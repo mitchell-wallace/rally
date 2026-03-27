@@ -6,6 +6,8 @@ builds:
   - id: rally
     main: ./cmd/rally
     binary: rally
+    env:
+      - CGO_ENABLED=0
     goos:
       - linux
       - darwin
