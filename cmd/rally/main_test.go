@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/mitchell-wallace/rally/internal/app"
@@ -109,5 +110,93 @@ func TestPrepareBatchStartNewClearsActiveBatch(t *testing.T) {
 	}
 	if st.StopAfterCurrent {
 		t.Fatal("expected stop-after-current cleared")
+	}
+}
+
+func TestDefaultConfigStandaloneUsesWorkingDirectoryAndHomeDataDir(t *testing.T) {
+	workspaceDir := t.TempDir()
+	homeDir := t.TempDir()
+
+	oldWD, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chdir(workspaceDir); err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		_ = os.Chdir(oldWD)
+	}()
+
+	t.Setenv("HOME", homeDir)
+	t.Setenv(app.EnvWorkspaceDir, "")
+	t.Setenv(app.EnvDataDir, "")
+	t.Setenv(app.EnvRepoProgressPath, "")
+	t.Setenv(app.EnvContainerName, "")
+
+	cfg := defaultConfig()
+	if cfg.WorkspaceDir != workspaceDir {
+		t.Fatalf("workspace dir = %q, want %q", cfg.WorkspaceDir, workspaceDir)
+	}
+
+	wantDataDir := filepath.Join(homeDir, ".local", "share", app.BinaryName)
+	if cfg.DataDir != wantDataDir {
+		t.Fatalf("data dir = %q, want %q", cfg.DataDir, wantDataDir)
+	}
+
+	wantRepoPath := filepath.Join(workspaceDir, app.DefaultRepoProgress)
+	if cfg.RepoProgressPath != wantRepoPath {
+		t.Fatalf("repo progress path = %q, want %q", cfg.RepoProgressPath, wantRepoPath)
+	}
+}
+
+func TestRunInitWritesRallyTomlStandalone(t *testing.T) {
+	workspaceDir := t.TempDir()
+	homeDir := t.TempDir()
+
+	oldWD, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chdir(workspaceDir); err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		_ = os.Chdir(oldWD)
+	}()
+
+	t.Setenv("HOME", homeDir)
+	t.Setenv(app.EnvWorkspaceDir, "")
+	t.Setenv(app.EnvDataDir, "")
+	t.Setenv(app.EnvRepoProgressPath, "")
+	t.Setenv(app.EnvContainerName, "")
+
+	oldStdin := os.Stdin
+	reader, writer, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := writer.WriteString("y\n\nn\n"); err != nil {
+		t.Fatal(err)
+	}
+	_ = writer.Close()
+	os.Stdin = reader
+	defer func() { os.Stdin = oldStdin }()
+
+	if err := run([]string{"init"}); err != nil {
+		t.Fatalf("run init returned error: %v", err)
+	}
+
+	rallyTomlPath := filepath.Join(workspaceDir, "rally.toml")
+	data, err := os.ReadFile(rallyTomlPath)
+	if err != nil {
+		t.Fatalf("read rally.toml: %v", err)
+	}
+	if !strings.Contains(string(data), "beads = 'true'") {
+		t.Fatalf("rally.toml missing beads setting: %s", string(data))
+	}
+
+	if _, err := os.Stat(filepath.Join(workspaceDir, "dune.toml")); !os.IsNotExist(err) {
+		t.Fatalf("expected no dune.toml, got err=%v", err)
 	}
 }

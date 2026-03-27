@@ -507,9 +507,9 @@ func runImportLegacy() error {
 func defaultConfig() orchtui.Config {
 	containerName := getenvOr(app.EnvContainerName, "local")
 	env := app.ContainerEnv(containerName)
-	dataDir := getenvOr(app.EnvDataDir, env[app.EnvDataDir])
-	repoPath := getenvOr(app.EnvRepoProgressPath, env[app.EnvRepoProgressPath])
-	workspaceDir := getenvOr(app.EnvWorkspaceDir, "/workspace")
+	workspaceDir := getenvOr(app.EnvWorkspaceDir, defaultWorkspaceDir())
+	dataDir := getenvOr(app.EnvDataDir, defaultDataDir(env[app.EnvDataDir]))
+	repoPath := getenvOr(app.EnvRepoProgressPath, app.RepoProgressPath(workspaceDir))
 	modelDefaults, _ := rallyconfig.LoadWorkspace(workspaceDir)
 	beadsMode := getenvOr(app.EnvBeads, modelDefaults.Beads)
 	return orchtui.Config{
@@ -523,6 +523,22 @@ func defaultConfig() orchtui.Config {
 		GeminiModel:      modelDefaults.GeminiModel,
 		OpenCodeModel:    modelDefaults.OpenCodeModel,
 	}
+}
+
+func defaultWorkspaceDir() string {
+	wd, err := os.Getwd()
+	if err != nil || wd == "" {
+		return "/workspace"
+	}
+	return wd
+}
+
+func defaultDataDir(containerDefault string) string {
+	home, err := os.UserHomeDir()
+	if err != nil || home == "" {
+		return containerDefault
+	}
+	return filepath.Join(home, ".local", "share", app.BinaryName)
 }
 
 func getenvOr(key, fallback string) string {
