@@ -1,0 +1,31 @@
+version: 2
+
+project_name: rally
+
+builds:
+  - id: rally
+    main: ./cmd/rally
+    binary: rally
+    goos:
+      - linux
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w -X main.Version={{ .Version }}
+
+archives:
+  - id: rally
+    ids:
+      - rally
+    formats:
+      - tar.gz
+    name_template: "{{ .ProjectName }}_{{ .Os }}_{{ .Arch }}"
+
+checksum:
+  name_template: checksums.txt
+
+release:
+  extra_files:
+    - glob: ./install.sh
