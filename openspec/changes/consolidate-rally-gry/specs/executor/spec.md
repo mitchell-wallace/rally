@@ -1,11 +1,11 @@
 ## ADDED Requirements
 
 ### Requirement: Executor interface
-The system SHALL define an `Executor` interface with a single method `Execute(ctx context.Context, opts RunOptions) (*RunResult, error)` that abstracts agent lifecycle.
+The system SHALL define an `Executor` interface with a single method `Execute(ctx context.Context, opts RunOptions) (*SessionResult, error)` that abstracts agent lifecycle. Each call to Execute represents one session (one agent CLI invocation).
 
 #### Scenario: Executor returns structured result
-- **WHEN** an Executor implementation completes a run
-- **THEN** it SHALL return a `RunResult` containing: `Completed` (bool), `Summary` (string), `RemainingWork` (string), `MessageAddressed` (*bool), `FilesChanged` ([]string), `CommitHash` (string)
+- **WHEN** an Executor implementation completes a session
+- **THEN** it SHALL return a `SessionResult` containing: `Completed` (bool), `Summary` (string), `RemainingWork` (string), `MessageAddressed` (*bool), `FilesChanged` ([]string), `CommitHash` (string)
 
 #### Scenario: Executor respects context cancellation
 - **WHEN** the provided context is cancelled during execution
@@ -23,7 +23,7 @@ The system SHALL build agent prompts from `RunOptions` fields: `Persona`, `TaskN
 - **THEN** the built prompt SHALL include a "Previous Attempt Summary" section containing the summary text
 
 ### Requirement: ClaudeExecutor
-The system SHALL provide a `ClaudeExecutor` that invokes `claude -p <prompt>` as a subprocess, captures stdout, and returns a `RunResult`.
+The system SHALL provide a `ClaudeExecutor` that invokes `claude -p <prompt>` as a subprocess, captures stdout, and returns a `SessionResult`.
 
 #### Scenario: Claude run with model override
 - **WHEN** a Claude model is specified in configuration
@@ -34,21 +34,21 @@ The system SHALL provide a `ClaudeExecutor` that invokes `claude -p <prompt>` as
 - **THEN** the executor SHALL capture stdout and stderr, and record the terminal transcript
 
 ### Requirement: CodexExecutor
-The system SHALL provide a `CodexExecutor` that invokes `codex exec` as a subprocess with appropriate flags and returns a `RunResult`.
+The system SHALL provide a `CodexExecutor` that invokes `codex exec` as a subprocess with appropriate flags and returns a `SessionResult`.
 
 #### Scenario: Codex run with full-auto mode
 - **WHEN** a codex run is executed
 - **THEN** the executor SHALL pass `--full-auto` and `--dangerously-bypass-approvals-and-sandbox` flags
 
 ### Requirement: GeminiExecutor
-The system SHALL provide a `GeminiExecutor` that invokes the `gemini` CLI as a subprocess and returns a `RunResult`.
+The system SHALL provide a `GeminiExecutor` that invokes the `gemini` CLI as a subprocess and returns a `SessionResult`.
 
-#### Scenario: Gemini uses JSON output mode
+#### Scenario: Gemini run execution
 - **WHEN** a Gemini run is executed
-- **THEN** the executor SHALL configure JSON output mode since Gemini streams everything otherwise
+- **THEN** the executor SHALL invoke the gemini CLI and collect structured output via its hook system
 
 ### Requirement: OpenCodeExecutor
-The system SHALL provide an `OpenCodeExecutor` that invokes `opencode run` as a subprocess and returns a `RunResult`.
+The system SHALL provide an `OpenCodeExecutor` that invokes `opencode run` as a subprocess and returns a `SessionResult`.
 
 #### Scenario: OpenCode run execution
 - **WHEN** an opencode run is executed
@@ -59,7 +59,7 @@ The system SHALL provide a `FixtureExecutor` that replays precomputed git diffs 
 
 #### Scenario: Fixture applies diff and returns canned result
 - **WHEN** a fixture executor is invoked with a diff path and output path
-- **THEN** it SHALL apply the diff via `git apply`, commit the changes, and return the RunResult parsed from the output JSON file
+- **THEN** it SHALL apply the diff via `git apply`, commit the changes, and return the SessionResult parsed from the output JSON file
 
 #### Scenario: Fixture supports configurable delay
 - **WHEN** a delay duration is configured on the fixture executor
