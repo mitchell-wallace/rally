@@ -1,0 +1,1 @@
+- [Rally v0.2.0 Consolidation](project_consolidation.md) — Merging rally+gry: gry skeleton, rally organs, JSONL+SQLite storage, externalized task tracking
