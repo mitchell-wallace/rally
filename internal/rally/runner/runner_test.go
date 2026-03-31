@@ -170,6 +170,20 @@ func TestBuildAgentCommandOmitsEmptyModelFlags(t *testing.T) {
 	}
 }
 
+func TestAgentEnvOverrides(t *testing.T) {
+	t.Parallel()
+
+	if got := AgentEnvOverrides("codex"); got != nil {
+		t.Fatalf("expected no env overrides for codex, got %#v", got)
+	}
+
+	got := AgentEnvOverrides("opencode")
+	want := []string{`OPENCODE_PERMISSION={"*":"allow"}`}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("env override mismatch:\n got %#v\nwant %#v", got, want)
+	}
+}
+
 func TestAutoCommitWorkspaceCommitsDirtyRepo(t *testing.T) {
 	t.Parallel()
 

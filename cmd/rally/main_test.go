@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -198,5 +199,23 @@ func TestRunInitWritesRallyTomlStandalone(t *testing.T) {
 
 	if _, err := os.Stat(filepath.Join(workspaceDir, "dune.toml")); !os.IsNotExist(err) {
 		t.Fatalf("expected no dune.toml, got err=%v", err)
+	}
+}
+
+func TestAppendAgentSpecsSplitsSingleFlagValue(t *testing.T) {
+	got, err := appendAgentSpecs([]string{"ge:1"}, "cc:2 cx:3 op:1")
+	if err != nil {
+		t.Fatalf("appendAgentSpecs returned error: %v", err)
+	}
+
+	want := []string{"ge:1", "cc:2", "cx:3", "op:1"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("agent specs mismatch:\n got %#v\nwant %#v", got, want)
+	}
+}
+
+func TestAppendAgentSpecsRejectsEmptyFlagValue(t *testing.T) {
+	if _, err := appendAgentSpecs(nil, " \t "); err == nil {
+		t.Fatal("expected error for empty agent flag value")
 	}
 }

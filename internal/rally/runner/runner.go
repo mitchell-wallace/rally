@@ -46,6 +46,7 @@ type Config struct {
 }
 
 const defaultScoutIterations = 5
+const opencodePermissionYolo = `{"*":"allow"}`
 
 type Runner struct {
 	cfg          Config
@@ -173,6 +174,15 @@ func BuildAgentCommand(cfg Config, agentName, prompt string) ([]string, bool, er
 		return command, false, nil
 	default:
 		return nil, false, fmt.Errorf("unsupported agent %q", agentName)
+	}
+}
+
+func AgentEnvOverrides(agentName string) []string {
+	switch agentName {
+	case "opencode":
+		return []string{"OPENCODE_PERMISSION=" + opencodePermissionYolo}
+	default:
+		return nil
 	}
 }
 
@@ -347,6 +357,7 @@ func (r *Runner) runOne(ctx context.Context, st *state.State, mix AgentMix) (Ses
 		app.EnvAgent+"="+agent,
 		app.EnvSessionDir+"="+sessionDir,
 	)
+	cmd.Env = append(cmd.Env, AgentEnvOverrides(agent)...)
 
 	stdout := io.MultiWriter(logFile, r.cfg.Stdout)
 	stderrTarget := io.MultiWriter(logFile, r.cfg.Stderr)

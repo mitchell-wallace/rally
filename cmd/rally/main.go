@@ -79,7 +79,7 @@ Commands:
 
 Flags for run/tui:
   --iterations N           Number of iterations (default: 1, scout: 5)
-  --agent SPEC             Agent mix (repeatable, e.g. cc:2 cx:1)
+  --agent SPEC             Agent mix (repeatable; quoted lists allowed, e.g. "cc:2 cx:1")
   --beads [auto|true|false] Beads task source (default: from env/config)
   --resume                 Resume the last unfinished batch explicitly
   --new                    Start a new batch explicitly, discarding unfinished batch state
@@ -120,7 +120,11 @@ func runTUI(argv []string) error {
 			if len(argv) < 2 {
 				return fmt.Errorf("missing value for --agent")
 			}
-			cfg.AgentSpecs = append(cfg.AgentSpecs, argv[1])
+			var err error
+			cfg.AgentSpecs, err = appendAgentSpecs(cfg.AgentSpecs, argv[1])
+			if err != nil {
+				return err
+			}
 			argv = argv[2:]
 		case "--auto-start":
 			cfg.AutoStart = true
@@ -202,7 +206,11 @@ func runBatch(argv []string) error {
 			if len(argv) < 2 {
 				return fmt.Errorf("missing value for --agent")
 			}
-			cfg.AgentSpecs = append(cfg.AgentSpecs, argv[1])
+			var err error
+			cfg.AgentSpecs, err = appendAgentSpecs(cfg.AgentSpecs, argv[1])
+			if err != nil {
+				return err
+			}
 			argv = argv[2:]
 		case "--beads":
 			argv = argv[1:]
@@ -546,6 +554,14 @@ func getenvOr(key, fallback string) string {
 		return value
 	}
 	return fallback
+}
+
+func appendAgentSpecs(dst []string, value string) ([]string, error) {
+	specs := strings.Fields(value)
+	if len(specs) == 0 {
+		return dst, fmt.Errorf("empty value for --agent")
+	}
+	return append(dst, specs...), nil
 }
 
 func stdinIsTerminal() bool {
