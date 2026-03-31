@@ -7,7 +7,7 @@ The system SHALL use three-tier naming for execution units:
 - **Relay**: A campaign of N runs with a configured agent mix.
 
 ### Requirement: Relay lifecycle
-The system SHALL manage relays as a campaign of N sequential runs with a configured agent mix. A relay tracks: relay ID, target iterations, completed iterations, agent mix, start time, and end time.
+The system SHALL manage relays as a campaign of N sequential runs with a configured agent mix. A relay tracks: relay ID, target iterations, completed iterations, agent mix, start time, end time, first/last relay_session_id, and consumed relay-level message IDs.
 
 #### Scenario: New relay created
 - **WHEN** a user starts a relay with a prompt, iteration count, and agent mix
@@ -15,7 +15,7 @@ The system SHALL manage relays as a campaign of N sequential runs with a configu
 
 #### Scenario: Relay resumes after interruption
 - **WHEN** rally starts and an incomplete relay exists in state
-- **THEN** the system SHALL offer to resume from the next uncompleted iteration
+- **THEN** the TUI SHALL display a modal prompt offering to resume, showing the relay's state (completed/total runs, agent mix). Resuming continues with the relay's existing settings.
 
 ### Requirement: Agent mix cycling
 The system SHALL cycle through agents in a deterministic rotation based on the configured agent mix weights. For example, `cc:2 cx:1` produces the cycle `[cc, cc, cx]`, repeated across runs.
@@ -29,19 +29,23 @@ The system SHALL cycle through agents in a deterministic rotation based on the c
 - **THEN** the system SHALL parse them into weighted cycles preserving declaration order
 
 ### Requirement: Session execution
-The system SHALL execute each session by: writing `.rally/current_task.md`, building a prompt, invoking the selected agent's Executor, recording the SessionResult, and auto-committing workspace changes.
+The system SHALL execute each session by: writing `.rally/current_task.md` (the prompt fed to the agent), recording HEAD before session, invoking the selected agent's Executor, tracking commit hash, recording the SessionResult, and auto-committing if needed.
 
 #### Scenario: Context file written before session
 - **WHEN** a session is about to execute
-- **THEN** the system SHALL write the current task context to `.rally/current_task.md` (gitignored, ephemeral)
+- **THEN** the system SHALL write the agent prompt to `.rally/current_task.md` (gitignored, ephemeral)
+
+#### Scenario: Commit hash tracking
+- **WHEN** a session completes
+- **THEN** the runner SHALL compare current HEAD against pre-session HEAD. If the agent committed (HEAD changed), use that commit hash. If uncommitted changes exist, auto-commit and use that hash. If no changes, record no commit hash.
 
 #### Scenario: Session result recorded
-- **WHEN** an agent executor returns a SessionResult
-- **THEN** the system SHALL persist the result to the store with: session ID, run ID, relay ID, agent type, completed status, summary, files changed, commit hash, timestamps, and attempt number
+- **WHEN** a session's commit hash is determined
+- **THEN** the system SHALL persist the result to the store with: relay_session_id, run ID, relay ID, agent type, completed status, summary, files changed, commit hash, timestamps, and attempt number
 
-#### Scenario: Auto-commit on current branch
-- **WHEN** a session produces workspace changes
-- **THEN** the system SHALL auto-commit on the current branch. Rally does NOT create, switch, or merge branches.
+#### Scenario: Auto-commit only when needed
+- **WHEN** a session leaves uncommitted workspace changes
+- **THEN** the system SHALL auto-commit on the current branch. Rally does NOT create, switch, or merge branches. If the agent already committed, no auto-commit is needed.
 
 ### Requirement: Failure detection
 A session is considered failed if the agent reports `Completed: false`, exits with an error, or produces no meaningful work (no file changes and runs less than 3 minutes).
@@ -90,7 +94,7 @@ The system SHALL implement a per-agent-type error resilience cascade. After 3 co
 
 #### Scenario: Pause/freeze state persisted across restarts
 - **WHEN** rally is restarted while agents are paused or frozen
-- **THEN** the system SHALL restore pause/freeze state and timestamps from the relay record in JSONL, so that timers are not reset by a restart
+- **THEN** the system SHALL restore pause/freeze state and timestamps from `agent_status.jsonl`, so that timers are not reset by a restart
 
 ### Requirement: Graceful stop
 The system SHALL support graceful stopping: when requested, the current session completes, and the relay halts without starting a new run. The relay state is preserved for future resumption.

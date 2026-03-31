@@ -1,16 +1,18 @@
 ## ADDED Requirements
 
 ### Requirement: Structured output collection
-Each agent executor SHALL collect a structured progress report after session completion. The strategy is **resume-and-report**: after the agent session ends, resume the same session with a reporting prompt, preserving input token caching. All four CLIs support this pattern. The hook system serves as the trigger mechanism.
+Each agent executor SHALL collect a structured progress report after session completion. The collection strategy varies per agent to account for different CLI maturity levels and known issues. All CLI flags referenced below have been tested and verified against actual agent CLIs.
 
 **Collection strategy by agent:**
 
-| Agent | Resume command | Schema support | Output format | Fallback |
-|-------|---------------|----------------|---------------|----------|
-| Claude Code | `claude -c -p "<prompt>" --json-schema '<schema>' --output-format json` | Yes (`--json-schema`) | Top-level JSON | Stop hook block-and-report |
-| Codex | `codex exec resume --last "<prompt>" --output-schema ./schema.json -o ./report.json` | Yes (`--output-schema`) | Output file | Stop hook block-and-report |
-| Gemini CLI | `gemini --resume -p "<prompt>" --output-format json` | No (prompt-guided) | `{"response": "...", "session_id": "...", "stats": {...}}` | None needed |
-| OpenCode | `opencode run --continue "<prompt>" --format json` | No (prompt-guided) | JSON events | None needed |
+| Agent | Primary strategy | Command | Schema support | Fallback |
+|-------|-----------------|---------|----------------|----------|
+| Claude Code | Block-and-report (stop hook) | Stop hook with `decision: "block"` | Yes (prompt-guided in hook context) | Resume: `claude -c -p "<prompt>" --json-schema '<schema>' --output-format json` |
+| Codex | Resume-and-report | `codex exec resume --last "<prompt>" --output-schema ./schema.json -o ./report.json` | Yes (`--output-schema`) | Stop hook block-and-report |
+| Gemini CLI | Resume-and-report | `gemini --resume -p "<prompt>" --output-format json` | No (prompt-guided) | None needed |
+| OpenCode | Resume-and-report | `opencode run --continue "<prompt>" --format json` | No (prompt-guided) | None needed |
+
+**Why per-agent strategies**: Claude Code has a potential cache invalidation bug with resume behavior, making block-and-report more reliable as the primary strategy. Codex hooks are flagged as experimental, so resume is preferred there with hooks as fallback. Gemini and OpenCode only support resume.
 
 **Docs:**
 - Claude Code CLI: https://code.claude.com/docs/en/cli-usage.md
@@ -19,25 +21,43 @@ Each agent executor SHALL collect a structured progress report after session com
 - Gemini CLI hooks: https://geminicli.com/docs/hooks/
 - OpenCode plugins: https://opencode.ai/docs/plugins
 
-### Requirement: Resume-and-report strategy
-After a session completes, the executor SHALL resume the same session with a reporting prompt that requests the structured JSON report. This preserves the full conversation context and leverages input token caching — the agent already has complete knowledge of what it did.
+### Requirement: Claude Code block-and-report (primary)
+The ClaudeExecutor SHALL use the stop hook block-and-report strategy as its primary output collection method.
 
-#### Scenario: Claude Code resume-and-report
-- **WHEN** a ClaudeExecutor session completes
-- **THEN** the executor SHALL run `claude -c -p "<reporting prompt>" --json-schema '<schema>' --output-format json`
-- **AND** parse the JSON output into a `SessionResult`
-- **NOTE**: `-c` continues the most recent conversation. `--json-schema` validates the output against the report schema.
+#### Scenario: Claude block-and-report flow
+- **WHEN** a ClaudeExecutor session reaches the `Stop` event (`stop_hook_active: false`)
+- **THEN** the hook SHALL return `{"decision": "block", "reason": "<reporting prompt>"}` to force a reporting turn
+- **AND** on the second `Stop` event (`stop_hook_active: true`), parse `last_assistant_message` for the JSON report
+
+#### Scenario: Claude fallback to resume
+- **WHEN** the block-and-report hook fails to produce valid output
+- **THEN** the executor MAY fall back to resume: `claude -c -p "<reporting prompt>" --json-schema '<schema>' --output-format json`
+- **NOTE**: `-c` continues the most recent conversation. `--json-schema` validates output. This fallback is available but demoted due to potential cache invalidation.
+
+### Requirement: Codex resume-and-report (primary)
+The CodexExecutor SHALL use resume-and-report as its primary output collection method, with stop hook block-and-report as fallback.
 
 #### Scenario: Codex resume-and-report
 - **WHEN** a CodexExecutor session completes
 - **THEN** the executor SHALL run `codex exec resume --last "<reporting prompt>" --output-schema ./schema.json -o ./report.json`
 - **AND** parse the output file into a `SessionResult`
 
-#### Scenario: Gemini CLI resume-and-report
+#### Scenario: Codex fallback to block-and-report
+- **WHEN** the resume command fails for Codex
+- **THEN** the executor SHALL fall back to the block-and-report stop hook strategy
+- **NOTE**: Codex hooks are flagged as experimental, so this is the fallback rather than primary.
+
+### Requirement: Gemini CLI resume-and-report
+The GeminiExecutor SHALL use resume-and-report for output collection.
+
+#### Scenario: Gemini resume-and-report
 - **WHEN** a GeminiExecutor session completes
 - **THEN** the executor SHALL run `gemini --resume -p "<reporting prompt>" --output-format json`
 - **AND** extract the report from the `response` field of the top-level JSON output
 - **NOTE**: Gemini's `--output-format json` wraps the response in `{"session_id": "...", "response": "...", "stats": {...}}`. The report JSON is inside the `response` string and must be parsed separately. Gemini has no schema validation flag — the reporting prompt must instruct the agent to produce the exact JSON shape. Gemini stderr is noisy (MCP server registration messages etc.) — capture and discard stderr.
+
+### Requirement: OpenCode resume-and-report
+The OpenCodeExecutor SHALL use resume-and-report for output collection.
 
 #### Scenario: OpenCode resume-and-report
 - **WHEN** an OpenCodeExecutor session completes
@@ -45,12 +65,8 @@ After a session completes, the executor SHALL resume the same session with a rep
 - **AND** parse the JSON output into a `SessionResult`
 - **NOTE**: OpenCode has no schema validation flag — the reporting prompt must instruct the agent to produce the exact JSON shape.
 
-### Requirement: Stop hook as trigger and fallback
-The executor SHALL register stop hooks as the mechanism to trigger the resume-and-report flow. When a stop hook fires, it signals the executor that the session has ended and a resume command should be issued.
-
-For Claude Code and Codex, stop hooks also serve as a **fallback** via block-and-report if the resume approach fails:
-1. On first `Stop` event (`stop_hook_active: false`), return `{"decision": "block", "reason": "<reporting prompt>"}` to force a reporting turn.
-2. On second `Stop` event (`stop_hook_active: true`), parse `last_assistant_message` for the JSON report.
+### Requirement: Stop hooks as triggers
+The executor SHALL register stop hooks to detect session completion and trigger the appropriate collection strategy.
 
 **Hook reference:**
 
@@ -61,9 +77,9 @@ For Claude Code and Codex, stop hooks also serve as a **fallback** via block-and
 | Gemini CLI | `SessionEnd` | `.gemini/settings.json` | Undocumented (advisory) |
 | OpenCode | `session.idle` | `.opencode/plugins/` (JS/TS) | `ctx` with `project`, `directory`, `worktree` |
 
-#### Scenario: Claude/Codex fallback to block-and-report
-- **WHEN** the resume-and-report command fails for Claude Code or Codex
-- **THEN** the executor SHALL fall back to the block-and-report stop hook strategy
+#### Scenario: Hook signals session end
+- **WHEN** an agent's stop/end hook fires
+- **THEN** the executor SHALL proceed with the agent's primary collection strategy (block-and-report for Claude, resume for others)
 
 ### Requirement: Structured report schema
 The structured output SHALL produce a JSON report with the fields: `completed` (boolean), `summary` (string), `remaining_work` (string), `message_addressed` (boolean or null), and `files_changed` (array of strings).

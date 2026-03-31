@@ -53,23 +53,49 @@ The system SHALL provide an inbox panel for managing messages in a FIFO queue. U
 - **THEN** pending messages SHALL appear above addressed messages, ordered by position
 
 ### Requirement: View navigation
-The system SHALL support keyboard navigation between views: dashboard, inbox, and any overlays (e.g., project switcher if multi-project support is added later).
+The system SHALL support keyboard navigation between views: dashboard, inbox, and overlays (relay start, relay resume).
 
 #### Scenario: Switch to inbox
 - **WHEN** the user presses the inbox key from the dashboard
 - **THEN** the system SHALL display the inbox panel
 
 #### Scenario: Return to dashboard
-- **WHEN** the user presses Escape from a non-dashboard view
+- **WHEN** the user presses Escape from a non-dashboard view or overlay
 - **THEN** the system SHALL return to the dashboard panel
 
-### Requirement: Relay control from TUI
-The system SHALL allow starting and stopping relays from the TUI via keyboard shortcuts.
+### Requirement: Relay start overlay
+The system SHALL provide a configuration overlay for starting a new relay.
 
-#### Scenario: Start relay from TUI with configurable parameters
+#### Scenario: Start relay from TUI
 - **WHEN** the user presses the start key and no relay is running
 - **THEN** the system SHALL present a configuration overlay where the user can set iteration count and agent mix
 - **AND** defaults SHALL be loaded from `rally.toml` (or sensible built-in defaults if no config exists)
+
+#### Scenario: Overlay fields
+- **WHEN** the relay start overlay is displayed
+- **THEN** it SHALL show editable fields for: iteration count (numeric), agent mix (text, e.g. `cc:2 cx:1`), with defaults pre-filled
+
+#### Scenario: Confirm starts relay
+- **WHEN** the user confirms the relay start overlay
+- **THEN** the system SHALL create and start a new relay with the configured parameters
+
+### Requirement: Relay resume modal
+The system SHALL display a modal prompt when an incomplete relay is detected on startup.
+
+#### Scenario: Incomplete relay detected
+- **WHEN** rally launches and an incomplete relay exists in state
+- **THEN** the TUI SHALL display a modal showing the relay's state (completed/total runs, agent mix) and offering to resume or discard
+
+#### Scenario: Resume continues with existing settings
+- **WHEN** the user chooses to resume
+- **THEN** the relay SHALL continue with its original settings (iteration target, agent mix) from the next uncompleted run
+
+#### Scenario: Discard clears incomplete relay
+- **WHEN** the user chooses to discard
+- **THEN** the relay SHALL be marked as ended and the TUI SHALL return to idle state
+
+### Requirement: Relay stop
+The system SHALL allow stopping a running relay via keyboard shortcut.
 
 #### Scenario: Stop relay from TUI
 - **WHEN** the user presses the stop key while a relay is running

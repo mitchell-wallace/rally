@@ -5,14 +5,15 @@ The system SHALL define an `Executor` interface with a single method `Execute(ct
 
 #### Scenario: Executor returns structured result
 - **WHEN** an Executor implementation completes a session
-- **THEN** it SHALL return a `SessionResult` containing: `Completed` (bool), `Summary` (string), `RemainingWork` (string), `MessageAddressed` (*bool), `FilesChanged` ([]string), `CommitHash` (string)
+- **THEN** it SHALL return a `SessionResult` containing: `Completed` (bool), `Summary` (string), `RemainingWork` (string), `MessageAddressed` (*bool), `FilesChanged` ([]string)
+- **NOTE**: `CommitHash` is NOT part of `SessionResult` — it is determined by the relay runner after the executor returns, by comparing HEAD before and after the session.
 
 #### Scenario: Executor respects context cancellation
 - **WHEN** the provided context is cancelled during execution
 - **THEN** the executor SHALL terminate the agent subprocess and return a context cancellation error
 
 ### Requirement: RunOptions prompt building
-The system SHALL build agent prompts from `RunOptions` fields: `Persona`, `TaskName`, `TaskRequirements`, `InboxMessage`, `PreviousSummary`, and an optional explicit `Prompt` override.
+The system SHALL build agent prompts from `RunOptions` fields: `Persona`, `TaskName`, `TaskRequirements`, `InboxMessage`, `PreviousSummary`, `RecentSessionContext` (summaries from recent sessions), and an optional explicit `Prompt` override. The built prompt is also written to `.rally/current_task.md` for agent reference.
 
 #### Scenario: Explicit prompt overrides built prompt
 - **WHEN** `RunOptions.Prompt` is non-empty
