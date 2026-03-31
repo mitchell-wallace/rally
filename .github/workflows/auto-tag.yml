@@ -7,6 +7,7 @@ on:
 
 permissions:
   contents: write
+  actions: write
 
 jobs:
   auto-tag:
@@ -36,3 +37,8 @@ jobs:
           git tag "$VERSION"
           git push origin "$VERSION"
           echo "Created and pushed tag $VERSION"
+
+          echo "Dispatching release workflow for $VERSION"
+          gh api "repos/{owner}/{repo}/actions/workflows/release.yml/dispatches" \
+            --method POST \
+            --field ref="$VERSION"
