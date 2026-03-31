@@ -22,6 +22,9 @@ The CI workflow (`.github/workflows/release.yml`) will:
 
 ### Important notes
 
+- When someone says "bump version" in normal maintenance work, assume that
+  means incrementing the patch version in `VERSION` as part of the update
+  unless they explicitly ask for a minor or major bump.
 - **Don't re-push an existing tag** expecting CI to rebuild. If you need to redo
   a release, delete it first: `gh release delete v0.2.0 && git tag -d v0.2.0 &&
   git push origin :refs/tags/v0.2.0`, then re-tag and push.
