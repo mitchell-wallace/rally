@@ -31,7 +31,11 @@ type Asset struct {
 }
 
 func FetchLatest(ctx context.Context) (Release, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, latestReleaseURL, nil)
+	return FetchLatestFrom(ctx, latestReleaseURL)
+}
+
+func FetchLatestFrom(ctx context.Context, url string) (Release, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return Release{}, err
 	}
@@ -160,20 +164,24 @@ func DisplayVersion(value string) string {
 }
 
 func CheckForUpdate(currentVersion string) (string, error) {
+	return CheckForUpdateFrom(currentVersion, latestReleaseURL)
+}
+
+func CheckForUpdateFrom(currentVersion, checkURL string) (string, error) {
 	if NormalizeVersion(currentVersion) == "" || NormalizeVersion(currentVersion) == "dev" {
 		return "", nil
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
-	rel, err := FetchLatest(ctx)
+	rel, err := FetchLatestFrom(ctx, checkURL)
 	if err != nil {
 		return "", err
 	}
 	if NormalizeVersion(rel.TagName) == NormalizeVersion(currentVersion) {
 		return "", nil
 	}
-	return fmt.Sprintf("A new version of Rally is available: %s. Run 'rally update' to upgrade.", DisplayVersion(rel.TagName)), nil
+	return fmt.Sprintf("new update available: %s | to update run `rally update`", DisplayVersion(rel.TagName)), nil
 }
 
 func UpdateCurrentBinary(currentVersion, destination string) (string, string, bool, error) {

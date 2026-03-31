@@ -663,7 +663,10 @@ func startBackgroundUpdateCheck(argv []string, stderr io.Writer) func() {
 	msgCh := make(chan string, 1)
 	go func() {
 		msg, err := release.CheckForUpdate(Version)
-		if err == nil && msg != "" {
+		if err != nil {
+			msg = fmt.Sprintf("unable to check for updates: %s", err)
+		}
+		if msg != "" {
 			msgCh <- msg
 		}
 		close(msgCh)
