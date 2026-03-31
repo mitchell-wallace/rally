@@ -1,0 +1,38 @@
+name: auto-tag
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  auto-tag:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Check if VERSION changed and create tag
+        run: |
+          if git diff HEAD~1 --quiet -- VERSION; then
+            echo "VERSION file unchanged, skipping."
+            exit 0
+          fi
+
+          VERSION="v$(cat VERSION)"
+          echo "VERSION changed to $VERSION"
+
+          if git tag -l "$VERSION" | grep -q .; then
+            echo "Tag $VERSION already exists, skipping."
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag "$VERSION"
+          git push origin "$VERSION"
+          echo "Created and pushed tag $VERSION"
