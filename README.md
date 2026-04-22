@@ -133,10 +133,10 @@ Rally reads `rally.toml` from the workspace root.
 Example:
 
 ```toml
-claude_model = "sonnet"
-codex_model = "o3"
-gemini_model = "gemini-2.5-pro"
-opencode_model = "anthropic/claude-sonnet-4"
+claude_model = "claude-opus-4.7"
+codex_model = "gpt-5.4"
+gemini_model = "gemini-3.1-pro-preview"
+opencode_model = "zai-coding-plan/glm-5.1"
 beads = "auto"
 ```
 
