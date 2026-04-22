@@ -335,6 +335,9 @@ func runInit() error {
 	if err := os.MkdirAll(cfg.DataDir, 0o755); err != nil {
 		return err
 	}
+	if err := ensureWorkspaceEnvConfig(cfg.WorkspaceDir, cfg.DataDir); err != nil {
+		return err
+	}
 
 	var instructions []string
 
@@ -516,7 +519,8 @@ func defaultConfig() orchtui.Config {
 	containerName := getenvOr(app.EnvContainerName, "local")
 	env := app.ContainerEnv(containerName)
 	workspaceDir := getenvOr(app.EnvWorkspaceDir, defaultWorkspaceDir())
-	dataDir := getenvOr(app.EnvDataDir, defaultDataDir(env[app.EnvDataDir]))
+	workspaceEnv, _ := loadWorkspaceEnvConfig(workspaceDir)
+	dataDir := getenvOr(app.EnvDataDir, getenvOrMap(workspaceEnv, app.EnvDataDir, defaultDataDir(env[app.EnvDataDir])))
 	repoPath := getenvOr(app.EnvRepoProgressPath, app.RepoProgressPath(workspaceDir))
 	modelDefaults, _ := rallyconfig.LoadWorkspace(workspaceDir)
 	beadsMode := getenvOr(app.EnvBeads, modelDefaults.Beads)
@@ -554,6 +558,101 @@ func getenvOr(key, fallback string) string {
 		return value
 	}
 	return fallback
+}
+
+func getenvOrMap(values map[string]string, key, fallback string) string {
+	if value := values[key]; value != "" {
+		return value
+	}
+	return fallback
+}
+
+func loadWorkspaceEnvConfig(workspaceDir string) (map[string]string, error) {
+	path := filepath.Join(workspaceDir, ".rally", "config")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	values := map[string]string{}
+	for _, line := range strings.Split(string(data), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		key, value, ok := strings.Cut(line, "=")
+		if !ok {
+			continue
+		}
+		key = strings.TrimSpace(key)
+		value = cleanConfigValue(strings.TrimSpace(value))
+		if key == "" || value == "" {
+			continue
+		}
+		if key == app.EnvDataDir {
+			values[key] = resolveWorkspaceConfigPath(workspaceDir, value)
+		}
+	}
+	return values, nil
+}
+
+func ensureWorkspaceEnvConfig(workspaceDir, dataDir string) error {
+	path := filepath.Join(workspaceDir, ".rally", "config")
+	if _, err := os.Stat(path); err == nil {
+		return nil
+	} else if !os.IsNotExist(err) {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	content := strings.Join([]string{
+		"# Rally runtime data directory.",
+		"# Full batch logs and per-session transcripts are stored here.",
+		"# Relative paths are resolved from the workspace root. Environment variables",
+		"# like $HOME and ${HOME} are expanded.",
+		"RALLY_DATA_DIR=" + configDataDirValue(dataDir),
+		"",
+	}, "\n")
+	return os.WriteFile(path, []byte(content), 0o644)
+}
+
+func configDataDirValue(dataDir string) string {
+	home, err := os.UserHomeDir()
+	if err != nil || home == "" {
+		return dataDir
+	}
+	rel, err := filepath.Rel(home, dataDir)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) {
+		return dataDir
+	}
+	if rel == "." {
+		return "$HOME"
+	}
+	return filepath.ToSlash(filepath.Join("$HOME", rel))
+}
+
+func cleanConfigValue(value string) string {
+	if len(value) >= 2 {
+		if (value[0] == '"' && value[len(value)-1] == '"') || (value[0] == '\'' && value[len(value)-1] == '\'') {
+			value = value[1 : len(value)-1]
+		}
+	}
+	return os.ExpandEnv(value)
+}
+
+func resolveWorkspaceConfigPath(workspaceDir, value string) string {
+	if strings.HasPrefix(value, "~/") {
+		if home, err := os.UserHomeDir(); err == nil && home != "" {
+			value = filepath.Join(home, strings.TrimPrefix(value, "~/"))
+		}
+	}
+	if filepath.IsAbs(value) {
+		return value
+	}
+	return filepath.Join(workspaceDir, value)
 }
 
 func appendAgentSpecs(dst []string, value string) ([]string, error) {

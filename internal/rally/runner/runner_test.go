@@ -43,12 +43,13 @@ func TestRunnerAppliesBatchMessageAcrossRemainingSessions(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	agentScript := "#!/usr/bin/env bash\nprintf '%s\n' \"${@: -1}\"\n"
-	for _, name := range []string{"claude", "codex"} {
-		path := filepath.Join(binDir, name)
-		if err := os.WriteFile(path, []byte(agentScript), 0o755); err != nil {
-			t.Fatal(err)
-		}
+	claudeScript := "#!/usr/bin/env bash\nprintf '%s\n' '{\"type\":\"result\",\"result\":\"batch-wide instruction\"}'\n"
+	if err := os.WriteFile(filepath.Join(binDir, "claude"), []byte(claudeScript), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	codexScript := "#!/usr/bin/env bash\nprintf '%s\n' \"${@: -1}\"\n"
+	if err := os.WriteFile(filepath.Join(binDir, "codex"), []byte(codexScript), 0o755); err != nil {
+		t.Fatal(err)
 	}
 
 	dataDir := filepath.Join(workspaceDir, "data")
@@ -122,8 +123,8 @@ func TestBuildAgentCommandUsesConfiguredModels(t *testing.T) {
 	}{
 		{
 			agent:  "claude",
-			want:   []string{"claude", "-p", "--dangerously-skip-permissions", "--model", "sonnet", "--output-format", "text", "prompt"},
-			stderr: false,
+			want:   []string{"claude", "-p", "--dangerously-skip-permissions", "--model", "sonnet", "--output-format", "stream-json", "--verbose", "prompt"},
+			stderr: true,
 		},
 		{
 			agent:  "codex",
@@ -244,6 +245,24 @@ func TestFormatGeminiHeadlessResponse(t *testing.T) {
 	}
 }
 
+func TestFormatClaudeStreamJSONResponse(t *testing.T) {
+	t.Parallel()
+
+	raw := []byte(strings.Join([]string{
+		`{"type":"system","subtype":"init"}`,
+		`{"type":"assistant","message":{"content":[{"type":"text","text":"hidden stream"}]}}`,
+		`{"type":"result","result":"FINAL"}`,
+	}, "\n"))
+
+	got, err := formatClaudeStreamJSONResponse(raw)
+	if err != nil {
+		t.Fatalf("formatClaudeStreamJSONResponse returned error: %v", err)
+	}
+	if string(got) != "FINAL\n" {
+		t.Fatalf("unexpected formatted output: %q", got)
+	}
+}
+
 func TestFormatOpenCodeJSONResponse(t *testing.T) {
 	t.Parallel()
 
@@ -307,14 +326,25 @@ func TestRunnerGeminiWritesOnlyFinalResponseToStdout(t *testing.T) {
 		t.Fatal(err)
 	}
 	log := string(data)
-	if !strings.Contains(log, "OK\n") {
-		t.Fatalf("session transcript missing final response: %s", log)
-	}
-	if strings.Contains(log, `{"response":"OK","stats":{}}`) {
-		t.Fatalf("session transcript should not include raw Gemini JSON: %s", log)
+	if !strings.Contains(log, `{"response":"OK","stats":{}}`) {
+		t.Fatalf("session transcript missing raw Gemini JSON: %s", log)
 	}
 	if !strings.Contains(log, "Gemini noise") {
 		t.Fatalf("session transcript missing Gemini stderr: %s", log)
+	}
+
+	for _, path := range []string{BatchLogPath(dataDir, 1), RepoBatchLogPath(workspaceDir, 1)} {
+		data, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		log := string(data)
+		if !strings.Contains(log, "OK\n") {
+			t.Fatalf("batch log %s missing final response: %s", path, log)
+		}
+		if strings.Contains(log, `{"response":"OK","stats":{}}`) || strings.Contains(log, "Gemini noise") {
+			t.Fatalf("batch log %s should contain only filtered output, got: %s", path, log)
+		}
 	}
 }
 
@@ -369,13 +399,47 @@ func TestRunnerOpenCodeWritesOnlyFinalResponseToStdoutAndLogsRawEvents(t *testin
 		t.Fatalf("session transcript missing raw Opencode history: %s", sessionLog)
 	}
 
-	batchData, err := os.ReadFile(BatchLogPath(workspaceDir, 1))
-	if err != nil {
-		t.Fatal(err)
+	for _, path := range []string{BatchLogPath(dataDir, 1), RepoBatchLogPath(workspaceDir, 1)} {
+		batchData, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		batchLog := string(batchData)
+		if !strings.Contains(batchLog, "rally: batch 1") || !strings.Contains(batchLog, "FINAL\n") {
+			t.Fatalf("batch log %s missing expected filtered history: %s", path, batchLog)
+		}
+		if strings.Contains(batchLog, "tool_use") || strings.Contains(batchLog, "raw tool output") || strings.Contains(batchLog, "Opencode noise") {
+			t.Fatalf("batch log %s should contain only filtered output, got: %s", path, batchLog)
+		}
 	}
-	batchLog := string(batchData)
-	if !strings.Contains(batchLog, "rally: batch 1") || !strings.Contains(batchLog, "raw tool output") || !strings.Contains(batchLog, "FINAL\n") {
-		t.Fatalf("batch log missing expected console history: %s", batchLog)
+}
+
+func TestPruneRepoBatchLogsKeepsLatestTen(t *testing.T) {
+	t.Parallel()
+
+	workspaceDir := t.TempDir()
+	for i := 1; i <= 12; i++ {
+		path := RepoBatchLogPath(workspaceDir, i)
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte("log\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if err := pruneRepoBatchLogs(workspaceDir, 10); err != nil {
+		t.Fatalf("pruneRepoBatchLogs returned error: %v", err)
+	}
+	for i := 1; i <= 2; i++ {
+		if _, err := os.Stat(RepoBatchLogPath(workspaceDir, i)); !os.IsNotExist(err) {
+			t.Fatalf("expected batch %d pruned, err=%v", i, err)
+		}
+	}
+	for i := 3; i <= 12; i++ {
+		if _, err := os.Stat(RepoBatchLogPath(workspaceDir, i)); err != nil {
+			t.Fatalf("expected batch %d kept: %v", i, err)
+		}
 	}
 }
 

@@ -142,6 +142,15 @@ beads = "auto"
 
 You can create the file manually or let `rally init` write the initial config.
 
+Rally also reads `.rally/config` for runtime paths. `RALLY_DATA_DIR` controls
+where durable state, full batch logs, and per-session transcripts are stored:
+
+```sh
+RALLY_DATA_DIR=$HOME/.local/share/rally
+```
+
+The environment variable still takes precedence when set.
+
 ## Project Instructions
 
 Use project instructions when you want every session to inherit repo-specific
@@ -165,7 +174,8 @@ By default, Rally keeps runtime state under:
 Useful outputs:
 
 - Session transcripts and metadata in `~/.local/share/rally/sessions/`
-- Batch console logs in `.rally/batches/batch-N.log`
+- Durable batch logs in `~/.local/share/rally/batches/batch-N.log`
+- Recent batch log cache in `.rally/batches/batch-N.log`
 - Repo progress in `docs/orchestration/rally-progress.yaml`
 - Workspace config in `rally.toml`
 
@@ -189,7 +199,8 @@ Each iteration:
 2. Builds a prompt from your inline prompt or stored instructions.
 3. Runs that agent CLI in the current repo.
 4. Captures a transcript and session metadata.
-5. Appends the full batch console history to `.rally/batches/batch-N.log`.
+5. Appends filtered batch output to `~/.local/share/rally/batches/batch-N.log`
+   and mirrors the latest logs into `.rally/batches/`.
 6. Rebuilds `docs/orchestration/rally-progress.yaml`.
 7. Auto-commits workspace changes if the repo became dirty.
 

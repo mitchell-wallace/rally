@@ -151,6 +151,78 @@ func TestDefaultConfigStandaloneUsesWorkingDirectoryAndHomeDataDir(t *testing.T)
 	}
 }
 
+func TestDefaultConfigUsesWorkspaceRallyConfigDataDir(t *testing.T) {
+	workspaceDir := t.TempDir()
+	homeDir := t.TempDir()
+
+	oldWD, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chdir(workspaceDir); err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		_ = os.Chdir(oldWD)
+	}()
+
+	t.Setenv("HOME", homeDir)
+	t.Setenv(app.EnvWorkspaceDir, "")
+	t.Setenv(app.EnvDataDir, "")
+	t.Setenv(app.EnvRepoProgressPath, "")
+	t.Setenv(app.EnvContainerName, "")
+
+	configDir := filepath.Join(workspaceDir, ".rally")
+	if err := os.MkdirAll(configDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(configDir, "config"), []byte("RALLY_DATA_DIR=$HOME/custom-rally\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg := defaultConfig()
+	want := filepath.Join(homeDir, "custom-rally")
+	if cfg.DataDir != want {
+		t.Fatalf("data dir = %q, want %q", cfg.DataDir, want)
+	}
+}
+
+func TestDefaultConfigEnvDataDirOverridesWorkspaceRallyConfig(t *testing.T) {
+	workspaceDir := t.TempDir()
+	homeDir := t.TempDir()
+	envDataDir := filepath.Join(homeDir, "env-rally")
+
+	oldWD, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chdir(workspaceDir); err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		_ = os.Chdir(oldWD)
+	}()
+
+	t.Setenv("HOME", homeDir)
+	t.Setenv(app.EnvWorkspaceDir, "")
+	t.Setenv(app.EnvDataDir, envDataDir)
+	t.Setenv(app.EnvRepoProgressPath, "")
+	t.Setenv(app.EnvContainerName, "")
+
+	configDir := filepath.Join(workspaceDir, ".rally")
+	if err := os.MkdirAll(configDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(configDir, "config"), []byte("RALLY_DATA_DIR=repo-rally\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg := defaultConfig()
+	if cfg.DataDir != envDataDir {
+		t.Fatalf("data dir = %q, want %q", cfg.DataDir, envDataDir)
+	}
+}
+
 func TestRunInitWritesRallyTomlStandalone(t *testing.T) {
 	workspaceDir := t.TempDir()
 	homeDir := t.TempDir()
@@ -195,6 +267,14 @@ func TestRunInitWritesRallyTomlStandalone(t *testing.T) {
 	}
 	if !strings.Contains(string(data), "beads = 'true'") {
 		t.Fatalf("rally.toml missing beads setting: %s", string(data))
+	}
+
+	rallyConfigData, err := os.ReadFile(filepath.Join(workspaceDir, ".rally", "config"))
+	if err != nil {
+		t.Fatalf("read .rally/config: %v", err)
+	}
+	if !strings.Contains(string(rallyConfigData), "RALLY_DATA_DIR=$HOME/.local/share/rally") {
+		t.Fatalf(".rally/config missing data dir setting: %s", string(rallyConfigData))
 	}
 
 	if _, err := os.Stat(filepath.Join(workspaceDir, "dune.toml")); !os.IsNotExist(err) {

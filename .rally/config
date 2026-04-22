@@ -1,0 +1,5 @@
+# Rally runtime data directory.
+# Full batch logs and per-session transcripts are stored here.
+# Relative paths are resolved from the workspace root. Environment variables
+# like $HOME and ${HOME} are expanded.
+RALLY_DATA_DIR=$HOME/.local/share/rally

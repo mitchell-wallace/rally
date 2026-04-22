@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -49,6 +50,7 @@ type Config struct {
 
 const defaultScoutIterations = 5
 const opencodePermissionYolo = `{"*":"allow"}`
+const repoBatchLogCacheLimit = 10
 
 type Runner struct {
 	cfg          Config
@@ -67,6 +69,11 @@ type SessionResult struct {
 
 type geminiHeadlessOutput struct {
 	Response string `json:"response"`
+}
+
+type claudeStreamEvent struct {
+	Type   string `json:"type"`
+	Result string `json:"result"`
 }
 
 type opencodeJSONEvent struct {
@@ -160,8 +167,8 @@ func BuildAgentCommand(cfg Config, agentName, prompt string) ([]string, bool, er
 		if cfg.ClaudeModel != "" {
 			command = append(command, "--model", cfg.ClaudeModel)
 		}
-		command = append(command, "--output-format", "text", prompt)
-		return command, false, nil
+		command = append(command, "--output-format", "stream-json", "--verbose", prompt)
+		return command, true, nil
 	case "codex":
 		command := []string{"codex", "exec", "--dangerously-bypass-approvals-and-sandbox"}
 		if cfg.CodexModel != "" {
@@ -290,11 +297,14 @@ func (r *Runner) Run(ctx context.Context) ([]SessionResult, error) {
 		return nil, err
 	}
 
-	batchLog, err := openBatchLog(r.cfg.WorkspaceDir, st.ActiveBatch.BatchID)
+	batchLog, err := openBatchLog(r.cfg.DataDir, r.cfg.WorkspaceDir, st.ActiveBatch.BatchID)
 	if err != nil {
 		return nil, err
 	}
-	defer batchLog.Close()
+	defer func() {
+		_ = batchLog.Close()
+		_ = pruneRepoBatchLogs(r.cfg.WorkspaceDir, repoBatchLogCacheLimit)
+	}()
 
 	writeConsoleAndBatch(r.cfg.Stderr, batchLog, "rally: batch %d — %d iteration(s), agents: %s\n",
 		st.ActiveBatch.BatchID, st.ActiveBatch.TargetIterations, mix.Label)
@@ -376,12 +386,16 @@ func (r *Runner) runOne(ctx context.Context, st *state.State, mix AgentMix, batc
 	)
 	cmd.Env = append(cmd.Env, AgentEnvOverrides(agent)...)
 
-	agentLog := io.MultiWriter(logFile, batchLog)
+	agentLog := logFile
+	filteredOutput := io.MultiWriter(batchLog, r.cfg.Stdout)
 	stdout := io.MultiWriter(logFile, batchLog, r.cfg.Stdout)
-	stderrTarget := io.MultiWriter(logFile, batchLog, r.cfg.Stderr)
+	stderrTarget := io.MultiWriter(logFile, r.cfg.Stderr)
+	var claudeStdout bytes.Buffer
 	var geminiStdout bytes.Buffer
 	var opencodeStdout bytes.Buffer
-	if agent == "gemini" {
+	if agent == "claude" {
+		cmd.Stdout = &claudeStdout
+	} else if agent == "gemini" {
 		cmd.Stdout = &geminiStdout
 	} else if agent == "opencode" {
 		cmd.Stdout = &opencodeStdout
@@ -412,30 +426,43 @@ func (r *Runner) runOne(ctx context.Context, st *state.State, mix AgentMix, batc
 	}
 
 	runErr := cmd.Run()
-	if agent == "gemini" {
-		if _, writeErr := batchLog.Write(geminiStdout.Bytes()); writeErr != nil && runErr == nil {
+	if agent == "claude" {
+		if _, writeErr := logFile.Write(claudeStdout.Bytes()); writeErr != nil && runErr == nil {
+			runErr = writeErr
+		}
+		formatted, err := formatClaudeStreamJSONResponse(claudeStdout.Bytes())
+		if err != nil {
+			fmt.Fprintf(agentLog, "rally: warning: failed to parse Claude JSON output: %v\n", err)
+			if _, writeErr := filteredOutput.Write(claudeStdout.Bytes()); writeErr != nil && runErr == nil {
+				runErr = writeErr
+			}
+		} else if _, writeErr := filteredOutput.Write(formatted); writeErr != nil && runErr == nil {
+			runErr = writeErr
+		}
+	} else if agent == "gemini" {
+		if _, writeErr := logFile.Write(geminiStdout.Bytes()); writeErr != nil && runErr == nil {
 			runErr = writeErr
 		}
 		formatted, err := formatGeminiHeadlessResponse(geminiStdout.Bytes())
 		if err != nil {
 			fmt.Fprintf(agentLog, "rally: warning: failed to parse Gemini JSON output: %v\n", err)
-			if _, writeErr := stdout.Write(geminiStdout.Bytes()); writeErr != nil && runErr == nil {
+			if _, writeErr := filteredOutput.Write(geminiStdout.Bytes()); writeErr != nil && runErr == nil {
 				runErr = writeErr
 			}
-		} else if _, writeErr := stdout.Write(formatted); writeErr != nil && runErr == nil {
+		} else if _, writeErr := filteredOutput.Write(formatted); writeErr != nil && runErr == nil {
 			runErr = writeErr
 		}
 	} else if agent == "opencode" {
-		if _, writeErr := agentLog.Write(opencodeStdout.Bytes()); writeErr != nil && runErr == nil {
+		if _, writeErr := logFile.Write(opencodeStdout.Bytes()); writeErr != nil && runErr == nil {
 			runErr = writeErr
 		}
 		formatted, err := formatOpenCodeJSONResponse(opencodeStdout.Bytes())
 		if err != nil {
 			fmt.Fprintf(agentLog, "rally: warning: failed to parse Opencode JSON output: %v\n", err)
-			if _, writeErr := r.cfg.Stdout.Write(opencodeStdout.Bytes()); writeErr != nil && runErr == nil {
+			if _, writeErr := filteredOutput.Write(opencodeStdout.Bytes()); writeErr != nil && runErr == nil {
 				runErr = writeErr
 			}
-		} else if _, writeErr := stdout.Write(formatted); writeErr != nil && runErr == nil {
+		} else if _, writeErr := filteredOutput.Write(formatted); writeErr != nil && runErr == nil {
 			runErr = writeErr
 		}
 	}
@@ -501,6 +528,35 @@ func formatGeminiHeadlessResponse(raw []byte) ([]byte, error) {
 	return []byte(response + "\n"), nil
 }
 
+func formatClaudeStreamJSONResponse(raw []byte) ([]byte, error) {
+	scanner := bufio.NewScanner(bytes.NewReader(raw))
+	scanner.Buffer(make([]byte, 0, 64*1024), 10*1024*1024)
+
+	var response string
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" {
+			continue
+		}
+		var event claudeStreamEvent
+		if err := json.Unmarshal([]byte(line), &event); err != nil {
+			return nil, err
+		}
+		if event.Type == "result" {
+			response = event.Result
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		return nil, err
+	}
+
+	response = strings.TrimSpace(response)
+	if response == "" {
+		return nil, fmt.Errorf("missing result event")
+	}
+	return []byte(response + "\n"), nil
+}
+
 func formatOpenCodeJSONResponse(raw []byte) ([]byte, error) {
 	scanner := bufio.NewScanner(bytes.NewReader(raw))
 	scanner.Buffer(make([]byte, 0, 64*1024), 10*1024*1024)
@@ -539,16 +595,101 @@ func formatOpenCodeJSONResponse(raw []byte) ([]byte, error) {
 	return []byte(response + "\n"), nil
 }
 
-func openBatchLog(workspaceDir string, batchID int) (*os.File, error) {
-	path := BatchLogPath(workspaceDir, batchID)
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return nil, err
-	}
-	return os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
+type batchLog struct {
+	files  []*os.File
+	writer io.Writer
 }
 
-func BatchLogPath(workspaceDir string, batchID int) string {
+func (l *batchLog) Write(p []byte) (int, error) {
+	return l.writer.Write(p)
+}
+
+func (l *batchLog) Close() error {
+	var closeErr error
+	for _, file := range l.files {
+		if err := file.Close(); err != nil && closeErr == nil {
+			closeErr = err
+		}
+	}
+	return closeErr
+}
+
+func openBatchLog(dataDir, workspaceDir string, batchID int) (*batchLog, error) {
+	paths := []string{
+		BatchLogPath(dataDir, batchID),
+		RepoBatchLogPath(workspaceDir, batchID),
+	}
+	var files []*os.File
+	seen := map[string]bool{}
+	for _, path := range paths {
+		if seen[path] {
+			continue
+		}
+		seen[path] = true
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			return nil, err
+		}
+		file, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
+		if err != nil {
+			for _, opened := range files {
+				_ = opened.Close()
+			}
+			return nil, err
+		}
+		files = append(files, file)
+	}
+	writers := make([]io.Writer, 0, len(files))
+	for _, file := range files {
+		writers = append(writers, file)
+	}
+	return &batchLog{files: files, writer: io.MultiWriter(writers...)}, nil
+}
+
+func BatchLogPath(dataDir string, batchID int) string {
+	return filepath.Join(dataDir, "batches", fmt.Sprintf("batch-%d.log", batchID))
+}
+
+func RepoBatchLogPath(workspaceDir string, batchID int) string {
 	return filepath.Join(workspaceDir, ".rally", "batches", fmt.Sprintf("batch-%d.log", batchID))
+}
+
+func pruneRepoBatchLogs(workspaceDir string, keep int) error {
+	dir := filepath.Join(workspaceDir, ".rally", "batches")
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil
+		}
+		return err
+	}
+	var logs []os.DirEntry
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasPrefix(entry.Name(), "batch-") || !strings.HasSuffix(entry.Name(), ".log") {
+			continue
+		}
+		logs = append(logs, entry)
+	}
+	if len(logs) <= keep {
+		return nil
+	}
+	sort.Slice(logs, func(i, j int) bool {
+		return batchLogID(logs[i].Name()) < batchLogID(logs[j].Name())
+	})
+	for _, entry := range logs[:len(logs)-keep] {
+		if err := os.Remove(filepath.Join(dir, entry.Name())); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return err
+		}
+	}
+	return nil
+}
+
+func batchLogID(name string) int {
+	value := strings.TrimSuffix(strings.TrimPrefix(name, "batch-"), ".log")
+	n, err := strconv.Atoi(value)
+	if err != nil {
+		return 0
+	}
+	return n
 }
 
 func writeConsoleAndBatch(console io.Writer, batchLog io.Writer, format string, args ...any) {
