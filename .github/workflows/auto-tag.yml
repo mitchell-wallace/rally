@@ -17,7 +17,7 @@ jobs:
         with:
           fetch-depth: 2
 
-      - name: Check if VERSION changed and create tag
+      - name: Check if VERSION changed, create tag, and dispatch release
         run: |
           if git diff HEAD~1 --quiet -- VERSION; then
             echo "VERSION file unchanged, skipping."
@@ -27,18 +27,19 @@ jobs:
           VERSION="v$(cat VERSION)"
           echo "VERSION changed to $VERSION"
 
-          if git tag -l "$VERSION" | grep -q .; then
-            echo "Tag $VERSION already exists, skipping."
-            exit 0
+          if git ls-remote --exit-code --tags origin "refs/tags/$VERSION" > /dev/null; then
+            echo "Tag $VERSION already exists on origin."
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git tag "$VERSION"
+            git push origin "$VERSION"
+            echo "Created and pushed tag $VERSION"
           fi
-
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git tag "$VERSION"
-          git push origin "$VERSION"
-          echo "Created and pushed tag $VERSION"
 
           echo "Dispatching release workflow for $VERSION"
           gh api "repos/{owner}/{repo}/actions/workflows/release.yml/dispatches" \
             --method POST \
             --field ref="$VERSION"
+        env:
+          GH_TOKEN: ${{ github.token }}
