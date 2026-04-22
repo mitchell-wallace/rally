@@ -31,21 +31,22 @@ type AgentMix struct {
 }
 
 type Config struct {
-	WorkspaceDir     string
-	DataDir          string
-	RepoProgressPath string
-	AgentSpecs       []string
-	Iterations       int
-	Stdout           io.Writer
-	Stderr           io.Writer
-	BeadsMode        string // "auto", "true", "false", or "" (use env default)
-	InlinePrompt     string
-	ScoutMode        bool
-	ScoutFocus       string
-	ClaudeModel      string
-	CodexModel       string
-	GeminiModel      string
-	OpenCodeModel    string
+	WorkspaceDir         string
+	DataDir              string
+	RepoProgressPath     string
+	AgentSpecs           []string
+	Iterations           int
+	Stdout               io.Writer
+	Stderr               io.Writer
+	BeadsMode            string // "auto", "true", "false", or "" (use env default)
+	InlinePrompt         string
+	ScoutMode            bool
+	ScoutFocus           string
+	ClaudeModel          string
+	CodexModel           string
+	GeminiModel          string
+	OpenCodeModel        string
+	RunHooksOnAutoCommit bool
 }
 
 const defaultScoutIterations = 5
@@ -297,6 +298,9 @@ func (r *Runner) Run(ctx context.Context) ([]SessionResult, error) {
 		return nil, err
 	}
 
+	if err := ensureRepoBatchLogsIgnored(r.cfg.WorkspaceDir); err != nil {
+		fmt.Fprintf(r.cfg.Stderr, "rally: batch log ignore warning: %v\n", err)
+	}
 	batchLog, err := openBatchLog(r.cfg.DataDir, r.cfg.WorkspaceDir, st.ActiveBatch.BatchID)
 	if err != nil {
 		return nil, err
@@ -501,7 +505,7 @@ func (r *Runner) runOne(ctx context.Context, st *state.State, mix AgentMix, batc
 	if _, err := progress.RebuildRepoProgress(r.cfg.DataDir, r.cfg.RepoProgressPath, activeBatchMap(st.ActiveBatch)); err != nil {
 		return SessionResult{}, err
 	}
-	if commitHash, err := autoCommitWorkspace(r.cfg.WorkspaceDir, sessionID, iterationIndex, agent); err != nil {
+	if commitHash, err := autoCommitWorkspace(r.cfg.WorkspaceDir, sessionID, iterationIndex, agent, r.cfg.RunHooksOnAutoCommit); err != nil {
 		writeConsoleAndBatch(r.cfg.Stderr, batchLog, "rally: session %d auto-commit warning: %v\n", sessionID, err)
 	} else if commitHash != "" {
 		writeConsoleAndBatch(r.cfg.Stderr, batchLog, "rally: session %d auto-committed workspace changes (%s)\n", sessionID, commitHash)
@@ -692,6 +696,57 @@ func batchLogID(name string) int {
 	return n
 }
 
+func ensureRepoBatchLogsIgnored(workspaceDir string) error {
+	repoRoot, ok, err := gitRepoRoot(workspaceDir)
+	if err != nil || !ok {
+		return err
+	}
+
+	checkCmd := exec.Command("git", "-C", repoRoot, "check-ignore", "-q", "--", ".rally/batches/.rally-keep")
+	if err := checkCmd.Run(); err == nil {
+		return nil
+	} else {
+		var exitErr *exec.ExitError
+		if !errors.As(err, &exitErr) || exitErr.ExitCode() != 1 {
+			return gitCommandError([]string{"check-ignore", "-q", "--", ".rally/batches/.rally-keep"}, nil, err)
+		}
+	}
+
+	pathOutput, err := gitOutput(repoRoot, "rev-parse", "--git-path", "info/exclude")
+	if err != nil {
+		return err
+	}
+	excludePath := strings.TrimSpace(string(pathOutput))
+	if excludePath == "" {
+		return nil
+	}
+	if !filepath.IsAbs(excludePath) {
+		excludePath = filepath.Join(repoRoot, excludePath)
+	}
+
+	data, err := os.ReadFile(excludePath)
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	if strings.Contains(string(data), ".rally/batches/") || strings.Contains(string(data), "/.rally/batches/") {
+		return nil
+	}
+	if err := os.MkdirAll(filepath.Dir(excludePath), 0o755); err != nil {
+		return err
+	}
+
+	var builder strings.Builder
+	if len(data) > 0 {
+		builder.Write(data)
+		if !strings.HasSuffix(string(data), "\n") {
+			builder.WriteByte('\n')
+		}
+	}
+	builder.WriteString("# Rally runtime batch log cache.\n")
+	builder.WriteString(".rally/batches/\n")
+	return os.WriteFile(excludePath, []byte(builder.String()), 0o644)
+}
+
 func writeConsoleAndBatch(console io.Writer, batchLog io.Writer, format string, args ...any) {
 	if batchLog == nil {
 		fmt.Fprintf(console, format, args...)
@@ -820,19 +875,16 @@ func (r *Runner) buildPrompt(batchID, sessionID, iterationIndex, targetIteration
 	return consumed, body, nil
 }
 
-func autoCommitWorkspace(workspaceDir string, sessionID, iterationIndex int, agent string) (string, error) {
-	rootCmd := exec.Command("git", "-C", workspaceDir, "rev-parse", "--show-toplevel")
-	output, err := rootCmd.Output()
+func autoCommitWorkspace(workspaceDir string, sessionID, iterationIndex int, agent string, runHooks bool) (string, error) {
+	repoRoot, ok, err := gitRepoRoot(workspaceDir)
 	if err != nil {
-		return "", nil
+		return "", err
 	}
-	repoRoot := strings.TrimSpace(string(output))
-	if repoRoot == "" {
+	if !ok {
 		return "", nil
 	}
 
-	statusCmd := exec.Command("git", "-C", repoRoot, "status", "--porcelain")
-	statusOutput, err := statusCmd.Output()
+	statusOutput, err := gitOutput(repoRoot, "status", "--porcelain")
 	if err != nil {
 		return "", err
 	}
@@ -840,33 +892,85 @@ func autoCommitWorkspace(workspaceDir string, sessionID, iterationIndex int, age
 		return "", nil
 	}
 
-	addCmd := exec.Command("git", "-C", repoRoot, "add", "-A")
-	if err := addCmd.Run(); err != nil {
+	if _, err := gitOutput(repoRoot, "add", "-A"); err != nil {
 		return "", err
 	}
 
-	diffCmd := exec.Command("git", "-C", repoRoot, "diff", "--cached", "--quiet")
-	if err := diffCmd.Run(); err == nil {
+	diffOutput, err := gitOutput(repoRoot, "diff", "--cached", "--quiet")
+	if err == nil {
+		statusOutput, statusErr := gitOutput(repoRoot, "status", "--porcelain")
+		if statusErr != nil {
+			return "", statusErr
+		}
+		if strings.TrimSpace(string(statusOutput)) != "" {
+			return "", fmt.Errorf("workspace is dirty, but git add -A did not stage any committable changes:\n%s", strings.TrimSpace(string(statusOutput)))
+		}
 		return "", nil
 	} else {
 		var exitErr *exec.ExitError
-		if !errors.As(err, &exitErr) {
-			return "", err
+		if !errors.As(err, &exitErr) || exitErr.ExitCode() != 1 {
+			return "", gitCommandError([]string{"diff", "--cached", "--quiet"}, diffOutput, err)
 		}
 	}
 
-	message := fmt.Sprintf("rally: session %d iteration %d (%s)", sessionID, iterationIndex, agent)
-	commitCmd := exec.Command("git", "-C", repoRoot, "commit", "-m", message)
-	if err := commitCmd.Run(); err != nil {
+	commitArgs := append(gitUserFallbackConfig(repoRoot), "commit")
+	if !runHooks {
+		commitArgs = append(commitArgs, "--no-verify")
+	}
+	commitArgs = append(commitArgs, "-m", fmt.Sprintf("rally: session %d iteration %d (%s)", sessionID, iterationIndex, agent))
+	if _, err := gitOutput(repoRoot, commitArgs...); err != nil {
 		return "", err
 	}
 
-	hashCmd := exec.Command("git", "-C", repoRoot, "rev-parse", "--short", "HEAD")
-	hashOutput, err := hashCmd.Output()
+	hashOutput, err := gitOutput(repoRoot, "rev-parse", "--short", "HEAD")
 	if err != nil {
 		return "", nil
 	}
 	return strings.TrimSpace(string(hashOutput)), nil
+}
+
+func gitRepoRoot(workspaceDir string) (string, bool, error) {
+	output, err := gitOutput(workspaceDir, "rev-parse", "--show-toplevel")
+	if err != nil {
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) {
+			return "", false, nil
+		}
+		return "", false, err
+	}
+	repoRoot := strings.TrimSpace(string(output))
+	if repoRoot == "" {
+		return "", false, nil
+	}
+	return repoRoot, true, nil
+}
+
+func gitUserFallbackConfig(repoRoot string) []string {
+	var args []string
+	if value, err := gitOutput(repoRoot, "config", "--get", "user.name"); err != nil || strings.TrimSpace(string(value)) == "" {
+		args = append(args, "-c", "user.name=Rally")
+	}
+	if value, err := gitOutput(repoRoot, "config", "--get", "user.email"); err != nil || strings.TrimSpace(string(value)) == "" {
+		args = append(args, "-c", "user.email=rally@localhost")
+	}
+	return args
+}
+
+func gitOutput(repoRoot string, args ...string) ([]byte, error) {
+	cmd := exec.Command("git", append([]string{"-C", repoRoot}, args...)...)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return output, gitCommandError(args, output, err)
+	}
+	return output, nil
+}
+
+func gitCommandError(args []string, output []byte, err error) error {
+	detail := strings.TrimSpace(string(output))
+	if detail == "" {
+		return fmt.Errorf("git %s failed: %w", strings.Join(args, " "), err)
+	}
+	return fmt.Errorf("git %s failed: %w\n%s", strings.Join(args, " "), err, detail)
 }
 
 func activeBatchMap(batch *state.BatchState) map[string]any {

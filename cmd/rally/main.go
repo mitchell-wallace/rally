@@ -261,21 +261,22 @@ func runBatch(argv []string) error {
 	}
 
 	r := runner.New(runner.Config{
-		WorkspaceDir:     cfg.WorkspaceDir,
-		DataDir:          cfg.DataDir,
-		RepoProgressPath: cfg.RepoProgressPath,
-		Iterations:       iterations,
-		AgentSpecs:       cfg.AgentSpecs,
-		Stdout:           os.Stdout,
-		Stderr:           os.Stderr,
-		BeadsMode:        beadsMode,
-		InlinePrompt:     inlinePrompt,
-		ScoutMode:        scoutMode,
-		ScoutFocus:       scoutFocus,
-		ClaudeModel:      cfg.ClaudeModel,
-		CodexModel:       cfg.CodexModel,
-		GeminiModel:      cfg.GeminiModel,
-		OpenCodeModel:    cfg.OpenCodeModel,
+		WorkspaceDir:         cfg.WorkspaceDir,
+		DataDir:              cfg.DataDir,
+		RepoProgressPath:     cfg.RepoProgressPath,
+		Iterations:           iterations,
+		AgentSpecs:           cfg.AgentSpecs,
+		Stdout:               os.Stdout,
+		Stderr:               os.Stderr,
+		BeadsMode:            beadsMode,
+		InlinePrompt:         inlinePrompt,
+		ScoutMode:            scoutMode,
+		ScoutFocus:           scoutFocus,
+		ClaudeModel:          cfg.ClaudeModel,
+		CodexModel:           cfg.CodexModel,
+		GeminiModel:          cfg.GeminiModel,
+		OpenCodeModel:        cfg.OpenCodeModel,
+		RunHooksOnAutoCommit: cfg.RunHooksOnAutoCommit,
 	})
 	if err := r.EnsureInitialized(); err != nil {
 		return err
@@ -525,15 +526,16 @@ func defaultConfig() orchtui.Config {
 	modelDefaults, _ := rallyconfig.LoadWorkspace(workspaceDir)
 	beadsMode := getenvOr(app.EnvBeads, modelDefaults.Beads)
 	return orchtui.Config{
-		WorkspaceDir:     workspaceDir,
-		DataDir:          dataDir,
-		RepoProgressPath: repoPath,
-		Iterations:       1,
-		BeadsMode:        beadsMode,
-		ClaudeModel:      modelDefaults.ClaudeModel,
-		CodexModel:       modelDefaults.CodexModel,
-		GeminiModel:      modelDefaults.GeminiModel,
-		OpenCodeModel:    modelDefaults.OpenCodeModel,
+		WorkspaceDir:         workspaceDir,
+		DataDir:              dataDir,
+		RepoProgressPath:     repoPath,
+		Iterations:           1,
+		BeadsMode:            beadsMode,
+		ClaudeModel:          modelDefaults.ClaudeModel,
+		CodexModel:           modelDefaults.CodexModel,
+		GeminiModel:          modelDefaults.GeminiModel,
+		OpenCodeModel:        modelDefaults.OpenCodeModel,
+		RunHooksOnAutoCommit: modelDefaults.RunHooksOnAutoCommit,
 	}
 }
 

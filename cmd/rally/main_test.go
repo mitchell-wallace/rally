@@ -187,6 +187,37 @@ func TestDefaultConfigUsesWorkspaceRallyConfigDataDir(t *testing.T) {
 	}
 }
 
+func TestDefaultConfigLoadsRunHooksOnAutoCommit(t *testing.T) {
+	workspaceDir := t.TempDir()
+	homeDir := t.TempDir()
+
+	oldWD, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chdir(workspaceDir); err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		_ = os.Chdir(oldWD)
+	}()
+
+	t.Setenv("HOME", homeDir)
+	t.Setenv(app.EnvWorkspaceDir, "")
+	t.Setenv(app.EnvDataDir, "")
+	t.Setenv(app.EnvRepoProgressPath, "")
+	t.Setenv(app.EnvContainerName, "")
+
+	if err := os.WriteFile(filepath.Join(workspaceDir, "rally.toml"), []byte("run_hooks_on_autocommit = true\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg := defaultConfig()
+	if !cfg.RunHooksOnAutoCommit {
+		t.Fatal("expected run_hooks_on_autocommit loaded from rally.toml")
+	}
+}
+
 func TestDefaultConfigEnvDataDirOverridesWorkspaceRallyConfig(t *testing.T) {
 	workspaceDir := t.TempDir()
 	homeDir := t.TempDir()

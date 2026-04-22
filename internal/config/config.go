@@ -10,11 +10,12 @@ import (
 )
 
 type Config struct {
-	ClaudeModel   string `toml:"claude_model,omitempty"`
-	CodexModel    string `toml:"codex_model,omitempty"`
-	GeminiModel   string `toml:"gemini_model,omitempty"`
-	OpenCodeModel string `toml:"opencode_model,omitempty"`
-	Beads         string `toml:"beads,omitempty"`
+	ClaudeModel          string `toml:"claude_model,omitempty"`
+	CodexModel           string `toml:"codex_model,omitempty"`
+	GeminiModel          string `toml:"gemini_model,omitempty"`
+	OpenCodeModel        string `toml:"opencode_model,omitempty"`
+	Beads                string `toml:"beads,omitempty"`
+	RunHooksOnAutoCommit bool   `toml:"run_hooks_on_autocommit"`
 }
 
 func WorkspacePath(workspaceDir string) string {

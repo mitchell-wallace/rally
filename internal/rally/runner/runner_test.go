@@ -202,7 +202,7 @@ func TestAutoCommitWorkspaceCommitsDirtyRepo(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	hash, err := autoCommitWorkspace(repo, 3, 2, "codex")
+	hash, err := autoCommitWorkspace(repo, 3, 2, "codex", false)
 	if err != nil {
 		t.Fatalf("autoCommitWorkspace returned error: %v", err)
 	}
@@ -216,6 +216,107 @@ func TestAutoCommitWorkspaceCommitsDirtyRepo(t *testing.T) {
 	}
 }
 
+func TestAutoCommitWorkspaceUsesFallbackIdentity(t *testing.T) {
+	homeDir := t.TempDir()
+	t.Setenv("HOME", homeDir)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(homeDir, "xdg"))
+	t.Setenv("GIT_CONFIG_GLOBAL", filepath.Join(homeDir, "gitconfig"))
+	t.Setenv("GIT_CONFIG_NOSYSTEM", "1")
+
+	repo := t.TempDir()
+	runGit(t, repo, "init")
+	if err := os.WriteFile(filepath.Join(repo, "file.txt"), []byte("one\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	hash, err := autoCommitWorkspace(repo, 4, 1, "gemini", false)
+	if err != nil {
+		t.Fatalf("autoCommitWorkspace returned error: %v", err)
+	}
+	if hash == "" {
+		t.Fatal("expected commit hash")
+	}
+
+	author := strings.TrimSpace(runGit(t, repo, "log", "-1", "--pretty=%an <%ae>"))
+	if author != "Rally <rally@localhost>" {
+		t.Fatalf("unexpected fallback author: %q", author)
+	}
+}
+
+func TestAutoCommitWorkspaceBypassesCommitHooks(t *testing.T) {
+	t.Parallel()
+
+	repo := t.TempDir()
+	runGit(t, repo, "init")
+	runGit(t, repo, "config", "user.name", "Rally Test")
+	runGit(t, repo, "config", "user.email", "rally@example.com")
+	hooksDir := filepath.Join(repo, ".git", "hooks")
+	if err := os.WriteFile(filepath.Join(hooksDir, "pre-commit"), []byte("#!/usr/bin/env bash\nprintf 'hook says no\\n' >&2\nexit 1\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(repo, "file.txt"), []byte("one\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	hash, err := autoCommitWorkspace(repo, 5, 1, "codex", false)
+	if err != nil {
+		t.Fatalf("autoCommitWorkspace returned error: %v", err)
+	}
+	if hash == "" {
+		t.Fatal("expected commit hash")
+	}
+	if status := strings.TrimSpace(runGit(t, repo, "status", "--porcelain")); status != "" {
+		t.Fatalf("expected clean repo after hook-bypassing commit, got:\n%s", status)
+	}
+}
+
+func TestAutoCommitWorkspaceRunsCommitHooksWhenEnabled(t *testing.T) {
+	t.Parallel()
+
+	repo := t.TempDir()
+	runGit(t, repo, "init")
+	runGit(t, repo, "config", "user.name", "Rally Test")
+	runGit(t, repo, "config", "user.email", "rally@example.com")
+	hooksDir := filepath.Join(repo, ".git", "hooks")
+	if err := os.WriteFile(filepath.Join(hooksDir, "pre-commit"), []byte("#!/usr/bin/env bash\nprintf 'hook says no\\n' >&2\nexit 1\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(repo, "file.txt"), []byte("one\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := autoCommitWorkspace(repo, 6, 1, "codex", true)
+	if err == nil {
+		t.Fatal("expected autoCommitWorkspace to return hook error")
+	}
+	if !strings.Contains(err.Error(), "hook says no") {
+		t.Fatalf("expected hook output in error, got: %v", err)
+	}
+}
+
+func TestAutoCommitWorkspaceIncludesGitFailureOutput(t *testing.T) {
+	t.Parallel()
+
+	repo := t.TempDir()
+	runGit(t, repo, "init")
+	runGit(t, repo, "config", "user.name", "Rally Test")
+	runGit(t, repo, "config", "user.email", "rally@example.com")
+	if err := os.WriteFile(filepath.Join(repo, ".git", "index.lock"), []byte("locked\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(repo, "file.txt"), []byte("one\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := autoCommitWorkspace(repo, 7, 1, "codex", false)
+	if err == nil {
+		t.Fatal("expected autoCommitWorkspace to return git error")
+	}
+	if !strings.Contains(err.Error(), "index.lock") {
+		t.Fatalf("expected git output in error, got: %v", err)
+	}
+}
+
 func TestAutoCommitWorkspaceSkipsCleanRepo(t *testing.T) {
 	t.Parallel()
 
@@ -224,12 +325,62 @@ func TestAutoCommitWorkspaceSkipsCleanRepo(t *testing.T) {
 	runGit(t, repo, "config", "user.name", "Rally Test")
 	runGit(t, repo, "config", "user.email", "rally@example.com")
 
-	hash, err := autoCommitWorkspace(repo, 1, 1, "claude")
+	hash, err := autoCommitWorkspace(repo, 1, 1, "claude", false)
 	if err != nil {
 		t.Fatalf("autoCommitWorkspace returned error: %v", err)
 	}
 	if hash != "" {
 		t.Fatalf("expected empty hash for clean repo, got %q", hash)
+	}
+}
+
+func TestRunnerAutoCommitLeavesRepoCleanWhenBatchLogsAreUnignored(t *testing.T) {
+	repo := t.TempDir()
+	runGit(t, repo, "init")
+	runGit(t, repo, "config", "user.name", "Rally Test")
+	runGit(t, repo, "config", "user.email", "rally@example.com")
+
+	binDir := filepath.Join(t.TempDir(), "bin")
+	if err := os.MkdirAll(binDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	codexScript := "#!/usr/bin/env bash\nprintf 'changed\\n' > file.txt\nprintf 'done\\n'\n"
+	if err := os.WriteFile(filepath.Join(binDir, "codex"), []byte(codexScript), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	dataDir := filepath.Join(t.TempDir(), "data")
+	r := New(Config{
+		WorkspaceDir:     repo,
+		DataDir:          dataDir,
+		RepoProgressPath: filepath.Join(repo, "docs", "orchestration", "rally-progress.yaml"),
+		AgentSpecs:       []string{"cx:1"},
+		Iterations:       1,
+		Stdout:           ioDiscard{},
+		Stderr:           ioDiscard{},
+	})
+
+	results, err := r.Run(context.Background())
+	if err != nil {
+		t.Fatalf("Run returned error: %v", err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("unexpected results length: %d", len(results))
+	}
+
+	if status := strings.TrimSpace(runGit(t, repo, "status", "--porcelain")); status != "" {
+		t.Fatalf("expected clean repo after run, got:\n%s", status)
+	}
+	if trackedLogs := strings.TrimSpace(runGit(t, repo, "ls-files", ".rally/batches")); trackedLogs != "" {
+		t.Fatalf("batch logs should remain untracked, got:\n%s", trackedLogs)
+	}
+	excludeData, err := os.ReadFile(filepath.Join(repo, ".git", "info", "exclude"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(excludeData), ".rally/batches/") {
+		t.Fatalf("expected git info exclude to ignore batch logs, got:\n%s", string(excludeData))
 	}
 }
 

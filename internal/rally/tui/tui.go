@@ -16,18 +16,19 @@ import (
 )
 
 type Config struct {
-	WorkspaceDir     string
-	DataDir          string
-	RepoProgressPath string
-	Iterations       int
-	AgentSpecs       []string
-	AutoStart        bool
-	ExitWhenIdle     bool
-	BeadsMode        string
-	ClaudeModel      string
-	CodexModel       string
-	GeminiModel      string
-	OpenCodeModel    string
+	WorkspaceDir         string
+	DataDir              string
+	RepoProgressPath     string
+	Iterations           int
+	AgentSpecs           []string
+	AutoStart            bool
+	ExitWhenIdle         bool
+	BeadsMode            string
+	ClaudeModel          string
+	CodexModel           string
+	GeminiModel          string
+	OpenCodeModel        string
+	RunHooksOnAutoCommit bool
 }
 
 type model struct {
@@ -50,18 +51,19 @@ type tickMsg time.Time
 
 func Run(cfg Config) error {
 	r := runner.New(runner.Config{
-		WorkspaceDir:     cfg.WorkspaceDir,
-		DataDir:          cfg.DataDir,
-		RepoProgressPath: cfg.RepoProgressPath,
-		AgentSpecs:       cfg.AgentSpecs,
-		Iterations:       cfg.Iterations,
-		Stdout:           os.Stdout,
-		Stderr:           os.Stderr,
-		BeadsMode:        cfg.BeadsMode,
-		ClaudeModel:      cfg.ClaudeModel,
-		CodexModel:       cfg.CodexModel,
-		GeminiModel:      cfg.GeminiModel,
-		OpenCodeModel:    cfg.OpenCodeModel,
+		WorkspaceDir:         cfg.WorkspaceDir,
+		DataDir:              cfg.DataDir,
+		RepoProgressPath:     cfg.RepoProgressPath,
+		AgentSpecs:           cfg.AgentSpecs,
+		Iterations:           cfg.Iterations,
+		Stdout:               os.Stdout,
+		Stderr:               os.Stderr,
+		BeadsMode:            cfg.BeadsMode,
+		ClaudeModel:          cfg.ClaudeModel,
+		CodexModel:           cfg.CodexModel,
+		GeminiModel:          cfg.GeminiModel,
+		OpenCodeModel:        cfg.OpenCodeModel,
+		RunHooksOnAutoCommit: cfg.RunHooksOnAutoCommit,
 	})
 	if err := r.EnsureInitialized(); err != nil {
 		return err

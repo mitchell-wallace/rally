@@ -138,9 +138,14 @@ codex_model = "gpt-5.4"
 gemini_model = "gemini-3.1-pro-preview"
 opencode_model = "zai-coding-plan/glm-5.1"
 beads = "auto"
+run_hooks_on_autocommit = false
 ```
 
 You can create the file manually or let `rally init` write the initial config.
+By default Rally uses `--no-verify` for its post-run autocommit checkpoint so
+repo hooks cannot block progress/logging commits. Set
+`run_hooks_on_autocommit = true` if you want those fallback commits to run the
+workspace's normal Git hooks.
 
 Rally also reads `.rally/config` for runtime paths. `RALLY_DATA_DIR` controls
 where durable state, full batch logs, and per-session transcripts are stored:
