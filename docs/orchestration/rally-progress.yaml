@@ -1,13 +1,5 @@
 version: 1
-updated_at: "2026-04-22T05:53:06Z"
-active_batch:
-    agent_mix:
-        - op
-    batch_id: 1
-    completed_iterations: 2
-    ended_at: ""
-    started_at: "2026-04-22T05:49:15Z"
-    target_iterations: 3
+updated_at: "2026-04-22T05:53:28Z"
 history_window: 50
 recent_sessions:
     - session_id: 1
@@ -39,3 +31,15 @@ recent_sessions:
       commits:
         - a4f7258 "Add tmp/2.json and tmp/3.json files"
       transcript_path: /home/mitchell/.local/share/rally/sessions/session-2/terminal.log
+    - session_id: 3
+      batch_id: 1
+      iteration_index: 3
+      agent: opencode
+      status: completed
+      started_at: "2026-04-22T05:53:06Z"
+      ended_at: "2026-04-22T05:53:28Z"
+      runtime_seconds: 22
+      summary: No tasks available — br ready reports all work complete
+      follow_ups:
+        - Check for new tasks in next session
+      transcript_path: /home/mitchell/.local/share/rally/sessions/session-3/terminal.log
