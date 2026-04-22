@@ -165,6 +165,7 @@ By default, Rally keeps runtime state under:
 Useful outputs:
 
 - Session transcripts and metadata in `~/.local/share/rally/sessions/`
+- Batch console logs in `.rally/batches/batch-N.log`
 - Repo progress in `docs/orchestration/rally-progress.yaml`
 - Workspace config in `rally.toml`
 
@@ -188,8 +189,9 @@ Each iteration:
 2. Builds a prompt from your inline prompt or stored instructions.
 3. Runs that agent CLI in the current repo.
 4. Captures a transcript and session metadata.
-5. Rebuilds `docs/orchestration/rally-progress.yaml`.
-6. Auto-commits workspace changes if the repo became dirty.
+5. Appends the full batch console history to `.rally/batches/batch-N.log`.
+6. Rebuilds `docs/orchestration/rally-progress.yaml`.
+7. Auto-commits workspace changes if the repo became dirty.
 
 That gives you a simple, repeatable multi-agent loop without having to manually
 coordinate each pass.

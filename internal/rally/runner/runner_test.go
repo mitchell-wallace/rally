@@ -137,8 +137,8 @@ func TestBuildAgentCommandUsesConfiguredModels(t *testing.T) {
 		},
 		{
 			agent:  "opencode",
-			want:   []string{"opencode", "run", "--model", "anthropic/claude-sonnet-4", "prompt"},
-			stderr: false,
+			want:   []string{"opencode", "run", "--model", "anthropic/claude-sonnet-4", "--format", "json", "prompt"},
+			stderr: true,
 		},
 	}
 
@@ -164,7 +164,7 @@ func TestBuildAgentCommandOmitsEmptyModelFlags(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	want := []string{"opencode", "run", "prompt"}
+	want := []string{"opencode", "run", "--format", "json", "prompt"}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("command mismatch:\n got %#v\nwant %#v", got, want)
 	}
@@ -244,6 +244,25 @@ func TestFormatGeminiHeadlessResponse(t *testing.T) {
 	}
 }
 
+func TestFormatOpenCodeJSONResponse(t *testing.T) {
+	t.Parallel()
+
+	raw := []byte(strings.Join([]string{
+		`{"type":"text","part":{"type":"text","messageID":"msg_1","text":"pre-tool note"}}`,
+		`{"type":"tool_use","part":{"type":"tool","tool":"grep"}}`,
+		`{"type":"text","part":{"type":"text","messageID":"msg_2","text":"Final "}}`,
+		`{"type":"text","part":{"type":"text","messageID":"msg_2","text":"answer"}}`,
+	}, "\n"))
+
+	got, err := formatOpenCodeJSONResponse(raw)
+	if err != nil {
+		t.Fatalf("formatOpenCodeJSONResponse returned error: %v", err)
+	}
+	if string(got) != "Final answer\n" {
+		t.Fatalf("unexpected formatted output: %q", got)
+	}
+}
+
 func TestRunnerGeminiWritesOnlyFinalResponseToStdout(t *testing.T) {
 	workspaceDir := t.TempDir()
 	binDir := filepath.Join(workspaceDir, "bin")
@@ -296,6 +315,67 @@ func TestRunnerGeminiWritesOnlyFinalResponseToStdout(t *testing.T) {
 	}
 	if !strings.Contains(log, "Gemini noise") {
 		t.Fatalf("session transcript missing Gemini stderr: %s", log)
+	}
+}
+
+func TestRunnerOpenCodeWritesOnlyFinalResponseToStdoutAndLogsRawEvents(t *testing.T) {
+	workspaceDir := t.TempDir()
+	binDir := filepath.Join(workspaceDir, "bin")
+	if err := os.MkdirAll(binDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	opencodeScript := "#!/usr/bin/env bash\nprintf '%s\\n' 'Opencode noise' >&2\nprintf '%s\\n' '{\"type\":\"tool_use\",\"part\":{\"type\":\"tool\",\"tool\":\"grep\",\"state\":{\"output\":\"raw tool output\"}}}'\nprintf '%s\\n' '{\"type\":\"text\",\"part\":{\"type\":\"text\",\"messageID\":\"msg_1\",\"text\":\"FINAL\"}}'\n"
+	opencodePath := filepath.Join(binDir, "opencode")
+	if err := os.WriteFile(opencodePath, []byte(opencodeScript), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	dataDir := filepath.Join(workspaceDir, "data")
+	repoPath := filepath.Join(workspaceDir, "docs", "orchestration", "rally-progress.yaml")
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	r := New(Config{
+		WorkspaceDir:     workspaceDir,
+		DataDir:          dataDir,
+		RepoProgressPath: repoPath,
+		AgentSpecs:       []string{"op:1"},
+		Iterations:       1,
+		Stdout:           &stdout,
+		Stderr:           &stderr,
+	})
+	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	results, err := r.Run(context.Background())
+	if err != nil {
+		t.Fatalf("Run returned error: %v", err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("unexpected results length: %d", len(results))
+	}
+	if got := stdout.String(); got != "FINAL\n" {
+		t.Fatalf("unexpected stdout: %q", got)
+	}
+	if strings.Contains(stdout.String(), "tool_use") || strings.Contains(stdout.String(), "raw tool output") {
+		t.Fatalf("stdout should only contain final response: %s", stdout.String())
+	}
+
+	sessionData, err := os.ReadFile(filepath.Join(dataDir, "sessions", "session-1", "terminal.log"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	sessionLog := string(sessionData)
+	if !strings.Contains(sessionLog, "raw tool output") || !strings.Contains(sessionLog, "Opencode noise") {
+		t.Fatalf("session transcript missing raw Opencode history: %s", sessionLog)
+	}
+
+	batchData, err := os.ReadFile(BatchLogPath(workspaceDir, 1))
+	if err != nil {
+		t.Fatal(err)
+	}
+	batchLog := string(batchData)
+	if !strings.Contains(batchLog, "rally: batch 1") || !strings.Contains(batchLog, "raw tool output") || !strings.Contains(batchLog, "FINAL\n") {
+		t.Fatalf("batch log missing expected console history: %s", batchLog)
 	}
 }
 

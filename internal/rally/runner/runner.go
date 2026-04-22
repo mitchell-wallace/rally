@@ -1,6 +1,7 @@
 package runner
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -9,6 +10,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -65,6 +67,15 @@ type SessionResult struct {
 
 type geminiHeadlessOutput struct {
 	Response string `json:"response"`
+}
+
+type opencodeJSONEvent struct {
+	Type string `json:"type"`
+	Part struct {
+		Type      string `json:"type"`
+		MessageID string `json:"messageID"`
+		Text      string `json:"text"`
+	} `json:"part"`
 }
 
 func New(cfg Config) *Runner {
@@ -170,8 +181,8 @@ func BuildAgentCommand(cfg Config, agentName, prompt string) ([]string, bool, er
 		if cfg.OpenCodeModel != "" {
 			command = append(command, "--model", cfg.OpenCodeModel)
 		}
-		command = append(command, prompt)
-		return command, false, nil
+		command = append(command, "--format", "json", prompt)
+		return command, true, nil
 	default:
 		return nil, false, fmt.Errorf("unsupported agent %q", agentName)
 	}
@@ -279,21 +290,27 @@ func (r *Runner) Run(ctx context.Context) ([]SessionResult, error) {
 		return nil, err
 	}
 
-	fmt.Fprintf(r.cfg.Stderr, "rally: batch %d — %d iteration(s), agents: %s\n",
+	batchLog, err := openBatchLog(r.cfg.WorkspaceDir, st.ActiveBatch.BatchID)
+	if err != nil {
+		return nil, err
+	}
+	defer batchLog.Close()
+
+	writeConsoleAndBatch(r.cfg.Stderr, batchLog, "rally: batch %d — %d iteration(s), agents: %s\n",
 		st.ActiveBatch.BatchID, st.ActiveBatch.TargetIterations, mix.Label)
 	if st.ActiveBatch.CompletedIterations > 0 {
-		fmt.Fprintf(r.cfg.Stderr, "rally: resuming from iteration %d\n", st.ActiveBatch.CompletedIterations+1)
+		writeConsoleAndBatch(r.cfg.Stderr, batchLog, "rally: resuming from iteration %d\n", st.ActiveBatch.CompletedIterations+1)
 	}
 
 	var results []SessionResult
 	for st.ActiveBatch != nil && st.ActiveBatch.CompletedIterations < st.ActiveBatch.TargetIterations {
 		if ctx.Err() != nil {
-			fmt.Fprintf(r.cfg.Stderr, "rally: cancelled after %d iteration(s)\n", len(results))
+			writeConsoleAndBatch(r.cfg.Stderr, batchLog, "rally: cancelled after %d iteration(s)\n", len(results))
 			return results, ctx.Err()
 		}
-		current, err := r.runOne(ctx, &st, mix)
+		current, err := r.runOne(ctx, &st, mix, batchLog)
 		if err != nil {
-			fmt.Fprintf(r.cfg.Stderr, "rally: iteration %d failed: %v\n", current.IterationIndex, err)
+			writeConsoleAndBatch(r.cfg.Stderr, batchLog, "rally: iteration %d failed: %v\n", current.IterationIndex, err)
 			return results, err
 		}
 		results = append(results, current)
@@ -302,15 +319,15 @@ func (r *Runner) Run(ctx context.Context) ([]SessionResult, error) {
 			return results, err
 		}
 		if st.StopAfterCurrent {
-			fmt.Fprintf(r.cfg.Stderr, "rally: stop requested after iteration %d\n", current.IterationIndex)
+			writeConsoleAndBatch(r.cfg.Stderr, batchLog, "rally: stop requested after iteration %d\n", current.IterationIndex)
 			break
 		}
 	}
-	fmt.Fprintf(r.cfg.Stderr, "rally: batch %d complete — %d session(s) ran\n", st.NextBatchID-1, len(results))
+	writeConsoleAndBatch(r.cfg.Stderr, batchLog, "rally: batch %d complete — %d session(s) ran\n", st.NextBatchID-1, len(results))
 	return results, nil
 }
 
-func (r *Runner) runOne(ctx context.Context, st *state.State, mix AgentMix) (SessionResult, error) {
+func (r *Runner) runOne(ctx context.Context, st *state.State, mix AgentMix, batchLog io.Writer) (SessionResult, error) {
 	sessionID := st.NextSessionID
 	st.NextSessionID++
 	st.ActiveBatch.CompletedIterations++
@@ -318,7 +335,7 @@ func (r *Runner) runOne(ctx context.Context, st *state.State, mix AgentMix) (Ses
 	agent := AgentForSession(sessionID, mix)
 	startedAt := time.Now().UTC()
 
-	fmt.Fprintf(r.cfg.Stderr, "rally: [%d/%d] session %d — agent: %s\n",
+	writeConsoleAndBatch(r.cfg.Stderr, batchLog, "rally: [%d/%d] session %d — agent: %s\n",
 		iterationIndex, st.ActiveBatch.TargetIterations, sessionID, agent)
 
 	if err := r.stateStore.Save(*st); err != nil {
@@ -359,16 +376,20 @@ func (r *Runner) runOne(ctx context.Context, st *state.State, mix AgentMix) (Ses
 	)
 	cmd.Env = append(cmd.Env, AgentEnvOverrides(agent)...)
 
-	stdout := io.MultiWriter(logFile, r.cfg.Stdout)
-	stderrTarget := io.MultiWriter(logFile, r.cfg.Stderr)
+	agentLog := io.MultiWriter(logFile, batchLog)
+	stdout := io.MultiWriter(logFile, batchLog, r.cfg.Stdout)
+	stderrTarget := io.MultiWriter(logFile, batchLog, r.cfg.Stderr)
 	var geminiStdout bytes.Buffer
+	var opencodeStdout bytes.Buffer
 	if agent == "gemini" {
 		cmd.Stdout = &geminiStdout
+	} else if agent == "opencode" {
+		cmd.Stdout = &opencodeStdout
 	} else {
 		cmd.Stdout = stdout
 	}
 	if suppressStderr {
-		cmd.Stderr = logFile
+		cmd.Stderr = agentLog
 	} else {
 		cmd.Stderr = stderrTarget
 	}
@@ -392,10 +413,26 @@ func (r *Runner) runOne(ctx context.Context, st *state.State, mix AgentMix) (Ses
 
 	runErr := cmd.Run()
 	if agent == "gemini" {
+		if _, writeErr := batchLog.Write(geminiStdout.Bytes()); writeErr != nil && runErr == nil {
+			runErr = writeErr
+		}
 		formatted, err := formatGeminiHeadlessResponse(geminiStdout.Bytes())
 		if err != nil {
-			fmt.Fprintf(logFile, "rally: warning: failed to parse Gemini JSON output: %v\n", err)
+			fmt.Fprintf(agentLog, "rally: warning: failed to parse Gemini JSON output: %v\n", err)
 			if _, writeErr := stdout.Write(geminiStdout.Bytes()); writeErr != nil && runErr == nil {
+				runErr = writeErr
+			}
+		} else if _, writeErr := stdout.Write(formatted); writeErr != nil && runErr == nil {
+			runErr = writeErr
+		}
+	} else if agent == "opencode" {
+		if _, writeErr := agentLog.Write(opencodeStdout.Bytes()); writeErr != nil && runErr == nil {
+			runErr = writeErr
+		}
+		formatted, err := formatOpenCodeJSONResponse(opencodeStdout.Bytes())
+		if err != nil {
+			fmt.Fprintf(agentLog, "rally: warning: failed to parse Opencode JSON output: %v\n", err)
+			if _, writeErr := r.cfg.Stdout.Write(opencodeStdout.Bytes()); writeErr != nil && runErr == nil {
 				runErr = writeErr
 			}
 		} else if _, writeErr := stdout.Write(formatted); writeErr != nil && runErr == nil {
@@ -415,7 +452,7 @@ func (r *Runner) runOne(ctx context.Context, st *state.State, mix AgentMix) (Ses
 		}
 	}
 	runtimeSeconds := int(endedAt.Sub(startedAt).Seconds())
-	fmt.Fprintf(r.cfg.Stderr, "rally: [%d/%d] session %d %s (exit %d, %ds)\n",
+	writeConsoleAndBatch(r.cfg.Stderr, batchLog, "rally: [%d/%d] session %d %s (exit %d, %ds)\n",
 		iterationIndex, st.ActiveBatch.TargetIterations, sessionID, status, exitCode, runtimeSeconds)
 	if err := progress.UpdateSessionMeta(r.cfg.DataDir, sessionID, func(meta *progress.SessionMeta) error {
 		meta.Session.Status = status
@@ -438,9 +475,9 @@ func (r *Runner) runOne(ctx context.Context, st *state.State, mix AgentMix) (Ses
 		return SessionResult{}, err
 	}
 	if commitHash, err := autoCommitWorkspace(r.cfg.WorkspaceDir, sessionID, iterationIndex, agent); err != nil {
-		fmt.Fprintf(r.cfg.Stderr, "rally: session %d auto-commit warning: %v\n", sessionID, err)
+		writeConsoleAndBatch(r.cfg.Stderr, batchLog, "rally: session %d auto-commit warning: %v\n", sessionID, err)
 	} else if commitHash != "" {
-		fmt.Fprintf(r.cfg.Stderr, "rally: session %d auto-committed workspace changes (%s)\n", sessionID, commitHash)
+		writeConsoleAndBatch(r.cfg.Stderr, batchLog, "rally: session %d auto-committed workspace changes (%s)\n", sessionID, commitHash)
 	}
 
 	return SessionResult{
@@ -462,6 +499,64 @@ func formatGeminiHeadlessResponse(raw []byte) ([]byte, error) {
 		return nil, fmt.Errorf("missing response field")
 	}
 	return []byte(response + "\n"), nil
+}
+
+func formatOpenCodeJSONResponse(raw []byte) ([]byte, error) {
+	scanner := bufio.NewScanner(bytes.NewReader(raw))
+	scanner.Buffer(make([]byte, 0, 64*1024), 10*1024*1024)
+
+	var lastMessageID string
+	var textParts []string
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" {
+			continue
+		}
+		var event opencodeJSONEvent
+		if err := json.Unmarshal([]byte(line), &event); err != nil {
+			return nil, err
+		}
+		if event.Type != "text" && event.Part.Type != "text" {
+			continue
+		}
+		if event.Part.Text == "" {
+			continue
+		}
+		if event.Part.MessageID != "" && event.Part.MessageID != lastMessageID {
+			lastMessageID = event.Part.MessageID
+			textParts = textParts[:0]
+		}
+		textParts = append(textParts, event.Part.Text)
+	}
+	if err := scanner.Err(); err != nil {
+		return nil, err
+	}
+
+	response := strings.TrimSpace(strings.Join(textParts, ""))
+	if response == "" {
+		return nil, fmt.Errorf("missing text event")
+	}
+	return []byte(response + "\n"), nil
+}
+
+func openBatchLog(workspaceDir string, batchID int) (*os.File, error) {
+	path := BatchLogPath(workspaceDir, batchID)
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return nil, err
+	}
+	return os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
+}
+
+func BatchLogPath(workspaceDir string, batchID int) string {
+	return filepath.Join(workspaceDir, ".rally", "batches", fmt.Sprintf("batch-%d.log", batchID))
+}
+
+func writeConsoleAndBatch(console io.Writer, batchLog io.Writer, format string, args ...any) {
+	if batchLog == nil {
+		fmt.Fprintf(console, format, args...)
+		return
+	}
+	fmt.Fprintf(io.MultiWriter(console, batchLog), format, args...)
 }
 
 func (r *Runner) detectBeads() bool {
