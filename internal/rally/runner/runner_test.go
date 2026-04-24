@@ -110,10 +110,10 @@ func TestBuildAgentCommandUsesConfiguredModels(t *testing.T) {
 	t.Parallel()
 
 	cfg := Config{
-		ClaudeModel:   "sonnet",
-		CodexModel:    "o3",
-		GeminiModel:   "gemini-2.5-pro",
-		OpenCodeModel: "anthropic/claude-sonnet-4",
+		ClaudeModel:   "claude-opus-4.6",
+		CodexModel:    "gpt-5.4",
+		GeminiModel:   "gemini-3.1-pro-preview",
+		OpenCodeModel: "opencode-go/kimi-k2.6",
 	}
 
 	tests := []struct {
@@ -123,22 +123,22 @@ func TestBuildAgentCommandUsesConfiguredModels(t *testing.T) {
 	}{
 		{
 			agent:  "claude",
-			want:   []string{"claude", "-p", "--dangerously-skip-permissions", "--model", "sonnet", "--output-format", "stream-json", "--verbose", "prompt"},
+			want:   []string{"claude", "-p", "--dangerously-skip-permissions", "--model", "claude-opus-4.6", "--output-format", "stream-json", "--verbose", "prompt"},
 			stderr: true,
 		},
 		{
 			agent:  "codex",
-			want:   []string{"codex", "exec", "--dangerously-bypass-approvals-and-sandbox", "--model", "o3", "prompt"},
+			want:   []string{"codex", "exec", "--dangerously-bypass-approvals-and-sandbox", "--model", "gpt-5.4", "prompt"},
 			stderr: true,
 		},
 		{
 			agent:  "gemini",
-			want:   []string{"gemini", "--model", "gemini-2.5-pro", "--prompt", "prompt", "--yolo", "--output-format", "json"},
+			want:   []string{"gemini", "--model", "gemini-3.1-pro-preview", "--prompt", "prompt", "--yolo", "--output-format", "json"},
 			stderr: true,
 		},
 		{
 			agent:  "opencode",
-			want:   []string{"opencode", "run", "--model", "anthropic/claude-sonnet-4", "--format", "json", "prompt"},
+			want:   []string{"opencode", "run", "--model", "opencode-go/kimi-k2.6", "--format", "json", "prompt"},
 			stderr: true,
 		},
 	}
