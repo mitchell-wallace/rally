@@ -1,38 +1,38 @@
 ## 1. Project Scaffolding
 
-- [ ] 1.1 Add Cobra dependency to go.mod (no GORM/SQLite, no bubbles)
-- [ ] 1.2 Create new package layout: `internal/agent/`, `internal/store/`, `internal/relay/`
-- [ ] 1.3 Set up `.rally/` directory structure with `.gitignore` (exclude `current_task.md`, `relays/`)
-- [ ] 1.4 Migrate CLI from hand-rolled flags to Cobra root command with subcommands (`relay`, `init`, `instructions`, `update`, `version`)
-- [ ] 1.5 Make `rally relay` the primary command for starting/resuming relays (CLI-only, no TUI)
-- [ ] 1.6 Simplify `rally init` to programmatic-only: git init, create `.rally/` directory, create `.rally/.gitignore`, create `.rally/config.toml`, create `.rally/README.md`. No agent invocation.
-- [ ] 1.7 Create `.rally/README.md` template with instructions for agents on accessing rally data (e.g. `tail -10 tries.jsonl` for recent context)
-- [ ] 1.8 Consolidate `rally.toml` + `.rally/config` into `.rally/config.toml` (TOML format, all config in one file: agent models, beads mode, runtime paths, `run_hooks_on_autocommit`)
+- [x] 1.1 Add Cobra dependency to go.mod (no GORM/SQLite, no bubbles)
+- [x] 1.2 Create new package layout: `internal/agent/`, `internal/store/`, `internal/relay/`
+- [x] 1.3 Set up `.rally/` directory structure with `.gitignore` (exclude `current_task.md`, `relays/`)
+- [x] 1.4 Migrate CLI from hand-rolled flags to Cobra root command with subcommands (`relay`, `init`, `instructions`, `update`, `version`)
+- [x] 1.5 Make `rally relay` the primary command for starting/resuming relays (CLI-only, no TUI)
+- [x] 1.6 Simplify `rally init` to programmatic-only: git init, create `.rally/` directory, create `.rally/.gitignore`, create `.rally/config.toml`, create `.rally/README.md`. No agent invocation.
+- [x] 1.7 Create `.rally/README.md` template with instructions for agents on accessing rally data (e.g. `tail -10 tries.jsonl` for recent context)
+- [x] 1.8 Consolidate `rally.toml` + `.rally/config` into `.rally/config.toml` (TOML format, all config in one file: agent models, beads mode, runtime paths, `run_hooks_on_autocommit`)
 
 ## 2. Store Layer
 
-- [ ] 2.1 Define JSONL record types: `TryRecord`, `MessageRecord`, `RelayRecord`, `AgentStatusEvent` with JSON tags
-- [ ] 2.2 Implement JSONL append/read/rewrite functions for a generic record type
-- [ ] 2.3 Implement per-type record windowing: 200 tries, 50 relays, 50 agent status events. Messages windowed only when resolved/cancelled (pending messages exempt).
-- [ ] 2.4 Implement commit-then-truncate: when window exceeded, commit current file to git, truncate to window size, commit again
-- [ ] 2.5 Implement in-memory cache: load all JSONL files into typed slices/maps on startup
-- [ ] 2.6 Implement unified Store interface: write (JSONL append/rewrite + cache update) and read (in-memory query)
-- [ ] 2.7 Implement message model: JSON objects updated in place (not event-sourced), with position-based FIFO ordering
-- [ ] 2.8 Implement relay record with fields: id, target_iterations, completed_iterations, agent_mix, started_at, ended_at, first_try_id, last_try_id, consumed_message_ids
-- [ ] 2.9 Implement agent status store: dedicated `agent_status.jsonl` with pause/freeze/unfreeze/active events, persists across relays
-- [ ] 2.10 Write tests: round-trip JSONL write/read, in-memory cache reload, commit-then-truncate, message in-place update, agent status replay, pending message exemption from windowing
+- [x] 2.1 Define JSONL record types: `TryRecord`, `MessageRecord`, `RelayRecord`, `AgentStatusEvent` with JSON tags
+- [x] 2.2 Implement JSONL append/read/rewrite functions for a generic record type
+- [x] 2.3 Implement per-type record windowing: 200 tries, 50 relays, 50 agent status events. Messages windowed only when resolved/cancelled (pending messages exempt).
+- [x] 2.4 Implement commit-then-truncate: when window exceeded, commit current file to git, truncate to window size, commit again
+- [x] 2.5 Implement in-memory cache: load all JSONL files into typed slices/maps on startup
+- [x] 2.6 Implement unified Store interface: write (JSONL append/rewrite + cache update) and read (in-memory query)
+- [x] 2.7 Implement message model: JSON objects updated in place (not event-sourced), with position-based FIFO ordering
+- [x] 2.8 Implement relay record with fields: id, target_iterations, completed_iterations, agent_mix, started_at, ended_at, first_try_id, last_try_id, consumed_message_ids
+- [x] 2.9 Implement agent status store: dedicated `agent_status.jsonl` with pause/freeze/unfreeze/active events, persists across relays
+- [x] 2.10 Write tests: round-trip JSONL write/read, in-memory cache reload, commit-then-truncate, message in-place update, agent status replay, pending message exemption from windowing
 
 ## 3. Executor Interface & Agent Implementations
 
-- [ ] 3.1 Define `Executor` interface and `RunOptions`/`TryResult` types (inspired by gry). `TryResult` does NOT include `CommitHash` — that's determined by the runner.
-- [ ] 3.2 Implement prompt builder: persona + task + inbox message + previous summary + recent try context sections. Include brief mention of `.rally/README.md` for agent self-service data access.
-- [ ] 3.3 Implement `ClaudeExecutor`: subprocess spawn, `--output-format stream-json --verbose`, parse NDJSON stream for `result` events, model flag
-- [ ] 3.4 Implement `CodexExecutor`: subprocess spawn, full-auto flags, `--output-schema` + `-o` for structured output parsing
-- [ ] 3.5 Implement `GeminiExecutor`: subprocess spawn, `--output-format json`, extract and re-parse `response` field from JSON wrapper, discard noisy stderr
-- [ ] 3.6 Implement `OpenCodeExecutor`: subprocess spawn, `--format json`, parse NDJSON stream for `text` events
-- [ ] 3.7 Implement `FixtureExecutor` from gry (diff application, canned output, configurable delay)
-- [ ] 3.8 Implement shared git helpers: `gitRepoRoot`, `gitOutput`, `gitCommandError`, `gitUserFallbackConfig` — used by relay runner, not per-executor
-- [ ] 3.9 Write tests: fixture executor round-trip, prompt builder with all field combinations, output parsing per agent format (valid, malformed, missing fields)
+- [x] 3.1 Define `Executor` interface and `RunOptions`/`TryResult` types (inspired by gry). `TryResult` does NOT include `CommitHash` — that's determined by the runner.
+- [x] 3.2 Implement prompt builder: persona + task + inbox message + previous summary + recent try context sections. Include brief mention of `.rally/README.md` for agent self-service data access.
+- [x] 3.3 Implement `ClaudeExecutor`: subprocess spawn, `--output-format stream-json --verbose`, parse NDJSON stream for `result` events, model flag
+- [x] 3.4 Implement `CodexExecutor`: subprocess spawn, full-auto flags, `--output-schema` + `-o` for structured output parsing
+- [x] 3.5 Implement `GeminiExecutor`: subprocess spawn, `--output-format json`, extract and re-parse `response` field from JSON wrapper, discard noisy stderr
+- [x] 3.6 Implement `OpenCodeExecutor`: subprocess spawn, `--format json`, parse NDJSON stream for `text` events
+- [x] 3.7 Implement `FixtureExecutor` from gry (diff application, canned output, configurable delay)
+- [x] 3.8 Implement shared git helpers: `gitRepoRoot`, `gitOutput`, `gitCommandError`, `gitUserFallbackConfig` — used by relay runner, not per-executor
+- [x] 3.9 Write tests: fixture executor round-trip, prompt builder with all field combinations, output parsing per agent format (valid, malformed, missing fields)
 
 ## 4. Relay Runner
 
