@@ -136,16 +136,47 @@ func runRelay(cmd *cobra.Command, args []string) error {
 	}
 
 	// Resume check: if --resume not passed and incomplete relay exists, prompt
+	resumedRelay := false
+	var storedMix string
 	if !resume && !newBatch {
 		relays := s.RecentRelays(1)
 		if len(relays) > 0 && relays[0].EndedAt == "" {
-		fmt.Printf("Unfinished relay #%d is at iteration %d/%d (mix: %s). Resume or start new? [resume/new]: ",
-			relays[0].ID, relays[0].CompletedIterations, relays[0].TargetIterations, relays[0].AgentMix)
+			storedMix = relays[0].AgentMix
+			resumedRelay = true
+			fmt.Printf("Unfinished relay #%d is at iteration %d/%d (mix: %s). Resume or start new? [resume/new]: ",
+				relays[0].ID, relays[0].CompletedIterations, relays[0].TargetIterations, relays[0].AgentMix)
 			var answer string
 			fmt.Scanln(&answer)
 			if strings.ToLower(answer) == "new" || strings.ToLower(answer) == "n" {
 				_ = relay.CompleteRelay(s, relays[0].ID)
+				resumedRelay = false
 			}
+		}
+	}
+
+	// Handle mix resolution for resumed relays
+	if resumedRelay {
+		hasNewAgents := len(expandedAgents) > 0
+		if resume {
+			// Non-interactive --resume: overwrite mix if new agents provided
+			if hasNewAgents {
+				runnerCfg.AgentMixSpecs = expandedAgents
+				runnerCfg.OverwriteMixOnResume = true
+			}
+			// If no new agents, keep stored mix (default behavior)
+		} else {
+			// Interactive resume: prompt if new agents provided
+			if hasNewAgents {
+				fmt.Printf("New --agent flags detected. Keep stored mix (%s) or overwrite with new mix? [keep/overwrite]: ", storedMix)
+				var answer string
+				fmt.Scanln(&answer)
+				if strings.ToLower(answer) == "overwrite" || strings.ToLower(answer) == "o" {
+					runnerCfg.AgentMixSpecs = expandedAgents
+					runnerCfg.OverwriteMixOnResume = true
+				}
+				// If "keep", use stored mix (default behavior)
+			}
+			// If no new agents, keep stored mix (default behavior)
 		}
 	}
 

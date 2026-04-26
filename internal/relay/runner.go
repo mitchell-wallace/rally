@@ -26,6 +26,7 @@ type Config struct {
 	BeadsEnabled         bool
 	Instructions         string
 	TaskPrompt           string
+	OverwriteMixOnResume bool
 }
 
 type Runner struct {
@@ -50,16 +51,37 @@ func (r *Runner) RequestStop() {
 }
 
 func (r *Runner) Run(ctx context.Context) error {
-	mix, err := ParseAgentMix(r.cfg.AgentMixSpecs)
-	if err != nil {
-		return err
-	}
-
 	relay, resumed, err := ResumeRelay(r.store)
 	if err != nil {
 		return err
 	}
-	if !resumed {
+
+	var mix AgentMix
+	if resumed {
+		// Resuming an existing relay
+		if r.cfg.OverwriteMixOnResume {
+			// Use new mix from CLI and update relay record
+			mix, err = ParseAgentMix(r.cfg.AgentMixSpecs)
+			if err != nil {
+				return err
+			}
+			relay.AgentMix = mix.Label
+			if err := r.store.UpdateRelay(*relay); err != nil {
+				return err
+			}
+		} else {
+			// Use stored mix from relay
+			mix, err = ParseAgentMix(strings.Fields(relay.AgentMix))
+			if err != nil {
+				return err
+			}
+		}
+	} else {
+		// New relay
+		mix, err = ParseAgentMix(r.cfg.AgentMixSpecs)
+		if err != nil {
+			return err
+		}
 		relay, err = CreateRelay(r.store, r.cfg.TargetIterations, mix.Label)
 		if err != nil {
 			return err
