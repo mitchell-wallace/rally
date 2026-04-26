@@ -6,6 +6,8 @@ type RunOptions struct {
 	Persona          string
 	TaskName         string
 	TaskRequirements string
+	Instructions     string
+	TaskPrompt       string
 	InboxMessage     string
 	RelayMessage     string
 	PreviousSummary  string

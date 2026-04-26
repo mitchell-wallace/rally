@@ -36,6 +36,14 @@ func BuildPrompt(opts RunOptions) string {
 		fmt.Fprintf(&b, "Requirements:\n%s\n\n", opts.TaskRequirements)
 	}
 
+	if opts.Instructions != "" {
+		fmt.Fprintf(&b, "## Project Instructions\n%s\n\n", opts.Instructions)
+	}
+
+	if opts.TaskPrompt != "" {
+		fmt.Fprintf(&b, "## Task\n%s\n\n", opts.TaskPrompt)
+	}
+
 	if opts.BeadsEnabled {
 		fmt.Fprintf(&b, "%s\n\n", beadsTemplate)
 	}

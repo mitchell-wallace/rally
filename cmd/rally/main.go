@@ -74,9 +74,12 @@ func runRelay(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("load config: %w", err)
 	}
 
-	dataDir := filepath.Join(os.Getenv("HOME"), ".local", "share", "rally")
+	dataDir := ""
 	if home, err := os.UserHomeDir(); err == nil {
 		dataDir = filepath.Join(home, ".local", "share", "rally")
+	}
+	if cfg.DataDir != "" {
+		dataDir = cfg.DataDir
 	}
 
 	if _, err := os.Stat(rallyDir); os.IsNotExist(err) {
@@ -104,6 +107,15 @@ func runRelay(cmd *cobra.Command, args []string) error {
 		BeadsEnabled:         cfg.Beads == "true",
 	}
 
+	instructionsPath := filepath.Join(rallyDir, "instructions.md")
+	if data, err := os.ReadFile(instructionsPath); err == nil {
+		runnerCfg.Instructions = string(data)
+	}
+
+	if len(args) > 0 {
+		runnerCfg.TaskPrompt = strings.Join(args, " ")
+	}
+
 	if newBatch {
 		relays := s.RecentRelays(1)
 		if len(relays) > 0 && relays[0].EndedAt == "" {
@@ -127,8 +139,28 @@ func runRelay(cmd *cobra.Command, args []string) error {
 
 	r := relay.NewRunner(s, runnerCfg, executors)
 
-	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
+	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, os.Interrupt)
+	defer signal.Stop(sigCh)
+
+	go func() {
+		select {
+		case <-sigCh:
+			fmt.Fprintln(os.Stderr, "Stop requested. Completing current try... (press Ctrl-C again to force)")
+			r.RequestStop()
+		case <-ctx.Done():
+			return
+		}
+		select {
+		case <-sigCh:
+			cancel()
+		case <-ctx.Done():
+			return
+		}
+	}()
 
 	if err := r.Run(ctx); err != nil {
 		return err
@@ -193,6 +225,7 @@ gemini_model = ""
 opencode_model = ""
 beads = "auto"
 run_hooks_on_autocommit = false
+data_dir = ""
 `
 		if err := os.WriteFile(configPath, []byte(content), 0o644); err != nil {
 			return err

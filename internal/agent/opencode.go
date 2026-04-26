@@ -63,6 +63,5 @@ func parseOpenCodeOutput(out []byte, textParts []string) (*TryResult, error) {
 	if err := json.Unmarshal([]byte(combined), &tr); err != nil {
 		return &TryResult{Completed: true, Summary: combined}, nil
 	}
-	tr.Completed = true
 	return &tr, nil
 }

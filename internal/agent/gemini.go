@@ -49,6 +49,5 @@ func parseGeminiOutput(out []byte) (*TryResult, error) {
 	if err := json.Unmarshal([]byte(wrap.Response), &tr); err != nil {
 		return &TryResult{Completed: true, Summary: wrap.Response}, nil
 	}
-	tr.Completed = true
 	return &tr, nil
 }

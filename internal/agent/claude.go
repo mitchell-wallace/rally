@@ -59,9 +59,7 @@ func parseClaudeResult(out, resultRaw []byte) (*TryResult, error) {
 
 	var tr TryResult
 	if err := json.Unmarshal(resultRaw, &tr); err != nil {
-		tr = TryResult{Completed: true, Summary: string(resultRaw)}
-	} else {
-		tr.Completed = true
+		return &TryResult{Completed: true, Summary: string(resultRaw)}, nil
 	}
 
 	return &tr, nil

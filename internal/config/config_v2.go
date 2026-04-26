@@ -16,6 +16,7 @@ type V2Config struct {
 	OpenCodeModel        string `toml:"opencode_model,omitempty"`
 	Beads                string `toml:"beads,omitempty"`
 	RunHooksOnAutoCommit bool   `toml:"run_hooks_on_autocommit"`
+	DataDir              string `toml:"data_dir,omitempty"`
 }
 
 func V2Path(workspaceDir string) string {

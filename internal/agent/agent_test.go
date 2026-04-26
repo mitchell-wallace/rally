@@ -18,6 +18,8 @@ func TestBuildPrompt_AllFields(t *testing.T) {
 		Persona:          "Expert Go developer",
 		TaskName:         "Refactor store layer",
 		TaskRequirements: "Use generics for JSONL records.",
+		Instructions:     "Always write tests first.",
+		TaskPrompt:       "Fix the caching bug.",
 		InboxMessage:     "Urgent: fix race condition.",
 		PreviousSummary:  "Added basic cache.",
 		RecentTryContext: "Try #5 failed with timeout.",
@@ -30,6 +32,10 @@ func TestBuildPrompt_AllFields(t *testing.T) {
 		"Expert Go developer",
 		"Refactor store layer",
 		"Use generics for JSONL records.",
+		"Always write tests first.",
+		"## Project Instructions",
+		"Fix the caching bug.",
+		"## Task",
 		"Urgent: fix race condition.",
 		"Added basic cache.",
 		"Try #5 failed with timeout.",
@@ -64,6 +70,32 @@ func TestBuildPrompt_PreviousSummary(t *testing.T) {
 	}
 	if !strings.Contains(p, "Bar") {
 		t.Error("expected summary text")
+	}
+}
+
+func TestBuildPrompt_Instructions(t *testing.T) {
+	opts := RunOptions{
+		Instructions: "Always use TDD.",
+	}
+	p := BuildPrompt(opts)
+	if !strings.Contains(p, "## Project Instructions") {
+		t.Error("expected ## Project Instructions section")
+	}
+	if !strings.Contains(p, "Always use TDD.") {
+		t.Error("expected instructions text")
+	}
+}
+
+func TestBuildPrompt_TaskPrompt(t *testing.T) {
+	opts := RunOptions{
+		TaskPrompt: "Fix the race condition.",
+	}
+	p := BuildPrompt(opts)
+	if !strings.Contains(p, "## Task") {
+		t.Error("expected ## Task section")
+	}
+	if !strings.Contains(p, "Fix the race condition.") {
+		t.Error("expected task prompt text")
 	}
 }
 
@@ -188,6 +220,34 @@ func TestParseClaudeOutput_MissingResultField(t *testing.T) {
 	}
 }
 
+func TestParseClaudeOutput_CompletedFalse(t *testing.T) {
+	out := []byte(`{"type":"result","result":{"completed":false,"summary":"not done"}}`)
+	tr, err := parseClaudeResult(out, []byte(`{"completed":false,"summary":"not done"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tr.Completed {
+		t.Error("expected not completed when agent reports false")
+	}
+	if tr.Summary != "not done" {
+		t.Errorf("expected summary 'not done', got %q", tr.Summary)
+	}
+}
+
+func TestParseClaudeOutput_MalformedJSON(t *testing.T) {
+	out := []byte(`some output`)
+	tr, err := parseClaudeResult(out, []byte(`not-json-at-all`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !tr.Completed {
+		t.Error("expected completed fallback for malformed JSON")
+	}
+	if tr.Summary != "not-json-at-all" {
+		t.Errorf("expected raw result in summary, got %q", tr.Summary)
+	}
+}
+
 func TestParseGeminiOutput_Valid(t *testing.T) {
 	out := []byte(`{"response":"{\"completed\":true,\"summary\":\"hello\"}","session_id":"abc","stats":{}}`)
 	tr, err := parseGeminiOutput(out)
@@ -210,6 +270,34 @@ func TestParseGeminiOutput_MissingResponse(t *testing.T) {
 	}
 	if tr.Completed {
 		t.Error("expected not completed")
+	}
+}
+
+func TestParseGeminiOutput_CompletedFalse(t *testing.T) {
+	out := []byte(`{"response":"{\"completed\":false,\"summary\":\"still working\"}","session_id":"abc","stats":{}}`)
+	tr, err := parseGeminiOutput(out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tr.Completed {
+		t.Error("expected not completed when agent reports false")
+	}
+	if tr.Summary != "still working" {
+		t.Errorf("expected summary 'still working', got %q", tr.Summary)
+	}
+}
+
+func TestParseGeminiOutput_MalformedJSON(t *testing.T) {
+	out := []byte(`{"response":"not json content","session_id":"abc","stats":{}}`)
+	tr, err := parseGeminiOutput(out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !tr.Completed {
+		t.Error("expected completed fallback for malformed inner JSON")
+	}
+	if tr.Summary != "not json content" {
+		t.Errorf("expected raw response in summary, got %q", tr.Summary)
 	}
 }
 
@@ -237,6 +325,98 @@ func TestParseOpenCodeOutput_MissingText(t *testing.T) {
 	}
 	if tr.Summary != "some output" {
 		t.Errorf("expected raw output in summary, got %q", tr.Summary)
+	}
+}
+
+func TestParseOpenCodeOutput_CompletedFalse(t *testing.T) {
+	parts := []string{`{"completed":false,"summary":"not yet"}`}
+	tr, err := parseOpenCodeOutput(nil, parts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tr.Completed {
+		t.Error("expected not completed when agent reports false")
+	}
+	if tr.Summary != "not yet" {
+		t.Errorf("expected summary 'not yet', got %q", tr.Summary)
+	}
+}
+
+func TestParseOpenCodeOutput_MalformedJSON(t *testing.T) {
+	parts := []string{`garbled output`}
+	tr, err := parseOpenCodeOutput(nil, parts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !tr.Completed {
+		t.Error("expected completed fallback for malformed JSON")
+	}
+	if tr.Summary != "garbled output" {
+		t.Errorf("expected raw text in summary, got %q", tr.Summary)
+	}
+}
+
+func TestParseCodexResult_Valid(t *testing.T) {
+	data := []byte(`{"completed":true,"summary":"done"}`)
+	tr, err := parseCodexResult(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !tr.Completed {
+		t.Error("expected completed")
+	}
+	if tr.Summary != "done" {
+		t.Errorf("expected summary 'done', got %q", tr.Summary)
+	}
+}
+
+func TestParseCodexResult_CompletedFalse(t *testing.T) {
+	data := []byte(`{"completed":false,"summary":"still going"}`)
+	tr, err := parseCodexResult(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tr.Completed {
+		t.Error("expected not completed when agent reports false")
+	}
+	if tr.Summary != "still going" {
+		t.Errorf("expected summary 'still going', got %q", tr.Summary)
+	}
+}
+
+func TestParseCodexResult_Malformed(t *testing.T) {
+	data := []byte(`not valid json`)
+	tr, err := parseCodexResult(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !tr.Completed {
+		t.Error("expected completed fallback for malformed JSON")
+	}
+	if tr.Summary != "not valid json" {
+		t.Errorf("expected raw data in summary, got %q", tr.Summary)
+	}
+}
+
+func TestWriteCodexSchema(t *testing.T) {
+	path, err := writeCodexSchema()
+	if err != nil {
+		t.Fatalf("writeCodexSchema failed: %v", err)
+	}
+	defer os.Remove(path)
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("reading schema file: %v", err)
+	}
+	if len(data) == 0 {
+		t.Error("expected non-empty schema file")
+	}
+	required := []string{"completed", "summary", "remaining_work", "message_addressed", "files_changed"}
+	for _, r := range required {
+		if !strings.Contains(string(data), r) {
+			t.Errorf("schema missing field %q", r)
+		}
 	}
 }
 

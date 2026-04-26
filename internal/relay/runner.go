@@ -24,6 +24,8 @@ type Config struct {
 	TargetIterations     int
 	RunHooksOnAutoCommit bool
 	BeadsEnabled         bool
+	Instructions         string
+	TaskPrompt           string
 }
 
 type Runner struct {
@@ -270,6 +272,8 @@ func (r *Runner) runOne(ctx context.Context, relay *store.RelayRecord, runIndex 
 		opts := agent.RunOptions{
 			Persona:          agentType,
 			TaskName:         "relay run",
+			TaskPrompt:       r.cfg.TaskPrompt,
+			Instructions:     r.cfg.Instructions,
 			InboxMessage:     inbox,
 			RelayMessage:     relayMessage,
 			PreviousSummary:  previousSummary,

@@ -54,6 +54,49 @@ func newTestStore(t *testing.T, dir string) *store.Store {
 	return s
 }
 
+func TestInstructionsPassedToExecutor(t *testing.T) {
+	workspaceDir := t.TempDir()
+	rallyDir := filepath.Join(workspaceDir, ".rally")
+	os.MkdirAll(rallyDir, 0o755)
+	initRepo(t, workspaceDir)
+
+	s := newTestStore(t, rallyDir)
+	var receivedInstructions string
+	var receivedTaskPrompt string
+	changeCounter := 0
+	exec := &funcExecutor{
+		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+			receivedInstructions = opts.Instructions
+			receivedTaskPrompt = opts.TaskPrompt
+			changeCounter++
+			f, _ := os.OpenFile(filepath.Join(workspaceDir, "changes.txt"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+			fmt.Fprintf(f, "change %d\n", changeCounter)
+			f.Close()
+			return &agent.TryResult{Completed: true}, nil
+		},
+	}
+	executors := map[string]agent.Executor{"claude": exec}
+
+	r := NewRunner(s, Config{
+		WorkspaceDir:     workspaceDir,
+		DataDir:          t.TempDir(),
+		AgentMixSpecs:    []string{"cc:1"},
+		TargetIterations: 1,
+		Instructions:     "Always write tests.",
+		TaskPrompt:       "Build user auth.",
+	}, executors)
+
+	if err := r.Run(context.Background()); err != nil {
+		t.Fatalf("run failed: %v", err)
+	}
+
+	if receivedInstructions != "Always write tests." {
+		t.Errorf("expected instructions 'Always write tests.', got %q", receivedInstructions)
+	}
+	if receivedTaskPrompt != "Build user auth." {
+		t.Errorf("expected task prompt 'Build user auth.', got %q", receivedTaskPrompt)
+	}
+}
 func TestAgentCyclingDeterminism(t *testing.T) {
 	workspaceDir := t.TempDir()
 	rallyDir := filepath.Join(workspaceDir, ".rally")
