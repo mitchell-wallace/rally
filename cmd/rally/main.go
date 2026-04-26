@@ -115,8 +115,8 @@ func runRelay(cmd *cobra.Command, args []string) error {
 	if !resume && !newBatch {
 		relays := s.RecentRelays(1)
 		if len(relays) > 0 && relays[0].EndedAt == "" {
-			fmt.Printf("Unfinished relay #%d is at iteration %d/%d. Resume or start new? [resume/new]: ",
-				relays[0].ID, relays[0].CompletedIterations, relays[0].TargetIterations)
+		fmt.Printf("Unfinished relay #%d is at iteration %d/%d (mix: %s). Resume or start new? [resume/new]: ",
+			relays[0].ID, relays[0].CompletedIterations, relays[0].TargetIterations, relays[0].AgentMix)
 			var answer string
 			fmt.Scanln(&answer)
 			if strings.ToLower(answer) == "new" || strings.ToLower(answer) == "n" {

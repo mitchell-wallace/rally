@@ -36,16 +36,16 @@
 
 ## 4. Relay Runner
 
-- [ ] 4.1 Implement agent mix parsing (`ParseAgentMix`) and deterministic cycling (port from rally)
-- [ ] 4.2 Implement relay lifecycle: create, resume, complete relay records via Store. Relay records track first/last try ID and consumed_message_ids.
-- [ ] 4.3 Implement try execution loop: write current_task.md (= the prompt), build prompt, invoke executor, track commit hash (compare HEAD before/after; use agent's commit if exists, auto-commit with `--no-verify` if uncommitted changes, record no hash if no changes), record result
-- [ ] 4.4 Implement run-level retry logic: up to 3 try attempts per run, pass previous summary on retry. Failed tries do NOT count against iteration target.
-- [ ] 4.5 Implement failure detection: agent reports Completed: false, non-zero exit, or no-op try (no file changes + <3min runtime)
-- [ ] 4.6 Implement error resilience cascade: pause agent type (1hr) after 3 consecutive try failures → hourly retry → freeze agent (after 5hr) → relay failure if all frozen. Wait if all paused. State persisted via agent_status.jsonl (persists across relays).
-- [ ] 4.7 Implement graceful stop: atomic flag, complete current try then halt
-- [ ] 4.8 Implement inbox message consumption: oldest pending message consumed per run (not per try), same message across retries, mark addressed based on TryResult
-- [ ] 4.9 Implement relay logging: dual-write to `~/.local/share/rally/relays/relay-N.log` (durable) and `.rally/relays/relay-N.log` (repo cache, 10-file limit). Prune old repo cache logs.
-- [ ] 4.10 Write tests: agent cycling determinism, retry within run, retry exhaustion triggers cascade, graceful stop, message consumption across retries, error resilience state transitions (pause/unfreeze/freeze), commit hash tracking (agent-committed, auto-committed, no changes)
+- [x] 4.1 Implement agent mix parsing (`ParseAgentMix`) and deterministic cycling (port from rally)
+- [x] 4.2 Implement relay lifecycle: create, resume, complete relay records via Store. Relay records track first/last try ID and consumed_message_ids.
+- [x] 4.3 Implement try execution loop: write current_task.md (= the prompt), build prompt, invoke executor, track commit hash (compare HEAD before/after; use agent's commit if exists, auto-commit with `--no-verify` if uncommitted changes, record no hash if no changes), record result
+- [x] 4.4 Implement run-level retry logic: up to 3 try attempts per run, pass previous summary on retry. Failed tries do NOT count against iteration target.
+- [x] 4.5 Implement failure detection: agent reports Completed: false, non-zero exit, or no-op try (no file changes + <3min runtime)
+- [x] 4.6 Implement error resilience cascade: pause agent type (1hr) after 3 consecutive try failures → hourly retry → freeze agent (after 5hr) → relay failure if all frozen. Wait if all paused. State persisted via agent_status.jsonl (persists across relays).
+- [x] 4.7 Implement graceful stop: atomic flag, complete current try then halt
+- [x] 4.8 Implement inbox message consumption: oldest pending message consumed per run (not per try), same message across retries, mark addressed based on TryResult
+- [x] 4.9 Implement relay logging: dual-write to `~/.local/share/rally/relays/relay-N.log` (durable) and `.rally/relays/relay-N.log` (repo cache, 10-file limit). Prune old repo cache logs.
+- [x] 4.10 Write tests: agent cycling determinism, retry within run, retry exhaustion triggers cascade, graceful stop, message consumption across retries, error resilience state transitions (pause/unfreeze/freeze), commit hash tracking (agent-committed, auto-committed, no changes)
 
 ## 5. Migration & Cleanup
 
