@@ -11,11 +11,11 @@ Rally v0.2.0 is inspired by gry's architectural discipline while retaining rally
 **Goals:**
 - Unified codebase inspired by gry's testability with rally's multi-agent support
 - JSONL-in-git source of truth that survives container destruction
-- In-memory cache for fast TUI queries, loaded from JSONL at startup
+- In-memory cache for fast CLI queries, loaded from JSONL at startup
 - Executor interface enabling fixture-driven e2e tests without real agent CLIs
 - Per-agent structured output collection (block-and-report for Claude, resume-and-report for Codex/OpenCode, hybrid for Gemini)
 - Error resilience: retry sessions within a run → pause agent → freeze agent → relay failure cascade. Agent status persisted across relays.
-- Full-screen gitui-style TUI with bordered panels, inbox, live session status, and relay start overlay
+- CLI-only interface via Cobra (existing TUI removed; new TUI planned as a separate future change)
 - Cobra CLI replacing hand-rolled flag parsing
 
 **Non-Goals:**
@@ -23,7 +23,7 @@ Rally v0.2.0 is inspired by gry's architectural discipline while retaining rally
 - Cloud/shared database (future consideration, not v0.2.0)
 - Internalized task/planning model (externalized to beads or similar)
 - Dynamic iteration counts driven by task availability (fixed count for now)
-- Streaming agent stdout into TUI panels (show stats only)
+- Streaming agent stdout to the user (relay runner shows stats only, not raw output)
 - External database (SQLite/GORM unnecessary at ~100 record scale; in-memory is sufficient)
 - Mock agent CLI binaries (future — see future-proposals.md; FixtureExecutor covers v0.2.0 testing needs)
 - Scout mode (task discovery is out of scope — users manage their own workflow)
@@ -135,16 +135,15 @@ When appending would exceed the window, the store commits the current file, then
 
 **Rationale**: Agent reliability history is a distinct concern from relay execution logs. A separate store keeps relay records clean and allows agent status to span multiple relays. The 50-event window provides sufficient history for debugging while keeping the file small.
 
-### 9. Full-screen TUI with bubbles panels
+### 9. CLI-only interface (TUI removed)
 
-**Decision**: Full-screen Bubble Tea app using the bubbles component library for bordered panels. Layout: dashboard (relay progress + session history), inbox (message management), live session status (runtime, git lines +/-, files changed). Responsive to terminal size.
+**Decision**: Remove the existing line-based Bubble Tea TUI. Rally v0.2.0 is CLI-only — `rally relay` starts a relay from the command line with flags for iteration count and agent mix. The existing TUI is removed as part of the old `internal/rally/` cleanup. A new TUI will be built as a separate future change once the core architecture is stable.
 
 **Alternatives considered**:
-- Line-based TUI (gry's current approach): No boxes, no full-screen, no clean redraws
-- Web dashboard: Requires server, adds complexity, doesn't work in sandboxes
-- Simple CLI output (rally v0.1.x): No interactivity during relay
+- Keep the existing TUI: It's tightly coupled to v0.1.x state/runner internals, which are being replaced entirely. Porting it would add scope without value.
+- Build the new full-screen TUI now: Adds significant scope. Better to stabilize the core (store, executor, relay runner) first, then build the TUI on solid foundations.
 
-**Rationale**: gitui proves that Bubble Tea + bordered panels can create a professional, responsive terminal UI. The dashboard needs to show both current relay state and historical sessions, which benefits from structured panel layout. bubbles provides viewport, list, and other components that reduce boilerplate.
+**Rationale**: Focusing on CLI-only for v0.2.0 reduces scope, ensures the core architecture is solid, and avoids building a TUI on top of APIs that are still being designed. The CLI provides all the functionality needed to run relays.
 
 ### 10. Data directory layout
 
@@ -172,9 +171,9 @@ When appending would exceed the window, the store commits the current file, then
 
 ### 12. Relay resume
 
-**Decision**: When rally launches and an incomplete relay exists, the TUI displays a modal prompt offering to resume. Resuming continues with the relay's existing settings (iteration target, agent mix). The UI hints at the relay's state (completed/total runs, agent mix).
+**Decision**: When `rally relay` is invoked and an incomplete relay exists, rally prints a summary of the incomplete relay (completed/total runs, agent mix) and prompts the user to resume or discard. A `--resume` flag can skip the prompt and resume automatically.
 
-**Rationale**: Explicit modal avoids accidental resumption or silent discard. Preserving original settings ensures the relay continues as configured.
+**Rationale**: CLI prompt is simple and predictable. The `--resume` flag enables scripted/automated usage without interaction.
 
 ## Risks / Trade-offs
 
@@ -183,6 +182,5 @@ When appending would exceed the window, the store commits the current file, then
 - [Per-agent strategy complexity] → Different collection strategies per agent adds implementation complexity. Justified by reliability — each agent CLI has different maturity and quirks. The output contract (JSON schema) is uniform.
 - [Claude cache invalidation with resume] → Potential bug in Claude Code's resume behavior may invalidate input token cache. Block-and-report via stop hook avoids this entirely. If the bug is resolved, Claude can be switched to resume-and-report later.
 - [JSONL file size with many sessions] → Per-type windows (200 sessions, 50 relays, 50 agent status). Commit-then-truncate preserves history in git.
-- [bubbles dependency weight] → Adds ~5 transitive dependencies. Acceptable for the UI quality improvement.
 - [Container ephemeral state] → Transcripts and current_task.md are lost on container wipe. By design — JSONL is the durable layer, everything else is derived or ephemeral.
 - [In-memory cache consistency] → Single process, single writer — no concurrent access concerns. Cache is always rebuilt from JSONL on startup.

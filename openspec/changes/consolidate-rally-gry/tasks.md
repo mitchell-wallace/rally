@@ -1,10 +1,10 @@
 ## 1. Project Scaffolding
 
-- [ ] 1.1 Add Cobra and bubbles dependencies to go.mod (no GORM/SQLite)
-- [ ] 1.2 Create new package layout: `internal/agent/`, `internal/store/`, `internal/relay/`, `internal/tui/dashboard/`, `internal/tui/inbox/`, `internal/tui/runstatus/`
+- [ ] 1.1 Add Cobra dependency to go.mod (no GORM/SQLite, no bubbles)
+- [ ] 1.2 Create new package layout: `internal/agent/`, `internal/store/`, `internal/relay/`
 - [ ] 1.3 Set up `.rally/` directory structure with `.gitignore` (exclude `current_task.md`)
 - [ ] 1.4 Migrate CLI from hand-rolled flags to Cobra root command with subcommands (`relay`, `init`, `instructions`, `update`, `version`)
-- [ ] 1.5 Make default (no subcommand) launch the full-screen TUI
+- [ ] 1.5 Make `rally relay` the primary command for starting/resuming relays (CLI-only, no TUI)
 - [ ] 1.6 Simplify `rally init` to programmatic-only: git init, create `.rally/` directory, create `.rally/.gitignore`, create `.rally/README.md`. No agent invocation.
 - [ ] 1.7 Create `.rally/README.md` template with instructions for agents on accessing rally data (e.g. `tail -10 sessions.jsonl` for recent context)
 
@@ -53,37 +53,24 @@
 - [ ] 5.6 Implement error resilience cascade: pause agent type (1hr) after 3 consecutive session failures → hourly retry → freeze agent (after 5hr) → relay failure if all frozen. Wait if all paused. State persisted via agent_status.jsonl (persists across relays).
 - [ ] 5.7 Implement graceful stop: atomic flag, complete current session then halt
 - [ ] 5.8 Implement inbox message consumption: oldest pending message consumed per run (not per session), same message across retries, mark addressed based on SessionResult
-- [ ] 5.9 Implement status callbacks (OnStatus) for TUI integration
-- [ ] 5.10 Write tests: agent cycling determinism, retry within run, retry exhaustion triggers cascade, graceful stop, message consumption across retries, error resilience state transitions (pause/unfreeze/freeze), commit hash tracking (agent-committed, auto-committed, no changes)
+- [ ] 5.9 Write tests: agent cycling determinism, retry within run, retry exhaustion triggers cascade, graceful stop, message consumption across retries, error resilience state transitions (pause/unfreeze/freeze), commit hash tracking (agent-committed, auto-committed, no changes)
 
-## 6. TUI Dashboard
+## 6. Migration & Cleanup
 
-- [ ] 6.1 Implement root App model with Bubble Tea full-screen program and terminal resize handling
-- [ ] 6.2 Implement bordered panel layout using bubbles (gitui-style boxes, responsive to terminal size)
-- [ ] 6.3 Implement dashboard panel: relay status, progress bar, recent sessions with agent/runtime/git stats
-- [ ] 6.4 Implement live session status panel: elapsed runtime counter, git lines +/-, files changed
-- [ ] 6.5 Implement inbox panel: message list (pending above addressed), compose mode, reorder, mark addressed
-- [ ] 6.6 Implement view navigation: keyboard shortcuts for dashboard/inbox switching, Escape to return
-- [ ] 6.7 Implement relay start configuration overlay: editable fields for iteration count and agent mix, defaults from rally.toml, confirm/cancel
-- [ ] 6.8 Implement relay resume modal: shown on startup when incomplete relay exists, displays relay state (completed/total, agent mix), resume/discard options
-- [ ] 6.9 Implement relay stop: stop keybinding, graceful stop request to runner goroutine
-- [ ] 6.10 Wire TUI to Store for reading relay/session/message data
+- [ ] 6.1 Port rally.toml config loading to new structure (beads mode, agent models)
+- [ ] 6.2 Port beads prompt mode from rally's prompt package (scout mode dropped)
+- [ ] 6.3 Port self-update and release infrastructure (release.go, install.sh, goreleaser)
+- [ ] 6.4 Remove old internal/rally/ package tree (runner, state, messages, progress, prompt, tui) — including existing Bubble Tea TUI code
+- [ ] 6.5 Update AGENTS.md and README for v0.2.0
+- [ ] 6.6 Bump VERSION to 0.2.0
 
-## 7. Migration & Cleanup
+## 7. Test Infrastructure
 
-- [ ] 7.1 Port rally.toml config loading to new structure (beads mode, agent models)
-- [ ] 7.2 Port beads prompt mode from rally's prompt package (scout mode dropped)
-- [ ] 7.3 Port self-update and release infrastructure (release.go, install.sh, goreleaser)
-- [ ] 7.4 Remove old internal/rally/ package tree (runner, state, messages, progress, prompt, tui)
-- [ ] 7.5 Update AGENTS.md and README for v0.2.0
-- [ ] 7.6 Bump VERSION to 0.2.0
+- [ ] 7.1 Port gry's testdata/ directory: fixture projects, diffs, and output JSON files
+- [ ] 7.2 Port gry's test helpers: fixture seeding, copyFixtureProject (adapted for run-centric model, no task/phase/sprint DB)
+- [ ] 7.3 Create e2e test: full relay workflow with fixture executor (session, record, verify store)
+- [ ] 7.4 Create e2e test: relay with inbox message consumption — message consumed per run, same message across retries
+- [ ] 7.5 Create e2e test: retry exhaustion triggers error cascade (not relay halt), agent paused then frozen
+- [ ] 7.6 Create e2e test: graceful stop completes current session then halts
+- [ ] 7.7 Create e2e test: commit hash tracking — verify agent-committed, auto-committed, and no-changes scenarios
 
-## 8. Test Infrastructure
-
-- [ ] 8.1 Port gry's testdata/ directory: fixture projects, diffs, and output JSON files
-- [ ] 8.2 Port gry's test helpers: fixture seeding, copyFixtureProject (adapted for run-centric model, no task/phase/sprint DB)
-- [ ] 8.3 Create e2e test: full relay workflow with fixture executor (session, record, verify store)
-- [ ] 8.4 Create e2e test: relay with inbox message consumption — message consumed per run, same message across retries
-- [ ] 8.5 Create e2e test: retry exhaustion triggers error cascade (not relay halt), agent paused then frozen
-- [ ] 8.6 Create e2e test: graceful stop completes current session then halts
-- [ ] 8.7 Create e2e test: commit hash tracking — verify agent-committed, auto-committed, and no-changes scenarios

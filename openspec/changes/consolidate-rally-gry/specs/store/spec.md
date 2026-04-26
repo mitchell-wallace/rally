@@ -49,7 +49,7 @@ The system SHALL store messages as JSON objects in `messages.jsonl`, one object 
 - **THEN** it SHALL be appended with a `position` field set to the next available position in the pending queue and `status: "pending"`
 
 #### Scenario: Message reordered
-- **WHEN** a user reorders a pending message via the TUI
+- **WHEN** a user reorders a pending message
 - **THEN** the system SHALL rewrite the messages file with updated position values for affected messages
 
 #### Scenario: Message consumed by run

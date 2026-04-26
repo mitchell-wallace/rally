@@ -4,7 +4,7 @@ Ideas that are out of scope for v0.2.0 but worth capturing for later.
 
 ### Mock Agent CLI Binaries
 
-**Current state (v0.2.0)**: `FixtureExecutor` is an in-process test double — it applies precomputed diffs and returns canned JSON outputs without invoking any real agent CLI. This is sufficient for e2e testing of rally's relay runner, store, and TUI.
+**Current state (v0.2.0)**: `FixtureExecutor` is an in-process test double — it applies precomputed diffs and returns canned JSON outputs without invoking any real agent CLI. This is sufficient for e2e testing of rally's relay runner, store, and CLI.
 
 **Future idea**: Build standalone mock CLI binaries that impersonate each agent CLI (`claude`, `codex`, `gemini`, `opencode`). These would live in fixture directories and behave like real CLIs:
 

@@ -15,7 +15,7 @@ The system SHALL manage relays as a campaign of N sequential runs with a configu
 
 #### Scenario: Relay resumes after interruption
 - **WHEN** rally starts and an incomplete relay exists in state
-- **THEN** the TUI SHALL display a modal prompt offering to resume, showing the relay's state (completed/total runs, agent mix). Resuming continues with the relay's existing settings.
+- **THEN** rally SHALL print a summary of the incomplete relay (completed/total runs, agent mix) and prompt the user to resume or discard. A `--resume` flag SHALL skip the prompt and resume automatically.
 
 ### Requirement: Agent mix cycling
 The system SHALL cycle through agents in a deterministic rotation based on the configured agent mix weights. For example, `cc:2 cx:1` produces the cycle `[cc, cc, cx]`, repeated across runs.
