@@ -14,10 +14,7 @@ tracking iterations, or rebuilding progress files after every pass.
 - Accepts agent mixes either by repeating the flag or by passing one quoted
   string: `--agent "cc:1 cx:2 op:1"`.
 - Stores transcripts and per-session metadata outside the repo by default.
-- Rebuilds a repo-visible progress file at
-  `docs/orchestration/rally-progress.yaml`.
 - Auto-commits dirty workspace changes after a session completes.
-- Supports scout mode for exploration-only passes.
 - Can pull tasks from Beads when enabled.
 
 ## Supported Agent CLIs
@@ -70,40 +67,27 @@ Initialize the repo once:
 rally init
 ```
 
-Run a basic loop:
+Run a basic relay:
 
 ```sh
-rally run "fix the failing tests without changing auth behavior"
+rally relay
 ```
 
 Run multiple iterations across different CLIs:
 
 ```sh
-rally run --iterations 4 --agent "cc:1 cx:2 ge:1 op:1" "stabilize CI failures"
-```
-
-Start a scout-only pass:
-
-```sh
-rally run --scout "find the highest-risk bugs in the release flow"
-```
-
-Open the TUI:
-
-```sh
-rally tui
+rally relay --iterations 4 --agent "cc:1 cx:2 ge:1 op:1"
 ```
 
 ## Common Commands
 
 ```sh
-rally run [prompt...]
-rally tui
+rally relay
 rally init
 rally update
 rally instructions edit
 rally instructions show
-rally progress repair
+rally version
 ```
 
 ## Agent Mix Examples
@@ -111,13 +95,13 @@ rally progress repair
 Repeat the flag:
 
 ```sh
-rally run --agent cc:1 --agent cx:2 --agent ge:1 "reduce flaky tests"
+rally relay --agent cc:1 --agent cx:2 --agent ge:1
 ```
 
 Or pass the same mix as one string:
 
 ```sh
-rally run --agent "cc:1 cx:2 ge:1" "reduce flaky tests"
+rally relay --agent "cc:1 cx:2 ge:1"
 ```
 
 If you do not provide `--agent`, Rally defaults to a mix of:
@@ -128,7 +112,7 @@ claude:1 codex:2
 
 ## Configuration
 
-Rally reads `rally.toml` from the workspace root.
+Rally reads `.rally/config.toml` from the workspace.
 
 Example:
 
@@ -146,15 +130,6 @@ By default Rally uses `--no-verify` for its post-run autocommit checkpoint so
 repo hooks cannot block progress/logging commits. Set
 `run_hooks_on_autocommit = true` if you want those fallback commits to run the
 workspace's normal Git hooks.
-
-Rally also reads `.rally/config` for runtime paths. `RALLY_DATA_DIR` controls
-where durable state, full batch logs, and per-session transcripts are stored:
-
-```sh
-RALLY_DATA_DIR=$HOME/.local/share/rally
-```
-
-The environment variable still takes precedence when set.
 
 ## Project Instructions
 
@@ -178,11 +153,12 @@ By default, Rally keeps runtime state under:
 
 Useful outputs:
 
-- Session transcripts and metadata in `~/.local/share/rally/sessions/`
-- Durable batch logs in `~/.local/share/rally/batches/batch-N.log`
-- Recent batch log cache in `.rally/batches/batch-N.log`
-- Repo progress in `docs/orchestration/rally-progress.yaml`
-- Workspace config in `rally.toml`
+- Relay logs in `~/.local/share/rally/relays/relay-N.log`
+- Recent relay log cache in `.rally/relays/relay-N.log`
+- Workspace config in `.rally/config.toml`
+- Try records in `.rally/tries.jsonl`
+- Messages in `.rally/messages.jsonl`
+- Agent status in `.rally/agent_status.jsonl`
 
 ## Updating
 
@@ -201,13 +177,27 @@ Rally also performs a background update check on normal startup unless
 Each iteration:
 
 1. Picks the next agent from the configured mix.
-2. Builds a prompt from your inline prompt or stored instructions.
+2. Builds a prompt from your project instructions, inbox messages, and recent
+   try context.
 3. Runs that agent CLI in the current repo.
 4. Captures a transcript and session metadata.
-5. Appends filtered batch output to `~/.local/share/rally/batches/batch-N.log`
-   and mirrors the latest logs into `.rally/batches/`.
-6. Rebuilds `docs/orchestration/rally-progress.yaml`.
+5. Appends filtered relay output to `~/.local/share/rally/relays/relay-N.log`
+   and mirrors the latest logs into `.rally/relays/`.
+6. Records the try result in `.rally/tries.jsonl`.
 7. Auto-commits workspace changes if the repo became dirty.
 
 That gives you a simple, repeatable multi-agent loop without having to manually
 coordinate each pass.
+
+## Architecture (v0.2.0)
+
+Rally v0.2.0 uses a new internal architecture:
+
+- **JSONL store** (`internal/store/`) — append-only JSONL files with
+  in-memory caching and commit-then-truncate windowing.
+- **Executor interface** (`internal/agent/`) — pluggable agents (Claude, Codex,
+  Gemini, Opencode, and test fixtures) with a shared prompt builder.
+- **Relay runner** (`internal/relay/`) — deterministic agent cycling, retry
+  logic, error resilience (pause/freeze), and graceful stop support.
+- **Cobra CLI** (`cmd/rally/main.go`) — subcommands: `relay`, `init`,
+  `instructions`, `update`, `version`.

@@ -49,13 +49,13 @@
 
 ## 5. Migration & Cleanup
 
-- [ ] 5.1 Migrate config: port `rally.toml` + `.rally/config` loading to `.rally/config.toml` (TOML, single file)
-- [ ] 5.2 Port beads prompt mode from rally's prompt package (scout mode dropped)
-- [ ] 5.3 Port self-update and release infrastructure (release.go with injectable URL for testing, install.sh, goreleaser). Existing release tests are portable.
-- [ ] 5.4 Ensure update check errors are concise (not full stack traces)
-- [ ] 5.5 Remove old internal/rally/ package tree (runner, state, messages, progress, prompt, tui) — including existing Bubble Tea TUI code
-- [ ] 5.6 Update AGENTS.md and README for v0.2.0
-- [ ] 5.7 Bump VERSION to 0.2.0
+- [x] 5.1 Migrate config: port `rally.toml` + `.rally/config` loading to `.rally/config.toml` (TOML, single file)
+- [x] 5.2 Port beads prompt mode from rally's prompt package (scout mode dropped)
+- [x] 5.3 Port self-update and release infrastructure (release.go with injectable URL for testing, install.sh, goreleaser). Existing release tests are portable.
+- [x] 5.4 Ensure update check errors are concise (not full stack traces)
+- [x] 5.5 Remove old internal/rally/ package tree (runner, state, messages, progress, prompt, tui) — including existing Bubble Tea TUI code
+- [x] 5.6 Update AGENTS.md and README for v0.2.0
+- [x] 5.7 Bump VERSION to 0.2.0
 
 ## 6. Test Infrastructure
 

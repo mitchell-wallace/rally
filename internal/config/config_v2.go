@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 
 	toml "github.com/pelletier/go-toml/v2"
 )
@@ -36,6 +37,15 @@ func LoadV2(workspaceDir string) (V2Config, error) {
 	}
 	cfg.Beads = normalizeBeads(cfg.Beads)
 	return cfg, nil
+}
+
+func normalizeBeads(value string) string {
+	switch strings.TrimSpace(strings.ToLower(value)) {
+	case "true", "false", "auto":
+		return strings.TrimSpace(strings.ToLower(value))
+	default:
+		return ""
+	}
 }
 
 func SaveV2(workspaceDir string, cfg V2Config) error {

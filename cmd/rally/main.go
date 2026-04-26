@@ -101,6 +101,7 @@ func runRelay(cmd *cobra.Command, args []string) error {
 		AgentMixSpecs:        expandedAgents,
 		TargetIterations:     iterations,
 		RunHooksOnAutoCommit: cfg.RunHooksOnAutoCommit,
+		BeadsEnabled:         cfg.Beads == "true",
 	}
 
 	if newBatch {
@@ -325,7 +326,7 @@ func startBackgroundUpdateCheck(argv []string, stderr io.Writer) func() {
 	go func() {
 		msg, err := release.CheckForUpdate(Version)
 		if err != nil {
-			msg = fmt.Sprintf("unable to check for updates: %s", err)
+			msg = fmt.Sprintf("update check: %s", err)
 		}
 		if msg != "" {
 			msgCh <- msg

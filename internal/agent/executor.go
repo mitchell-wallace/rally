@@ -9,6 +9,7 @@ type RunOptions struct {
 	InboxMessage     string
 	PreviousSummary  string
 	RecentTryContext string
+	BeadsEnabled     bool
 	Prompt           string // explicit override
 }
 

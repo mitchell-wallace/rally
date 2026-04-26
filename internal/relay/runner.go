@@ -22,6 +22,7 @@ type Config struct {
 	AgentMixSpecs        []string
 	TargetIterations     int
 	RunHooksOnAutoCommit bool
+	BeadsEnabled         bool
 }
 
 type Runner struct {
@@ -244,6 +245,7 @@ func (r *Runner) runOne(ctx context.Context, relay *store.RelayRecord, runIndex 
 			InboxMessage:     inbox,
 			PreviousSummary:  previousSummary,
 			RecentTryContext: recentContext.String(),
+			BeadsEnabled:     r.cfg.BeadsEnabled,
 		}
 		prompt := agent.BuildPrompt(opts)
 
