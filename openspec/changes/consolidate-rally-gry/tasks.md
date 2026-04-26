@@ -26,31 +26,31 @@
 
 - [x] 3.1 Define `Executor` interface and `RunOptions`/`TryResult` types (inspired by gry). `TryResult` does NOT include `CommitHash` — that's determined by the runner.
 - [x] 3.2 Implement prompt builder: persona + task + inbox message + previous summary + recent try context sections. Include brief mention of `.rally/README.md` for agent self-service data access.
-- [ ] 3.3 Implement `ClaudeExecutor`: subprocess spawn, `--output-format stream-json --verbose`, parse NDJSON stream for `result` events, model flag
-- [ ] 3.4 Implement `CodexExecutor`: subprocess spawn, full-auto flags, `--output-schema` + `-o` for structured output parsing
-- [ ] 3.5 Implement `GeminiExecutor`: subprocess spawn, `--output-format json`, extract and re-parse `response` field from JSON wrapper, discard noisy stderr
-- [ ] 3.6 Implement `OpenCodeExecutor`: subprocess spawn, `--format json`, parse NDJSON stream for `text` events
+- [x] 3.3 Implement `ClaudeExecutor`: subprocess spawn, `--output-format stream-json --verbose`, parse NDJSON stream for `result` events, model flag
+- [x] 3.4 Implement `CodexExecutor`: subprocess spawn, full-auto flags, `--output-schema` + `-o` for structured output parsing
+- [x] 3.5 Implement `GeminiExecutor`: subprocess spawn, `--output-format json`, extract and re-parse `response` field from JSON wrapper, discard noisy stderr
+- [x] 3.6 Implement `OpenCodeExecutor`: subprocess spawn, `--format json`, parse NDJSON stream for `text` events
 - [x] 3.7 Implement `FixtureExecutor` from gry (diff application, canned output, configurable delay)
 - [x] 3.8 Implement shared git helpers: `gitRepoRoot`, `gitOutput`, `gitCommandError`, `gitUserFallbackConfig` — used by relay runner, not per-executor
-- [ ] 3.9 Write tests: fixture executor round-trip, prompt builder with all field combinations, output parsing per agent format (valid, malformed, missing fields, completed=false)
+- [x] 3.9 Write tests: fixture executor round-trip, prompt builder with all field combinations, output parsing per agent format (valid, malformed, missing fields, completed=false)
 
 ## 4. Relay Runner
 
 - [x] 4.1 Implement agent mix parsing (`ParseAgentMix`) and deterministic cycling (port from rally)
 - [x] 4.2 Implement relay lifecycle: create, resume, complete relay records via Store. Relay records track first/last try ID and consumed_message_ids.
-- [ ] 4.3 Implement try execution loop: write current_task.md (= the prompt), build prompt, invoke executor, track commit hash (compare HEAD before/after; use agent's commit if exists, auto-commit with `--no-verify` if uncommitted changes, record no hash if no changes), record result
+- [x] 4.3 Implement try execution loop: write current_task.md (= the prompt), build prompt, invoke executor, track commit hash (compare HEAD before/after; use agent's commit if exists, auto-commit with `--no-verify` if uncommitted changes, record no hash if no changes), record result
 - [x] 4.4 Implement run-level retry logic: up to 3 try attempts per run, pass previous summary on retry. Failed tries do NOT count against iteration target.
 - [x] 4.5 Implement failure detection: agent reports Completed: false, non-zero exit, or no-op try (no file changes + <3min runtime)
-- [ ] 4.6 Implement error resilience cascade: pause agent type (1hr) after 3 consecutive try failures → hourly retry → freeze agent (after 5hr) → relay failure if all frozen. Wait if all paused. State persisted via agent_status.jsonl (persists across relays).
-- [ ] 4.7 Implement graceful stop: atomic flag, complete current try then halt
+- [x] 4.6 Implement error resilience cascade: pause agent type (1hr) after 3 consecutive try failures → hourly retry → freeze agent (after 5hr) → relay failure if all frozen. Wait if all paused. State persisted via agent_status.jsonl (persists across relays).
+- [x] 4.7 Implement graceful stop: atomic flag, complete current try then halt
 - [x] 4.8 Implement inbox message consumption: oldest pending message consumed per run (not per try), same message across retries, mark addressed based on TryResult
 - [x] 4.9 Implement relay logging: dual-write to `~/.local/share/rally/relays/relay-N.log` (durable) and `.rally/relays/relay-N.log` (repo cache, 10-file limit). Prune old repo cache logs.
-- [ ] 4.10 Write tests: agent cycling determinism, retry within run, retry exhaustion triggers cascade, graceful stop, message consumption across retries, error resilience state transitions (pause/unfreeze/freeze), commit hash tracking (agent-committed, auto-committed, no changes)
+- [x] 4.10 Write tests: agent cycling determinism, retry within run, retry exhaustion triggers cascade, graceful stop, message consumption across retries, error resilience state transitions (pause/unfreeze/freeze), commit hash tracking (agent-committed, auto-committed, no changes)
 
 ## 5. Migration & Cleanup
 
-- [ ] 5.1 Migrate config: port `rally.toml` + `.rally/config` loading to `.rally/config.toml` (TOML, single file)
-- [ ] 5.2 Port beads prompt mode from rally's prompt package (scout mode dropped)
+- [x] 5.1 Migrate config: port `rally.toml` + `.rally/config` loading to `.rally/config.toml` (TOML, single file)
+- [x] 5.2 Port beads prompt mode from rally's prompt package (scout mode dropped)
 - [x] 5.3 Port self-update and release infrastructure (release.go with injectable URL for testing, install.sh, goreleaser). Existing release tests are portable.
 - [x] 5.4 Ensure update check errors are concise (not full stack traces)
 - [x] 5.5 Remove old internal/rally/ package tree (runner, state, messages, progress, prompt, tui) — including existing Bubble Tea TUI code
