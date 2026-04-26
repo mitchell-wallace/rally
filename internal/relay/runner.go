@@ -114,6 +114,11 @@ func (r *Runner) Run(ctx context.Context) error {
 		var consumedMsg *store.MessageRecord
 		if len(pending) > 0 {
 			msg := pending[0]
+			runID := runIndex + 1
+			msg.ConsumedByRunID = &runID
+			if err := r.store.UpdateMessage(msg); err != nil {
+				return err
+			}
 			consumedMsg = &msg
 		}
 

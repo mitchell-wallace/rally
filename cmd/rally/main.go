@@ -1,16 +1,22 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"strings"
 	"time"
 
+	"github.com/mitchell-wallace/rally/internal/agent"
 	"github.com/mitchell-wallace/rally/internal/app"
+	"github.com/mitchell-wallace/rally/internal/config"
 	"github.com/mitchell-wallace/rally/internal/release"
+	"github.com/mitchell-wallace/rally/internal/relay"
+	"github.com/mitchell-wallace/rally/internal/store"
 	"github.com/spf13/cobra"
 )
 
@@ -48,7 +54,6 @@ func runRelay(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("cannot use --resume and --new together")
 	}
 
-	// Expand agent flag values that contain spaces (e.g. "cc:2 cx:1")
 	var expandedAgents []string
 	for _, spec := range agentSpecs {
 		fields := strings.Fields(spec)
@@ -58,12 +63,76 @@ func runRelay(cmd *cobra.Command, args []string) error {
 		expandedAgents = append(expandedAgents, fields...)
 	}
 
-	_ = iterations
-	_ = expandedAgents
-	_ = resume
-	_ = newBatch
+	workspaceDir, err := os.Getwd()
+	if err != nil {
+		return err
+	}
 
-	fmt.Println("relay: not yet implemented (Phase 4)")
+	rallyDir := filepath.Join(workspaceDir, ".rally")
+	cfg, err := config.LoadV2(workspaceDir)
+	if err != nil {
+		return fmt.Errorf("load config: %w", err)
+	}
+
+	dataDir := filepath.Join(os.Getenv("HOME"), ".local", "share", "rally")
+	if home, err := os.UserHomeDir(); err == nil {
+		dataDir = filepath.Join(home, ".local", "share", "rally")
+	}
+
+	if _, err := os.Stat(rallyDir); os.IsNotExist(err) {
+		return fmt.Errorf("rally not initialized; run `rally init` first")
+	}
+
+	s, err := store.NewStore(rallyDir)
+	if err != nil {
+		return fmt.Errorf("load store: %w", err)
+	}
+
+	executors := map[string]agent.Executor{
+		"claude":   &agent.ClaudeExecutor{Model: cfg.ClaudeModel},
+		"codex":    &agent.CodexExecutor{Model: cfg.CodexModel},
+		"gemini":   &agent.GeminiExecutor{Model: cfg.GeminiModel},
+		"opencode": &agent.OpenCodeExecutor{Model: cfg.OpenCodeModel},
+	}
+
+	runnerCfg := relay.Config{
+		WorkspaceDir:         workspaceDir,
+		DataDir:              dataDir,
+		AgentMixSpecs:        expandedAgents,
+		TargetIterations:     iterations,
+		RunHooksOnAutoCommit: cfg.RunHooksOnAutoCommit,
+	}
+
+	if newBatch {
+		relays := s.RecentRelays(1)
+		if len(relays) > 0 && relays[0].EndedAt == "" {
+			_ = relay.CompleteRelay(s, relays[0].ID)
+		}
+	}
+
+	// Resume check: if --resume not passed and incomplete relay exists, prompt
+	if !resume && !newBatch {
+		relays := s.RecentRelays(1)
+		if len(relays) > 0 && relays[0].EndedAt == "" {
+			fmt.Printf("Unfinished relay #%d is at iteration %d/%d. Resume or start new? [resume/new]: ",
+				relays[0].ID, relays[0].CompletedIterations, relays[0].TargetIterations)
+			var answer string
+			fmt.Scanln(&answer)
+			if strings.ToLower(answer) == "new" || strings.ToLower(answer) == "n" {
+				_ = relay.CompleteRelay(s, relays[0].ID)
+			}
+		}
+	}
+
+	r := relay.NewRunner(s, runnerCfg, executors)
+
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
+	defer cancel()
+
+	if err := r.Run(ctx); err != nil {
+		return err
+	}
+	fmt.Println("Relay complete.")
 	return nil
 }
 
