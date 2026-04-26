@@ -105,14 +105,22 @@ func (r *Runner) Run(ctx context.Context) error {
 		resilience = NewResilience(r.store)
 	}
 
-	// Consume oldest pending relay-scoped message at relay start
+	// Consume oldest eligible relay-scoped message at relay start
 	var relayMsg *store.MessageRecord
-	relayPending := r.store.RelayScopedMessages()
+	relayPending := r.store.EligibleRelayScopedMessages(relay.ID)
 	if len(relayPending) > 0 {
 		msg := relayPending[0]
-		msg.ConsumedByRelayID = &relay.ID
-		if err := r.store.UpdateMessage(msg); err != nil {
-			return err
+		// Record consumption at consume time (Task 6)
+		if msg.ConsumedByRelayID == nil {
+			msg.ConsumedByRelayID = &relay.ID
+			if err := r.store.UpdateMessage(msg); err != nil {
+				return err
+			}
+			// Append to ConsumedMessageIDs immediately
+			relay.ConsumedMessageIDs = append(relay.ConsumedMessageIDs, msg.ID)
+			if err := r.store.UpdateRelay(*relay); err != nil {
+				return err
+			}
 		}
 		relayMsg = &msg
 	}
@@ -147,19 +155,26 @@ func (r *Runner) Run(ctx context.Context) error {
 			return err
 		}
 
-		// Consume oldest pending run-scoped message at start of each run
-		pending := r.store.PendingMessages()
+		// Consume run-scoped message at start of each run
+		// First check if there's an already-consumed message from a failed run
+		runID := runIndex + 1
 		var consumedMsg *store.MessageRecord
-		for _, p := range pending {
-			if p.Scope != "relay" {
-				msg := p
-				runID := runIndex + 1
-				msg.ConsumedByRunID = &runID
-				if err := r.store.UpdateMessage(msg); err != nil {
-					return err
+		if existingMsg := r.store.ConsumedRunScopedMessageForRun(runID); existingMsg != nil {
+			// Reuse the message from the failed run
+			consumedMsg = existingMsg
+		} else {
+			// Consume a new message
+			pending := r.store.PendingMessages()
+			for _, p := range pending {
+				if p.Scope != "relay" && p.ConsumedByRunID == nil {
+					msg := p
+					msg.ConsumedByRunID = &runID
+					if err := r.store.UpdateMessage(msg); err != nil {
+						return err
+					}
+					consumedMsg = &msg
+					break
 				}
-				consumedMsg = &msg
-				break
 			}
 		}
 
@@ -201,7 +216,10 @@ func (r *Runner) Run(ctx context.Context) error {
 				if err := r.store.UpdateMessage(*consumedMsg); err != nil {
 					return err
 				}
-				relay.ConsumedMessageIDs = append(relay.ConsumedMessageIDs, consumedMsg.ID)
+				// Add to ConsumedMessageIDs if not already present
+				if !containsInt(relay.ConsumedMessageIDs, consumedMsg.ID) {
+					relay.ConsumedMessageIDs = append(relay.ConsumedMessageIDs, consumedMsg.ID)
+				}
 			}
 			if relayMsg != nil && addressed && relayMsg.Status == "pending" {
 				relayMsg.Status = "addressed"
@@ -210,7 +228,10 @@ func (r *Runner) Run(ctx context.Context) error {
 				if err := r.store.UpdateMessage(*relayMsg); err != nil {
 					return err
 				}
-				relay.ConsumedMessageIDs = append(relay.ConsumedMessageIDs, relayMsg.ID)
+				// Already added at consume time, but ensure no duplicates
+				if !containsInt(relay.ConsumedMessageIDs, relayMsg.ID) {
+					relay.ConsumedMessageIDs = append(relay.ConsumedMessageIDs, relayMsg.ID)
+				}
 			}
 		} else {
 			runIndex = nextRunIndex
@@ -456,4 +477,13 @@ func (r *Runner) autoCommit(runIndex int, agentType string, attempt int) (string
 		return "", nil
 	}
 	return strings.TrimSpace(string(hashOut)), nil
+}
+
+func containsInt(slice []int, val int) bool {
+	for _, v := range slice {
+		if v == val {
+			return true
+		}
+	}
+	return false
 }

@@ -259,6 +259,37 @@ func (s *Store) RelayScopedMessages() []MessageRecord {
 	return out
 }
 
+// EligibleRelayScopedMessages returns pending relay-scoped messages that have
+// not been consumed by a different relay. Messages already consumed by the
+// given relayID are included (for resume).
+func (s *Store) EligibleRelayScopedMessages(relayID int) []MessageRecord {
+	var out []MessageRecord
+	for _, m := range s.cache.Messages {
+		if m.Status == "pending" && m.Scope == "relay" {
+			// Include if not consumed, or consumed by this relay
+			if m.ConsumedByRelayID == nil || *m.ConsumedByRelayID == relayID {
+				out = append(out, m)
+			}
+		}
+	}
+	sort.Slice(out, func(i, j int) bool {
+		return out[i].Position < out[j].Position
+	})
+	return out
+}
+
+// ConsumedRunScopedMessageForRun returns a run-scoped message that was already
+// consumed by the given runID but not addressed (i.e., from a failed run).
+func (s *Store) ConsumedRunScopedMessageForRun(runID int) *MessageRecord {
+	for _, m := range s.cache.Messages {
+		if m.Status == "pending" && m.Scope != "relay" && m.ConsumedByRunID != nil && *m.ConsumedByRunID == runID {
+			cp := m
+			return &cp
+		}
+	}
+	return nil
+}
+
 // GetAgentStatus returns all status events for a given agent type.
 func (s *Store) GetAgentStatus(agentType string) []AgentStatusEvent {
 	var out []AgentStatusEvent
