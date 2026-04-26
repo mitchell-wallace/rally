@@ -1,6 +1,6 @@
 ## Why
 
-Rally v0.2.0 (consolidate-rally-gry) ships as CLI-only to focus on getting the core architecture right: Executor interface, JSONL store, relay runner, and per-agent hooks. Once that foundation is stable, rally needs a rich terminal UI to make relay management, session monitoring, and inbox messaging feel natural without leaving the terminal.
+Rally v0.2.0 (consolidate-rally-gry) ships as CLI-only to focus on getting the core architecture right: Executor interface, JSONL store, relay runner, and per-agent inline output parsing. Once that foundation is stable, rally needs a rich terminal UI to make relay management, try monitoring, and inbox messaging feel natural without leaving the terminal.
 
 The v0.1.x TUI was a simple line-based Bubble Tea app tightly coupled to the old runner/state/messages internals. It was removed during the v0.2.0 consolidation rather than ported, since it would need a complete rewrite to work with the new architecture.
 
@@ -12,12 +12,12 @@ The v0.1.x TUI was a simple line-based Bubble Tea app tightly coupled to the old
 ## What Changes
 
 - Add full-screen gitui-style terminal UI using Bubble Tea and bubbles component library
-- Add dashboard panel: relay progress (completed/total runs), agent mix, recent session history with outcome/agent/runtime/git stats
-- Add live session status panel: elapsed runtime counter, git lines +/-, files changed (no agent stdout streaming)
+- Add dashboard panel: relay progress (completed/total runs), agent mix, recent try history with outcome/agent/runtime/git stats
+- Add live try status panel: elapsed runtime counter, git lines +/-, files changed (no agent stdout streaming)
 - Add inbox panel: message list (pending above addressed), compose mode, reorder, mark addressed
-- Add relay start configuration overlay: editable fields for iteration count and agent mix, defaults from `rally.toml`
+- Add relay start configuration overlay: editable fields for iteration count and agent mix, defaults from `.rally/config.toml`
 - Add relay resume modal: shown on startup when incomplete relay exists, displays relay state, resume/discard options
-- Add relay stop via keyboard shortcut (graceful stop — complete current session then halt)
+- Add relay stop via keyboard shortcut (graceful stop — complete current try then halt)
 - Add view navigation: keyboard shortcuts for dashboard/inbox switching
 - Make default (no subcommand) launch the full-screen TUI
 - Add `github.com/charmbracelet/bubbles` dependency
@@ -36,7 +36,7 @@ These are carried forward from the original consolidate-rally-gry design and sho
 ## Capabilities
 
 ### New Capabilities
-- `tui-dashboard`: Full-screen gitui-style terminal UI — bordered panels via bubbles, dashboard view (relay progress + session history), inbox view (message CRUD + FIFO ordering), live session status (runtime, git stats), relay start configuration overlay, responsive layout
+- `tui-dashboard`: Full-screen gitui-style terminal UI — bordered panels via bubbles, dashboard view (relay progress + try history), inbox view (message CRUD + FIFO ordering), live try status (runtime, git stats), relay start configuration overlay, responsive layout
 
 ## Impact
 

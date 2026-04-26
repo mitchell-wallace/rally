@@ -13,8 +13,8 @@ Rally v0.2.0 is inspired by gry's architectural discipline while retaining rally
 - JSONL-in-git source of truth that survives container destruction
 - In-memory cache for fast CLI queries, loaded from JSONL at startup
 - Executor interface enabling fixture-driven e2e tests without real agent CLIs
-- Per-agent structured output collection (block-and-report for Claude, resume-and-report for Codex/OpenCode, hybrid for Gemini)
-- Error resilience: retry sessions within a run → pause agent → freeze agent → relay failure cascade. Agent status persisted across relays.
+- Per-agent inline structured output parsing (stream-json for Claude, JSON events for OpenCode, JSON wrapper for Gemini, structured output for Codex) — no hooks
+- Error resilience: retry tries within a run → pause agent → freeze agent → relay failure cascade. Agent status persisted across relays.
 - CLI-only interface via Cobra (existing TUI removed; new TUI planned as a separate future change)
 - Cobra CLI replacing hand-rolled flag parsing
 
@@ -28,15 +28,16 @@ Rally v0.2.0 is inspired by gry's architectural discipline while retaining rally
 - Mock agent CLI binaries (future — see future-proposals.md; FixtureExecutor covers v0.2.0 testing needs)
 - Scout mode (task discovery is out of scope — users manage their own workflow)
 - Agent-invoked init steps (init is programmatic only: git init, create `.rally/`)
+- Agent hooks for output collection (hooks left entirely free for per-harness customisations)
 
 ## Decisions
 
 ### 1. JSONL as source of truth, in-memory as cache
 
-**Decision**: One JSONL file per record type in `.rally/`, git-tracked: `sessions.jsonl`, `messages.jsonl`, `relays.jsonl`, `agent_status.jsonl`. On startup, all records loaded into in-memory Go data structures for fast reads. Session IDs in rally's stores are named `relay_session_id` to disambiguate from agent CLI session identifiers.
+**Decision**: One JSONL file per record type in `.rally/`, git-tracked: `tries.jsonl`, `messages.jsonl`, `relays.jsonl`, `agent_status.jsonl`. On startup, all records loaded into in-memory Go data structures for fast reads.
 
 Per-type window sizes reflect different population rates:
-- Sessions: 200 records
+- Tries: 200 records
 - Relays: 50 records
 - Agent status events: 50 records
 - Messages: windowed only when resolved/cancelled (pending messages are never truncated)
@@ -47,46 +48,40 @@ When appending would exceed the window, the store commits the current file, then
 - SQLite as cache (gry's approach): Adds GORM + SQLite driver dependencies, cache staleness detection, rebuild logic — all for records that fit trivially in memory
 - YAML files only (rally v0.1.x approach): No query capability, slow for dashboard aggregations
 - Dolt (git-native SQL): Reliability issues observed in practice — startup failures caused cascading problems
-- Uniform ~100 record window: Different record types populate at very different rates; uniform limits would either over-retain relays or under-retain sessions
+- Uniform ~100 record window: Different record types populate at very different rates; uniform limits would either over-retain relays or under-retain tries
 
 **Rationale**: JSONL is human-readable, diffable, git-mergeable, and agents can grep it directly. Loading everything into memory on startup is instant and eliminates an entire class of cache-divergence bugs. The write path is: append to JSONL, then update in-memory structs. The commit-then-truncate approach ensures nothing is lost even when files are trimmed.
 
 ### 2. Executor interface for agent abstraction
 
-**Decision**: Port gry's `Executor` interface with `Execute(ctx, opts) (*SessionResult, error)`. Create per-agent implementations: `ClaudeExecutor`, `CodexExecutor`, `GeminiExecutor`, `OpenCodeExecutor`, `FixtureExecutor`.
+**Decision**: Port gry's `Executor` interface with `Execute(ctx, opts) (*TryResult, error)`. Create per-agent implementations: `ClaudeExecutor`, `CodexExecutor`, `GeminiExecutor`, `OpenCodeExecutor`, `FixtureExecutor`. Git operations (commit hash tracking, auto-commit, repo root detection) are shared helpers used by the relay runner, not reimplemented per executor.
 
 **Alternatives considered**:
 - Keep rally's inline subprocess spawning: Untestable, no abstraction boundary
 - Plugin system: Over-engineered for four known agents
 
-**Rationale**: The interface is the natural seam for testing. FixtureExecutor replays diffs and canned outputs. Real executors construct CLI commands and parse results. Agent mix cycling lives above the interface in the relay runner.
+**Rationale**: The interface is the natural seam for testing. FixtureExecutor replays diffs and canned outputs. Real executors construct CLI commands and parse results. Agent mix cycling lives above the interface in the relay runner. Git operations are a runner concern, not an executor concern.
 
-### 3. Per-agent structured output collection
+### 3. Per-agent inline output parsing (no hooks)
 
-**Decision**: Each agent uses the most reliable output collection strategy available for its CLI. This is not one-size-fits-all — different agents have different CLI maturity levels and known issues. All CLI flags below have been tested and verified.
+**Decision**: Each executor parses structured output inline from the agent's stdout stream during the primary session. No hooks are registered. This follows the approach already proven on main (v0.1.x).
 
-**Per-agent strategies**:
-- **Claude Code: block-and-report (primary)**. Uses stop hook with `decision: "block"` to force a reporting turn, then parses `last_assistant_message` on the second stop event. Resume (`claude -c -p "<prompt>" --json-schema '<schema>' --output-format json`) exists but is demoted due to a potential cache invalidation bug in Claude Code's resume behavior.
-- **Codex: resume-and-report (primary)**. `codex exec resume --last "<prompt>" --output-schema ./schema.json -o ./report.json`. Codex hooks are flagged as experimental, so resume is preferred. Block-and-report via stop hook available as fallback.
-- **Gemini CLI: resume-and-report**. `gemini --resume -p "<prompt>" --output-format json`. Response is in `{"response": "...", "session_id": "...", "stats": {...}}` wrapper — report JSON inside `response` must be double-parsed. No schema validation. Stderr is noisy (MCP messages) — discard.
-- **OpenCode: resume-and-report**. `opencode run --continue "<prompt>" --format json`. No schema validation — prompt-guided.
-
-**Hook systems (for triggering and fallback)**:
-- All four CLIs have hook systems (Claude `Stop`, Codex `Stop`, Gemini `SessionEnd`, OpenCode `session.idle`)
-- Hooks signal session end to the executor, triggering the appropriate collection strategy
-- For Claude, the stop hook IS the primary strategy (block-and-report)
-- For Codex, the stop hook is a fallback if resume fails
+**Per-agent output formats**:
+- **Claude Code**: `--output-format stream-json --verbose`. Parses NDJSON stream of `claudeStreamEvent` structs, extracts `result` from events with `type: "result"`.
+- **Codex**: Structured output via `--output-schema ./schema.json -o ./report.json`. Parse output file.
+- **Gemini CLI**: `--output-format json`. Response wrapped in `{"response": "...", "session_id": "...", "stats": {...}}` — extract and re-parse `response` field. Stderr is noisy (MCP messages) — discard.
+- **OpenCode**: `--format json`. Parses NDJSON stream of `opencodeJSONEvent` structs, extracts `text` from events with `type: "text"`.
 
 **Alternatives considered**:
-- Uniform resume-and-report for all agents: Cleaner in theory, but Claude's potential cache invalidation issue and Codex's experimental hooks make per-agent strategies more reliable in practice
-- Post-run transcript parsing: Fragile, agent-specific, no structured contract
-- Output schema flags during session: Places schema burden on the agent throughout the session rather than at the reporting moment
+- Hook-based block-and-report (previous plan): Conflicts with using hooks for per-harness optimisation. Hooks are a limited resource — rally shouldn't consume them for its own output parsing.
+- Post-run transcript parsing: Fragile, agent-specific, no structured contract.
+- Resume-and-report: Adds a second agent invocation after each try — doubles API cost and time.
 
-**Rationale**: The reality of orchestrating four different agent CLIs is that each has different maturity and quirks. A per-agent strategy is more complex but more reliable. The output contract (JSON report schema) remains the same regardless of collection method.
+**Rationale**: Inline parsing is simpler, cheaper, and already working in production on v0.1.x. Keeping hooks entirely free means each deployment harness can customise hooks for its own needs (e.g., auto-approval, metrics, notifications) without conflicting with rally's output collection.
 
 ### 4. Prompt modes (beads only) carried forward; scout dropped
 
-**Decision**: The prompt building system (base template, beads mode, session headers, exploration fallback) is ported from rally v0.1.x without redesign, minus scout mode. No new spec — the existing prompt package is the spec. Recent session context (summaries, remaining work) is fed into prompts similarly to how `rally-progress.yaml` worked, but sourced from `sessions.jsonl`. A `.rally/README.md` provides agents with instructions for accessing rally data directly (e.g. `tail -10 sessions.jsonl`).
+**Decision**: The prompt building system (base template, beads mode, try headers, exploration fallback) is ported from rally v0.1.x without redesign, minus scout mode. No new spec — the existing prompt package is the spec. Recent try context (summaries, remaining work) is fed into prompts similarly to how `rally-progress.yaml` worked, but sourced from `tries.jsonl`. A `.rally/README.md` provides agents with instructions for accessing rally data directly (e.g. `tail -10 tries.jsonl`).
 
 **Scout mode dropped**: Scout was built around gry's task model (discover tasks, create beads). With rally's externalized task management, task discovery is the user's workflow — out of scope for the orchestrator.
 
@@ -94,7 +89,7 @@ When appending would exceed the window, the store commits the current file, then
 
 ### 5. Externalized task tracking (unchanged)
 
-**Decision**: Rally does not own task/planning data. Task context comes via the prompt (beads, or another backend). Rally records what happened (sessions, results) but not what should happen (tasks, sprints).
+**Decision**: Rally does not own task/planning data. Task context comes via the prompt (beads, or another backend). Rally records what happened (tries, results) but not what should happen (tasks, sprints).
 
 **Alternatives considered**:
 - Internalized Sprint/Phase/Task model (gry's approach): Duplicates external planners, creates sync burden
@@ -102,18 +97,19 @@ When appending would exceed the window, the store commits the current file, then
 
 **Rationale**: Rally is an orchestrator, not a planner. Beads (or beads_rust, or another backend) provides `bd ready` / `bd show` for task context. Rally's prompt builder injects this into the agent prompt. The link is through prompt mode configuration, not data model coupling.
 
-### 6. Naming: session + run + relay
+### 6. Naming: try + run + relay
 
 **Decision**: Three-tier naming:
-- **Session**: One invocation of an agent CLI, regardless of outcome. The fundamental unit. This aligns with the term used by most agent CLIs themselves.
-- **Run**: One logical iteration counting against the relay's target count. A run consumes one run-level inbox message and receives the same task context throughout retries. If no failures, one run = one session. On failure, the run retries — each retry is a new session.
+- **Try**: One invocation of an agent CLI, regardless of outcome. The atomic unit. Previously called "session" in earlier plans, renamed to "try" to avoid ambiguity with agent CLI session identifiers and to better convey the retry semantics.
+- **Run**: One logical iteration counting against the relay's target count. A run consumes one run-level inbox message and receives the same task context throughout retries. If no failures, one run = one try. On failure, the run retries — each retry is a new try.
 - **Relay**: A campaign of N runs with a configured agent mix.
 
 **Alternatives considered**:
 - rally v0.1.x naming (session/batch): Only two tiers, no distinction between "one CLI call" and "one iteration"
 - gry's naming (run/phase): "Phase" implies hierarchical planning which is externalized
+- session/run/relay: "Session" collides with agent CLI session identifiers, creates confusion
 
-**Rationale**: Three tiers cleanly separate concerns. Session is the atomic unit matching what agent CLIs call their invocations. Run is the retry-boundary and message-consumption unit. Relay is the campaign. Retries don't count against iteration targets — they're new sessions within the same run.
+**Rationale**: Three tiers cleanly separate concerns. Try is the atomic unit — a single attempt. Run is the retry-boundary and message-consumption unit. Relay is the campaign. Retries don't count against iteration targets — they're new tries within the same run.
 
 ### 7. Git branching: current branch only
 
@@ -147,27 +143,36 @@ When appending would exceed the window, the store commits the current file, then
 
 ### 10. Data directory layout
 
-**Decision**: Split between `.rally/` (repo root, git-tracked) and `~/.local/share/rally/` (system-local).
+**Decision**: Split between `.rally/` (repo root, git-tracked + gitignored sections) and `~/.local/share/rally/` (system-local).
 
 `.rally/` contains:
-- `sessions.jsonl`, `messages.jsonl`, `relays.jsonl`, `agent_status.jsonl` — source of truth
-- `README.md` — instructions for agents on accessing rally data (e.g. `tail -10 sessions.jsonl` for recent context)
+- `config.toml` — consolidated configuration (agent models, beads mode, runtime paths, auto-commit hooks)
+- `tries.jsonl`, `messages.jsonl`, `relays.jsonl`, `agent_status.jsonl` — source of truth
+- `README.md` — instructions for agents on accessing rally data (e.g. `tail -10 tries.jsonl` for recent context)
 - `current_task.md` — ephemeral, gitignored, contains the prompt fed to the agent
-- `.gitignore` — excludes ephemeral files
+- `relays/relay-N.log` — recent relay log cache (gitignored, 10-file limit)
+- `.gitignore` — excludes ephemeral files and relay log cache
 
 `~/.local/share/rally/` contains:
-- `sessions/<session-id>/terminal.log` — transcripts
-- Config and other internal state
+- `tries/<try-id>/terminal.log` — transcripts
+- `relays/relay-N.log` — durable relay logs (full history)
 
-**Replaces**: `docs/orchestration/rally-progress.yaml` from v0.1.x. Recent session context (summaries, remaining work) is now sourced from `sessions.jsonl` and fed into prompts directly.
+**Config consolidation**: `rally.toml` (workspace root) and `.rally/config` (env-style runtime paths) from v0.1.x are merged into `.rally/config.toml`. This eliminates the ambiguity of having two config files with overlapping concerns.
 
-**Rationale**: JSONL in-repo survives container destruction and is accessible across hosts via git. Ephemeral files (task context) are gitignored but locally accessible to agents during sessions. System-local storage handles large/binary data (transcripts) that shouldn't bloat the repo. The `.rally/README.md` gives agents a self-service path to access rally data without needing it all injected into the prompt.
+**Replaces**: `docs/orchestration/rally-progress.yaml` from v0.1.x. Recent try context (summaries, remaining work) is now sourced from `tries.jsonl` and fed into prompts directly.
 
-### 11. Commit hash tracking
+**Rationale**: JSONL in-repo survives container destruction and is accessible across hosts via git. Ephemeral files (task context) are gitignored but locally accessible to agents during tries. System-local storage handles large/binary data (transcripts, full relay logs) that shouldn't bloat the repo. The `.rally/README.md` gives agents a self-service path to access rally data without needing it all injected into the prompt.
 
-**Decision**: The relay runner (not the executor) is responsible for tracking commit hashes. Before a session, the runner records the current HEAD. After the session, the runner checks HEAD again. If the agent committed (HEAD changed), use that hash. If the agent left uncommitted changes, the runner auto-commits and uses that hash. If there are no changes, the session result records no commit hash.
+### 11. Commit hash tracking and auto-commit hardening
 
-**Rationale**: Agents typically commit their own changes with descriptive messages. The runner should respect those commits rather than always auto-committing. This keeps the git history readable while ensuring no changes are lost.
+**Decision**: The relay runner (not the executor) is responsible for tracking commit hashes and auto-committing. Before a try, the runner records the current HEAD. After the try, the runner checks HEAD again. If the agent committed (HEAD changed), use that hash. If the agent left uncommitted changes, the runner auto-commits and uses that hash. If there are no changes, the try result records no commit hash.
+
+**Auto-commit hardening** (ported from v0.1.x main):
+- Auto-commits use `--no-verify` by default to prevent repo hooks from blocking progress/logging commits. Opt-in via `run_hooks_on_autocommit = true` in `.rally/config.toml`.
+- Git user fallback: if `user.name` or `user.email` are not configured (common in containers), rally sets `user.name=Rally` and `user.email=rally@localhost` for the commit.
+- Shared git helper functions (`gitRepoRoot`, `gitOutput`, `gitUserFallbackConfig`) used by the runner — not reimplemented per executor.
+
+**Rationale**: Agents typically commit their own changes with descriptive messages. The runner should respect those commits rather than always auto-committing. `--no-verify` prevents hooks from interfering with rally's operational commits. Git user fallback ensures commits work in minimal container environments.
 
 ### 12. Relay resume
 
@@ -175,12 +180,18 @@ When appending would exceed the window, the store commits the current file, then
 
 **Rationale**: CLI prompt is simple and predictable. The `--resume` flag enables scripted/automated usage without interaction.
 
+### 13. Relay logging
+
+**Decision**: Relay logs are human-readable text logs capturing filtered output from all tries within a relay. Dual-write: `~/.local/share/rally/relays/relay-N.log` (durable, full history) and `.rally/relays/relay-N.log` (repo cache, 10-file limit, gitignored). This continues the batch logging system from v0.1.x, renamed from "batch" to "relay" to match the new naming.
+
+**Rationale**: JSONL is the structured source of truth, but human-readable logs are valuable for quick debugging and for agents to reference recent context. The dual-write ensures durable history in the system-local directory while keeping recent logs accessible in the repo for agents.
+
 ## Risks / Trade-offs
 
 - [JSONL git merge conflicts] → Each file is append-only with distinct record IDs; conflicts are mechanically resolvable. Commit-then-truncate ensures full history in git.
-- [Gemini CLI resume output wrapper] → Gemini's `--output-format json` wraps the response in a `{"response": "...", "session_id": "...", "stats": {...}}` envelope. The report JSON is inside the `response` string and must be double-parsed. Gemini stderr is noisy with MCP server messages — must be discarded.
-- [Per-agent strategy complexity] → Different collection strategies per agent adds implementation complexity. Justified by reliability — each agent CLI has different maturity and quirks. The output contract (JSON schema) is uniform.
-- [Claude cache invalidation with resume] → Potential bug in Claude Code's resume behavior may invalidate input token cache. Block-and-report via stop hook avoids this entirely. If the bug is resolved, Claude can be switched to resume-and-report later.
-- [JSONL file size with many sessions] → Per-type windows (200 sessions, 50 relays, 50 agent status). Commit-then-truncate preserves history in git.
-- [Container ephemeral state] → Transcripts and current_task.md are lost on container wipe. By design — JSONL is the durable layer, everything else is derived or ephemeral.
+- [Gemini CLI output wrapper] → Gemini's `--output-format json` wraps the response in a `{"response": "...", "session_id": "...", "stats": {...}}` envelope. The report JSON inside `response` must be double-parsed. Gemini stderr is noisy with MCP server messages — must be discarded.
+- [Inline output parsing per agent] → Different parsing strategies per agent adds implementation complexity. Justified by the simplicity of not using hooks and the fact that this is already working on v0.1.x main.
+- [JSONL file size with many tries] → Per-type windows (200 tries, 50 relays, 50 agent status). Commit-then-truncate preserves history in git.
+- [Container ephemeral state] → Transcripts, current_task.md, and relay log cache are lost on container wipe. By design — JSONL is the durable layer, everything else is derived or ephemeral.
 - [In-memory cache consistency] → Single process, single writer — no concurrent access concerns. Cache is always rebuilt from JSONL on startup.
+- [Config consolidation migration] → Users with existing `rally.toml` files need to move config to `.rally/config.toml`. `rally init` can auto-migrate.

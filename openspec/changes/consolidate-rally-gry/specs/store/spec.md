@@ -1,10 +1,10 @@
 ## ADDED Requirements
 
 ### Requirement: JSONL source of truth
-The system SHALL persist all durable state as JSONL files in the `.rally/` directory at the repository root. Each record type SHALL have its own file: `sessions.jsonl`, `messages.jsonl`, `relays.jsonl`, `agent_status.jsonl`. Session IDs in rally's stores SHALL be named `relay_session_id` to disambiguate from agent CLI session identifiers.
+The system SHALL persist all durable state as JSONL files in the `.rally/` directory at the repository root. Each record type SHALL have its own file: `tries.jsonl`, `messages.jsonl`, `relays.jsonl`, `agent_status.jsonl`.
 
 #### Scenario: Record appended to JSONL
-- **WHEN** a new record is created (session, message, relay, or agent status event)
+- **WHEN** a new record is created (try, message, relay, or agent status event)
 - **THEN** the system SHALL append a JSON line to the corresponding JSONL file and update the in-memory cache
 
 #### Scenario: JSONL files are git-tracked
@@ -12,7 +12,7 @@ The system SHALL persist all durable state as JSONL files in the `.rally/` direc
 - **THEN** the JSONL files SHALL be included in version control, making state durable across container lifecycles
 
 ### Requirement: Record windowing
-The system SHALL maintain per-type maximum record counts: 200 for sessions, 50 for relays, 50 for agent status events. Messages SHALL only be windowed when resolved (consumed + addressed) or cancelled — pending messages are never truncated.
+The system SHALL maintain per-type maximum record counts: 200 for tries, 50 for relays, 50 for agent status events. Messages SHALL only be windowed when resolved (consumed + addressed) or cancelled — pending messages are never truncated.
 
 #### Scenario: Window exceeded triggers commit-then-truncate
 - **WHEN** a JSONL file exceeds its window limit after an append
@@ -57,7 +57,7 @@ The system SHALL store messages as JSON objects in `messages.jsonl`, one object 
 - **THEN** the system SHALL update the message's `consumed_by_run_id` field and rewrite the file
 
 #### Scenario: Message addressed
-- **WHEN** a session result indicates the message was addressed
+- **WHEN** a try result indicates the message was addressed
 - **THEN** the system SHALL update the message's `status` to `"addressed"` and rewrite the file
 
 #### Scenario: Messages loaded into cache
@@ -65,11 +65,11 @@ The system SHALL store messages as JSON objects in `messages.jsonl`, one object 
 - **THEN** the system SHALL parse each line as a complete message object to reconstruct current message state
 
 ### Requirement: Relay record
-The system SHALL store relay records in `relays.jsonl` with fields: `id`, `target_iterations`, `completed_iterations`, `agent_mix`, `started_at`, `ended_at`, `first_relay_session_id`, `last_relay_session_id`, and `consumed_message_ids` (relay-level messages consumed during this relay).
+The system SHALL store relay records in `relays.jsonl` with fields: `id`, `target_iterations`, `completed_iterations`, `agent_mix`, `started_at`, `ended_at`, `first_try_id`, `last_try_id`, and `consumed_message_ids` (relay-level messages consumed during this relay).
 
-#### Scenario: Relay record tracks session range
-- **WHEN** sessions execute within a relay
-- **THEN** the relay record SHALL track `first_relay_session_id` (set on first session) and `last_relay_session_id` (updated after each session)
+#### Scenario: Relay record tracks try range
+- **WHEN** tries execute within a relay
+- **THEN** the relay record SHALL track `first_try_id` (set on first try) and `last_try_id` (updated after each try)
 
 #### Scenario: Relay-level message consumption tracked
 - **WHEN** a relay-level message is consumed
