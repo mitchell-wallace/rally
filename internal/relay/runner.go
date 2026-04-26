@@ -340,7 +340,7 @@ func (r *Runner) runOne(ctx context.Context, relay *store.RelayRecord, runIndex 
 		if headBefore != "" && headAfter != "" && headBefore != headAfter {
 			commitHash = headAfter
 		} else {
-			dirty, _ := gitx.IsGitDirty(r.cfg.WorkspaceDir)
+			dirty, _ := gitx.IsWorkspaceDirty(r.cfg.WorkspaceDir)
 			if dirty {
 				hash, commitErr := r.autoCommit(runIndex, agentType, attempt)
 				if commitErr != nil {
@@ -349,6 +349,11 @@ func (r *Runner) runOne(ctx context.Context, relay *store.RelayRecord, runIndex 
 					commitHash = hash
 				}
 			}
+		}
+
+		// Commit Rally state after each try
+		if err := gitx.CommitRallyState(r.cfg.WorkspaceDir); err != nil {
+			fmt.Fprintf(log, "relay %d run %d attempt %d rally state commit warning: %v\n", relay.ID, runIndex+1, attempt, err)
 		}
 
 		// Failure detection
@@ -360,7 +365,7 @@ func (r *Runner) runOne(ctx context.Context, relay *store.RelayRecord, runIndex 
 		} else {
 			hasChanges := commitHash != ""
 			if !hasChanges {
-				dirty, _ := gitx.IsGitDirty(r.cfg.WorkspaceDir)
+				dirty, _ := gitx.IsWorkspaceDirty(r.cfg.WorkspaceDir)
 				hasChanges = dirty
 			}
 			noFileChanges := !hasChanges

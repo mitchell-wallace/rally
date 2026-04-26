@@ -36,10 +36,10 @@ func initRepo(t *testing.T, dir string) {
 	runGit(t, dir, "init")
 	runGit(t, dir, "config", "user.name", "Rally Test")
 	runGit(t, dir, "config", "user.email", "rally@example.com")
-	// Exclude rally's ephemeral and store files from git status so auto-commit
-	// only commits real workspace changes, not rally's own operational files.
+	// Exclude only rally's ephemeral files from git status.
+	// Rally's JSONL state files are now committed as durable git-backed state.
 	excludePath := filepath.Join(dir, ".git", "info", "exclude")
-	os.WriteFile(excludePath, []byte(".rally/current_task.md\n.rally/relays/\n.rally/*.jsonl\n"), 0o644)
+	os.WriteFile(excludePath, []byte(".rally/current_task.md\n.rally/relays/\n"), 0o644)
 }
 
 func newTestStore(t *testing.T, dir string) *store.Store {
@@ -679,7 +679,7 @@ func TestFreezeCascade(t *testing.T) {
 		TargetIterations: 1,
 	}, executors)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
 	defer cancel()
 	_ = r.Run(ctx)
 

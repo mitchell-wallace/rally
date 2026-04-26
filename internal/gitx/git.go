@@ -59,3 +59,68 @@ func IsGitDirty(dir string) (bool, error) {
 	}
 	return strings.TrimSpace(string(out)) != "", nil
 }
+
+// IsWorkspaceDirty checks if there are user-agent workspace changes,
+// excluding Rally's own operational files (.rally/*.jsonl, .rally/current_task.md).
+func IsWorkspaceDirty(dir string) (bool, error) {
+	out, err := GitOutput(dir, "status", "--porcelain")
+	if err != nil {
+		return false, err
+	}
+	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		// Skip Rally's own files
+		if strings.HasPrefix(line, "M .rally/") || strings.HasPrefix(line, "A .rally/") ||
+			strings.HasPrefix(line, "D .rally/") || strings.HasPrefix(line, "R .rally/") {
+			continue
+		}
+		if strings.HasSuffix(line, ".rally/current_task.md") || strings.HasSuffix(line, ".rally/relays/") {
+			continue
+		}
+		// Check if the file path is under .rally/
+		parts := strings.SplitN(line, " ", 2)
+		if len(parts) == 2 {
+			path := parts[1]
+			if strings.HasPrefix(path, ".rally/") {
+				continue
+			}
+		}
+		return true, nil
+	}
+	return false, nil
+}
+
+// CommitRallyState commits Rally's operational state files.
+func CommitRallyState(dir string) error {
+	_, inGit, err := GitRepoRoot(dir)
+	if err != nil || !inGit {
+		return nil
+	}
+
+	// Check if there are Rally files to commit
+	out, err := GitOutput(dir, "status", "--porcelain", ".rally/")
+	if err != nil {
+		return err
+	}
+	if strings.TrimSpace(string(out)) == "" {
+		return nil
+	}
+
+	if _, err := GitOutput(dir, "add", ".rally/*.jsonl"); err != nil {
+		return err
+	}
+
+	args := append(GitUserFallbackConfig(dir), "commit", "--no-verify", "-m", "rally: update state")
+	if _, err := GitOutput(dir, args...); err != nil {
+		// If nothing to commit, that's okay
+		if strings.Contains(string(out), "nothing to commit") {
+			return nil
+		}
+		return err
+	}
+	return nil
+}
