@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/mitchell-wallace/rally/internal/agent"
+	"github.com/mitchell-wallace/rally/internal/gitx"
 	"github.com/mitchell-wallace/rally/internal/store"
 )
 
@@ -69,7 +70,7 @@ func (r *Runner) Run(ctx context.Context) error {
 	}
 	r.log = log
 	defer func() {
-		_ = pruneRepoRelayLogs(r.cfg.WorkspaceDir, 10)
+		_ = PruneRepoRelayLogs(r.cfg.WorkspaceDir, 10)
 		_ = log.Close()
 	}()
 
@@ -78,6 +79,18 @@ func (r *Runner) Run(ctx context.Context) error {
 	resilience := r.resilience
 	if resilience == nil {
 		resilience = NewResilience(r.store)
+	}
+
+	// Consume oldest pending relay-scoped message at relay start
+	var relayMsg *store.MessageRecord
+	relayPending := r.store.RelayScopedMessages()
+	if len(relayPending) > 0 {
+		msg := relayPending[0]
+		msg.ConsumedByRelayID = &relay.ID
+		if err := r.store.UpdateMessage(msg); err != nil {
+			return err
+		}
+		relayMsg = &msg
 	}
 
 	runIndex := relay.CompletedIterations
@@ -110,20 +123,23 @@ func (r *Runner) Run(ctx context.Context) error {
 			return err
 		}
 
-		// Consume oldest pending message at start of each run
+		// Consume oldest pending run-scoped message at start of each run
 		pending := r.store.PendingMessages()
 		var consumedMsg *store.MessageRecord
-		if len(pending) > 0 {
-			msg := pending[0]
-			runID := runIndex + 1
-			msg.ConsumedByRunID = &runID
-			if err := r.store.UpdateMessage(msg); err != nil {
-				return err
+		for _, p := range pending {
+			if p.Scope != "relay" {
+				msg := p
+				runID := runIndex + 1
+				msg.ConsumedByRunID = &runID
+				if err := r.store.UpdateMessage(msg); err != nil {
+					return err
+				}
+				consumedMsg = &msg
+				break
 			}
-			consumedMsg = &msg
 		}
 
-		success, addressed, interrupted, err := r.runOne(ctx, relay, runIndex, agentType, consumedMsg, isHourlyRetry, log)
+		success, addressed, interrupted, err := r.runOne(ctx, relay, runIndex, agentType, consumedMsg, relayMsg, isHourlyRetry, log)
 		if err != nil {
 			fmt.Fprintf(log, "relay %d run %d error: %v\n", relay.ID, runIndex+1, err)
 			return err
@@ -162,6 +178,15 @@ func (r *Runner) Run(ctx context.Context) error {
 					return err
 				}
 				relay.ConsumedMessageIDs = append(relay.ConsumedMessageIDs, consumedMsg.ID)
+			}
+			if relayMsg != nil && addressed && relayMsg.Status == "pending" {
+				relayMsg.Status = "addressed"
+				now := time.Now().UTC().Format(time.RFC3339)
+				relayMsg.UpdatedAt = now
+				if err := r.store.UpdateMessage(*relayMsg); err != nil {
+					return err
+				}
+				relay.ConsumedMessageIDs = append(relay.ConsumedMessageIDs, relayMsg.ID)
 			}
 		} else {
 			relay.CompletedIterations++
@@ -208,10 +233,14 @@ func timeUntilNextRetry(resilience *Resilience, mix AgentMix) time.Duration {
 	return minWait
 }
 
-func (r *Runner) runOne(ctx context.Context, relay *store.RelayRecord, runIndex int, agentType string, consumedMsg *store.MessageRecord, isHourlyRetry bool, log io.Writer) (bool, bool, bool, error) {
+func (r *Runner) runOne(ctx context.Context, relay *store.RelayRecord, runIndex int, agentType string, consumedMsg *store.MessageRecord, relayMsg *store.MessageRecord, isHourlyRetry bool, log io.Writer) (bool, bool, bool, error) {
 	inbox := ""
 	if consumedMsg != nil {
 		inbox = consumedMsg.Body
+	}
+	relayMessage := ""
+	if relayMsg != nil {
+		relayMessage = relayMsg.Body
 	}
 
 	recentTries := r.store.RecentTries(5)
@@ -243,6 +272,7 @@ func (r *Runner) runOne(ctx context.Context, relay *store.RelayRecord, runIndex 
 			Persona:          agentType,
 			TaskName:         "relay run",
 			InboxMessage:     inbox,
+			RelayMessage:     relayMessage,
 			PreviousSummary:  previousSummary,
 			RecentTryContext: recentContext.String(),
 			BeadsEnabled:     r.cfg.BeadsEnabled,
@@ -264,7 +294,7 @@ func (r *Runner) runOne(ctx context.Context, relay *store.RelayRecord, runIndex 
 		if headBefore != "" && headAfter != "" && headBefore != headAfter {
 			commitHash = headAfter
 		} else {
-			dirty, _ := isGitDirty(r.cfg.WorkspaceDir)
+			dirty, _ := gitx.IsGitDirty(r.cfg.WorkspaceDir)
 			if dirty {
 				hash, commitErr := r.autoCommit(runIndex, agentType, attempt)
 				if commitErr != nil {
@@ -284,7 +314,7 @@ func (r *Runner) runOne(ctx context.Context, relay *store.RelayRecord, runIndex 
 		} else {
 			hasChanges := commitHash != ""
 			if !hasChanges {
-				dirty, _ := isGitDirty(r.cfg.WorkspaceDir)
+				dirty, _ := gitx.IsGitDirty(r.cfg.WorkspaceDir)
 				hasChanges = dirty
 			}
 			noFileChanges := !hasChanges
@@ -354,11 +384,11 @@ func (r *Runner) executeTry(ctx context.Context, agentType string, opts agent.Ru
 }
 
 func (r *Runner) headHash() (string, error) {
-	_, inGit, err := gitRepoRoot(r.cfg.WorkspaceDir)
+	_, inGit, err := gitx.GitRepoRoot(r.cfg.WorkspaceDir)
 	if err != nil || !inGit {
 		return "", nil
 	}
-	out, err := gitOutput(r.cfg.WorkspaceDir, "rev-parse", "HEAD")
+	out, err := gitx.GitOutput(r.cfg.WorkspaceDir, "rev-parse", "HEAD")
 	if err != nil {
 		return "", err
 	}
@@ -366,7 +396,7 @@ func (r *Runner) headHash() (string, error) {
 }
 
 func (r *Runner) autoCommit(runIndex int, agentType string, attempt int) (string, error) {
-	repoRoot, ok, err := gitRepoRoot(r.cfg.WorkspaceDir)
+	repoRoot, ok, err := gitx.GitRepoRoot(r.cfg.WorkspaceDir)
 	if err != nil {
 		return "", err
 	}
@@ -374,11 +404,11 @@ func (r *Runner) autoCommit(runIndex int, agentType string, attempt int) (string
 		return "", nil
 	}
 
-	if _, err := gitOutput(repoRoot, "add", "-A"); err != nil {
+	if _, err := gitx.GitOutput(repoRoot, "add", "-A"); err != nil {
 		return "", err
 	}
 
-	_, err = gitOutput(repoRoot, "diff", "--cached", "--quiet")
+	_, err = gitx.GitOutput(repoRoot, "diff", "--cached", "--quiet")
 	if err == nil {
 		return "", nil
 	}
@@ -387,16 +417,16 @@ func (r *Runner) autoCommit(runIndex int, agentType string, attempt int) (string
 		return "", err
 	}
 
-	commitArgs := append(gitUserFallbackConfig(repoRoot), "commit")
+	commitArgs := append(gitx.GitUserFallbackConfig(repoRoot), "commit")
 	if !r.cfg.RunHooksOnAutoCommit {
 		commitArgs = append(commitArgs, "--no-verify")
 	}
 	commitArgs = append(commitArgs, "-m", fmt.Sprintf("rally: run %d attempt %d (%s)", runIndex+1, attempt, agentType))
-	if _, err := gitOutput(repoRoot, commitArgs...); err != nil {
+	if _, err := gitx.GitOutput(repoRoot, commitArgs...); err != nil {
 		return "", err
 	}
 
-	hashOut, err := gitOutput(repoRoot, "rev-parse", "--short", "HEAD")
+	hashOut, err := gitx.GitOutput(repoRoot, "rev-parse", "--short", "HEAD")
 	if err != nil {
 		return "", nil
 	}

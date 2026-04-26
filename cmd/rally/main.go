@@ -174,6 +174,18 @@ func runInit(cmd *cobra.Command, args []string) error {
 
 	// 4. Create .rally/config.toml
 	configPath := filepath.Join(rallyDir, "config.toml")
+	// Auto-migrate legacy rally.toml to .rally/config.toml (will be removed in a future version)
+	legacyPath := filepath.Join(workspaceDir, "rally.toml")
+	if _, err := os.Stat(legacyPath); err == nil {
+		if _, err := os.Stat(configPath); os.IsNotExist(err) {
+			data, err := os.ReadFile(legacyPath)
+			if err == nil {
+				if err := os.WriteFile(configPath, data, 0o644); err == nil {
+					fmt.Println("Migrated legacy rally.toml to .rally/config.toml (auto-migration will be removed in a future version)")
+				}
+			}
+		}
+	}
 	if _, err := os.Stat(configPath); os.IsNotExist(err) {
 		content := `claude_model = ""
 codex_model = ""
@@ -192,12 +204,23 @@ run_hooks_on_autocommit = false
 	if _, err := os.Stat(readmePath); os.IsNotExist(err) {
 		content := `# Rally Data Directory
 
-This directory contains rally's operational data.
+This directory contains rally's operational data. You can access this data
+directly to understand the project's history and current state.
 
-## Quick Reference
-- Recent tries: ` + "`tail -10 .rally/tries.jsonl`" + `
-- Messages: ` + "`cat .rally/messages.jsonl`" + `
-- Config: ` + "`.rally/config.toml`" + `
+## JSONL Data Files (source of truth, git-tracked)
+- ` + "`tries.jsonl`" + ` — One line per agent execution attempt
+- ` + "`messages.jsonl`" + ` — Inbox messages for agents
+- ` + "`relays.jsonl`" + ` — Relay session records
+- ` + "`agent_status.jsonl`" + ` — Agent pause/freeze state history
+
+## Quick Reference for Agents
+- View recent tries (last 10): ` + "`tail -10 .rally/tries.jsonl | jq .`" + `
+- View pending messages: ` + "`cat .rally/messages.jsonl | jq 'select(.status==\\\"pending\\\")'`" + `
+- View current relay status: ` + "`tail -1 .rally/relays.jsonl | jq .`" + `
+- Counts: ` + "`wc -l .rally/*.jsonl`" + `
+
+## Config
+- ` + "`config.toml`" + ` — Agent model configuration and runtime settings
 `
 		if err := os.WriteFile(readmePath, []byte(content), 0o644); err != nil {
 			return err

@@ -8,6 +8,9 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/mitchell-wallace/rally/internal/gitx"
+	"github.com/mitchell-wallace/rally/internal/testutil"
 )
 
 func TestBuildPrompt_AllFields(t *testing.T) {
@@ -68,9 +71,7 @@ func TestFixtureExecutor_RoundTrip(t *testing.T) {
 	tmp := t.TempDir()
 
 	// init git repo
-	mustExec(t, tmp, "git", "init")
-	mustExec(t, tmp, "git", "config", "user.name", "Test")
-	mustExec(t, tmp, "git", "config", "user.email", "test@localhost")
+	testutil.InitGitRepo(t, tmp)
 
 	// create a file to diff
 	origPath := filepath.Join(tmp, "hello.txt")
@@ -243,9 +244,9 @@ func TestGitHelpers(t *testing.T) {
 	tmp := t.TempDir()
 	mustExec(t, tmp, "git", "init")
 
-	root, ok, err := gitRepoRoot(tmp)
+	root, ok, err := gitx.GitRepoRoot(tmp)
 	if err != nil {
-		t.Fatalf("gitRepoRoot error: %v", err)
+		t.Fatalf("GitRepoRoot error: %v", err)
 	}
 	if !ok {
 		t.Fatal("expected ok")
@@ -254,8 +255,8 @@ func TestGitHelpers(t *testing.T) {
 		t.Errorf("unexpected root: %s", root)
 	}
 
-	// gitUserFallbackConfig when not configured
-	fallback := gitUserFallbackConfig(tmp)
+	// GitUserFallbackConfig when not configured
+	fallback := gitx.GitUserFallbackConfig(tmp)
 	if len(fallback) == 0 {
 		t.Error("expected fallback config")
 	}
@@ -263,7 +264,7 @@ func TestGitHelpers(t *testing.T) {
 	// configure user
 	mustExec(t, tmp, "git", "config", "user.name", "A")
 	mustExec(t, tmp, "git", "config", "user.email", "a@b")
-	fallback = gitUserFallbackConfig(tmp)
+	fallback = gitx.GitUserFallbackConfig(tmp)
 	if len(fallback) != 0 {
 		t.Error("expected no fallback when configured")
 	}

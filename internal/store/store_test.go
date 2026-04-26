@@ -434,6 +434,54 @@ func intPtr(i int) *int {
 	return &i
 }
 
+func TestRelayScopedMessages(t *testing.T) {
+	rallyDir, store := setupTempStore(t)
+
+	_ = store.AddMessage(MessageRecord{ID: 1, Body: "relay-msg", Status: "pending", Position: 1, Scope: "relay"})
+	_ = store.AddMessage(MessageRecord{ID: 2, Body: "run-msg", Status: "pending", Position: 2, Scope: "run"})
+	_ = store.AddMessage(MessageRecord{ID: 3, Body: "relay-msg2", Status: "pending", Position: 3, Scope: "relay"})
+	_ = store.AddMessage(MessageRecord{ID: 4, Body: "no-scope", Status: "pending", Position: 4})
+
+	relayMsgs := store.RelayScopedMessages()
+	if len(relayMsgs) != 2 {
+		t.Fatalf("expected 2 relay-scoped messages, got %d", len(relayMsgs))
+	}
+	if relayMsgs[0].ID != 1 || relayMsgs[1].ID != 3 {
+		t.Fatalf("unexpected relay-scoped messages: %v", relayMsgs)
+	}
+
+	// PendingMessages should still return all pending messages
+	pending := store.PendingMessages()
+	if len(pending) != 4 {
+		t.Fatalf("expected 4 pending messages, got %d", len(pending))
+	}
+
+	// After reload
+	store2, _ := NewStore(rallyDir)
+	relayMsgs = store2.RelayScopedMessages()
+	if len(relayMsgs) != 2 {
+		t.Fatalf("expected 2 relay-scoped messages after reload, got %d", len(relayMsgs))
+	}
+}
+
+func TestRelayScopedMessages_Empty(t *testing.T) {
+	rallyDir, store := setupTempStore(t)
+
+	_ = store.AddMessage(MessageRecord{ID: 1, Body: "run-msg", Status: "pending", Position: 1, Scope: "run"})
+
+	relayMsgs := store.RelayScopedMessages()
+	if len(relayMsgs) != 0 {
+		t.Fatalf("expected 0 relay-scoped messages, got %d", len(relayMsgs))
+	}
+
+	// Reload
+	store2, _ := NewStore(rallyDir)
+	relayMsgs = store2.RelayScopedMessages()
+	if len(relayMsgs) != 0 {
+		t.Fatalf("expected 0 relay-scoped messages after reload, got %d", len(relayMsgs))
+	}
+}
+
 func TestCommitThenTruncateNoGitRepo(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "tries.jsonl")

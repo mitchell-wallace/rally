@@ -426,3 +426,305 @@ func TestCommitHashTracking_NoChanges(t *testing.T) {
 		}
 	}
 }
+
+func TestRelayScopedMessageIncludedInAllRuns(t *testing.T) {
+	workspaceDir := t.TempDir()
+	rallyDir := filepath.Join(workspaceDir, ".rally")
+	os.MkdirAll(rallyDir, 0o755)
+	initRepo(t, workspaceDir)
+
+	s := newTestStore(t, rallyDir)
+	s.AddMessage(store.MessageRecord{ID: 1, Body: "relay-msg", Status: "pending", Position: 1, Scope: "relay"})
+
+	var relayMsgsSeen []string
+	changeCounter := 0
+	exec := &funcExecutor{
+		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+			relayMsgsSeen = append(relayMsgsSeen, opts.RelayMessage)
+			changeCounter++
+			f, _ := os.OpenFile(filepath.Join(workspaceDir, "changes.txt"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+			fmt.Fprintf(f, "change %d\n", changeCounter)
+			f.Close()
+			return &agent.TryResult{Completed: true}, nil
+		},
+	}
+	executors := map[string]agent.Executor{"claude": exec}
+
+	r := NewRunner(s, Config{
+		WorkspaceDir:     workspaceDir,
+		DataDir:          t.TempDir(),
+		AgentMixSpecs:    []string{"cc:1"},
+		TargetIterations: 3,
+	}, executors)
+
+	if err := r.Run(context.Background()); err != nil {
+		t.Fatalf("run failed: %v", err)
+	}
+
+	if len(relayMsgsSeen) != 3 {
+		t.Fatalf("expected relay message in 3 runs, got %d", len(relayMsgsSeen))
+	}
+	for i, msg := range relayMsgsSeen {
+		if msg != "relay-msg" {
+			t.Fatalf("run %d relay message = %q, want 'relay-msg'", i, msg)
+		}
+	}
+}
+
+func TestRelayScopedMessageAddressed(t *testing.T) {
+	workspaceDir := t.TempDir()
+	rallyDir := filepath.Join(workspaceDir, ".rally")
+	os.MkdirAll(rallyDir, 0o755)
+	initRepo(t, workspaceDir)
+
+	s := newTestStore(t, rallyDir)
+	s.AddMessage(store.MessageRecord{ID: 1, Body: "relay-msg", Status: "pending", Position: 1, Scope: "relay"})
+
+	changeCounter := 0
+	exec := &funcExecutor{
+		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+			changeCounter++
+			f, _ := os.OpenFile(filepath.Join(workspaceDir, "changes.txt"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+			fmt.Fprintf(f, "change %d\n", changeCounter)
+			f.Close()
+			msgAddr := true
+			return &agent.TryResult{Completed: true, MessageAddressed: &msgAddr}, nil
+		},
+	}
+	executors := map[string]agent.Executor{"claude": exec}
+
+	r := NewRunner(s, Config{
+		WorkspaceDir:     workspaceDir,
+		DataDir:          t.TempDir(),
+		AgentMixSpecs:    []string{"cc:1"},
+		TargetIterations: 2,
+	}, executors)
+
+	if err := r.Run(context.Background()); err != nil {
+		t.Fatalf("run failed: %v", err)
+	}
+
+	relay := s.AllRelays()
+	if len(relay) != 1 {
+		t.Fatalf("expected 1 relay, got %d", len(relay))
+	}
+	foundRelayMsg := false
+	for _, id := range relay[0].ConsumedMessageIDs {
+		if id == 1 {
+			foundRelayMsg = true
+		}
+	}
+	if !foundRelayMsg {
+		t.Fatal("expected relay message ID 1 in ConsumedMessageIDs")
+	}
+
+	msgs := s.GetMessages()
+	for _, m := range msgs {
+		if m.ID == 1 && m.Status != "addressed" {
+			t.Fatalf("expected relay message addressed, got %s", m.Status)
+		}
+	}
+}
+
+func TestCombinedRelayAndRunScopedMessages(t *testing.T) {
+	workspaceDir := t.TempDir()
+	rallyDir := filepath.Join(workspaceDir, ".rally")
+	os.MkdirAll(rallyDir, 0o755)
+	initRepo(t, workspaceDir)
+
+	s := newTestStore(t, rallyDir)
+	s.AddMessage(store.MessageRecord{ID: 1, Body: "relay-msg", Status: "pending", Position: 1, Scope: "relay"})
+	s.AddMessage(store.MessageRecord{ID: 2, Body: "run-msg-1", Status: "pending", Position: 2})
+	s.AddMessage(store.MessageRecord{ID: 3, Body: "run-msg-2", Status: "pending", Position: 3})
+
+	var relayMsgsSeen []string
+	var inboxMsgsSeen []string
+	changeCounter := 0
+	exec := &funcExecutor{
+		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+			relayMsgsSeen = append(relayMsgsSeen, opts.RelayMessage)
+			inboxMsgsSeen = append(inboxMsgsSeen, opts.InboxMessage)
+			changeCounter++
+			f, _ := os.OpenFile(filepath.Join(workspaceDir, "changes.txt"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+			fmt.Fprintf(f, "change %d\n", changeCounter)
+			f.Close()
+			msgAddr := true
+			return &agent.TryResult{Completed: true, MessageAddressed: &msgAddr}, nil
+		},
+	}
+	executors := map[string]agent.Executor{"claude": exec}
+
+	r := NewRunner(s, Config{
+		WorkspaceDir:     workspaceDir,
+		DataDir:          t.TempDir(),
+		AgentMixSpecs:    []string{"cc:1"},
+		TargetIterations: 2,
+	}, executors)
+
+	if err := r.Run(context.Background()); err != nil {
+		t.Fatalf("run failed: %v", err)
+	}
+
+	// Relay message seen in both runs
+	if len(relayMsgsSeen) != 2 {
+		t.Fatalf("expected relay message in 2 runs, got %d", len(relayMsgsSeen))
+	}
+	for i, msg := range relayMsgsSeen {
+		if msg != "relay-msg" {
+			t.Fatalf("run %d relay message = %q, want 'relay-msg'", i, msg)
+		}
+	}
+
+	// Inbox messages: each run gets a different run-scoped message
+	if len(inboxMsgsSeen) != 2 {
+		t.Fatalf("expected inbox message in 2 runs, got %d", len(inboxMsgsSeen))
+	}
+	if inboxMsgsSeen[0] != "run-msg-1" {
+		t.Fatalf("run 1 inbox = %q, want 'run-msg-1'", inboxMsgsSeen[0])
+	}
+	if inboxMsgsSeen[1] != "run-msg-2" {
+		t.Fatalf("run 2 inbox = %q, want 'run-msg-2'", inboxMsgsSeen[1])
+	}
+
+	// All messages should be addressed
+	msgs := s.GetMessages()
+	for _, m := range msgs {
+		if m.Status != "addressed" {
+			t.Fatalf("expected message %d to be addressed, got %s", m.ID, m.Status)
+		}
+	}
+
+	// Relay ConsumedMessageIDs should have all 3 message IDs
+	relay := s.AllRelays()
+	if len(relay) != 1 {
+		t.Fatalf("expected 1 relay, got %d", len(relay))
+	}
+	if len(relay[0].ConsumedMessageIDs) != 3 {
+		t.Fatalf("expected 3 consumed message IDs, got %v", relay[0].ConsumedMessageIDs)
+	}
+}
+
+func TestFreezeCascade(t *testing.T) {
+	workspaceDir := t.TempDir()
+	rallyDir := filepath.Join(workspaceDir, ".rally")
+	os.MkdirAll(rallyDir, 0o755)
+	initRepo(t, workspaceDir)
+
+	s := newTestStore(t, rallyDir)
+	exec := &funcExecutor{
+		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+			return &agent.TryResult{Completed: false, Summary: "fail"}, nil
+		},
+	}
+	executors := map[string]agent.Executor{"claude": exec}
+
+	r := NewRunner(s, Config{
+		WorkspaceDir:     workspaceDir,
+		DataDir:          t.TempDir(),
+		AgentMixSpecs:    []string{"cc:1"},
+		TargetIterations: 1,
+	}, executors)
+
+	if err := r.Run(context.Background()); err != nil {
+		t.Fatalf("run failed: %v", err)
+	}
+
+	// Verify agent is paused after 3 retries exhausted
+	st, _ := NewResilience(s).getState("claude")
+	if st != StatePaused {
+		t.Fatalf("expected agent paused after retry exhaustion, got %s", st)
+	}
+
+	// Simulate 5 hourly retries failing with progressively advancing times
+	counter := 0
+	resilience := &Resilience{
+		Store:                     s,
+		PauseDuration:             time.Hour,
+		HourlyRetriesBeforeFreeze: 5,
+		NowFunc: func() time.Time {
+			counter++
+			return time.Date(2026, 1, 1, counter, 0, 0, 0, time.UTC)
+		},
+	}
+
+	for i := 0; i < 5; i++ {
+		if err := resilience.RecordHourlyFailure("claude", 1); err != nil {
+			t.Fatalf("RecordHourlyFailure %d failed: %v", i+1, err)
+		}
+	}
+
+	// Verify agent is now frozen
+	st, _ = resilience.getState("claude")
+	if st != StateFrozen {
+		t.Fatalf("expected agent frozen after 5 hourly retries, got %s", st)
+	}
+
+	// Verify a "frozen" event was recorded
+	events := s.GetAgentStatus("claude")
+	foundFrozen := false
+	for _, e := range events {
+		if e.EventType == "frozen" {
+			foundFrozen = true
+			break
+		}
+	}
+	if !foundFrozen {
+		t.Fatal("expected frozen event in agent status")
+	}
+}
+
+func TestAgentUnfreeze(t *testing.T) {
+	workspaceDir := t.TempDir()
+	rallyDir := filepath.Join(workspaceDir, ".rally")
+	os.MkdirAll(rallyDir, 0o755)
+
+	s := newTestStore(t, rallyDir)
+	resilience := NewResilience(s)
+
+	if err := resilience.PauseAgent("claude", 1); err != nil {
+		t.Fatalf("PauseAgent failed: %v", err)
+	}
+
+	st, _ := resilience.getState("claude")
+	if st != StatePaused {
+		t.Fatalf("expected StatePaused after pause, got %s", st)
+	}
+
+	if err := resilience.UnpauseAgent("claude", 1); err != nil {
+		t.Fatalf("UnpauseAgent failed: %v", err)
+	}
+
+	st, _ = resilience.getState("claude")
+	if st != StateActive {
+		t.Fatalf("expected StateActive after unpause, got %s", st)
+	}
+}
+
+func TestAllAgentsFrozenEndsRelay(t *testing.T) {
+	workspaceDir := t.TempDir()
+	rallyDir := filepath.Join(workspaceDir, ".rally")
+	os.MkdirAll(rallyDir, 0o755)
+
+	s := newTestStore(t, rallyDir)
+	resilience := NewResilience(s)
+
+	if err := resilience.FreezeAgent("claude", 1); err != nil {
+		t.Fatalf("FreezeAgent claude failed: %v", err)
+	}
+	if err := resilience.FreezeAgent("codex", 1); err != nil {
+		t.Fatalf("FreezeAgent codex failed: %v", err)
+	}
+
+	mix, err := ParseAgentMix([]string{"cc:1", "cx:1"})
+	if err != nil {
+		t.Fatalf("ParseAgentMix failed: %v", err)
+	}
+
+	_, _, _, err = resilience.SelectActiveAgent(mix, 0)
+	if err == nil {
+		t.Fatal("expected error from SelectActiveAgent")
+	}
+	if err.Error() != "all agents frozen" {
+		t.Fatalf("expected 'all agents frozen' error, got %q", err.Error())
+	}
+}

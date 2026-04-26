@@ -7,6 +7,7 @@ type RunOptions struct {
 	TaskName         string
 	TaskRequirements string
 	InboxMessage     string
+	RelayMessage     string
 	PreviousSummary  string
 	RecentTryContext string
 	BeadsEnabled     bool

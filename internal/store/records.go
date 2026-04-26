@@ -18,14 +18,16 @@ type TryRecord struct {
 
 // MessageRecord represents an inbox message that can be consumed by a run.
 type MessageRecord struct {
-	ID              int    `json:"id"`
-	Body            string `json:"body"`
-	Status          string `json:"status"` // pending, addressed, cancelled
-	Position        int    `json:"position"`
-	CreatedAt       string `json:"created_at"`
-	UpdatedAt       string `json:"updated_at"`
-	ConsumedByRunID *int   `json:"consumed_by_run_id,omitempty"`
-	RelayID         *int   `json:"relay_id,omitempty"`
+	ID                int    `json:"id"`
+	Body              string `json:"body"`
+	Status            string `json:"status"` // pending, addressed, cancelled
+	Position          int    `json:"position"`
+	Scope             string `json:"scope"` // "run" (default) or "relay"
+	CreatedAt         string `json:"created_at"`
+	UpdatedAt         string `json:"updated_at"`
+	ConsumedByRunID   *int   `json:"consumed_by_run_id,omitempty"`
+	ConsumedByRelayID *int   `json:"consumed_by_relay_id,omitempty"`
+	RelayID           *int   `json:"relay_id,omitempty"`
 }
 
 // RelayRecord tracks the lifecycle of a relay session.

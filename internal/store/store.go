@@ -245,6 +245,20 @@ func (s *Store) PendingMessages() []MessageRecord {
 	return out
 }
 
+// RelayScopedMessages returns pending messages with Scope == "relay" sorted by position.
+func (s *Store) RelayScopedMessages() []MessageRecord {
+	var out []MessageRecord
+	for _, m := range s.cache.Messages {
+		if m.Status == "pending" && m.Scope == "relay" {
+			out = append(out, m)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool {
+		return out[i].Position < out[j].Position
+	})
+	return out
+}
+
 // GetAgentStatus returns all status events for a given agent type.
 func (s *Store) GetAgentStatus(agentType string) []AgentStatusEvent {
 	var out []AgentStatusEvent

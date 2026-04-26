@@ -50,7 +50,7 @@ func repoRelayLogPath(workspaceDir string, relayID int) string {
 	return filepath.Join(workspaceDir, ".rally", "relays", fmt.Sprintf("relay-%d.log", relayID))
 }
 
-func pruneRepoRelayLogs(workspaceDir string, keep int) error {
+func PruneRepoRelayLogs(workspaceDir string, keep int) error {
 	dir := filepath.Join(workspaceDir, ".rally", "relays")
 	entries, err := os.ReadDir(dir)
 	if err != nil {

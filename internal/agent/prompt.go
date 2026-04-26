@@ -40,6 +40,10 @@ func BuildPrompt(opts RunOptions) string {
 		fmt.Fprintf(&b, "%s\n\n", beadsTemplate)
 	}
 
+	if opts.RelayMessage != "" {
+		fmt.Fprintf(&b, "Relay Message:\n%s\n\n", opts.RelayMessage)
+	}
+
 	if opts.InboxMessage != "" {
 		fmt.Fprintf(&b, "Inbox Message:\n%s\n\n", opts.InboxMessage)
 	}
