@@ -134,3 +134,31 @@ func splitLines(data []byte) []string {
 	}
 	return lines
 }
+
+// commitThenTruncateWithContent archives the current file via git, writes the
+// exact provided records to the file, and commits the result.
+func commitThenTruncateWithContent[T any](path string, records []T) error {
+	filename := filepath.Base(path)
+	inGit := isGitRepo(path)
+
+	// 1. Commit current file (git only)
+	if inGit {
+		if err := gitAddCommit(path, fmt.Sprintf("rally: archive %s", filename)); err != nil {
+			return fmt.Errorf("archive commit: %w", err)
+		}
+	}
+
+	// 2. Rewrite file with exact kept records
+	if err := rewriteJSONL(path, records); err != nil {
+		return fmt.Errorf("write %s: %w", path, err)
+	}
+
+	// 3. Commit truncated file (git only)
+	if inGit {
+		if err := gitAddCommit(path, fmt.Sprintf("rally: truncate %s", filename)); err != nil {
+			return fmt.Errorf("truncate commit: %w", err)
+		}
+	}
+
+	return nil
+}

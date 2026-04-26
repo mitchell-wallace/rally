@@ -191,11 +191,8 @@ func (s *Store) maybeTruncateMessages() error {
 		}
 	}
 
-	if err := commitThenTruncate(path, len(kept)); err != nil {
-		return err
-	}
-
-	if err := rewriteJSONL(path, kept); err != nil {
+	// Archive the full file, write the exact kept set, then commit the result.
+	if err := commitThenTruncateWithContent(path, kept); err != nil {
 		return err
 	}
 
