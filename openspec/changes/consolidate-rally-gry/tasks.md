@@ -59,10 +59,10 @@
 
 ## 6. Test Infrastructure
 
-- [ ] 6.1 Port gry's testdata/ directory: fixture projects, diffs, and output JSON files
-- [ ] 6.2 Port gry's test helpers: fixture seeding, copyFixtureProject (adapted for run-centric model, no task/phase/sprint DB)
-- [ ] 6.3 Create e2e test: full relay workflow with fixture executor (try, record, verify store)
-- [ ] 6.4 Create e2e test: relay with inbox message consumption — message consumed per run, same message across retries
-- [ ] 6.5 Create e2e test: retry exhaustion triggers error cascade (not relay halt), agent paused then frozen
-- [ ] 6.6 Create e2e test: graceful stop completes current try then halts
-- [ ] 6.7 Create e2e test: commit hash tracking — verify agent-committed, auto-committed, and no-changes scenarios
+- [x] 6.1 Port gry's testdata/ directory: fixture projects, diffs, and output JSON files
+- [x] 6.2 Port gry's test helpers: fixture seeding, copyFixtureProject (adapted for run-centric model, no task/phase/sprint DB)
+- [x] 6.3 Create e2e test: full relay workflow with fixture executor (try, record, verify store)
+- [x] 6.4 Create e2e test: relay with inbox message consumption — message consumed per run, same message across retries
+- [x] 6.5 Create e2e test: retry exhaustion triggers error cascade (not relay halt), agent paused then frozen
+- [x] 6.6 Create e2e test: graceful stop completes current try then halts
+- [x] 6.7 Create e2e test: commit hash tracking — verify agent-committed, auto-committed, and no-changes scenarios
