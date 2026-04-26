@@ -37,7 +37,8 @@ Rally (v0.1.x) is a proven agent orchestrator — it connects to four coding age
 
 - All internal packages restructured: `internal/rally/runner/` → `internal/relay/`, new `internal/agent/`, `internal/store/`
 - Go dependencies added: `github.com/spf13/cobra`
-- Go dependencies removed: `github.com/charmbracelet/bubbletea`, `github.com/charmbracelet/lipgloss` (TUI removed)
+- Go dependencies removed: `github.com/charmbracelet/bubbletea` (TUI removed)
+- Go dependencies retained: `github.com/charmbracelet/lipgloss` (used for CLI output styling)
 - Go dependencies NOT added: `gorm.io/gorm`, `gorm.io/driver/sqlite` (using in-memory cache instead)
 - Data directory split: `.rally/` (git-tracked JSONL + config, gitignored ephemeral files + relay log cache) + `~/.local/share/rally/` (transcripts, durable relay logs)
 - Config consolidated: `rally.toml` + `.rally/config` → `.rally/config.toml`
