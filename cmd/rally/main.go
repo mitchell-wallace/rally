@@ -14,6 +14,7 @@ import (
 	"github.com/mitchell-wallace/rally/internal/agent"
 	"github.com/mitchell-wallace/rally/internal/app"
 	"github.com/mitchell-wallace/rally/internal/config"
+	"github.com/mitchell-wallace/rally/internal/gitx"
 	"github.com/mitchell-wallace/rally/internal/release"
 	"github.com/mitchell-wallace/rally/internal/relay"
 	"github.com/mitchell-wallace/rally/internal/store"
@@ -44,6 +45,17 @@ var relayCmd = &cobra.Command{
 	RunE:  runRelay,
 }
 
+func resolveWorkspaceDir() (string, error) {
+	wd, err := os.Getwd()
+	if err != nil {
+		return "", err
+	}
+	if root, ok, _ := gitx.GitRepoRoot(wd); ok {
+		return root, nil
+	}
+	return wd, nil
+}
+
 func runRelay(cmd *cobra.Command, args []string) error {
 	iterations, _ := cmd.Flags().GetInt("iterations")
 	agentSpecs, _ := cmd.Flags().GetStringArray("agent")
@@ -63,7 +75,7 @@ func runRelay(cmd *cobra.Command, args []string) error {
 		expandedAgents = append(expandedAgents, fields...)
 	}
 
-	workspaceDir, err := os.Getwd()
+	workspaceDir, err := resolveWorkspaceDir()
 	if err != nil {
 		return err
 	}
@@ -176,7 +188,7 @@ var initCmd = &cobra.Command{
 }
 
 func runInit(cmd *cobra.Command, args []string) error {
-	workspaceDir, err := os.Getwd()
+	workspaceDir, err := resolveWorkspaceDir()
 	if err != nil {
 		return err
 	}
@@ -282,7 +294,7 @@ var instructionsShowCmd = &cobra.Command{
 }
 
 func runInstructionsEdit(cmd *cobra.Command, args []string) error {
-	workspaceDir, err := os.Getwd()
+	workspaceDir, err := resolveWorkspaceDir()
 	if err != nil {
 		return err
 	}
@@ -308,7 +320,7 @@ func runInstructionsEdit(cmd *cobra.Command, args []string) error {
 }
 
 func runInstructionsShow(cmd *cobra.Command, args []string) error {
-	workspaceDir, err := os.Getwd()
+	workspaceDir, err := resolveWorkspaceDir()
 	if err != nil {
 		return err
 	}
