@@ -2,13 +2,9 @@ package relay
 
 import (
 	"context"
-	"fmt"
 	"os"
 	"os/exec"
-	"path/filepath"
-	"strings"
 	"testing"
-	"time"
 
 	"github.com/mitchell-wallace/rally/internal/agent"
 	"github.com/mitchell-wallace/rally/internal/store"
