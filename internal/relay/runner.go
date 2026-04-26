@@ -189,7 +189,6 @@ func (r *Runner) Run(ctx context.Context) error {
 				relay.ConsumedMessageIDs = append(relay.ConsumedMessageIDs, relayMsg.ID)
 			}
 		} else {
-			relay.CompletedIterations++
 			runIndex = nextRunIndex
 		}
 

@@ -66,7 +66,6 @@ func (r *Resilience) SelectActiveAgent(mix AgentMix, runIndex int) (string, int,
 
 	allFrozen := true
 	anyActive := false
-	var pausedAgents []string
 	uniqueAgents := map[string]struct{}{}
 	for _, a := range mix.Cycle {
 		if _, ok := uniqueAgents[a]; ok {
@@ -79,45 +78,30 @@ func (r *Resilience) SelectActiveAgent(mix AgentMix, runIndex int) (string, int,
 		}
 		if st == StateActive {
 			anyActive = true
-		} else if st == StatePaused {
-			pausedAgents = append(pausedAgents, a)
 		}
 	}
 	if allFrozen {
 		return "", runIndex, false, fmt.Errorf("all agents frozen")
 	}
 
-	// Look for active agent starting at runIndex
+	// Look for an agent starting at runIndex
 	for i := 0; i < cycleLen; i++ {
 		idx := (runIndex + i) % cycleLen
 		a := mix.Cycle[idx]
-		st, _ := r.getState(a)
-		if st == StateActive {
+		st, since := r.getState(a)
+		switch st {
+		case StateActive:
 			return a, runIndex + i + 1, false, nil
+		case StatePaused:
+			if !r.NowFunc().Before(since.Add(r.PauseDuration)) {
+				return a, runIndex + i + 1, true, nil
+			}
 		}
 	}
 
-	// No active agents. If any paused agent is due for hourly retry, use it.
 	if !anyActive {
-		var selected string
-		var selectedDue time.Time
-		for _, a := range pausedAgents {
-			st, pausedAt := r.getState(a)
-			if st != StatePaused {
-				continue
-			}
-			due := pausedAt.Add(r.PauseDuration)
-			if selected == "" || due.Before(selectedDue) {
-				selected = a
-				selectedDue = due
-			}
-		}
-		if selected != "" && !r.NowFunc().Before(selectedDue) {
-			return selected, runIndex + 1, true, nil
-		}
 		return "", runIndex, false, fmt.Errorf("all agents paused")
 	}
-
 	return "", runIndex, false, fmt.Errorf("no active agent found")
 }
 

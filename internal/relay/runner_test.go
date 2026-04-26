@@ -173,14 +173,18 @@ func TestRetryExhaustionTriggersPause(t *testing.T) {
 		AgentMixSpecs:    []string{"cc:1"},
 		TargetIterations: 1,
 	}, executors)
-
-	if err := r.Run(context.Background()); err != nil {
-		t.Fatalf("run failed: %v", err)
+	r.resilience = &Resilience{
+		Store:                     s,
+		PauseDuration:             time.Millisecond,
+		HourlyRetriesBeforeFreeze: 2,
+		NowFunc:                   time.Now,
 	}
 
+	_ = r.Run(context.Background())
+
 	tries := s.AllTries()
-	if len(tries) != 3 {
-		t.Fatalf("got %d tries, want 3", len(tries))
+	if len(tries) < 3 {
+		t.Fatalf("got %d tries, want at least 3", len(tries))
 	}
 
 	status := s.GetAgentStatus("claude")
@@ -410,19 +414,26 @@ func TestCommitHashTracking_NoChanges(t *testing.T) {
 		AgentMixSpecs:    []string{"cc:1"},
 		TargetIterations: 1,
 	}, executors)
-
-	if err := r.Run(context.Background()); err != nil {
-		t.Fatalf("run failed: %v", err)
+	r.resilience = &Resilience{
+		Store:                     s,
+		PauseDuration:             time.Millisecond,
+		HourlyRetriesBeforeFreeze: 2,
+		NowFunc:                   time.Now,
 	}
+
+	_ = r.Run(context.Background())
 
 	// No-op tries (no changes + <3min) are treated as failures and retried up to 3x.
+	// With the fix, failed runs don't count toward target, so the relay runs
+	// hourly retries after pausing. Initial run has 3 tries; hourly retries have 1 each.
 	tries := s.AllTries()
-	if len(tries) != 3 {
-		t.Fatalf("expected 3 tries (all retries exhausted), got %d", len(tries))
+	if len(tries) <= 3 {
+		t.Fatalf("expected > 3 tries (initial 3 + hourly retries), got %d", len(tries))
 	}
-	for i, tr := range tries {
-		if tr.CommitHash != "" {
-			t.Fatalf("try %d expected no commit hash, got %q", i, tr.CommitHash)
+	// First 3 tries should have no commit hash
+	for i := 0; i < 3; i++ {
+		if tries[i].CommitHash != "" {
+			t.Fatalf("try %d expected no commit hash, got %q", i, tries[i].CommitHash)
 		}
 	}
 }
@@ -625,9 +636,9 @@ func TestFreezeCascade(t *testing.T) {
 		TargetIterations: 1,
 	}, executors)
 
-	if err := r.Run(context.Background()); err != nil {
-		t.Fatalf("run failed: %v", err)
-	}
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+	_ = r.Run(ctx)
 
 	// Verify agent is paused after 3 retries exhausted
 	st, _ := NewResilience(s).getState("claude")
@@ -697,6 +708,89 @@ func TestAgentUnfreeze(t *testing.T) {
 	st, _ = resilience.getState("claude")
 	if st != StateActive {
 		t.Fatalf("expected StateActive after unpause, got %s", st)
+	}
+}
+
+func TestFailedRunDoesNotCountIteration(t *testing.T) {
+	workspaceDir := t.TempDir()
+	rallyDir := filepath.Join(workspaceDir, ".rally")
+	os.MkdirAll(rallyDir, 0o755)
+	initRepo(t, workspaceDir)
+
+	s := newTestStore(t, rallyDir)
+	exec := &funcExecutor{
+		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+			return &agent.TryResult{Completed: false, Summary: "fail"}, nil
+		},
+	}
+	executors := map[string]agent.Executor{"claude": exec}
+
+	r := NewRunner(s, Config{
+		WorkspaceDir:     workspaceDir,
+		DataDir:          t.TempDir(),
+		AgentMixSpecs:    []string{"cc:1"},
+		TargetIterations: 1,
+	}, executors)
+	r.resilience = &Resilience{
+		Store:                     s,
+		PauseDuration:             time.Millisecond,
+		HourlyRetriesBeforeFreeze: 2,
+		NowFunc:                   time.Now,
+	}
+
+	_ = r.Run(context.Background())
+
+	relays := s.AllRelays()
+	if len(relays) != 1 {
+		t.Fatalf("expected 1 relay, got %d", len(relays))
+	}
+	if relays[0].CompletedIterations != 0 {
+		t.Fatalf("expected 0 completed iterations after failed run, got %d", relays[0].CompletedIterations)
+	}
+
+	st, _ := NewResilience(s).getState("claude")
+	if st != StateFrozen {
+		t.Fatalf("expected agent frozen after hourly retry exhaustion, got %s", st)
+	}
+}
+
+func TestHourlyRetryWithOtherAgentActive(t *testing.T) {
+	workspaceDir := t.TempDir()
+	rallyDir := filepath.Join(workspaceDir, ".rally")
+	os.MkdirAll(rallyDir, 0o755)
+
+	s := newTestStore(t, rallyDir)
+
+	baseTime := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	resilience := &Resilience{
+		Store:         s,
+		PauseDuration: time.Hour,
+		NowFunc:       func() time.Time { return baseTime },
+	}
+
+	if err := resilience.PauseAgent("claude", 1); err != nil {
+		t.Fatalf("PauseAgent failed: %v", err)
+	}
+
+	resilience.NowFunc = func() time.Time { return baseTime.Add(2 * time.Hour) }
+
+	mix, err := ParseAgentMix([]string{"cc:2", "cx:1"})
+	if err != nil {
+		t.Fatalf("ParseAgentMix failed: %v", err)
+	}
+
+	agent, nextRunIndex, isHourlyRetry, err := resilience.SelectActiveAgent(mix, 0)
+	if err != nil {
+		t.Fatalf("SelectActiveAgent failed: %v", err)
+	}
+	if agent != "claude" {
+		t.Fatalf("expected claude (hourly retry), got %s", agent)
+	}
+	if nextRunIndex != 1 {
+		t.Fatalf("expected nextRunIndex 1, got %d", nextRunIndex)
+	}
+	if !isHourlyRetry {
+		t.Fatal("expected isHourlyRetry=true")
 	}
 }
 
