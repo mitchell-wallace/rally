@@ -1,10 +1,17 @@
-## ADDED Requirements
+# relay-runner Specification
 
+## Purpose
+TBD - created by archiving change consolidate-rally-gry. Update Purpose after archive.
+## Requirements
 ### Requirement: Naming — try, run, relay
 The system SHALL use three-tier naming for execution units:
 - **Try**: One invocation of an agent CLI, regardless of outcome. The atomic unit. Each try produces a `TryResult`.
 - **Run**: One logical iteration that counts against the relay's target iteration count. A run consumes a distinct run-level inbox message and receives the same task context. If no agent failures occur, one run equals one try. If the try fails, the run is retried — each retry is a new try within the same run.
 - **Relay**: A campaign of N runs with a configured agent mix.
+
+#### Scenario: Try fails within a run
+- **WHEN** a try fails within a run
+- **THEN** the system SHALL retry the try within the same run
 
 ### Requirement: Relay lifecycle
 The system SHALL manage relays as a campaign of N sequential runs with a configured agent mix. A relay tracks: relay ID, target iterations, completed iterations, agent mix, start time, end time, first/last try ID, and consumed relay-level message IDs.
@@ -53,7 +60,7 @@ The system SHALL execute each try by: writing `.rally/current_task.md` (the prom
 - **THEN** the system SHALL auto-commit on the current branch. Rally does NOT create, switch, or merge branches. If the agent already committed, no auto-commit is needed.
 
 ### Requirement: Failure detection
-A try is considered failed if the agent reports `Completed: false`, exits with an error, or produces no meaningful work (no file changes and runs less than 3 minutes).
+The system SHALL consider a try failed if the agent reports `Completed: false`, exits with an error, or produces no meaningful work (no file changes and runs less than 3 minutes).
 
 #### Scenario: Short no-op try detected as failure
 - **WHEN** a try produces no file changes and completes in under 3 minutes
@@ -141,3 +148,4 @@ The system SHALL produce a human-readable relay log for each relay, capturing fi
 #### Scenario: Relay log cache is gitignored
 - **WHEN** the `.rally/` directory is configured
 - **THEN** `.rally/relays/` SHALL be excluded from git tracking
+
