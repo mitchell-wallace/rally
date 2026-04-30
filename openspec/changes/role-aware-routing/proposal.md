@@ -116,9 +116,10 @@ These define the scheduler's behaviour. The implementation must make all seven e
 - `routes-validator`: `rally routes check` validates the `[routes]` table
 
 ### Modified Capabilities
-- `relay-runner`: Per-iteration agent selection routed through the scheduler; round-robin becomes the no-quota case of a `default` route; prompt assembly appends role-instruction file content when matched
-- `microbeads-only-integration`: `assignee` field surfaced from `mb get head`'s JSON output to the routing layer (no separate fetch — bead pull and assignee read are the same call)
-- `repo-config`: `[routes]` table added to `.rally/config.toml`
+- `relay-runner`: Per-iteration agent selection routed through the scheduler; legacy `--mix` becomes a synonym for a single-roster `--agent`; prompt assembly appends role-instruction file content when matched; new scheduler hooks (`onAgentFailed`/`onAgentRecovered`) feed exhaustion state
+- `repo-config`: `[routes]` table added to `.rally/config.toml` alongside the v0.5.0 sections
+
+_(Note: `microbeads-only-integration` already surfaces `assignee` per v0.4.0's bead head-pull adapter requirement; no spec delta is needed for this consumption change — v0.6.0 just reads what v0.4.0 exposes.)_
 
 ## Impact
 
