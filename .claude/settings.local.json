@@ -2,7 +2,10 @@
   "permissions": {
     "allow": [
       "Bash(find /home/mitchell/Documents/Mycode/gry -type d -not -path */.*)",
-      "Bash(wc -l /home/mitchell/Documents/Mycode/gry/internal/**/*.go /home/mitchell/Documents/Mycode/gry/cmd/**/*.go)"
+      "Bash(wc -l /home/mitchell/Documents/Mycode/gry/internal/**/*.go /home/mitchell/Documents/Mycode/gry/cmd/**/*.go)",
+      "Bash(openspec *)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)"
     ]
   }
 }
