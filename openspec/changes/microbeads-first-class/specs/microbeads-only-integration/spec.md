@@ -41,13 +41,13 @@ The system SHALL maintain rally-owned entries in `.beads/mb-hooks.json` in micro
 - **WHEN** the user has their own hook entry on `mb done` after-hook with a non-rally `name`
 - **THEN** the installer SHALL leave the user entry intact and append rally's entry alongside
 
-### Requirement: Microbeads instruction toggle
-The system SHALL expose a configuration toggle for whether microbeads-related instructions are injected into the agent prompt, with values `"auto"`, `"include"`, and `"skip"`. The legacy field `Beads string` (with values `"true"|"false"|"auto"`) SHALL be removed and replaced by a key under a clearly-microbeads-scoped section of the config.
+### Requirement: Microbeads instruction injection is unconditional in microbeads-backed mode
+The system SHALL inject microbeads-related instructions into the agent prompt whenever microbeads-backed mode is detected, with no toggle to disable injection. The legacy field `Beads string` (with values `"true"|"false"|"auto"`) SHALL be removed outright — not renamed, not preserved under a new key.
 
-#### Scenario: auto mode detects existing instructions
-- **WHEN** the toggle is set to `"auto"` and the workspace contains a `CLAUDE.md` or `AGENTS.md` referencing microbeads commands
-- **THEN** rally SHALL skip injection (the instructions are already present)
+#### Scenario: Microbeads-backed mode always injects
+- **WHEN** rally is operating in microbeads-backed mode
+- **THEN** the prompt SHALL contain microbeads instructions regardless of any workspace `CLAUDE.md` / `AGENTS.md` content
 
-#### Scenario: skip mode never injects
-- **WHEN** the toggle is set to `"skip"`
-- **THEN** rally SHALL not inject microbeads instructions regardless of workspace contents
+#### Scenario: Legacy Beads field absent
+- **WHEN** rally loads `.rally/config.toml`
+- **THEN** the loader SHALL NOT recognise a top-level `Beads` field; an unknown-field warning is acceptable but no behaviour SHALL be wired to it
