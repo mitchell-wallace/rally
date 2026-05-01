@@ -33,18 +33,3 @@ The CI workflow (`.github/workflows/release.yml`) will:
 - The `install.sh` script is uploaded as a release asset (configured in
   `.goreleaser.yaml`).
 
-## Project Structure (v0.2.0)
-
-The v0.2.0 rewrite uses the following layout:
-
-- `internal/store/` — JSONL-backed store with in-memory caching
-- `internal/agent/` — `Executor` interface and implementations (Claude, Codex,
-  Gemini, Opencode, Fixture)
-- `internal/relay/` — Relay runner with deterministic agent cycling, retry
-  logic, and error resilience (pause/freeze)
-- `cmd/rally/main.go` — Cobra CLI (`relay`, `init`, `instructions`, `update`,
-  `version`)
-- `.rally/config.toml` — Single TOML config file (replaces `rally.toml`)
-
-The old `internal/rally/` package tree (runner, state, messages, progress,
-prompt, TUI) has been removed.
