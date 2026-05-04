@@ -17,14 +17,14 @@
 
 ## 3. User-defined harness executor
 
-- [ ] 3.1 Add a generic harness executor next to the built-in executors in `internal/agent/`; share existing prompt-building, stream-capture, and run-bookkeeping helpers
-- [ ] 3.2 Implement `$PROMPT` substitution: each command element is replaced verbatim if it equals `$PROMPT`; partial matches (`prefix-$PROMPT`, `--prompt=$PROMPT`) are also substituted; substitution is positional, not shell
-- [ ] 3.3 If `$PROMPT` does not appear anywhere in `command`, pipe the prompt on stdin
-- [ ] 3.4 Implement `model_flag` model injection: when `model_flag` is set non-empty and a model is resolved, append `[model_flag, model]` to the command; when `model_flag` is set to empty string and a model is resolved, append `[model]`; when `model_flag` is unset, never append; when no model is resolved, never append regardless of `model_flag`
-- [ ] 3.5 When `model_flag` is unset AND a non-empty model is resolved, log a one-line informational note that the model could not be passed
-- [ ] 3.6 Implement `output_strategy = "tail"` parser: capture the stream selected by `tail_stream` (default `combined`), surface the last `output_lines` (default 40) as the run output; reject any other `output_strategy` value at config load
-- [ ] 3.7 Wire the executor selection: a harness whose `[harness.<name>]` declares `command` dispatches through this generic path; built-ins continue to dispatch through their existing executors
-- [ ] 3.8 Unit tests: `$PROMPT` substitution and stdin fallback; `model_flag` non-empty appends flag-and-value; `model_flag = ""` appends positional; `model_flag` unset omits model and logs note; no resolved model omits model regardless; tail parser on long output; tail parser on short output; `tail_stream = "stderr"` captures stderr only; built-in harness still uses built-in executor
+- [x] 3.1 Add a generic harness executor next to the built-in executors in `internal/agent/`; share existing prompt-building, stream-capture, and run-bookkeeping helpers
+- [x] 3.2 Implement `$PROMPT` substitution: each command element is replaced verbatim if it equals `$PROMPT`; partial matches (`prefix-$PROMPT`, `--prompt=$PROMPT`) are also substituted; substitution is positional, not shell
+- [x] 3.3 If `$PROMPT` does not appear anywhere in `command`, pipe the prompt on stdin
+- [x] 3.4 Implement `model_flag` model injection: when `model_flag` is set non-empty and a model is resolved, append `[model_flag, model]` to the command; when `model_flag` is set to empty string and a model is resolved, append `[model]`; when `model_flag` is unset, never append; when no model is resolved, never append regardless of `model_flag`
+- [x] 3.5 When `model_flag` is unset AND a non-empty model is resolved, log a one-line informational note that the model could not be passed
+- [x] 3.6 Implement `output_strategy = "tail"` parser: capture the stream selected by `tail_stream` (default `combined`), surface the last `output_lines` (default 40) as the run output; reject any other `output_strategy` value at config load
+- [x] 3.7 Wire the executor selection: a harness whose `[harness.<name>]` declares `command` dispatches through this generic path; built-ins continue to dispatch through their existing executors
+- [x] 3.8 Unit tests: `$PROMPT` substitution and stdin fallback; `model_flag` non-empty appends flag-and-value; `model_flag = ""` appends positional; `model_flag` unset omits model and logs note; no resolved model omits model regardless; tail parser on long output; tail parser on short output; `tail_stream = "stderr"` captures stderr only; built-in harness still uses built-in executor
 
 ## 4. AgentMix type and parser
 

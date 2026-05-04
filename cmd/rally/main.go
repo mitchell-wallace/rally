@@ -112,6 +112,18 @@ func runRelay(cmd *cobra.Command, args []string) error {
 		"opencode": &agent.OpenCodeExecutor{Model: cfg.OpenCodeModel},
 	}
 
+	for name, hc := range cfg.Harnesses {
+		if len(hc.Command) > 0 {
+			executors[name] = &agent.GenericExecutor{
+				Command:        hc.Command,
+				ModelFlag:      hc.ModelFlag,
+				OutputStrategy: hc.OutputStrategy,
+				OutputLines:    hc.OutputLines,
+				TailStream:     hc.TailStream,
+			}
+		}
+	}
+
 	lapsEnabled := laps.Detect(workspaceDir)
 
 	if lapsEnabled {
