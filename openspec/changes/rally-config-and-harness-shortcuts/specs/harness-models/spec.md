@@ -52,14 +52,15 @@ The system SHALL surface `harness` and `model` as separate fields throughout the
 - **WHEN** a mix contains `cc` and `claude_model = "claude-opus-4-7"` is set at the config root
 - **THEN** the parser SHALL produce `(harness="claude", model="claude-opus-4-7")`
 
-### Requirement: User-defined harnesses via templated `command`
-The system SHALL accept a `[harness.<name>]` entry that registers a new harness when it declares a `command` field (an array of strings). The command SHALL be invoked with `$MODEL` substituted to the resolved model string and `$PROMPT` substituted to the prompt body; if `$PROMPT` does not appear in `command`, the prompt SHALL be piped to the harness on stdin. Built-in harnesses SHALL NOT declare `command` or `output_strategy` — the loader SHALL reject either field on a built-in entry.
+### Requirement: User-defined harnesses via `command` and declarative `model_flag`
+The system SHALL accept a `[harness.<name>]` entry that registers a new harness when it declares a `command` field (an array of strings). The command SHALL be invoked with `$PROMPT` substituted to the prompt body if `$PROMPT` appears anywhere in `command`; otherwise the prompt SHALL be piped to the harness on stdin. Substitution is positional (no shell interpolation): each command element is replaced verbatim if it equals `$PROMPT`, and partial matches (`prefix-$PROMPT`) are also substituted. The model is injected declaratively via `model_flag`, not via a placeholder in `command`. Built-in harnesses SHALL NOT declare `command`, `model_flag`, `output_strategy`, or `tail_stream` — the loader SHALL reject any of those fields on a built-in entry.
 
 #### Scenario: User harness registered and invoked
 - **GIVEN** `.rally/config.toml` contains:
   ```
   [harness.droid]
-  command         = ["droid", "run", "--model", "$MODEL"]
+  command         = ["droid", "run"]
+  model_flag      = "--model"
   output_strategy = "tail"
   output_lines    = 40
 
@@ -70,25 +71,66 @@ The system SHALL accept a `[harness.<name>]` entry that registers a new harness 
 - **THEN** the system SHALL exec `droid run --model droid-v1` with the prompt piped on stdin, and surface the last 40 lines of combined stdout+stderr as the run output
 
 #### Scenario: `$PROMPT` substituted as argument
-- **GIVEN** `[harness.droid] command = ["droid", "ask", "--model", "$MODEL", "--prompt", "$PROMPT"]`
-- **WHEN** a relay run is dispatched
-- **THEN** the system SHALL exec the command with `$PROMPT` replaced by the prompt body and SHALL NOT pipe to stdin
+- **GIVEN** `[harness.droid] command = ["droid", "ask", "--prompt", "$PROMPT"]` and `model_flag = "--model"`
+- **WHEN** a relay run is dispatched with `model=droid-v1`
+- **THEN** the system SHALL exec `droid ask --prompt <prompt-body> --model droid-v1` and SHALL NOT pipe to stdin
+
+#### Scenario: `$MODEL` placeholder rejected at config load
+- **WHEN** `.rally/config.toml` contains a `command` array with any element containing the literal `$MODEL`
+- **THEN** config load SHALL exit non-zero with an error explaining that the model is injected via `model_flag`, not a placeholder
 
 #### Scenario: Built-in rejects `command` field
 - **WHEN** `.rally/config.toml` contains `[harness.cc] command = [...]`
-- **THEN** config load SHALL exit non-zero with an error explaining that built-in harnesses do not accept `command` or `output_strategy`
+- **THEN** config load SHALL exit non-zero with an error explaining that built-in harnesses do not accept `command`, `model_flag`, `output_strategy`, or `tail_stream`
 
-### Requirement: Tail output strategy with configurable line count
-The system SHALL implement an output strategy named `"tail"` for user-defined harnesses that captures the last N lines of combined stdout+stderr, where N is `output_lines` (default 40). Other `output_strategy` values SHALL be rejected at config load in v0.5.0.
+### Requirement: `model_flag` controls model injection
+The system SHALL append the resolved model to a user-defined harness's command according to the harness's `model_flag` setting:
+- If `model_flag` is set to a non-empty string AND a model is resolved, the system SHALL append `[model_flag, resolved_model]` to the command.
+- If `model_flag` is set to an empty string AND a model is resolved, the system SHALL append `[resolved_model]` (positional, no flag).
+- If `model_flag` is omitted from the harness configuration, the system SHALL NOT append the model under any circumstance, even if a model is resolved.
+- If no model is resolved (bare alias with no flat-field default), the system SHALL NOT append the model regardless of `model_flag`.
 
-#### Scenario: Default line count
-- **WHEN** a user-defined harness declares `output_strategy = "tail"` and omits `output_lines`
-- **THEN** the parser SHALL default to 40 lines
+When a run has a non-empty resolved model AND the dispatched harness has `model_flag` unset, the system SHALL log a one-line informational note that the model could not be passed and the harness's own default will be used.
+
+#### Scenario: Flag-and-value appended
+- **GIVEN** `[harness.droid] command = ["droid", "run"]` and `model_flag = "--model"`
+- **WHEN** a run dispatches with `model=droid-v1`
+- **THEN** the system SHALL exec `droid run --model droid-v1`
+
+#### Scenario: Positional model appended
+- **GIVEN** `[harness.droid] command = ["droid", "run"]` and `model_flag = ""`
+- **WHEN** a run dispatches with `model=droid-v1`
+- **THEN** the system SHALL exec `droid run droid-v1`
+
+#### Scenario: Model-flag omitted with model resolved
+- **GIVEN** `[harness.droid] command = ["droid", "run"]` with no `model_flag` field
+- **WHEN** a run dispatches with `model=droid-v1`
+- **THEN** the system SHALL exec `droid run` and SHALL log a one-line note that the model could not be passed
+
+#### Scenario: No model resolved
+- **GIVEN** `[harness.droid] command = ["droid", "run"]` and `model_flag = "--model"`
+- **WHEN** a run dispatches with no resolved model (bare alias against an unset flat-field default)
+- **THEN** the system SHALL exec `droid run` (model not appended, harness applies its own default)
+
+### Requirement: Tail output strategy with configurable line count and stream
+The system SHALL implement an output strategy named `"tail"` for user-defined harnesses that captures the last N lines of the configured stream, where N is `output_lines` (default 40) and the stream is selected by `tail_stream`: `"stdout"`, `"stderr"`, or `"combined"` (default). Other `output_strategy` values SHALL be rejected at config load in v0.5.0. Other `tail_stream` values SHALL also be rejected at config load.
+
+#### Scenario: Default line count and stream
+- **WHEN** a user-defined harness declares `output_strategy = "tail"` and omits `output_lines` and `tail_stream`
+- **THEN** the parser SHALL default to 40 lines of combined stdout+stderr
 
 #### Scenario: Custom line count
 - **WHEN** a user-defined harness declares `output_strategy = "tail"` and `output_lines = 100`
-- **THEN** the parser SHALL surface the last 100 lines
+- **THEN** the parser SHALL surface the last 100 lines of combined stdout+stderr
+
+#### Scenario: Stderr-only capture
+- **WHEN** a user-defined harness declares `tail_stream = "stderr"`
+- **THEN** the parser SHALL surface the last `output_lines` lines of stderr only, ignoring stdout
 
 #### Scenario: Unknown strategy rejected
 - **WHEN** a user-defined harness declares `output_strategy = "json"` (or any value other than `"tail"`)
 - **THEN** config load SHALL exit non-zero with an error listing the supported strategies
+
+#### Scenario: Unknown stream rejected
+- **WHEN** a user-defined harness declares `tail_stream = "both"` (or any value other than `stdout`/`stderr`/`combined`)
+- **THEN** config load SHALL exit non-zero with an error listing the supported streams
