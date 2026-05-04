@@ -39,6 +39,17 @@ exit 1
 	return tmp
 }
 
+func enableLapsInWorkspace(t *testing.T, workspaceDir string) {
+	t.Helper()
+	lapsDir := filepath.Join(workspaceDir, ".laps")
+	if err := os.MkdirAll(lapsDir, 0o755); err != nil {
+		t.Fatalf("mkdir .laps: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(lapsDir, "laps.json"), []byte("{}"), 0o644); err != nil {
+		t.Fatalf("write laps.json: %v", err)
+	}
+}
+
 func overrideWorkspaceDir(t *testing.T, dir string) {
 	t.Helper()
 	old := getWorkspaceDir
@@ -99,6 +110,7 @@ func TestProgressSetHandoff(t *testing.T) {
 
 func TestProgressComplete(t *testing.T) {
 	tmp := setupTempWorkspace(t)
+	enableLapsInWorkspace(t, tmp)
 	overrideWorkspaceDir(t, tmp)
 
 	// Seed run state with a run ID and some laps.
@@ -199,6 +211,7 @@ func TestProgressHandoff(t *testing.T) {
 
 func TestProgressWrapupNoHandoff(t *testing.T) {
 	tmp := setupTempWorkspace(t)
+	enableLapsInWorkspace(t, tmp)
 	overrideWorkspaceDir(t, tmp)
 
 	if err := SaveRunState(tmp, &RunState{

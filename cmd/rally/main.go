@@ -16,6 +16,7 @@ import (
 	"github.com/mitchell-wallace/rally/internal/config"
 	"github.com/mitchell-wallace/rally/internal/gitx"
 	"github.com/mitchell-wallace/rally/internal/laps"
+	"github.com/mitchell-wallace/rally/internal/progress"
 	"github.com/mitchell-wallace/rally/internal/release"
 	"github.com/mitchell-wallace/rally/internal/relay"
 	"github.com/mitchell-wallace/rally/internal/store"
@@ -112,6 +113,17 @@ func runRelay(cmd *cobra.Command, args []string) error {
 	}
 
 	lapsEnabled := laps.Detect(workspaceDir)
+
+	if lapsEnabled {
+		lapsDir := filepath.Join(workspaceDir, ".laps")
+		changed, err := laps.InstallHooks(lapsDir)
+		if err != nil {
+			return fmt.Errorf("install laps hooks: %w", err)
+		}
+		if changed {
+			fmt.Printf("Installed rally hooks in %s\n", filepath.Join(lapsDir, "hooks", "rally"))
+		}
+	}
 
 	runnerCfg := relay.Config{
 		WorkspaceDir:         workspaceDir,
@@ -244,7 +256,7 @@ func runInit(cmd *cobra.Command, args []string) error {
 	// 3. Create .rally/.gitignore
 	gitignorePath := filepath.Join(rallyDir, ".gitignore")
 	if _, err := os.Stat(gitignorePath); os.IsNotExist(err) {
-		content := "current_task.md\nrelays/\n"
+		content := "current_task.md\nrelays/\nrun-state.json\n"
 		if err := os.WriteFile(gitignorePath, []byte(content), 0o644); err != nil {
 			return err
 		}
@@ -409,6 +421,7 @@ func init() {
 	instructionsCmd.AddCommand(instructionsShowCmd)
 	rootCmd.AddCommand(versionCmd)
 	rootCmd.AddCommand(updateCmd)
+	rootCmd.AddCommand(progress.NewProgressCmd())
 
 	relayCmd.Flags().Int("iterations", 1, "Number of iterations")
 	relayCmd.Flags().StringArray("agent", nil, "Agent mix (repeatable; quoted lists allowed, e.g. \"cc:2 cx:1\")")

@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/mitchell-wallace/rally/internal/laps"
 	"github.com/spf13/cobra"
 )
 
@@ -118,10 +119,13 @@ func runFinalize(workspaceDir string, mode string, summary string, followups []s
 	}
 
 	var lapsCompleted interface{}
-	if len(rs.RecordedLaps) > 0 {
-		lapsCompleted = rs.RecordedLaps
-	} else {
-		lapsCompleted = "none"
+	lapsEnabled := laps.Detect(workspaceDir)
+	if lapsEnabled {
+		if len(rs.RecordedLaps) > 0 {
+			lapsCompleted = rs.RecordedLaps
+		} else {
+			lapsCompleted = "none"
+		}
 	}
 
 	entry := RunEntry{

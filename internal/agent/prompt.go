@@ -47,7 +47,26 @@ func BuildPrompt(opts RunOptions) string {
 		fmt.Fprintf(&b, "Recent Try Context:\n%s\n\n", opts.RecentTryContext)
 	}
 
-	fmt.Fprintf(&b, "You can access rally data and context via `.rally/README.md`.\n")
+	if opts.LapsEnabled {
+		fmt.Fprintf(&b, `## Run Exit Conditions
+When you have finished the current lap, mark it done:
+  laps done
+
+If you are blocked and cannot proceed, signal a handoff:
+  laps handoff
+
+Do not exit the run without calling one of the above.
+`)
+	} else {
+		fmt.Fprintf(&b, `## Run Exit Action
+Before exiting, record your progress:
+  rally progress --complete --summary "<one-line summary>" --followup "<next task>"
+
+Calling rally directly from the agent is the documented exception in no-backend mode.
+`)
+	}
+
+	fmt.Fprintf(&b, "\nYou can access rally data and context via `.rally/README.md`.\n")
 
 	return b.String()
 }

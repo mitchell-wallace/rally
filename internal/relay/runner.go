@@ -17,6 +17,7 @@ import (
 	"github.com/mitchell-wallace/rally/internal/gitx"
 	"github.com/mitchell-wallace/rally/internal/keyboard"
 	"github.com/mitchell-wallace/rally/internal/monitor"
+	"github.com/mitchell-wallace/rally/internal/progress"
 	"github.com/mitchell-wallace/rally/internal/store"
 	"github.com/mitchell-wallace/rally/internal/style"
 )
@@ -57,6 +58,9 @@ func (r *Runner) RequestStop() {
 }
 
 func (r *Runner) Run(ctx context.Context) error {
+	// Clear any stale run-state from a previous interrupted relay.
+	_ = r.maybeWriteStubAndClearState("")
+
 	relay, resumed, err := ResumeRelay(r.store)
 	if err != nil {
 		return err
@@ -318,6 +322,10 @@ func timeUntilNextRetry(resilience *Resilience, mix AgentMix) time.Duration {
 }
 
 func (r *Runner) runOne(ctx context.Context, relay *store.RelayRecord, runIndex int, agentType string, consumedMsg *store.MessageRecord, relayMsg *store.MessageRecord, isHourlyRetry bool, log io.Writer) (bool, bool, bool, error) {
+	// Initialize run-state for this run.
+	runID := fmt.Sprintf("relay-%d-run-%d", relay.ID, runIndex+1)
+	_ = progress.SaveRunState(r.cfg.WorkspaceDir, &progress.RunState{RunID: runID, HandoffState: 0, RecordedLaps: []string{}})
+
 	inbox := ""
 	if consumedMsg != nil {
 		inbox = consumedMsg.Body
@@ -358,6 +366,7 @@ func (r *Runner) runOne(ctx context.Context, relay *store.RelayRecord, runIndex 
 			RelayMessage:     relayMessage,
 			PreviousSummary:  previousSummary,
 			RecentTryContext: recentContext.String(),
+			LapsEnabled:      r.cfg.LapsEnabled,
 		}
 		prompt := agent.BuildPrompt(opts)
 
@@ -569,6 +578,13 @@ func (r *Runner) runOne(ctx context.Context, relay *store.RelayRecord, runIndex 
 		}
 	}
 
+	// Write stub entry if the agent did not finalize the run.
+	stubSummary := ""
+	if lastResult != nil {
+		stubSummary = lastResult.Summary
+	}
+	_ = r.maybeWriteStubAndClearState(stubSummary)
+
 	addressed := false
 	if lastResult != nil && lastResult.MessageAddressed != nil {
 		addressed = *lastResult.MessageAddressed
@@ -673,4 +689,46 @@ func containsInt(slice []int, val int) bool {
 		}
 	}
 	return false
+}
+
+func truncate(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	return s[:n]
+}
+
+func (r *Runner) maybeWriteStubAndClearState(lastOutput string) error {
+	rs, err := progress.LoadRunState(r.cfg.WorkspaceDir)
+	if err != nil {
+		return err
+	}
+	// If no run-state file exists, LoadRunState returns a fresh empty state.
+	// We only write a stub if the file actually existed on disk.
+	if _, err := os.Stat(progress.RunStatePath(r.cfg.WorkspaceDir)); os.IsNotExist(err) {
+		return nil
+	}
+
+	var lapsCompleted interface{}
+	if r.cfg.LapsEnabled {
+		if len(rs.RecordedLaps) > 0 {
+			lapsCompleted = rs.RecordedLaps
+		} else {
+			lapsCompleted = "none"
+		}
+	}
+
+	summary := lastOutput
+	if summary == "" {
+		summary = "(agent exited without finalizing)"
+	}
+
+	entry := progress.RunEntry{
+		RunID:         rs.RunID,
+		Summary:       truncate(summary, 160),
+		LapsCompleted: lapsCompleted,
+	}
+	_ = progress.AppendRunEntry(r.cfg.WorkspaceDir, entry)
+	_ = progress.ClearRunState(r.cfg.WorkspaceDir)
+	return nil
 }
