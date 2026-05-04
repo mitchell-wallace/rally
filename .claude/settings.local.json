@@ -5,7 +5,10 @@
       "Bash(wc -l /home/mitchell/Documents/Mycode/gry/internal/**/*.go /home/mitchell/Documents/Mycode/gry/cmd/**/*.go)",
       "Bash(openspec *)",
       "Bash(git add *)",
-      "Bash(git commit -m ' *)"
+      "Bash(git commit -m ' *)",
+      "Bash(git commit -m ':*)",
+      "Bash(find:*)",
+      "Bash(git commit:*)"
     ]
   }
 }

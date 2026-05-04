@@ -392,6 +392,7 @@ func (r *Runner) runOne(ctx context.Context, relay *store.RelayRecord, runIndex 
 		}
 		tryCh := make(chan tryResult, 1)
 		attemptCtx, cancelAttempt := context.WithCancel(ctx)
+		defer cancelAttempt()
 		go func() {
 			res, err := r.executeTry(attemptCtx, agentType, opts)
 			tryCh <- tryResult{res, err}
@@ -436,12 +437,6 @@ func (r *Runner) runOne(ctx context.Context, relay *store.RelayRecord, runIndex 
 
 		endedAt := time.Now().UTC()
 
-		footerSuccess := execErr == nil && result != nil && result.Completed
-		runtime := endedAt.Sub(startedAt)
-		dirtyCount, _ := monitor.GitDirtyCount(r.cfg.WorkspaceDir)
-		footer := style.RenderFooter(footerSuccess, runtime, dirtyCount, "")
-		fmt.Println(footer)
-
 		headAfter, _ := r.headHash()
 
 		commitHash := ""
@@ -458,6 +453,18 @@ func (r *Runner) runOne(ctx context.Context, relay *store.RelayRecord, runIndex 
 				}
 			}
 		}
+
+		footerSuccess := execErr == nil && result != nil && result.Completed
+		runtime := endedAt.Sub(startedAt)
+		dirtyCount, _ := monitor.GitDirtyCount(r.cfg.WorkspaceDir)
+		shortHash := ""
+		if len(commitHash) >= 7 {
+			shortHash = commitHash[:7]
+		} else if commitHash != "" {
+			shortHash = commitHash
+		}
+		footer := style.RenderFooter(footerSuccess, runtime, dirtyCount, shortHash)
+		fmt.Println(footer)
 
 		if err := gitx.CommitRallyState(r.cfg.WorkspaceDir); err != nil {
 			fmt.Fprintf(log, "relay %d run %d attempt %d rally state commit warning: %v\n", relay.ID, runIndex+1, attempt, err)

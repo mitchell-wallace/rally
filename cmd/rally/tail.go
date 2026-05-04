@@ -64,17 +64,6 @@ func runTail(cmd *cobra.Command, args []string) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	// Handle Ctrl+C gracefully
-	go func() {
-		ch := make(chan os.Signal, 1)
-		// We can't import os/signal here without import cycle... actually we can.
-		// signal.Notify(ch, os.Interrupt)
-		// <-ch
-		// cancel()
-		// For simplicity, let the user break with Ctrl+C which will kill the process.
-		_ = ch
-	}()
-
 	return followFile(ctx, f, os.Stdout)
 }
 
