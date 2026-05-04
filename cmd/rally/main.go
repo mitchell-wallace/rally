@@ -15,6 +15,7 @@ import (
 	"github.com/mitchell-wallace/rally/internal/app"
 	"github.com/mitchell-wallace/rally/internal/config"
 	"github.com/mitchell-wallace/rally/internal/gitx"
+	"github.com/mitchell-wallace/rally/internal/laps"
 	"github.com/mitchell-wallace/rally/internal/release"
 	"github.com/mitchell-wallace/rally/internal/relay"
 	"github.com/mitchell-wallace/rally/internal/store"
@@ -110,12 +111,15 @@ func runRelay(cmd *cobra.Command, args []string) error {
 		"opencode": &agent.OpenCodeExecutor{Model: cfg.OpenCodeModel},
 	}
 
+	lapsEnabled := laps.Detect(workspaceDir)
+
 	runnerCfg := relay.Config{
 		WorkspaceDir:         workspaceDir,
 		DataDir:              dataDir,
 		AgentMixSpecs:        expandedAgents,
 		TargetIterations:     iterations,
 		RunHooksOnAutoCommit: cfg.RunHooksOnAutoCommit,
+		LapsEnabled:          lapsEnabled,
 	}
 
 	instructionsPath := filepath.Join(rallyDir, "instructions.md")

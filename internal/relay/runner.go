@@ -27,6 +27,7 @@ type Config struct {
 	AgentMixSpecs        []string
 	TargetIterations     int
 	RunHooksOnAutoCommit bool
+	LapsEnabled          bool
 	Instructions         string
 	TaskPrompt           string
 	OverwriteMixOnResume bool

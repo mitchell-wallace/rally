@@ -13,6 +13,7 @@ type V2Config struct {
 	CodexModel           string `toml:"codex_model,omitempty"`
 	GeminiModel          string `toml:"gemini_model,omitempty"`
 	OpenCodeModel        string `toml:"opencode_model,omitempty"`
+	LapsInstructions     string `toml:"laps_instructions,omitempty"`
 	RunHooksOnAutoCommit bool   `toml:"run_hooks_on_autocommit"`
 	DataDir              string `toml:"data_dir,omitempty"`
 }
