@@ -57,7 +57,7 @@
 - [x] 8.1 In the relay loop, capture the agent's final console-printed output line(s) per run
 - [x] 8.2 At run-end, if `.rally/run-state.json` shows the run was not finalised (no `--complete` or `--handoff` call this run), write a stub entry whose `summary` is the first 160 characters of that captured output
 - [x] 8.3 Stub entries still include `laps_completed` accumulated by the `laps done` hook
-- [ ] 8.4 Integration test: run a fake agent that exits without `laps wrapup`, verify a stub entry is written with the truncated final message
+- [x] 8.4 Integration test: run a fake agent that exits without `laps wrapup`, verify a stub entry is written with the truncated final message
 
 ## 9. Run-state file
 
@@ -71,12 +71,12 @@
 - [x] 10.1 Remove the `Header Context` block from the relay prompt template
 - [x] 10.2 Add a mode-aware section: laps-enabled includes `laps done <id>` and `laps handoff` exit-condition instructions; no-backend includes `rally progress --summary --followup` instructions
 - [x] 10.3 Verify no executor (claude/codex/gemini/opencode) re-injects the Header Context
-- [ ] 10.4 Test: build the prompt in each mode, snapshot-compare against expected output
+- [x] 10.4 Test: build the prompt in each mode, snapshot-compare against expected output
 
 ## 11. Verification
 
-- [ ] 11.1 End-to-end: laps-enabled, agent calls `laps done` then `laps wrapup` — verify progress entry has `summary`, `followups`, `laps_completed: [id]`
-- [ ] 11.2 End-to-end: laps-enabled, agent calls `laps handoff` then `laps wrapup` — verify progress entry has `handoff` field, queue-head lap(s) created, original lap still open
-- [ ] 11.3 End-to-end: laps-enabled, agent exits without finalising — verify stub entry with 160-char summary and accumulated `laps_completed`
-- [ ] 11.4 End-to-end: no-backend mode, agent calls `rally progress --complete --summary --followup` — verify entry written, no `laps_completed` field
+- [x] 11.1 End-to-end: laps-enabled, agent calls `laps done` then `laps wrapup` — verify progress entry has `summary`, `followups`, `laps_completed: [id]`
+- [x] 11.2 End-to-end: laps-enabled, agent calls `laps handoff` then `laps wrapup` — verify progress entry has `handoff` field, queue-head lap(s) created, original lap still open
+- [x] 11.3 End-to-end: laps-enabled, agent exits without finalising — verify stub entry with 160-char summary and accumulated `laps_completed`
+- [x] 11.4 End-to-end: no-backend mode, agent calls `rally progress --complete --summary --followup` — verify entry written, no `laps_completed` field
 - [x] 11.5 Confirm `grep beads_rust` returns zero hits outside archived openspec changes
