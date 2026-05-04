@@ -20,18 +20,18 @@ The system SHALL determine whether laps is enabled at startup by checking two co
 - **THEN** rally SHALL operate with laps disabled regardless of whether `laps` is on PATH
 
 ### Requirement: Lap head-pull adapter
-The system SHALL retrieve the next ready lap when laps is enabled by invoking `laps get head` and parsing the command output. The adapter SHALL surface the lap's `id`, `title`, `description`, and `assignee` fields to the relay runner.
+The system SHALL retrieve the next ready lap when laps is enabled by invoking `laps get head` and parsing the command output. The adapter SHALL surface the lap's `title`, `description`, and `assignee` fields to the relay runner. Rally MAY retain an internal `id` field on its `Lap` struct, but current upstream `laps get head` output does not expose an ID, so that field SHALL remain empty.
 
 #### Scenario: Head lap returned
 - **WHEN** the relay runner requests the next task with laps enabled and `laps get head` returns a task
-- **THEN** the adapter SHALL parse the output and return a Lap struct containing `id`, `title`, `description`, and `assignee` (the latter possibly empty)
+- **THEN** the adapter SHALL parse the output and return a Lap struct containing `title`, `description`, and `assignee` (the latter possibly empty)
 
 #### Scenario: Empty queue
 - **WHEN** `laps get head` exits non-zero (including the "no head task" case)
 - **THEN** the adapter SHALL return a no-lap sentinel without raising an error; the relay runner uses the configured fallback prompt
 
 ### Requirement: Hook installer
-The system SHALL maintain rally-owned entries in `.laps/hooks.json` when laps is enabled. The installer SHALL identify rally entries by a `rally:` prefix in the hook `name` field, SHALL preserve any user-edited hooks for the same `(command, when)` pairs, and SHALL be idempotent across re-runs. Hook scripts SHALL be embedded in the rally binary via `//go:embed` and written to `.laps/hooks/rally/` in the workspace.
+The system SHALL maintain rally-owned entries in `.laps/hooks.json` when laps is enabled. The installer SHALL identify rally entries by a `rally:` prefix in the hook `title` field, SHALL preserve any user-edited hooks for the same `(command, when)` pairs, and SHALL be idempotent across re-runs. Hook scripts SHALL be embedded in the rally binary via `//go:embed` and written to `.laps/hooks/rally/` in the workspace.
 
 #### Scenario: First-time installation
 - **WHEN** rally runs with laps enabled and `.laps/hooks.json` lacks rally-keyed entries
@@ -42,7 +42,7 @@ The system SHALL maintain rally-owned entries in `.laps/hooks.json` when laps is
 - **THEN** the installer SHALL leave the file unchanged (idempotency)
 
 #### Scenario: Coexistence with user hooks
-- **WHEN** the user has their own hook entry on `laps done` after-hook with a non-rally `name`
+- **WHEN** the user has their own hook entry on `laps done` after-hook with a non-rally `title`
 - **THEN** the installer SHALL leave the user entry intact and append rally's entry alongside
 
 ### Requirement: Laps instruction injection is unconditional when enabled

@@ -1,11 +1,11 @@
 ## ADDED Requirements
 
 ### Requirement: Two distinct prompt-template modes
-The system SHALL maintain two prompt-template variants selected by the `LapsEnabled` bool determined at startup. The laps-enabled variant SHALL teach `laps done <id>` and `laps handoff` as the only initial run-exit conditions; `laps wrapup` SHALL NOT appear in the initial prompt. The no-backend variant SHALL teach `rally progress --summary "..." --followup "..."` as the run-end action.
+The system SHALL maintain two prompt-template variants selected by the `LapsEnabled` bool determined at startup. The laps-enabled variant SHALL teach `laps done` and `laps handoff` as the only initial run-exit conditions; `laps wrapup` SHALL NOT appear in the initial prompt. The no-backend variant SHALL teach `rally progress --summary "..." --followup "..."` as the run-end action.
 
 #### Scenario: Laps-enabled initial instructions
 - **WHEN** rally builds the prompt template with laps enabled
-- **THEN** the prompt SHALL list `laps done <id>` (when the lap is finished) and `laps handoff` (when blocked) as the run-exit conditions, and SHALL NOT mention `laps wrapup`
+- **THEN** the prompt SHALL list `laps done` (when the lap is finished) and `laps handoff` (when blocked) as the run-exit conditions, and SHALL NOT mention `laps wrapup`
 
 #### Scenario: No-backend initial instructions
 - **WHEN** rally builds the prompt template with laps disabled

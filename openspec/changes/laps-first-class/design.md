@@ -14,7 +14,7 @@ The `rally progress` CLI is the only place agents are taught to call rally direc
 - Agents when laps is enabled never see `rally` CLI syntax in their prompt
 - Distinct user-facing flows for "finished" vs. "blocked" run-end states
 - Progress log records lap-completion data unambiguously and grows monotonically across runs
-- Tests use real `laps` binary (sourced from github.com/mitchell-wallace/laps at `lib/laps/`)
+- Tests use a real `laps` binary from `PATH` against a fixture workspace project
 
 **Non-Goals:**
 - Maintaining `beads` or `beads_rust` compatibility — users who want them can prompt-instruct agents directly without rally's involvement
@@ -124,7 +124,7 @@ The `rally progress` CLI is the only place agents are taught to call rally direc
 - **Agents who stop without calling `laps wrapup` produce stub entries with potentially uninformative summaries** → Mitigation: explicit `"none"` for `laps_completed` makes incomplete runs visible; the 160-char summary is bounded; operators reviewing `recent_runs` can spot the pattern
 - **`laps wrapup` arg parsing in shell scripts is fragile around quoting** → Mitigation: the shell layer just forwards `$@` to `rally progress`; rally does the real parsing in Go where shell quoting is already consumed
 - **Stale handoff flag in `.rally/run-state.json` if agent crashes between `laps handoff` and `laps wrapup`** → For v0.4.0, the flag is cleared at relay-runner start of next run, so it doesn't bleed across runs
-- **Real `laps` binary in tests adds a build dependency** → `lib/laps/` is vendored from github.com/mitchell-wallace/laps; CI builds it once
+- **Real `laps` binary in tests adds an environment dependency** → integration tests use a real `laps` binary from `PATH` against a reusable fixture workspace; suites that need it skip cleanly when `laps` is absent
 
 ## Migration Plan
 

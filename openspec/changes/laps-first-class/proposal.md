@@ -13,7 +13,7 @@ Rally's current bead-tracker support is a multi-backend (`beads`, `beads_rust`, 
 
 ### Agent contract: `laps` only (with one exception)
 - When laps is enabled, agent prompts mention only `laps` commands. Agents never see `rally` CLI syntax
-- Initial exit conditions in the prompt: `laps done <id>` (finished) and `laps handoff` (blocked)
+- Initial exit conditions in the prompt: `laps done` (finished) and `laps handoff` (blocked)
 - `laps wrapup` is taught contextually by `laps done`'s passback, not in initial instructions
 - When laps is disabled, agents call `rally progress` directly — the explicit, documented exception
 
@@ -55,4 +55,4 @@ _(None — prompt-template changes and stub-entry writing are captured under the
 - Progress log at `.rally/progress.yaml` (fresh creation, no migration)
 - Codebase cleanup: removal of every `beads_rust` and `beads`-as-backend reference; removal of the `Beads string` config field
 - Token usage: small reduction per try from removing the Header Context block
-- Test dependency: real `laps` binary sourced from `lib/laps/` (github.com/mitchell-wallace/laps)
+- Test dependency: real `laps` binary on `PATH`, exercised against a fixture workspace project

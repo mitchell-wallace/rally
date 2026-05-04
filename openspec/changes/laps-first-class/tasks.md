@@ -15,10 +15,10 @@
 ## 3. Laps adapter
 
 - [x] 3.1 Add `internal/laps/adapter.go` with a `HeadPull(ctx context.Context) (Lap, error)` method that shells out to `laps get head` and parses command output
-- [x] 3.2 Define a `Lap` struct with fields `ID`, `Title`, `Description`, and `Assignee` (the latter optional and not yet used)
+- [x] 3.2 Define a `Lap` struct with fields `ID`, `Title`, `Description`, and `Assignee` (the latter optional and not yet used; current upstream head-pull output leaves `ID` empty)
 - [x] 3.3 Handle the "no head task" case (where `laps` exits non-zero with that literal message) by returning a no-lap sentinel without crashing
 - [x] 3.4 Also handle the case where `laps` returns a non-0 exit code by returning the no-lap sentinel
-- [x] 3.5 Source real `laps` binary from `lib/laps/` (github.com/mitchell-wallace/laps repo). Expand the `testdata/` folder to include a `fixture-laps` folder for integration testing
+- [x] 3.5 Use a real `laps` binary from `PATH` for integration coverage and exercise it against a fixture workspace project in `testdata/`
 - [x] 3.6 Add tests against real `laps` binary: test scenarios where head is present and where queue is empty
 
 ## 4. Hook scripts
@@ -69,7 +69,7 @@
 ## 10. Prompt template
 
 - [x] 10.1 Remove the `Header Context` block from the relay prompt template
-- [x] 10.2 Add a mode-aware section: laps-enabled includes `laps done <id>` and `laps handoff` exit-condition instructions; no-backend includes `rally progress --summary --followup` instructions
+- [x] 10.2 Add a mode-aware section: laps-enabled includes `laps done` and `laps handoff` exit-condition instructions; no-backend includes `rally progress --summary --followup` instructions
 - [x] 10.3 Verify no executor (claude/codex/gemini/opencode) re-injects the Header Context
 - [x] 10.4 Test: build the prompt in each mode, snapshot-compare against expected output
 
@@ -78,5 +78,5 @@
 - [x] 11.1 End-to-end: laps-enabled, agent calls `laps done` then `laps wrapup` — verify progress entry has `summary`, `followups`, `laps_completed: [id]`
 - [x] 11.2 End-to-end: laps-enabled, agent calls `laps handoff` then `laps wrapup` — verify progress entry has `handoff` field, queue-head lap(s) created, original lap still open
 - [x] 11.3 End-to-end: laps-enabled, agent exits without finalising — verify stub entry with 160-char summary and accumulated `laps_completed`
-- [x] 11.4 End-to-end: no-backend mode, agent calls `rally progress --complete --summary --followup` — verify entry written, no `laps_completed` field
+- [x] 11.4 End-to-end: no-backend mode, agent calls `rally progress --summary --followup` — verify entry written, no `laps_completed` field
 - [x] 11.5 Confirm `grep beads_rust` returns zero hits outside archived openspec changes

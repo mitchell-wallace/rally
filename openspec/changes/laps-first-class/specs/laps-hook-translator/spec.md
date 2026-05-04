@@ -4,7 +4,7 @@
 The system SHALL register a `passback: true` after-hook on `laps done` that records the just-closed lap ID against the active run's progress entry and prints next-step `laps wrapup` instructions back to the agent via stdout. The instructions SHALL include the exact `laps wrapup --summary "..." --followup "..."` syntax.
 
 #### Scenario: Agent calls laps done
-- **WHEN** the agent invokes `laps done <id>` during a laps-enabled run
+- **WHEN** the agent invokes `laps done` during a laps-enabled run
 - **THEN** the after-hook SHALL invoke `rally progress --record-lap <id>` internally to accumulate the ID and SHALL print to stdout (passback) the line:
 
   `Marked done. Wrap up this run before exiting:`
