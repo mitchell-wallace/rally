@@ -11,70 +11,72 @@ The `rally progress` CLI is the only place agents are taught to call rally direc
 **Goals:**
 - One first-class tracker (microbeads), zero references to others in the codebase
 - Hook-based integration via `mb-hooks.json` — no rally-side daemon, no microbeads modifications
-- Agents in microbeads-backed mode never see `rally` CLI syntax in their prompt
+- Agents when microbeads is enabled never see `rally` CLI syntax in their prompt
 - Distinct user-facing flows for "finished" vs. "blocked" run-end states
-- Progress log records bead-completion data unambiguously and grows monotonically across runs
+- Progress log records microbead-completion data unambiguously and grows monotonically across runs
+- Tests use real `mb` binary (sourced from github.com/mitchell-wallace/microbeads at `lib/mb/`)
 
 **Non-Goals:**
 - Maintaining `beads` or `beads_rust` compatibility — users who want them can prompt-instruct agents directly without rally's involvement
 - Modifying microbeads — `mb-hooks.json` is the only interface; microbeads stays rally-agnostic per its SPEC
 - Re-deciding the progress log format (YAML vs JSON) — defer until usage data accrues
-- Attempting to detect garbage output or enforce per-bead quality gates — that lives in the v0.6.0+ role workflow
+- Migrating legacy progress yaml — `.rally/progress.yaml` is fresh; old file is irrelevant
+- Attempting to detect garbage output or enforce per-microbead quality gates — that lives in the v0.6.0+ role workflow
 
 ## Decisions
 
-### Detect microbeads by `.beads/mb.json`, not `mb` on PATH
-**Chosen**: A repo is "microbeads-backed" iff `.beads/mb.json` is discoverable from cwd per the microbeads SPEC.
+### Detect microbeads by BOTH `.beads/mb.json` AND `mb` on PATH
+**Chosen**: Microbeads is enabled iff `.beads/mb.json` is discoverable from cwd per the microbeads SPEC AND the `mb` binary is available on PATH. Both conditions required.
 
-**Alternative considered**: `mb` on PATH plus any `.beads/` directory.
+**Alternative considered**: `.beads/mb.json` alone is sufficient.
 
-**Why**: A user can have microbeads installed globally yet be running regular `beads`, `beads_rust`, or some other fork in the present repo. Both alternatives use `.beads/` for storage. The `mb.json` filename is microbeads-specific (its SPEC §Storage names it), so file presence is a sound discriminator. The PATH+dir heuristic would produce false positives in mixed-tooling environments.
+**Why**: Rally shells out to `mb` for head-pull, hook registration, and microbead creation. If `mb` isn't available, none of those operations work. Requiring both ensures the integration surface is actually functional, not just structurally present.
 
-### Two-mode operation
-**Chosen**: Two distinct modes (microbeads-backed, no-backend) determined at startup, governing hook installation, prompt-template content, and `rally progress` visibility.
+### Simple bool, not a mode enum
+**Chosen**: `MicrobeadsEnabled bool` on the runner config. Code branches on this bool directly.
 
-**Alternative considered**: A single mode with microbeads as a soft requirement (warn-and-degrade if absent).
+**Alternative considered**: A `Mode` enum with `MicrobeadsBacked` and `NoBackend` variants.
 
-**Why**: Soft-requirement degrade paths historically grow into bugs — the warn becomes invisible, agents get inconsistent instructions, hooks get installed where mb won't fire them. An explicit mode flag makes the boundary unambiguous and lets the prompt template branch cleanly.
+**Why**: There are only two states and no plan for a third. A bool is simpler to pass, branch on, and test. If a third mode ever appears (unlikely given the "one tracker" goal), it can be refactored then.
 
-### Agent contract is `mb`-only in microbeads mode
-**Chosen**: Agents in microbeads-backed mode see only `mb` commands in their prompt. Hook scripts translate to internal `rally progress` calls. In no-backend mode, agents call `rally progress` directly as the explicit exception.
+### Agent contract is `mb`-only when microbeads is enabled
+**Chosen**: Agents with microbeads enabled see only `mb` commands in their prompt. Hook scripts translate to internal `rally progress` calls. When microbeads is disabled, agents call `rally progress` directly as the explicit exception.
 
 **Alternative considered**: Agents always call `rally progress`; microbeads is an internal detail.
 
-**Why**: Two reasons. First, agents already learn `mb done` to close beads — making it the entry point for both bead state *and* run state collapses two surfaces into one. Second, mb-hooks fire deterministically per command, which gives rally a structural seam (the hook script) to capture run state without needing the agent to remember a separate CLI. The no-backend exception exists because there's no `mb` to mediate.
+**Why**: Two reasons. First, agents already learn `mb done` to close microbeads — making it the entry point for both microbead state *and* run state collapses two surfaces into one. Second, mb-hooks fire deterministically per command, which gives rally a structural seam (the hook script) to capture run state without needing the agent to remember a separate CLI. The no-backend exception exists because there's no `mb` to mediate.
 
 ### `mb wrapup` is taught contextually, not up-front
-**Chosen**: Initial prompt instructions name only `mb done` and `mb handoff` as exit conditions. The `mb done` after-hook's passback teaches `mb wrapup` once the agent has actually finished a bead.
+**Chosen**: Initial prompt instructions name only `mb done` and `mb handoff` as exit conditions. The `mb done` after-hook's passback teaches `mb wrapup` once the agent has actually finished a microbead.
 
 **Alternative considered**: Initial instructions list `mb done`, `mb wrapup`, `mb handoff` as a triplet up front.
 
-**Why**: Up-front listing creates ambiguity — agents see "wrapup" and may try it standalone, or skip `mb done` thinking wrapup subsumes it. Context-driven teaching ties wrapup to the moment it's needed (right after closing a bead) and keeps the initial prompt smaller. The `mb done` → wrapup chain becomes an obvious narrative.
+**Why**: Up-front listing creates ambiguity — agents see "wrapup" and may try it standalone, or skip `mb done` thinking wrapup subsumes it. Context-driven teaching ties wrapup to the moment it's needed (right after closing a microbead) and keeps the initial prompt smaller. The `mb done` → wrapup chain becomes an obvious narrative.
 
-### `mb handoff` uses a two-call protocol on the same command name
-**Chosen**: First call (no/minimal args) flips a per-run handoff flag in `.rally/run-state.json` and prints handoff-tuned instructions back to the agent. Second call (with `--reason` and `--followup`) does the actual work — creates blocker beads via `mb add head`, writes the handoff entry, clears the flag.
+### `mb handoff` is a single call that directs to `mb wrapup`
+**Chosen**: `mb handoff` sets `RALLY_HANDOFF_STATE=1` in `.rally/run-state.json` and prints instructions directing the agent to call `mb wrapup --summary "..." --followup "..."`. The wrapup hook checks this state flag: if set, it routes to the handoff path (which creates microbeads at queue head per `--followup`). This means wrapup is always the data-entry terminal, regardless of completion or handoff.
 
-**Alternative considered (a)**: Single-call form with all args required up front.
-**Alternative considered (b)**: Two distinct command names (`mb handoff-init`, `mb handoff-finalise`).
+**Alternative considered (a)**: Two-call `mb handoff` protocol where first call sets flag and second call with `--reason`/`--followup` does the work.
+**Alternative considered (b)**: Single-call `mb handoff` that takes all args and does everything itself.
 
-**Why**: When an agent realises they're stuck, the cognitive cost of constructing a complete handoff invocation is real. The two-call form gives them an "ask for help" first step, then echoes back the exact syntax for the second step. Reusing the same command name avoids inventing a new vocabulary; the hook script distinguishes by inspecting args. The flag in `.rally/run-state.json` lets the eventual progress write know whether the run ended via wrapup or handoff.
+**Why**: The single-call-to-wrapup pattern keeps `mb wrapup` as the universal "provide your summary and followups" terminal. Agents have one data-entry surface regardless of exit path. The handoff hook's only job is to signal intent and teach the agent what to put in wrapup. This is simpler than a two-call protocol and avoids inventing arg parsing in the handoff hook.
 
-### Handoff follow-ups go to the queue head, not the tail
-**Chosen**: `mb add head` for each `--followup` so blockers jump the queue.
+### Followups from handoff-path wrapup go to queue head
+**Chosen**: When wrapup routes through the handoff path, each `--followup` is inserted via `mb add head` so blockers jump the queue.
 
 **Alternative considered**: `mb add tail` (microbeads' default behaviour).
 
-**Why**: Handoff means the current bead can't proceed until the blocker is addressed. Putting the blocker at the tail of the queue means rally would keep retrying the original bead in subsequent runs, all blocked, before reaching the unblock task. Head insertion makes "address blockers first" the default.
+**Why**: Handoff means the current microbead can't proceed until the blocker is addressed. Putting the blocker at the tail of the queue means rally would keep retrying the original microbead in subsequent runs, all blocked, before reaching the unblock task. Head insertion makes "address blockers first" the default.
 
-### Progress log stays YAML, moves to `.rally/progress.yaml`
-**Chosen**: Keep YAML for now. Move the file from `docs/orchestration/rally-progress.yaml` to `.rally/progress.yaml`.
+### Progress log at `.rally/progress.yaml`, no migration
+**Chosen**: Fresh file at `.rally/progress.yaml`. No copy from legacy location. No schema migration of old keys.
 
-**Alternative considered**: Migrate to JSON immediately to match the "TOML for config, JSON for output" convention.
+**Alternative considered**: One-shot copy from `docs/orchestration/rally-progress.yaml` with key renames.
 
-**Why**: The format question deserves real-usage data before it's settled — the file's audience is humans reading diffs, not just programs. The location move is a clear win regardless: rally runtime data belongs under `.rally/`, not `docs/`. Old file is copied once and left in place; user can git-rm at leisure.
+**Why**: The legacy file was a different format serving a different era of rally. Carrying forward stale entries adds complexity for no user value — operators can reference the old file if they want history. Starting fresh keeps the code simple and the progress log relevant.
 
 ### Stub entries derive summary from the agent's final console output
-**Chosen**: When an agent ends without finalising via `mb wrapup` or second `mb handoff` call, the relay loop writes a stub progress entry with `summary` = first 160 characters of the agent's final console-printed message.
+**Chosen**: When an agent ends without finalising via `mb wrapup` or `rally progress --complete`, the relay loop writes a stub progress entry with `summary` = first 160 characters of the agent's final console-printed message.
 
 **Alternative considered (a)**: Skip the entry entirely (let `recent_runs` have gaps).
 **Alternative considered (b)**: Derive summary from the JSONL store's `TryRecord.Summary`.
@@ -82,59 +84,52 @@ The `rally progress` CLI is the only place agents are taught to call rally direc
 **Why**: Gaps in `recent_runs` make incomplete runs invisible — exactly when they're most important to surface. The agent's final console output is whatever rally already prints back to the operator at run-end, so the data is there without new plumbing. 160 chars matches the typical first-line length and stays scannable in YAML.
 
 ### Consolidated `progress-log` capability
-**Chosen**: Bead-completion accounting, handoff entries, file location, schema, and stub-entry behaviour all live under one `progress-log` capability spec.
+**Chosen**: Microbead-completion accounting, handoff entries, file location, schema, and stub-entry behaviour all live under one `progress-log` capability spec.
 
-**Alternative considered**: Separate capabilities `progress-bead-accounting`, `progress-handoff`, `progress-log` as the original draft proposed.
+**Alternative considered**: Separate capabilities for each feature.
 
-**Why**: All three are schema/behaviour features of the same artifact (`.rally/progress.yaml`). Splitting them invites cross-capability inconsistency at archive time. The `progress-log` spec has multiple requirements that cover each feature.
+**Why**: All are schema/behaviour features of the same artifact (`.rally/progress.yaml`). Splitting them invites cross-capability inconsistency at archive time.
 
-### Hook installation is implicit, with user notification including absolute paths
-**Chosen**: Hook installation runs implicitly on `rally relay` startup in microbeads-backed mode (no separate `rally hooks install` subcommand). The first run that installs or updates rally-keyed entries SHALL notify the operator with the absolute file paths of the installed hook scripts.
+### Hook installation is implicit, with user notification
+**Chosen**: Hook installation runs implicitly on `rally relay` startup when microbeads is enabled (no separate `rally hooks install` subcommand). The first run that installs or updates rally-keyed entries SHALL notify the operator with the paths of the installed hook scripts.
 
 **Alternative considered**: Explicit `rally hooks install` / `rally hooks uninstall` subcommands; silent implicit install.
 
-**Why**: Implicit-on-relay keeps the happy path frictionless. The notification matters because users may already have hooks for other tools (e.g. Claude Code hooks under `~/.claude/hooks/` or similar). Showing absolute paths to rally's installed scripts lets operators distinguish rally hooks from other tools' hooks at a glance, and gives them concrete files to inspect or remove if they want to opt out manually. The notification fires only when entries change — steady-state runs stay quiet.
+**Why**: Implicit-on-relay keeps the happy path frictionless. The notification matters because users may already have hooks for other tools. Showing paths to rally's installed scripts lets operators distinguish rally hooks from other tools' hooks, and gives them files to inspect or remove. The notification fires only when entries change — steady-state runs stay quiet.
+
+### Hook scripts written to `.beads/hooks/rally/` (workspace-local)
+**Chosen**: Hook scripts embedded in rally binary via `//go:embed`, written to `.beads/hooks/rally/` in the workspace, referenced from `mb-hooks.json` by relative path.
+
+**Alternative considered**: Global location like `~/.local/share/rally/hooks/`.
+
+**Why**: Workspace-local keeps everything self-contained. The `.beads/` directory already belongs to the microbeads ecosystem. A `hooks/rally/` subdirectory is clearly scoped. No cross-workspace pollution, no global state to manage.
 
 ### Drop the microbeads instruction toggle
-**Chosen**: When microbeads-backed mode is detected, microbeads-related instructions are always injected into the prompt. There is no `auto`/`include`/`skip` toggle. The legacy `Beads string` config field is removed (not renamed-and-kept).
+**Chosen**: When microbeads is enabled, microbeads-related instructions are always injected. No toggle. The legacy `Beads string` field is removed outright.
 
-**Alternative considered**: Keep an `auto`/`include`/`skip` toggle so users can opt out of injection when their `CLAUDE.md`/`AGENTS.md` already covers the syntax.
+**Alternative considered**: Keep an `auto`/`include`/`skip` toggle.
 
-**Why**: Mode detection already encodes the answer — having microbeads available is the trigger; the toggle becomes redundant. Supporting "microbeads-available-but-unused" as a distinct mode adds configuration surface for a niche case rally doesn't need to solve in v0.4.0. If a user has the syntax documented elsewhere, the duplication is small (a few lines of prompt) and removing it is a future refinement once usage data shows it matters.
-
-**Spec follow-up**: the `Microbeads instruction toggle` requirement in `specs/microbeads-only-integration/spec.md` should be removed. Tracking as a downstream edit.
+**Why**: The bool already encodes the answer — having microbeads enabled is the trigger. The toggle becomes redundant.
 
 ### `mb wrapup` requires `--summary`
-**Chosen**: `mb wrapup` invocations without `--summary` are rejected with a non-zero exit and an error message surfaced back to the agent. Runs that produced nothing recordable still must record that fact via `mb handoff` (with a `--reason` explaining the no-progress state) or by exiting (which produces a stub entry).
+**Chosen**: `mb wrapup` invocations without `--summary` are rejected with a non-zero exit and an error message surfaced back to the agent.
 
-**Alternative considered**: Allow a no-op `mb wrapup` form that records "agent had nothing to add" without requiring the agent to write a summary.
+**Alternative considered**: Allow a no-op `mb wrapup` that records "agent had nothing to add".
 
-**Why**: Agents that produce nothing useful are exactly the runs an operator most needs to see articulated — either as a handoff (with reason) or as a stub entry derived from the agent's last console output. Letting `mb wrapup` succeed with no summary creates a third "blank intentional" path that's indistinguishable from "agent forgot to summarise" in the log. The contract stays sharp: `mb wrapup` means "I have something to record"; otherwise use `mb handoff` or exit.
-
-### Drop `executor` from modified capabilities
-**Chosen**: The existing `executor` spec doesn't have a backend-selection requirement, so there's no requirement-level modification to apply.
-
-**Alternative considered**: List `executor` as modified to capture the conceptual change ("no backend selector").
-
-**Why**: Modified-capability deltas need a real existing requirement to amend. The backend-selector concept lives only in code today (the `Beads string` field), not in the spec, so the change shows up as code/config edits without a spec delta. Listing it would create an empty modification that confuses archive consolidation.
+**Why**: Agents that produce nothing useful are exactly the runs an operator most needs to see articulated — either as a handoff or as a stub entry. Letting `mb wrapup` succeed with no summary creates a "blank intentional" path indistinguishable from "agent forgot to summarise". The contract stays sharp.
 
 ## Risks / Trade-offs
 
-- **Hook installer overwriting user-edited hooks** → Mitigation: rally only touches entries keyed with a `rally:` prefix in hook names; the installer does idempotent diff-and-merge so user hooks for the same `mb` commands coexist with rally's
-- **Two-call `mb handoff` protocol depends on the agent reading the first call's instructions** → Mitigation: instructions are short and explicit; second call without `--reason` errors with a clear message. If agents systematically skip the second call, we can collapse to a one-shot form in a follow-up
-- **Agents who stop without calling `mb done` or `mb handoff` produce stub entries with potentially uninformative summaries** → Mitigation: explicit `"none"` for `beads_completed` makes incomplete runs visible; the 160-char summary is bounded so worst-case noise is small; operators reviewing `recent_runs` can spot the pattern
-- **`mb handoff` arg parsing in shell scripts is fragile around quoting** → Mitigation: the shell layer just forwards `$@` to `rally progress --handoff`; rally does the real parsing in Go where shell quoting is already consumed
-- **File copy of legacy `rally-progress.yaml` could surprise users with stale data under `.rally/`** → Mitigation: copy is one-shot on first post-upgrade run; release note documents the move; user owns whether/when to git-rm the old path
-- **Stale handoff flag in `.rally/run-state.json` if agent crashes between the two `mb handoff` calls** → Tracked as v0.7.0 concern (resume vs. fresh-start clearing). For v0.4.0, the flag is cleared at relay-runner start of next run, so it doesn't bleed across runs
+- **Hook installer overwriting user-edited hooks** → Mitigation: rally only touches entries keyed with `rally:` prefix; the installer does idempotent diff-and-merge so user hooks coexist
+- **Agents who stop without calling `mb wrapup` produce stub entries with potentially uninformative summaries** → Mitigation: explicit `"none"` for `microbeads_completed` makes incomplete runs visible; the 160-char summary is bounded; operators reviewing `recent_runs` can spot the pattern
+- **`mb wrapup` arg parsing in shell scripts is fragile around quoting** → Mitigation: the shell layer just forwards `$@` to `rally progress`; rally does the real parsing in Go where shell quoting is already consumed
+- **Stale handoff flag in `.rally/run-state.json` if agent crashes between `mb handoff` and `mb wrapup`** → For v0.4.0, the flag is cleared at relay-runner start of next run, so it doesn't bleed across runs
+- **Real `mb` binary in tests adds a build dependency** → `lib/mb/` is vendored from github.com/mitchell-wallace/microbeads; CI builds it once
 
 ## Migration Plan
 
-1. **Code cleanup phase**: remove all `beads_rust` and `beads`-as-backend references. Rename `Beads string` config field. Verify no test fixtures reference removed identifiers.
-2. **Storage move**: on first post-upgrade `rally relay` invocation, copy `docs/orchestration/rally-progress.yaml` → `.rally/progress.yaml` if the destination doesn't exist. Subsequent runs read/write `.rally/progress.yaml` only.
-3. **Schema rename**: on first write of the new file, rewrite `recent_sessions` → `recent_runs` and `session_id` → `run_id` in place. Additive fields (`beads_completed`, `handoff`) appear from then on.
-4. **Hook installation**: implicit on `rally relay` startup in microbeads-backed mode. Rally writes the three rally-keyed entries to `.beads/mb-hooks.json` and writes the hook script bodies to a stable on-disk location (e.g. `~/.local/share/rally/hooks/mb-{done,wrapup,handoff}-hook.sh`). When entries are added or updated, rally prints a one-time notification with the absolute paths of the script files so operators can distinguish rally's hooks from other tools' hooks (e.g. Claude Code hooks). Idempotent: steady-state re-runs don't duplicate and don't re-notify.
-5. **Prompt template switch**: relay-runner branches on mode at prompt-build time. Tests cover both branches.
+1. **Code cleanup phase**: remove all `beads_rust` and `beads`-as-backend references. Remove `Beads string` config field. Verify no test fixtures reference removed identifiers.
+2. **Hook installation**: implicit on `rally relay` startup when microbeads is enabled. Rally writes the three rally-keyed entries to `.beads/mb-hooks.json` and writes embedded hook scripts to `.beads/hooks/rally/`. When entries are added or updated, rally prints a notification with the paths. Idempotent: steady-state re-runs don't duplicate and don't re-notify.
+3. **Prompt template switch**: relay-runner branches on `MicrobeadsEnabled` at prompt-build time. Tests cover both branches.
 
-Rollback: revert the v0.4.0 release. The new `.rally/progress.yaml` is left behind harmlessly; the old `docs/orchestration/rally-progress.yaml` is still on disk because we never delete it. Hook entries can be removed by hand or by an explicit `rally hooks uninstall` if implemented.
-
-
+Rollback: revert the release. The `.rally/progress.yaml` is left behind harmlessly. Hook entries can be removed by hand.
