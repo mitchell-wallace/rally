@@ -369,6 +369,7 @@ func (r *Runner) runOne(ctx context.Context, relay *store.RelayRecord, runIndex 
 
 		opts := agent.RunOptions{
 			Persona:          picked.Harness,
+			Model:            picked.Model,
 			TaskName:         taskName,
 			TaskRequirements: taskRequirements,
 			TaskPrompt:       taskPrompt,
@@ -424,7 +425,7 @@ func (r *Runner) runOne(ctx context.Context, relay *store.RelayRecord, runIndex 
 			}
 		}
 		go func() {
-			res, err := r.executeTry(attemptCtx, picked.Harness, opts)
+			res, err := r.executeTry(attemptCtx, picked, opts)
 			tryCh <- tryResult{res, err}
 		}()
 		go func() {
@@ -639,10 +640,10 @@ func (r *Runner) resolveRunTask(ctx context.Context) (string, string, string, er
 	return taskName, taskRequirements, taskPrompt, nil
 }
 
-func (r *Runner) executeTry(ctx context.Context, agentType string, opts agent.RunOptions) (*agent.TryResult, error) {
-	exec, ok := r.executors[agentType]
+func (r *Runner) executeTry(ctx context.Context, picked ResolvedAgent, opts agent.RunOptions) (*agent.TryResult, error) {
+	exec, ok := r.executors[picked.Harness]
 	if !ok {
-		return nil, fmt.Errorf("no executor for agent %s", agentType)
+		return nil, fmt.Errorf("no executor for agent %s", picked.Harness)
 	}
 	return exec.Execute(ctx, opts)
 }

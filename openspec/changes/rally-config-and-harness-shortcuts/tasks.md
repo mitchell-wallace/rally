@@ -50,11 +50,11 @@
 
 ## 6. AgentMix runner completion
 
-- [ ] 6.1 Line 154 `agentType, ... := resilience.SelectActiveAgent(mix, runIndex)` — rename to `agent` (or `picked`), change type to `ResolvedAgent`
-- [ ] 6.2 Lines 207, 223, 233 use `agentType` for pause/unpause and rotation logic — pass `agent.Harness`
-- [ ] 6.3 Line 308 `timeUntilNextRetry(resilience *Resilience, mix AgentMix)` — loop variable `a` is now `ResolvedAgent`; pass `a.Harness` to `resilience.getState`
-- [ ] 6.4 Line 642 `executeTry(ctx, agentType, opts)` — extend to take `ResolvedAgent` (or `harness, model` separately); plumb `model` into `agent.RunOptions`
-- [ ] 6.5 Line 662 `autoCommit(runIndex, agentType, attempt)` — pass `agent.Harness`
+- [x] 6.1 Line 154 `agentType, ... := resilience.SelectActiveAgent(mix, runIndex)` — rename to `agent` (or `picked`), change type to `ResolvedAgent`
+- [x] 6.2 Lines 207, 223, 233 use `agentType` for pause/unpause and rotation logic — pass `agent.Harness`
+- [x] 6.3 Line 308 `timeUntilNextRetry(resilience *Resilience, mix AgentMix)` — loop variable `a` is now `ResolvedAgent`; pass `a.Harness` to `resilience.getState`
+- [x] 6.4 Line 642 `executeTry(ctx, agentType, opts)` — extend to take `ResolvedAgent` (or `harness, model` separately); plumb `model` into `agent.RunOptions`
+- [x] 6.5 Line 662 `autoCommit(runIndex, agentType, attempt)` — pass `agent.Harness`
 
 ## 7. AgentMix executor interface and store
 

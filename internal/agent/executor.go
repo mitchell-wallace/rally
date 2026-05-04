@@ -4,6 +4,7 @@ import "context"
 
 type RunOptions struct {
 	Persona          string
+	Model            string
 	TaskName         string
 	TaskRequirements string
 	Instructions     string
