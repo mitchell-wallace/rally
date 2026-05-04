@@ -1,10 +1,10 @@
 version: 1
-updated_at: "2026-05-04T12:18:44Z"
+updated_at: "2026-05-04T12:29:54Z"
 active_batch:
     agent_mix:
         - op
     batch_id: 3
-    completed_iterations: 1
+    completed_iterations: 2
     ended_at: ""
     started_at: "2026-05-04T11:41:22Z"
     target_iterations: 5
@@ -42,3 +42,12 @@ recent_sessions:
       follow_ups:
         - Phase 2 (Harness/model resolution) is next in tasks.md
       transcript_path: /home/agent/.local/share/rally/sessions/session-3/terminal.log
+    - session_id: 4
+      batch_id: 3
+      iteration_index: 2
+      agent: opencode
+      status: completed
+      started_at: "2026-05-04T12:18:44Z"
+      ended_at: "2026-05-04T12:29:54Z"
+      runtime_seconds: 669
+      transcript_path: /home/agent/.local/share/rally/sessions/session-4/terminal.log
