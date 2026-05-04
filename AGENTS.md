@@ -1,5 +1,20 @@
 # Rally — Agent Guide
 
+## Terminology
+
+### Hierarchy: relay > run > try
+
+- **Relay**: a campaign of runs processing a queue of microbeads (tasks).
+- **Run**: one runner assigned to one microbead. A microbead can have multiple
+  runs if skipped to a different runner. Each run tracks its own retry budget.
+- **Try**: one invocation of a runner. A run can have multiple tries (retries).
+
+### Runner
+
+A **runner** is a harness + model combination (e.g. `claude` harness with
+`sonnet-4` model, or `opencode` harness with `gemini-2.5-pro` model). Distinct
+from a **role**, which is a semantic label for what the runner does.
+
 ## Releasing
 
 Rally uses GoReleaser via GitHub Actions to publish releases. The workflow

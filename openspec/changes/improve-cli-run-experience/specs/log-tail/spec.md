@@ -9,7 +9,7 @@ The system SHALL provide a `rally tail` subcommand that streams the current try'
 
 #### Scenario: Tail a specific past try
 - **WHEN** the operator invokes `rally tail --try 3`
-- **THEN** the system SHALL locate the third try's log file and SHALL stream from the start of the file, then continue to follow it if still being written
+- **THEN** the system SHALL locate the third try's log file and SHALL stream from the start of the file, then continue to follow if still being written
 
 #### Scenario: No active try
 - **WHEN** the operator invokes `rally tail` in a workspace with no `.rally/tries.jsonl` or an empty one

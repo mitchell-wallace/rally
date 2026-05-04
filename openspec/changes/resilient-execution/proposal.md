@@ -6,7 +6,7 @@ With v0.3.0 monitoring signals and v0.5.0/v0.6.0 provider shortcuts in hand, we 
 
 ## Prerequisites
 
-- v0.3.0 (`log-driven-monitoring-and-interrupts`) — log-file mtime, connection, IO signals
+- v0.3.0 (`improve-cli-run-experience`) — log-file mtime, connection/IO warning signals, live monitor
 - v0.5.0 (`rally-config-and-harness-shortcuts`) — provider shortcuts to refer to alternatives
 - v0.6.0 (`role-aware-routing`) — within-list fallback iterator reusable for provider rotation
 
