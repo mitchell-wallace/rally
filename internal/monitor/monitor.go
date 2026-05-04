@@ -6,11 +6,11 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 )
 
@@ -79,14 +79,6 @@ func LogLastActivity(logPath string) (time.Duration, error) {
 	return time.Since(info.ModTime()).Round(time.Second), nil
 }
 
-// SetProcessGroup sets the subprocess to run in its own process group.
-func SetProcessGroup(cmd *exec.Cmd) {
-	if cmd.SysProcAttr == nil {
-		cmd.SysProcAttr = &syscall.SysProcAttr{}
-	}
-	cmd.SysProcAttr.Setpgid = true
-}
-
 // GetPIDsInGroup returns all PIDs that belong to the given process group.
 func GetPIDsInGroup(pgid int) ([]int, error) {
 	if runtime.GOOS != "linux" {
@@ -134,6 +126,18 @@ func CountTCPConnections(pids []int) (int, error) {
 	if runtime.GOOS != "linux" {
 		return 0, nil
 	}
+	if len(pids) == 0 {
+		return 0, nil
+	}
+
+	socketInodes, err := socketInodesForPIDs(pids)
+	if err != nil {
+		return 0, err
+	}
+	if len(socketInodes) == 0 {
+		return 0, nil
+	}
+
 	data, err := os.ReadFile("/proc/net/tcp")
 	if err != nil {
 		return 0, err
@@ -149,11 +153,38 @@ func CountTCPConnections(pids []int) (int, error) {
 			continue
 		}
 		// State is the 4th field (index 3). 01 = ESTABLISHED.
-		if fields[3] == "01" {
-			count++
+		if fields[3] == "01" && len(fields) > 9 {
+			if _, ok := socketInodes[fields[9]]; ok {
+				count++
+			}
 		}
 	}
 	return count, nil
+}
+
+func socketInodesForPIDs(pids []int) (map[string]struct{}, error) {
+	inodes := make(map[string]struct{})
+	for _, pid := range pids {
+		fdDir := fmt.Sprintf("/proc/%d/fd", pid)
+		entries, err := os.ReadDir(fdDir)
+		if err != nil {
+			continue
+		}
+		for _, entry := range entries {
+			target, err := os.Readlink(filepath.Join(fdDir, entry.Name()))
+			if err != nil {
+				continue
+			}
+			if !strings.HasPrefix(target, "socket:[") || !strings.HasSuffix(target, "]") {
+				continue
+			}
+			inode := strings.TrimSuffix(strings.TrimPrefix(target, "socket:["), "]")
+			if inode != "" {
+				inodes[inode] = struct{}{}
+			}
+		}
+	}
+	return inodes, nil
 }
 
 // ReadIOBytes returns the cumulative read+write bytes for a list of PIDs.
@@ -187,12 +218,10 @@ func ReadIOBytes(pids []int) (uint64, error) {
 
 // NetworkMonitor tracks network state and produces warnings.
 type NetworkMonitor struct {
-	pids        []int
+	pids         []int
 	lastConnTime time.Time
 	lastIOTime   time.Time
 	lastIOBytes  uint64
-	hasSeenConn  bool
-	hasSeenIO    bool
 }
 
 // NewNetworkMonitor creates a NetworkMonitor for the given PIDs.
@@ -203,6 +232,26 @@ func NewNetworkMonitor(pids []int) *NetworkMonitor {
 		lastConnTime: now,
 		lastIOTime:   now,
 	}
+}
+
+func (n *NetworkMonitor) evaluate(now time.Time, conns int, ioBytes uint64) []string {
+	if conns > 0 {
+		n.lastConnTime = now
+	}
+	if ioBytes > n.lastIOBytes {
+		n.lastIOTime = now
+		n.lastIOBytes = ioBytes
+	}
+
+	var warnings []string
+	if conns == 0 && now.Sub(n.lastConnTime) >= 30*time.Second {
+		warnings = append(warnings, "No TCP… (30s)")
+	}
+	if conns > 0 && now.Sub(n.lastIOTime) >= 30*time.Second {
+		warnings = append(warnings, "No network I/O… (30s)")
+	}
+
+	return warnings
 }
 
 // Check evaluates network state and returns any warnings.
@@ -218,37 +267,17 @@ func (n *NetworkMonitor) Check() []string {
 	if err != nil {
 		return nil
 	}
-
-	now := time.Now()
-	var warnings []string
-
-	if conns > 0 {
-		n.lastConnTime = now
-		n.hasSeenConn = true
-	}
-	if ioBytes > n.lastIOBytes {
-		n.lastIOTime = now
-		n.lastIOBytes = ioBytes
-		n.hasSeenIO = true
-	}
-
-	if n.hasSeenConn && conns == 0 && now.Sub(n.lastConnTime) >= 30*time.Second {
-		warnings = append(warnings, "No TCP… (30s)")
-	}
-	if n.hasSeenIO && ioBytes == n.lastIOBytes && now.Sub(n.lastIOTime) >= 30*time.Second {
-		warnings = append(warnings, "No network I/O… (30s)")
-	}
-
-	return warnings
+	return n.evaluate(time.Now(), conns, ioBytes)
 }
 
 // Monitor produces a live status line during try execution.
 type Monitor struct {
-	workspaceDir string
-	logPath      string
-	pgid         int
-	startTime    time.Time
-	netMon       *NetworkMonitor
+	workspaceDir  string
+	logPath       string
+	pgid          int
+	startTime     time.Time
+	netMon        *NetworkMonitor
+	cursorUpLines int
 
 	ticker *time.Ticker
 	stopCh chan struct{}
@@ -312,6 +341,7 @@ func (m *Monitor) Tick() (string, error) {
 
 	var warnings []string
 	if m.netMon != nil {
+		m.UpdatePIDs()
 		warnings = m.netMon.Check()
 	}
 
@@ -322,24 +352,27 @@ func (m *Monitor) run(out io.Writer, ticker *time.Ticker, stopCh chan struct{}) 
 	for {
 		select {
 		case <-stopCh:
-			fmt.Fprint(out, "\n")
+			m.clear(out)
 			return
 		case <-ticker.C:
 			line, err := m.Tick()
 			if err != nil {
 				continue
 			}
-			fmt.Fprintf(out, "\r%s", line)
+			m.render(out, line)
 		}
 	}
 }
 
 // UpdatePIDs refreshes the PID list for the monitor's process group.
 func (m *Monitor) UpdatePIDs() {
-	if m.pgid <= 0 {
+	m.mu.Lock()
+	pgid := m.pgid
+	m.mu.Unlock()
+	if pgid <= 0 {
 		return
 	}
-	pids, err := GetPIDsInGroup(m.pgid)
+	pids, err := GetPIDsInGroup(pgid)
 	if err != nil {
 		return
 	}
@@ -348,4 +381,50 @@ func (m *Monitor) UpdatePIDs() {
 		m.netMon.pids = pids
 	}
 	m.mu.Unlock()
+}
+
+// SetProcessGroupID attaches the monitor to a process group after the child starts.
+func (m *Monitor) SetProcessGroupID(pgid int) {
+	m.mu.Lock()
+	m.pgid = pgid
+	m.mu.Unlock()
+}
+
+// SetCursorUpLines reserves the given number of lines above the current cursor
+// for monitor updates.
+func (m *Monitor) SetCursorUpLines(lines int) {
+	m.mu.Lock()
+	m.cursorUpLines = lines
+	m.mu.Unlock()
+}
+
+func (m *Monitor) render(out io.Writer, line string) {
+	m.mu.Lock()
+	cursorUpLines := m.cursorUpLines
+	m.mu.Unlock()
+
+	if cursorUpLines <= 0 {
+		fmt.Fprintf(out, "\r%s", line)
+		return
+	}
+	fmt.Fprintf(out, "\x1b[%dA\r\x1b[2K%s\x1b[%dB\r", cursorUpLines, line, cursorUpLines)
+}
+
+func (m *Monitor) clear(out io.Writer) {
+	m.mu.Lock()
+	cursorUpLines := m.cursorUpLines
+	m.mu.Unlock()
+
+	if cursorUpLines <= 0 {
+		fmt.Fprint(out, "\n")
+		return
+	}
+	fmt.Fprintf(out, "\x1b[%dA\r", cursorUpLines)
+	for i := 0; i < cursorUpLines; i++ {
+		fmt.Fprint(out, "\x1b[2K")
+		if i < cursorUpLines-1 {
+			fmt.Fprint(out, "\n")
+		}
+	}
+	fmt.Fprint(out, "\r\n")
 }

@@ -120,36 +120,36 @@ func TestLogLastActivity(t *testing.T) {
 }
 
 func TestNetworkMonitorCheck(t *testing.T) {
-	// Test the logic directly by manipulating fields
 	nm := NewNetworkMonitor([]int{1})
+	base := time.Now()
+	nm.lastConnTime = base
+	nm.lastIOTime = base
 
-	// Initially no warnings
-	warnings := nm.Check()
-	if len(warnings) != 0 {
-		t.Fatalf("expected no warnings initially, got %v", warnings)
+	if warnings := nm.evaluate(base.Add(31*time.Second), 0, 0); len(warnings) != 1 || warnings[0] != "No TCP… (30s)" {
+		t.Fatalf("expected TCP warning, got %v", warnings)
 	}
 
-	// Simulate having seen connections and IO
-	nm.hasSeenConn = true
-	nm.hasSeenIO = true
-	nm.lastConnTime = time.Now().Add(-31 * time.Second)
-	nm.lastIOTime = time.Now().Add(-31 * time.Second)
-
-	// On non-Linux, Check should always return nil
-	if runtime.GOOS != "linux" {
-		warnings = nm.Check()
-		if len(warnings) != 0 {
-			t.Fatalf("expected no warnings on non-linux, got %v", warnings)
-		}
-		return
+	nm = NewNetworkMonitor([]int{1})
+	nm.lastConnTime = base
+	nm.lastIOTime = base
+	nm.lastIOBytes = 10
+	if warnings := nm.evaluate(base.Add(31*time.Second), 2, 10); len(warnings) != 1 || warnings[0] != "No network I/O… (30s)" {
+		t.Fatalf("expected I/O warning, got %v", warnings)
 	}
 
-	// On Linux, we can't easily mock /proc, but we can at least verify
-	// the function runs without panic and returns consistent results.
-	warnings = nm.Check()
-	// It may or may not return warnings depending on actual system state.
-	// We just verify it's a slice.
-	_ = warnings
+	if warnings := nm.evaluate(base.Add(32*time.Second), 2, 11); len(warnings) != 0 {
+		t.Fatalf("expected warning to clear after activity resumes, got %v", warnings)
+	}
+}
+
+func TestNetworkMonitorCheckNonLinux(t *testing.T) {
+	if runtime.GOOS == "linux" {
+		t.Skip("linux behavior covered by evaluate tests")
+	}
+	nm := NewNetworkMonitor([]int{1})
+	if warnings := nm.Check(); len(warnings) != 0 {
+		t.Fatalf("expected no warnings on non-linux, got %v", warnings)
+	}
 }
 
 func TestMonitorTick(t *testing.T) {

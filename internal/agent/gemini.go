@@ -12,9 +12,9 @@ type GeminiExecutor struct {
 }
 
 type geminiWrapper struct {
-	Response string          `json:"response"`
-	SessionID string         `json:"session_id"`
-	Stats    json.RawMessage `json:"stats"`
+	Response  string          `json:"response"`
+	SessionID string          `json:"session_id"`
+	Stats     json.RawMessage `json:"stats"`
 }
 
 func (g *GeminiExecutor) Execute(ctx context.Context, opts RunOptions) (*TryResult, error) {
@@ -28,10 +28,7 @@ func (g *GeminiExecutor) Execute(ctx context.Context, opts RunOptions) (*TryResu
 	cmd := exec.CommandContext(ctx, "gemini", args...)
 	cmd.Stderr = nil // discard noisy stderr
 	SetProcessGroup(cmd)
-	out, err := cmd.Output()
-	if opts.LogPath != "" {
-		_ = WriteTryLog(opts.LogPath, out)
-	}
+	out, err := runLoggedCommand(cmd, opts.LogPath, false, opts.OnStart)
 	if err != nil {
 		return nil, fmt.Errorf("gemini exec failed: %w\noutput: %s", err, string(out))
 	}

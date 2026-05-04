@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -138,6 +139,30 @@ func TestAgentCyclingDeterminism(t *testing.T) {
 		if agents[i] != w {
 			t.Fatalf("try %d agent = %q, want %q", i, agents[i], w)
 		}
+	}
+}
+
+func TestFilesChangedCountUsesCommitDiff(t *testing.T) {
+	workspaceDir := t.TempDir()
+	initRepo(t, workspaceDir)
+
+	os.WriteFile(filepath.Join(workspaceDir, "one.txt"), []byte("one\n"), 0o644)
+	os.WriteFile(filepath.Join(workspaceDir, "two.txt"), []byte("two\n"), 0o644)
+	runGit(t, workspaceDir, "add", ".")
+	runGit(t, workspaceDir, "commit", "-m", "init")
+
+	before := strings.TrimSpace(runGit(t, workspaceDir, "rev-parse", "HEAD"))
+
+	os.WriteFile(filepath.Join(workspaceDir, "one.txt"), []byte("one changed\n"), 0o644)
+	os.WriteFile(filepath.Join(workspaceDir, "two.txt"), []byte("two changed\n"), 0o644)
+	runGit(t, workspaceDir, "add", ".")
+	runGit(t, workspaceDir, "commit", "-m", "change two files")
+
+	after := strings.TrimSpace(runGit(t, workspaceDir, "rev-parse", "HEAD"))
+
+	r := &Runner{cfg: Config{WorkspaceDir: workspaceDir}}
+	if got := r.filesChangedCount(nil, before, after, after); got != 2 {
+		t.Fatalf("expected 2 changed files from commit diff, got %d", got)
 	}
 }
 

@@ -377,7 +377,6 @@ func (r *Runner) runOne(ctx context.Context, relay *store.RelayRecord, runIndex 
 		totalRuns := relay.TargetIterations
 		header := style.RenderHeader(runIndex+1, totalRuns, agentType, attempt, startedAt)
 		fmt.Println(header)
-		fmt.Println("[Ctrl+S skip]  [Ctrl+P pause]  [Ctrl+X stop]  [Ctrl+C quit]")
 
 		kb := keyboard.NewKeyboard(os.Stdin, os.Stdout)
 		_ = kb.SetRawMode()
@@ -385,6 +384,10 @@ func (r *Runner) runOne(ctx context.Context, relay *store.RelayRecord, runIndex 
 		actionCh := kb.Start(kbCtx)
 
 		mon := monitor.NewMonitor(r.cfg.WorkspaceDir, tryLogPath, 0)
+		initialStatus, _ := mon.Tick()
+		fmt.Println(initialStatus)
+		fmt.Println("[Ctrl+S skip]  [Ctrl+P pause]  [Ctrl+X stop]  [Ctrl+C quit]")
+		mon.SetCursorUpLines(2)
 		mon.Start(os.Stdout)
 
 		type tryResult struct {
@@ -394,9 +397,23 @@ func (r *Runner) runOne(ctx context.Context, relay *store.RelayRecord, runIndex 
 		tryCh := make(chan tryResult, 1)
 		attemptCtx, cancelAttempt := context.WithCancel(ctx)
 		defer cancelAttempt()
+		pidCh := make(chan int, 1)
+		opts.OnStart = func(pid int) {
+			select {
+			case pidCh <- pid:
+			default:
+			}
+		}
 		go func() {
 			res, err := r.executeTry(attemptCtx, agentType, opts)
 			tryCh <- tryResult{res, err}
+		}()
+		go func() {
+			select {
+			case pid := <-pidCh:
+				mon.SetProcessGroupID(pid)
+			case <-attemptCtx.Done():
+			}
 		}()
 
 		var result *agent.TryResult
@@ -457,14 +474,14 @@ func (r *Runner) runOne(ctx context.Context, relay *store.RelayRecord, runIndex 
 
 		footerSuccess := execErr == nil && result != nil && result.Completed
 		runtime := endedAt.Sub(startedAt)
-		dirtyCount, _ := monitor.GitDirtyCount(r.cfg.WorkspaceDir)
+		filesChangedCount := r.filesChangedCount(result, headBefore, headAfter, commitHash)
 		shortHash := ""
 		if len(commitHash) >= 7 {
 			shortHash = commitHash[:7]
 		} else if commitHash != "" {
 			shortHash = commitHash
 		}
-		footer := style.RenderFooter(footerSuccess, runtime, dirtyCount, shortHash)
+		footer := style.RenderFooter(footerSuccess, runtime, filesChangedCount, shortHash)
 		fmt.Println(footer)
 
 		if err := gitx.CommitRallyState(r.cfg.WorkspaceDir); err != nil {
@@ -616,6 +633,38 @@ func (r *Runner) autoCommit(runIndex int, agentType string, attempt int) (string
 		return "", nil
 	}
 	return strings.TrimSpace(string(hashOut)), nil
+}
+
+func (r *Runner) filesChangedCount(result *agent.TryResult, headBefore, headAfter, commitHash string) int {
+	if result != nil && len(result.FilesChanged) > 0 {
+		return len(result.FilesChanged)
+	}
+
+	repoRoot, ok, err := gitx.GitRepoRoot(r.cfg.WorkspaceDir)
+	if err == nil && ok {
+		var out []byte
+		if headBefore != "" && headAfter != "" && headBefore != headAfter {
+			out, err = gitx.GitOutput(repoRoot, "diff", "--name-only", headBefore, headAfter)
+		} else if commitHash != "" {
+			out, err = gitx.GitOutput(repoRoot, "diff-tree", "--no-commit-id", "--name-only", "-r", commitHash)
+		}
+		if err == nil && len(out) > 0 {
+			return countNonEmptyLines(string(out))
+		}
+	}
+
+	dirtyCount, _ := monitor.GitDirtyCount(r.cfg.WorkspaceDir)
+	return dirtyCount
+}
+
+func countNonEmptyLines(s string) int {
+	count := 0
+	for _, line := range strings.Split(s, "\n") {
+		if strings.TrimSpace(line) != "" {
+			count++
+		}
+	}
+	return count
 }
 
 func containsInt(slice []int, val int) bool {

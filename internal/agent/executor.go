@@ -15,6 +15,7 @@ type RunOptions struct {
 	BeadsEnabled     bool
 	Prompt           string // explicit override
 	LogPath          string // path to write try transcript log
+	OnStart          func(pid int)
 }
 
 type TryResult struct {
