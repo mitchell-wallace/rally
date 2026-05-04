@@ -30,13 +30,13 @@
 
 `AgentMix.Cycle` flips from `[]string` (harness aliases) to `[]ResolvedAgent` (typed `(harness, model)` records). Every callsite that reads or writes the cycle is updated. Land phases 4–9 in one commit so intermediate states don't compile-but-misbehave.
 
-- [ ] 4.1 In `internal/relay/mix.go`, define `type ResolvedAgent struct { Harness, Model string }`
-- [ ] 4.2 Change `AgentMix.Cycle` from `[]string` to `[]ResolvedAgent`
-- [ ] 4.3 Decide whether `AgentMix.Weights map[string]int` and `AgentMix.Order []string` stay keyed by harness alias or become richer. Recommendation: keep both keyed by harness alias for v0.5.0 — they describe weighting structure which is per-harness, not per-(harness,model). Document the choice in `mix.go`.
-- [ ] 4.4 Update `AgentMix.Label` builder: existing format `"cc:1 cx:2"` is round-trippable through `ParseAgentMix`. The new label MUST also round-trip the typed cycle (e.g. `"cc cc op:z op:gk"` — repeat tokens for weight, named models inline). Decide and document the format.
-- [ ] 4.5 Rewrite `ParseAgentMix(specs []string, resolver Resolver) (AgentMix, error)` — adds a resolver parameter so it can convert `harness:model-name` and bare aliases to `ResolvedAgent` records; existing weighted form still works (digits-after-colon → weight)
-- [ ] 4.6 Change `AgentForRun(runIndex int, mix AgentMix) ResolvedAgent` — return type flips from `string` to `ResolvedAgent`
-- [ ] 4.7 If `AgentForRun` is no longer used externally (verify with grep), consider deleting it — `SelectActiveAgent` is the actual call site
+- [x] 4.1 In `internal/relay/mix.go`, define `type ResolvedAgent struct { Harness, Model string }`
+- [x] 4.2 Change `AgentMix.Cycle` from `[]string` to `[]ResolvedAgent`
+- [x] 4.3 Decide whether `AgentMix.Weights map[string]int` and `AgentMix.Order []string` stay keyed by harness alias or become richer. Recommendation: keep both keyed by harness alias for v0.5.0 — they describe weighting structure which is per-harness, not per-(harness,model). Document the choice in `mix.go`.
+- [x] 4.4 Update `AgentMix.Label` builder: existing format `"cc:1 cx:2"` is round-trippable through `ParseAgentMix`. The new label MUST also round-trip the typed cycle (e.g. `"cc cc op:z op:gk"` — repeat tokens for weight, named models inline). Decide and document the format.
+- [x] 4.5 Rewrite `ParseAgentMix(specs []string, resolver Resolver) (AgentMix, error)` — adds a resolver parameter so it can convert `harness:model-name` and bare aliases to `ResolvedAgent` records; existing weighted form still works (digits-after-colon → weight)
+- [x] 4.6 Change `AgentForRun(runIndex int, mix AgentMix) ResolvedAgent` — return type flips from `string` to `ResolvedAgent`
+- [x] 4.7 If `AgentForRun` is no longer used externally (verify with grep), consider deleting it — `SelectActiveAgent` is the actual call site
 
 ## 5. AgentMix selector and runner setup
 

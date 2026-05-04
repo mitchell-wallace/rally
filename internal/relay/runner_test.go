@@ -954,7 +954,7 @@ func TestHourlyRetryWithOtherAgentActive(t *testing.T) {
 
 	resilience.NowFunc = func() time.Time { return baseTime.Add(2 * time.Hour) }
 
-	mix, err := ParseAgentMix([]string{"cc:2", "cx:1"})
+	mix, err := ParseAgentMix([]string{"cc:2", "cx:1"}, nil)
 	if err != nil {
 		t.Fatalf("ParseAgentMix failed: %v", err)
 	}
@@ -963,8 +963,8 @@ func TestHourlyRetryWithOtherAgentActive(t *testing.T) {
 	if err != nil {
 		t.Fatalf("SelectActiveAgent failed: %v", err)
 	}
-	if agent != "claude" {
-		t.Fatalf("expected claude (hourly retry), got %s", agent)
+	if agent.Harness != "claude" {
+		t.Fatalf("expected claude (hourly retry), got %s", agent.Harness)
 	}
 	if nextRunIndex != 1 {
 		t.Fatalf("expected nextRunIndex 1, got %d", nextRunIndex)
@@ -989,7 +989,7 @@ func TestAllAgentsFrozenEndsRelay(t *testing.T) {
 		t.Fatalf("FreezeAgent codex failed: %v", err)
 	}
 
-	mix, err := ParseAgentMix([]string{"cc:1", "cx:1"})
+	mix, err := ParseAgentMix([]string{"cc:1", "cx:1"}, nil)
 	if err != nil {
 		t.Fatalf("ParseAgentMix failed: %v", err)
 	}

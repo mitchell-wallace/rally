@@ -58,21 +58,21 @@ func (r *Resilience) getState(agentType string) (AgentState, time.Time) {
 
 // SelectActiveAgent returns the agent to use for the next run, the new runIndex
 // to advance to, and whether the selected agent is undergoing an hourly retry.
-func (r *Resilience) SelectActiveAgent(mix AgentMix, runIndex int) (string, int, bool, error) {
+func (r *Resilience) SelectActiveAgent(mix AgentMix, runIndex int) (ResolvedAgent, int, bool, error) {
 	cycleLen := len(mix.Cycle)
 	if cycleLen == 0 {
-		return "claude", runIndex + 1, false, nil
+		return ResolvedAgent{Harness: "claude"}, runIndex + 1, false, nil
 	}
 
 	allFrozen := true
 	anyActive := false
 	uniqueAgents := map[string]struct{}{}
 	for _, a := range mix.Cycle {
-		if _, ok := uniqueAgents[a]; ok {
+		if _, ok := uniqueAgents[a.Harness]; ok {
 			continue
 		}
-		uniqueAgents[a] = struct{}{}
-		st, _ := r.getState(a)
+		uniqueAgents[a.Harness] = struct{}{}
+		st, _ := r.getState(a.Harness)
 		if st != StateFrozen {
 			allFrozen = false
 		}
@@ -81,14 +81,14 @@ func (r *Resilience) SelectActiveAgent(mix AgentMix, runIndex int) (string, int,
 		}
 	}
 	if allFrozen {
-		return "", runIndex, false, fmt.Errorf("all agents frozen")
+		return ResolvedAgent{}, runIndex, false, fmt.Errorf("all agents frozen")
 	}
 
 	// Look for an agent starting at runIndex
 	for i := 0; i < cycleLen; i++ {
 		idx := (runIndex + i) % cycleLen
 		a := mix.Cycle[idx]
-		st, since := r.getState(a)
+		st, since := r.getState(a.Harness)
 		switch st {
 		case StateActive:
 			return a, runIndex + i + 1, false, nil
@@ -100,9 +100,9 @@ func (r *Resilience) SelectActiveAgent(mix AgentMix, runIndex int) (string, int,
 	}
 
 	if !anyActive {
-		return "", runIndex, false, fmt.Errorf("all agents paused")
+		return ResolvedAgent{}, runIndex, false, fmt.Errorf("all agents paused")
 	}
-	return "", runIndex, false, fmt.Errorf("no active agent found")
+	return ResolvedAgent{}, runIndex, false, fmt.Errorf("no active agent found")
 }
 
 func (r *Resilience) PauseAgent(agentType string, relayID int) error {
