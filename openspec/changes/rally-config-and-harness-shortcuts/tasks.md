@@ -1,9 +1,11 @@
 ## 1. Schema extension
 
 - [ ] 1.1 Extend `internal/config/config_v2.go` (or split as `v3.go` if the diff is large) with `[defaults]`, `[microbeads]`, `[fallback]`, `[harness.*]` sections and a top-level `schema_version` int
-- [ ] 1.2 Preserve all existing v0.2.x flat fields at the file root (`claude_model`, `codex_model`, `gemini_model`, `opencode_model`, `data_dir`, `run_hooks_on_autocommit`)
-- [ ] 1.3 Define struct types for each new section; each field is optional with a sensible zero value; `[harness.<name>]` is a map keyed by harness name with `models` (string→string), `command` ([]string, optional), `model_flag` (*string, optional — pointer to distinguish unset from empty-string-positional), `output_strategy` (string, optional), `output_lines` (int, optional), `tail_stream` (string, optional, one of `stdout`/`stderr`/`combined`, default `combined`)
-- [ ] 1.4 Unit tests: minimal v0.2.x file still loads; file with new sections loads; missing sections default cleanly; `model_flag = ""` (empty string) and `model_flag` absent are distinguishable in the parsed struct
+- [ ] 1.2 Move per-harness default model fields under `[defaults]`: add `claude_model`, `codex_model`, `gemini_model`, `opencode_model` to the `[defaults]` struct alongside `iterations` (int) and `mix` (string)
+- [ ] 1.3 Keep root-level workspace runtime fields untouched: `data_dir`, `run_hooks_on_autocommit`, `laps_instructions`, plus the new `schema_version`
+- [ ] 1.4 Backwards-compat: continue to load root-level `claude_model` / `codex_model` / `gemini_model` / `opencode_model` if present (v0.2.x location); `[defaults]` takes precedence on conflict; emit a one-line deprecation note when a model value resolves from a root-level field; on every config write, emit only the new shape (no round-trip of root-level model fields)
+- [ ] 1.5 Define struct types for each new section; each field is optional with a sensible zero value; `[harness.<name>]` is a map keyed by harness name with `models` (string→string), `command` ([]string, optional), `model_flag` (*string, optional — pointer to distinguish unset from empty-string-positional), `output_strategy` (string, optional), `output_lines` (int, optional), `tail_stream` (string, optional, one of `stdout`/`stderr`/`combined`, default `combined`)
+- [ ] 1.6 Unit tests: minimal v0.2.x file (root-level model fields only) still loads with deprecation note; file with `[defaults]` model fields loads cleanly; conflict between root and `[defaults]` resolves to `[defaults]` with deprecation note; `model_flag = ""` (empty string) and `model_flag` absent are distinguishable in the parsed struct; written config has model fields under `[defaults]` only
 
 ## 2. Harness/model resolution
 
@@ -101,8 +103,16 @@ After 4.1–4.7 land, grep for residual references to the old shape. Each patter
 ## 6. Defaults loading
 
 - [ ] 6.1 At relay startup, read `[defaults].iterations` and `.mix` from config when the corresponding CLI flag is absent
-- [ ] 6.2 Validate that `[defaults].mix` parses cleanly through the resolver at config load (so a typo errors at startup, not at run-time)
-- [ ] 6.3 Unit tests: each default applied, each CLI flag overrides, malformed default errors at startup
+- [ ] 6.2 Bare-alias resolution for built-in harnesses uses `[defaults].<harness>_model` first; falls back to root-level `<harness>_model` (with the deprecation note from 1.4); falls back to the harness's hard-coded internal default if neither is set
+- [ ] 6.3 Validate that `[defaults].mix` parses cleanly through the resolver at config load (so a typo errors at startup, not at run-time)
+- [ ] 6.4 Unit tests: each default applied; CLI flag overrides; malformed default errors at startup; bare-alias resolution prefers `[defaults]` over root-level; bare-alias resolution falls through cleanly when nothing is set
+
+## 6a. `rally init` example config
+
+- [ ] 6a.1 Update `runInit` ([cmd/rally/main.go:236](cmd/rally/main.go#L236)) so the example `.rally/config.toml` it writes uses the new shape: `schema_version = 2`, a populated `[defaults]` section with `iterations` and the four `<harness>_model` keys, and root-level runtime fields (`data_dir`, `run_hooks_on_autocommit`, `laps_instructions`)
+- [ ] 6a.2 Existing init tests at [cmd/rally/main_test.go:25,58](cmd/rally/main_test.go#L25-L58) reference the v0.2.x flat shape — update assertions to expect the new `[defaults]` shape
+- [ ] 6a.3 Confirm the existing "do not overwrite an existing config" behaviour is preserved (the new template only writes when no config exists)
+- [ ] 6a.4 Unit test: `rally init` in a fresh workspace writes a config with `[defaults]` populated and `schema_version = 2`
 
 ## 7. Microbeads instructions content source
 
@@ -139,7 +149,10 @@ After 4.1–4.7 land, grep for residual references to the old shape. Each patter
 - [ ] 11.3 End-to-end: same workspace with a bare `droid` alias (no model resolved) — model not appended, harness uses its own default
 - [ ] 11.4 End-to-end: harness with `model_flag = ""` (positional) — model appended without a flag
 - [ ] 11.5 End-to-end: harness with `model_flag` unset and a model resolved — model not appended, log shows the informational note
-- [ ] 11.6 Backwards-compat: workspace with only v0.2.x flat fields — loads cleanly with no warnings; bare alias `cc` in mix uses `claude_model` flat field as the model
+- [ ] 11.6 Backwards-compat: workspace with v0.2.x root-level `claude_model` (no `[defaults]`) — loads, bare alias `cc` resolves through the root-level field, deprecation note logged once
+- [ ] 11.6a New shape: workspace with `[defaults].claude_model` only — loads with no deprecation note, bare alias `cc` resolves through `[defaults]`
+- [ ] 11.6b Conflict: workspace with both root-level `claude_model = "X"` and `[defaults].claude_model = "Y"` — `Y` wins, deprecation note logged
+- [ ] 11.6c `rally init` writes a fresh config with `[defaults]` populated and `schema_version = 2`
 - [ ] 11.7 Resume: a relay started with `--mix "claude,op:z"` is killed and resumed; the stored label re-parses through the resolver and produces an identical typed cycle
 - [ ] 11.8 Did-you-mean: typo in a `harness:model-name` reference produces an error with closest matches scoped to that harness
 - [ ] 11.9 Numeric-only model name produces a clear error at config load

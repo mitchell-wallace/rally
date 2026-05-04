@@ -98,12 +98,17 @@ Built-in harnesses (`cc`/`cx`/`ge`/`op`) SHALL NOT declare `command`, `model_fla
 
 **Why**: The fallback exists specifically because there is no bead. Injecting it alongside a real bead body would dilute the bead's instructions and confuse the agent. Scoping fallback to "no bead" preserves the bead's primacy when one exists.
 
-### Preserve flat fields at root; new sections are purely additive
-**Chosen**: Existing fields (`claude_model`, `codex_model`, `gemini_model`, `opencode_model`, `data_dir`, `run_hooks_on_autocommit`) stay at the file root. They continue to act as the *unnamed default model* for each built-in harness — referenced by a bare alias in a mix (`cc` with no `:model-name` suffix). New sections (`[defaults]`, `[microbeads]`, `[fallback]`, `[harness.*]`) live alongside them. CLI flags continue to override config values.
+### Move per-harness default model fields under `[defaults]`; runtime fields stay at root
+**Chosen**: `claude_model` / `codex_model` / `gemini_model` / `opencode_model` move under `[defaults]` alongside `iterations` and `mix`. They continue to act as the *unnamed default model* for each built-in harness — referenced by a bare alias in a mix. The remaining root-level fields (`data_dir`, `run_hooks_on_autocommit`, `laps_instructions`) stay at the root: they are workspace runtime knobs, not per-harness defaults, and grouping them under a `[runtime]` section would be churn for no clarity gain.
 
-**Alternative considered**: Move all flat fields under `[harness.cc] default_model = "..."` shape.
+For backwards-compat, v0.5.0 also reads root-level `claude_model` / `codex_model` / `gemini_model` / `opencode_model` if present (the v0.2.x location). When a value resolves from a root-level field, rally logs a one-line deprecation note pointing the operator at `[defaults]`. `[defaults]` takes precedence on conflict. Every config write emits the new shape.
 
-**Why**: Existing `.rally/config.toml` files in the wild would all break, costing every user a manual migration for a purely cosmetic gain. The flat fields work fine; new sections expand the surface without disturbing the established part of it.
+The `rally init` template ([cmd/rally/main.go:236](cmd/rally/main.go#L236)) is updated to use the new shape so first-time users land on the canonical layout. The init template SHALL include a populated `[defaults]` section with all four model fields and an `iterations` placeholder, plus the runtime fields at the root.
+
+**Alternative considered (a)**: Keep flat fields at root for backwards-compat, accept the asymmetry between "default models live at root" and "named models live under `[harness.<name>.models]`."
+**Alternative considered (b)**: Move *all* flat fields under sections (`[runtime]` for `data_dir` etc.).
+
+**Why**: The v0.5.0 schema introduces enough new structure (`[defaults]`, `[microbeads]`, `[fallback]`, `[harness.*]`) that operators will be reading and editing it anyway. Leaving the four model defaults at root creates a cognitive split — "the *default* model for claude is at the root, but *named* models are under `[harness.cc.models]`" — that's hard to reason about. Moving them under `[defaults]` puts every model-related knob in two places (per-harness defaults under `[defaults]`, named alternatives under `[harness.<name>.models]`) with a clean rule. The backwards-compat read of root-level fields is cheap (a few lines) and keeps existing in-the-wild configs working without manual migration; the deprecation note nudges users to clean up at their own pace. Moving runtime fields too would be churn — they have no relationship to the model surface and would just rearrange config for the sake of it.
 
 ### Add a `schema_version` field but only warn on mismatch in v0.5.0
 **Chosen**: The TOML root gains a `schema_version = 2` field. v0.5.0 reads it; if absent, treat as version 1 and accept the file silently. On mismatch with what rally expects, log a warning but proceed. v0.6.0+ may use this to block load.
@@ -130,14 +135,15 @@ Built-in harnesses (`cc`/`cx`/`ge`/`op`) SHALL NOT declare `command`, `model_fla
 
 ## Migration Plan
 
-1. **Schema additions**: extend `internal/config/config_v2.go` (or split as `v3.go` if the diff is sizeable) with `[defaults]`, `[microbeads]`, `[fallback]`, `[harness.*]` sections and `schema_version`. Existing fields untouched. New fields default to zero values when absent.
+1. **Schema additions**: extend `internal/config/config_v2.go` (or split as `v3.go` if the diff is sizeable) with `[defaults]` (including the four model fields), `[microbeads]`, `[fallback]`, `[harness.*]` sections and `schema_version`. Root-level model fields stay loadable for backwards-compat (with a deprecation note). Runtime fields (`data_dir`, `run_hooks_on_autocommit`, `laps_instructions`) untouched. New fields default to zero values when absent.
 2. **Resolution layer**: add `ResolveAgent(spec string) (harness, model string, err error)` to the config layer. Mix parsing, route parsing (v0.6.0), and rotation parsing (v0.7.0) all funnel through this single resolver.
 3. **AgentMix re-typing**: replace `AgentMix.Cycle []string` with a slice of resolved-agent records. Update `AgentForRun` and every caller. Land this in the same change as the resolver wiring.
 4. **Mix parsing extension**: update the relay-runner's mix parser to call the new resolver. Existing `cc:2 cx:1` weighted form continues to work; `harness:model-name` entries resolve via `[harness.<harness>.models]`.
 5. **User-harness executor**: add a generic harness executor in `internal/agent/` that runs `command` with `$PROMPT` substitution (or stdin), appends `[model_flag, model]` (or `[model]` if `model_flag = ""`) when a model is resolved, and applies the tail-N output parser using `tail_stream`. Wire it into the executor selection so a `harness.<name>` with a `command` field dispatches there instead of the built-in path.
 6. **Fallback wiring**: extend the prompt-building path so that no-backend mode + no-ready-bead substitutes `[fallback].instructions_file` content (or built-in default) for the bead body.
-7. **Defaults wiring**: read `[defaults].iterations` and `.mix` at relay startup; CLI flags continue to override.
-8. **Schema version handshake**: emit `schema_version = 2` on every write; warn on read-time mismatch.
+7. **Defaults wiring**: read `[defaults].iterations`, `.mix`, and the four `[defaults].<harness>_model` fields at relay startup. Bare-alias resolution uses `[defaults].<harness>_model` first, falls back to root-level `<harness>_model` (with a deprecation note), then to the harness's hard-coded internal default. CLI flags continue to override.
+8. **Init template**: update `runInit` ([cmd/rally/main.go:236](cmd/rally/main.go#L236)) so the example `.rally/config.toml` it writes uses the new `[defaults]` shape and includes `schema_version = 2`.
+9. **Schema version handshake**: emit `schema_version = 2` on every write; warn on read-time mismatch.
 
 Rollback: revert v0.5.0. Existing `.rally/config.toml` files keep working since the new sections were additive. Workspaces that adopted named models or user-defined harnesses would need to expand them back to raw strings or lose access to those harnesses respectively — the release notes call this out.
 

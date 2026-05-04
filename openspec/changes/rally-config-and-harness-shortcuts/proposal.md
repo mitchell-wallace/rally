@@ -56,13 +56,35 @@ This change extends the existing TOML schema with named per-harness models, repo
 
 ### Repo-local config (`.rally/config.toml`)
 
-- `[defaults]`: `iterations` (int), `mix` (string). No `verbose` field — there is no corresponding CLI flag.
+- `[defaults]`: `iterations` (int), `mix` (string), `claude_model` / `codex_model` / `gemini_model` / `opencode_model` (string) — these four are the unnamed default model for each built-in harness, referenced by a bare alias in a mix.
 - `[microbeads]`: `instructions_file = ".rally/microbeads_instructions.md"` — sources microbeads-instruction content rally injects when in microbeads-backed mode. Per v0.4.0, injection is unconditional in microbeads-backed mode and absent in no-backend mode; there is no toggle.
 - `[fallback]`: `instructions_file = ".rally/fallback.md"` — used in no-backend mode when no ready bead exists.
 - `[harness.*]`: per-harness configuration (named models, optionally `command`/`model_flag`/output strategy/tail stream for user harnesses).
 - Top-level `schema_version` int (`2` in v0.5.0); absent treated as version 1, mismatch warns.
-- Existing flat fields (`claude_model`, `codex_model`, `gemini_model`, `opencode_model`, `data_dir`, `run_hooks_on_autocommit`) are preserved at the file root and continue to act as the unnamed default model for each built-in harness. New sections are additive.
+- Top-level `data_dir` and `run_hooks_on_autocommit` (and `laps_instructions`) remain at the root — these are workspace runtime knobs, not per-harness model defaults, so the move does not apply to them.
+- Backwards-compat: v0.5.0 also reads root-level `claude_model` / `codex_model` / `gemini_model` / `opencode_model` if present (the v0.2.x location). When a value comes from a root-level field, rally logs a one-line deprecation note pointing to `[defaults]`. `[defaults]` takes precedence on conflict. Every config write emits the new shape with `schema_version = 2`.
 - CLI flags continue to override config values.
+
+### Example config on `rally init`
+
+`rally init` writes `.rally/config.toml` when none exists. The template is updated to use the new shape so first-time users land on the canonical layout:
+
+```toml
+schema_version = 2
+
+[defaults]
+iterations     = 25
+# mix          = "claude,codex"
+claude_model   = ""
+codex_model    = ""
+gemini_model   = ""
+opencode_model = ""
+
+# Workspace runtime
+data_dir                = ""
+run_hooks_on_autocommit = false
+laps_instructions       = ""
+```
 
 ### Fallback instructions
 
@@ -86,7 +108,8 @@ This change extends the existing TOML schema with named per-harness models, repo
 - Extends `internal/config/config_v2.go` schema (or splits into `v3.go` if the diff warrants).
 - Adds a generic harness executor in `internal/agent/` that runs a templated command and applies the tail-N output parser with configurable stream selection.
 - `AgentMix.Cycle []string` is replaced with a typed slice of resolved-agent records. Every caller of the cycle is updated.
-- Existing `.rally/config.toml` files continue to load; new sections default to zero/sensible defaults.
+- Updates `runInit` ([cmd/rally/main.go:236](cmd/rally/main.go#L236)) so the example config it writes uses the new `[defaults]`-shaped layout including the four model fields.
+- Existing `.rally/config.toml` files continue to load; root-level `claude_model`/`codex_model`/`gemini_model`/`opencode_model` still resolve (with a deprecation note); new sections default to zero/sensible defaults.
 - v0.4.0 alignment: no microbeads-instruction toggle (injection is unconditional in microbeads-backed mode); legacy `Beads` flat field already removed in v0.4.0.
 - **Depends on v0.4.0 (microbeads-first-class) landing first** — no-backend / microbeads-backed mode detection and the `Beads`-field removal originate there.
 - v0.6.0 dependency: role routing references `harness:model-name` in route entries (and rolls `routes.yml` into the same TOML).
