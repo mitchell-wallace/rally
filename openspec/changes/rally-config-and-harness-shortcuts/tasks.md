@@ -40,13 +40,13 @@
 
 ## 5. AgentMix selector and runner setup
 
-- [ ] 5.1 Change `SelectActiveAgent(mix AgentMix, runIndex int) (string, int, bool, error)` signature to return `ResolvedAgent` instead of `string` (4-tuple becomes `(ResolvedAgent, int, bool, error)`)
-- [ ] 5.2 Inside `SelectActiveAgent` ([resilience.go:62-105](internal/relay/resilience.go#L62-L105)): the `uniqueAgents map[string]struct{}` and `r.getState(a)` calls work on a "freezable unit." Decide: does freezing apply per-harness (across all models) or per-(harness, model) tuple? Recommendation: per-harness for v0.5.0 (matches today's semantics; if claude is rate-limited, no model under it is going to succeed). Use `a.Harness` as the state key.
-- [ ] 5.3 Update `r.getState(a)` calls in resilience.go (lines 75, 91) — pass `a.Harness`, not the whole record
-- [ ] 5.4 Update `PauseAgent` / `UnpauseAgent` callers in `runner.go` (lines 223, 233) to pass `agent.Harness`
-- [ ] 5.5 Line 74 `var mix AgentMix` — type unchanged but cycle contents flip
-- [ ] 5.6 Lines 79, 89, 96 `ParseAgentMix(...)` calls — add the new `resolver` argument
-- [ ] 5.7 Lines 83, 100, 116 use `mix.Label` — verify the new label format round-trips through `ParseAgentMix(strings.Fields(relay.AgentMix), resolver)` at line 89
+- [x] 5.1 Change `SelectActiveAgent(mix AgentMix, runIndex int) (string, int, bool, error)` signature to return `ResolvedAgent` instead of `string` (4-tuple becomes `(ResolvedAgent, int, bool, error)`)
+- [x] 5.2 Inside `SelectActiveAgent` ([resilience.go:62-105](internal/relay/resilience.go#L62-L105)): the `uniqueAgents map[string]struct{}` and `r.getState(a)` calls work on a "freezable unit." Decide: does freezing apply per-harness (across all models) or per-(harness, model) tuple? Recommendation: per-harness for v0.5.0 (matches today's semantics; if claude is rate-limited, no model under it is going to succeed). Use `a.Harness` as the state key.
+- [x] 5.3 Update `r.getState(a)` calls in resilience.go (lines 75, 91) — pass `a.Harness`, not the whole record
+- [x] 5.4 Update `PauseAgent` / `UnpauseAgent` callers in `runner.go` (lines 223, 233) to pass `agent.Harness`
+- [x] 5.5 Line 74 `var mix AgentMix` — type unchanged but cycle contents flip
+- [x] 5.6 Lines 79, 89, 96 `ParseAgentMix(...)` calls — add the new `resolver` argument
+- [x] 5.7 Lines 83, 100, 116 use `mix.Label` — verify the new label format round-trips through `ParseAgentMix(strings.Fields(relay.AgentMix), resolver)` at line 89
 
 ## 6. AgentMix runner completion
 
