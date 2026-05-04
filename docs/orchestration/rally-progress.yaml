@@ -1,13 +1,5 @@
 version: 1
-updated_at: "2026-05-04T23:53:09Z"
-active_batch:
-    agent_mix:
-        - op
-    batch_id: 4
-    completed_iterations: 2
-    ended_at: ""
-    started_at: "2026-05-04T23:13:33Z"
-    target_iterations: 3
+updated_at: "2026-05-04T23:56:00Z"
 history_window: 50
 recent_sessions:
     - session_id: 1
@@ -100,3 +92,21 @@ recent_sessions:
       ended_at: "2026-05-04T23:53:09Z"
       runtime_seconds: 249
       transcript_path: /home/agent/.local/share/rally/sessions/session-8/terminal.log
+    - session_id: 9
+      batch_id: 4
+      iteration_index: 3
+      agent: opencode
+      status: completed
+      started_at: "2026-05-04T23:53:09Z"
+      ended_at: "2026-05-04T23:56:00Z"
+      runtime_seconds: 171
+      summary: 'Phase 6 complete: executeTry now takes ResolvedAgent instead of string, Model field added to RunOptions, model plumbed from picked ResolvedAgent into opts'
+      files_touched:
+        - internal/agent/executor.go
+        - internal/relay/runner.go
+        - openspec/changes/rally-config-and-harness-shortcuts/tasks.md
+      commits:
+        - 0be87d8
+      follow_ups:
+        - 'Phase 7: Update built-in executors to read opts.Model, and generic executor integration'
+      transcript_path: /home/agent/.local/share/rally/sessions/session-9/terminal.log
