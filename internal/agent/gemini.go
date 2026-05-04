@@ -27,7 +27,11 @@ func (g *GeminiExecutor) Execute(ctx context.Context, opts RunOptions) (*TryResu
 
 	cmd := exec.CommandContext(ctx, "gemini", args...)
 	cmd.Stderr = nil // discard noisy stderr
+	SetProcessGroup(cmd)
 	out, err := cmd.Output()
+	if opts.LogPath != "" {
+		_ = WriteTryLog(opts.LogPath, out)
+	}
 	if err != nil {
 		return nil, fmt.Errorf("gemini exec failed: %w\noutput: %s", err, string(out))
 	}

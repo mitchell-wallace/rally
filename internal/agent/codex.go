@@ -58,7 +58,11 @@ func (c *CodexExecutor) Execute(ctx context.Context, opts RunOptions) (*TryResul
 	args = append(args, "--output-schema", schemaPath, "-o", reportPath, prompt)
 
 	cmd := exec.CommandContext(ctx, "codex", args...)
+	SetProcessGroup(cmd)
 	out, err := cmd.CombinedOutput()
+	if opts.LogPath != "" {
+		_ = WriteTryLog(opts.LogPath, out)
+	}
 	if err != nil {
 		os.Remove(reportPath)
 		return nil, fmt.Errorf("codex exec failed: %w\noutput: %s", err, string(out))

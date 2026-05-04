@@ -29,7 +29,11 @@ func (o *OpenCodeExecutor) Execute(ctx context.Context, opts RunOptions) (*TryRe
 
 	cmd := exec.CommandContext(ctx, "opencode", args...)
 	cmd.Env = append(os.Environ(), `OPENCODE_PERMISSION={"*":"allow"}`)
+	SetProcessGroup(cmd)
 	out, err := cmd.CombinedOutput()
+	if opts.LogPath != "" {
+		_ = WriteTryLog(opts.LogPath, out)
+	}
 	if err != nil {
 		return nil, fmt.Errorf("opencode exec failed: %w\noutput: %s", err, string(out))
 	}

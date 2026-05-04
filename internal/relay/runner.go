@@ -14,7 +14,10 @@ import (
 
 	"github.com/mitchell-wallace/rally/internal/agent"
 	"github.com/mitchell-wallace/rally/internal/gitx"
+	"github.com/mitchell-wallace/rally/internal/keyboard"
+	"github.com/mitchell-wallace/rally/internal/monitor"
 	"github.com/mitchell-wallace/rally/internal/store"
+	"github.com/mitchell-wallace/rally/internal/style"
 )
 
 type Config struct {
@@ -34,8 +37,10 @@ type Runner struct {
 	cfg        Config
 	executors  map[string]agent.Executor
 	stopFlag   atomic.Bool
+	skipFlag   atomic.Bool
 	log        io.WriteCloser
 	resilience *Resilience
+	relayStart time.Time
 }
 
 func NewRunner(s *store.Store, cfg Config, executors map[string]agent.Executor) *Runner {
@@ -99,6 +104,7 @@ func (r *Runner) Run(ctx context.Context) error {
 	}()
 
 	fmt.Fprintf(log, "relay %d started (target %d iterations, mix: %s)\n", relay.ID, relay.TargetIterations, mix.Label)
+	r.relayStart = time.Now()
 
 	resilience := r.resilience
 	if resilience == nil {
@@ -188,6 +194,20 @@ func (r *Runner) Run(ctx context.Context) error {
 			break
 		}
 
+		// If skipped, don't pause the agent — just advance rotation
+		if r.skipFlag.Load() {
+			r.skipFlag.Store(false)
+			runIndex = nextRunIndex
+			relay.LastTryID = r.store.NextTryID() - 1
+			if relay.FirstTryID == 0 {
+				relay.FirstTryID = relay.LastTryID
+			}
+			if err := r.store.UpdateRelay(*relay); err != nil {
+				return err
+			}
+			continue
+		}
+
 		if isHourlyRetry {
 			if success {
 				if err := resilience.UnpauseAgent(agentType, relay.ID); err != nil {
@@ -253,6 +273,25 @@ func (r *Runner) Run(ctx context.Context) error {
 		fmt.Fprintf(log, "relay %d completed\n", relay.ID)
 	}
 
+	// Print relay summary
+	totalRuns := relay.CompletedIterations
+	if totalRuns > 0 {
+		passCount := 0
+		failCount := 0
+		for _, tr := range r.store.AllTries() {
+			if tr.RelayID == relay.ID {
+				if tr.Completed {
+					passCount++
+				} else {
+					failCount++
+				}
+			}
+		}
+		totalDuration := time.Since(r.relayStart)
+		summary := style.RenderSummary(totalRuns, passCount, failCount, totalDuration)
+		fmt.Println(summary)
+	}
+
 	return nil
 }
 
@@ -305,9 +344,6 @@ func (r *Runner) runOne(ctx context.Context, relay *store.RelayRecord, runIndex 
 		if ctx.Err() != nil {
 			return false, false, false, ctx.Err()
 		}
-
-		// Graceful stop: don't start a new try if stop requested.
-		// Current try always completes before this check is reached again.
 		if r.stopFlag.Load() {
 			return false, false, true, nil
 		}
@@ -330,10 +366,82 @@ func (r *Runner) runOne(ctx context.Context, relay *store.RelayRecord, runIndex 
 			return false, false, false, fmt.Errorf("write current_task.md: %w", err)
 		}
 
+		tryLogPath := filepath.Join(r.cfg.DataDir, "tries", fmt.Sprintf("try-%d.log", r.store.NextTryID()))
+		_ = os.MkdirAll(filepath.Dir(tryLogPath), 0o755)
+		opts.LogPath = tryLogPath
+
 		headBefore, _ := r.headHash()
 		startedAt := time.Now().UTC()
-		result, execErr := r.executeTry(ctx, agentType, opts)
+
+		totalRuns := relay.TargetIterations
+		header := style.RenderHeader(runIndex+1, totalRuns, agentType, attempt, startedAt)
+		fmt.Println(header)
+		fmt.Println("[Ctrl+S skip]  [Ctrl+P pause]  [Ctrl+X stop]  [Ctrl+C quit]")
+
+		kb := keyboard.NewKeyboard(os.Stdin, os.Stdout)
+		_ = kb.SetRawMode()
+		kbCtx, kbCancel := context.WithCancel(ctx)
+		actionCh := kb.Start(kbCtx)
+
+		mon := monitor.NewMonitor(r.cfg.WorkspaceDir, tryLogPath, 0)
+		mon.Start(os.Stdout)
+
+		type tryResult struct {
+			result *agent.TryResult
+			err    error
+		}
+		tryCh := make(chan tryResult, 1)
+		attemptCtx, cancelAttempt := context.WithCancel(ctx)
+		go func() {
+			res, err := r.executeTry(attemptCtx, agentType, opts)
+			tryCh <- tryResult{res, err}
+		}()
+
+		var result *agent.TryResult
+		var execErr error
+		actionTaken := false
+	actionLoop:
+		for {
+			select {
+			case res := <-tryCh:
+				result = res.result
+				execErr = res.err
+				break actionLoop
+			case action := <-actionCh:
+				switch action {
+				case keyboard.ActionSkip:
+					cancelAttempt()
+					r.skipFlag.Store(true)
+					actionTaken = true
+					res := <-tryCh
+					result = res.result
+					execErr = res.err
+					break actionLoop
+				case keyboard.ActionPause:
+					cancelAttempt()
+					actionTaken = true
+					res := <-tryCh
+					result = res.result
+					execErr = res.err
+					break actionLoop
+				case keyboard.ActionStop, keyboard.ActionQuit:
+					r.stopFlag.Store(true)
+				}
+			}
+		}
+
+		mon.Stop()
+		kbCancel()
+		_ = kb.Stop()
+
 		endedAt := time.Now().UTC()
+
+		footerSuccess := execErr == nil && result != nil && result.Completed
+		runtime := endedAt.Sub(startedAt)
+		dirtyCount, _ := monitor.GitDirtyCount(r.cfg.WorkspaceDir)
+		footer := style.RenderFooter(footerSuccess, runtime, dirtyCount, "")
+		fmt.Println(footer)
+
 		headAfter, _ := r.headHash()
 
 		commitHash := ""
@@ -351,12 +459,10 @@ func (r *Runner) runOne(ctx context.Context, relay *store.RelayRecord, runIndex 
 			}
 		}
 
-		// Commit Rally state after each try
 		if err := gitx.CommitRallyState(r.cfg.WorkspaceDir); err != nil {
 			fmt.Fprintf(log, "relay %d run %d attempt %d rally state commit warning: %v\n", relay.ID, runIndex+1, attempt, err)
 		}
 
-		// Failure detection
 		failed := false
 		if execErr != nil {
 			failed = true
@@ -369,8 +475,8 @@ func (r *Runner) runOne(ctx context.Context, relay *store.RelayRecord, runIndex 
 				hasChanges = dirty
 			}
 			noFileChanges := !hasChanges
-			runtime := endedAt.Sub(startedAt)
-			if noFileChanges && runtime < 3*time.Minute {
+			tryRuntime := endedAt.Sub(startedAt)
+			if noFileChanges && tryRuntime < 3*time.Minute {
 				failed = true
 			}
 		}
@@ -388,6 +494,7 @@ func (r *Runner) runOne(ctx context.Context, relay *store.RelayRecord, runIndex 
 			StartedAt:     startedAt.Format(time.RFC3339),
 			EndedAt:       endedAt.Format(time.RFC3339),
 			AttemptNumber: attempt,
+			LogPath:       tryLogPath,
 		}
 		if result != nil {
 			tryRecord.Summary = result.Summary
@@ -402,6 +509,25 @@ func (r *Runner) runOne(ctx context.Context, relay *store.RelayRecord, runIndex 
 		}
 		if err := r.store.AppendTry(tryRecord); err != nil {
 			return false, false, false, err
+		}
+
+		if actionTaken {
+			if r.stopFlag.Load() {
+				return false, false, true, nil
+			}
+			if r.skipFlag.Load() {
+				return false, false, false, nil
+			}
+			fmt.Println("Paused — press Enter to resume")
+			fmt.Scanln()
+			if result != nil {
+				previousSummary = result.Summary
+				lastResult = result
+			} else {
+				previousSummary = ""
+				lastResult = &agent.TryResult{Completed: false}
+			}
+			continue
 		}
 
 		if !failed {

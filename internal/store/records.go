@@ -14,6 +14,7 @@ type TryRecord struct {
 	StartedAt     string   `json:"started_at"`
 	EndedAt       string   `json:"ended_at"`
 	AttemptNumber int      `json:"attempt_number"`
+	LogPath       string   `json:"log_path,omitempty"`
 }
 
 // MessageRecord represents an inbox message that can be consumed by a run.

@@ -27,7 +27,11 @@ func (c *ClaudeExecutor) Execute(ctx context.Context, opts RunOptions) (*TryResu
 	}
 
 	cmd := exec.CommandContext(ctx, "claude", args...)
+	SetProcessGroup(cmd)
 	out, err := cmd.CombinedOutput()
+	if opts.LogPath != "" {
+		_ = WriteTryLog(opts.LogPath, out)
+	}
 	if err != nil {
 		return nil, fmt.Errorf("claude exec failed: %w\noutput: %s", err, string(out))
 	}
