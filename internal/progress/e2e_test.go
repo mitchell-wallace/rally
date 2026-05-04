@@ -139,8 +139,8 @@ func TestE2E_NoBackendComplete(t *testing.T) {
 
 	cmd := NewProgressCmd()
 	cmd.SetArgs([]string{
-		"--complete",
 		"--summary", "Did Y",
+		"--followup", "Next step",
 	})
 	if err := cmd.Execute(); err != nil {
 		t.Fatalf("Execute error: %v", err)

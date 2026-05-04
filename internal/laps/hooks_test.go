@@ -256,10 +256,14 @@ func TestHandoffHookScript(t *testing.T) {
 
 func TestWrapupHookScriptRoutesToComplete(t *testing.T) {
 	tmp := t.TempDir()
+	origWD, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
 	if err := os.Chdir(tmp); err != nil {
 		t.Fatalf("chdir: %v", err)
 	}
-	defer os.Chdir("/workspace")
+	defer os.Chdir(origWD)
 
 	// Create state file with handoff_state=0.
 	rallyDir := filepath.Join(tmp, ".rally")
@@ -284,7 +288,7 @@ func TestWrapupHookScriptRoutesToComplete(t *testing.T) {
 	t.Setenv("PATH", mockDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 	t.Setenv("MOCK_LOG", logFile)
 
-	scriptPath := filepath.Join("/workspace", "internal", "laps", "laps-wrapup-hook.sh")
+	scriptPath := filepath.Join(origWD, "laps-wrapup-hook.sh")
 	out, err := exec.Command("/bin/sh", scriptPath, "--summary", "test summary").CombinedOutput()
 	if err != nil {
 		t.Fatalf("hook script failed: %v\n%s", err, out)
@@ -309,10 +313,14 @@ func TestWrapupHookScriptRoutesToComplete(t *testing.T) {
 
 func TestWrapupHookScriptRoutesToHandoff(t *testing.T) {
 	tmp := t.TempDir()
+	origWD, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
 	if err := os.Chdir(tmp); err != nil {
 		t.Fatalf("chdir: %v", err)
 	}
-	defer os.Chdir("/workspace")
+	defer os.Chdir(origWD)
 
 	// Create state file with handoff_state=1.
 	rallyDir := filepath.Join(tmp, ".rally")
@@ -337,7 +345,7 @@ func TestWrapupHookScriptRoutesToHandoff(t *testing.T) {
 	t.Setenv("PATH", mockDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 	t.Setenv("MOCK_LOG", logFile)
 
-	scriptPath := filepath.Join("/workspace", "internal", "laps", "laps-wrapup-hook.sh")
+	scriptPath := filepath.Join(origWD, "laps-wrapup-hook.sh")
 	out, err := exec.Command("/bin/sh", scriptPath, "--summary", "blocked").CombinedOutput()
 	if err != nil {
 		t.Fatalf("hook script failed: %v\n%s", err, out)

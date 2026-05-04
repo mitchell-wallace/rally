@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/mitchell-wallace/rally/internal/agent"
+	"github.com/mitchell-wallace/rally/internal/laps"
 	"github.com/mitchell-wallace/rally/internal/progress"
 	"github.com/mitchell-wallace/rally/internal/store"
 )
@@ -97,6 +98,116 @@ func TestInstructionsPassedToExecutor(t *testing.T) {
 	}
 	if receivedTaskPrompt != "Build user auth." {
 		t.Errorf("expected task prompt 'Build user auth.', got %q", receivedTaskPrompt)
+	}
+}
+
+func TestLapsHeadTaskPassedToExecutor(t *testing.T) {
+	workspaceDir := t.TempDir()
+	rallyDir := filepath.Join(workspaceDir, ".rally")
+	os.MkdirAll(rallyDir, 0o755)
+	initRepo(t, workspaceDir)
+
+	s := newTestStore(t, rallyDir)
+	var receivedTaskName string
+	var receivedRequirements string
+	var receivedTaskPrompt string
+	changeCounter := 0
+	exec := &funcExecutor{
+		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+			receivedTaskName = opts.TaskName
+			receivedRequirements = opts.TaskRequirements
+			receivedTaskPrompt = opts.TaskPrompt
+			changeCounter++
+			f, _ := os.OpenFile(filepath.Join(workspaceDir, "changes.txt"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+			fmt.Fprintf(f, "change %d\n", changeCounter)
+			f.Close()
+			return &agent.TryResult{Completed: true}, nil
+		},
+	}
+	executors := map[string]agent.Executor{"claude": exec}
+
+	oldHeadPull := headPullLap
+	headPullLap = func(context.Context, string) (laps.Lap, error) {
+		return laps.Lap{
+			ID:          "lap-42",
+			Title:       "Implement auth",
+			Description: "Add login and session handling.",
+			Assignee:    "alice",
+		}, nil
+	}
+	defer func() { headPullLap = oldHeadPull }()
+
+	r := NewRunner(s, Config{
+		WorkspaceDir:     workspaceDir,
+		DataDir:          t.TempDir(),
+		AgentMixSpecs:    []string{"cc:1"},
+		TargetIterations: 1,
+		LapsEnabled:      true,
+		TaskPrompt:       "fallback prompt",
+	}, executors)
+
+	if err := r.Run(context.Background()); err != nil {
+		t.Fatalf("run failed: %v", err)
+	}
+
+	if receivedTaskName != "Implement auth" {
+		t.Errorf("expected task name from lap, got %q", receivedTaskName)
+	}
+	if receivedTaskPrompt != "Add login and session handling." {
+		t.Errorf("expected task prompt from lap, got %q", receivedTaskPrompt)
+	}
+	if receivedRequirements != "Lap ID: lap-42\nAssignee: alice" {
+		t.Errorf("expected lap requirements, got %q", receivedRequirements)
+	}
+}
+
+func TestLapsHeadTaskFallsBackToConfiguredPrompt(t *testing.T) {
+	workspaceDir := t.TempDir()
+	rallyDir := filepath.Join(workspaceDir, ".rally")
+	os.MkdirAll(rallyDir, 0o755)
+	initRepo(t, workspaceDir)
+
+	s := newTestStore(t, rallyDir)
+	var receivedTaskName string
+	var receivedTaskPrompt string
+	changeCounter := 0
+	exec := &funcExecutor{
+		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+			receivedTaskName = opts.TaskName
+			receivedTaskPrompt = opts.TaskPrompt
+			changeCounter++
+			f, _ := os.OpenFile(filepath.Join(workspaceDir, "changes.txt"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+			fmt.Fprintf(f, "change %d\n", changeCounter)
+			f.Close()
+			return &agent.TryResult{Completed: true}, nil
+		},
+	}
+	executors := map[string]agent.Executor{"claude": exec}
+
+	oldHeadPull := headPullLap
+	headPullLap = func(context.Context, string) (laps.Lap, error) {
+		return laps.NoLap, nil
+	}
+	defer func() { headPullLap = oldHeadPull }()
+
+	r := NewRunner(s, Config{
+		WorkspaceDir:     workspaceDir,
+		DataDir:          t.TempDir(),
+		AgentMixSpecs:    []string{"cc:1"},
+		TargetIterations: 1,
+		LapsEnabled:      true,
+		TaskPrompt:       "fallback prompt",
+	}, executors)
+
+	if err := r.Run(context.Background()); err != nil {
+		t.Fatalf("run failed: %v", err)
+	}
+
+	if receivedTaskName != "relay run" {
+		t.Errorf("expected fallback task name, got %q", receivedTaskName)
+	}
+	if receivedTaskPrompt != "fallback prompt" {
+		t.Errorf("expected fallback task prompt, got %q", receivedTaskPrompt)
 	}
 }
 func TestAgentCyclingDeterminism(t *testing.T) {

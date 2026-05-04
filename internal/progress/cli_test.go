@@ -109,6 +109,7 @@ func TestProgressSetHandoff(t *testing.T) {
 }
 
 func TestProgressComplete(t *testing.T) {
+	installFakeLaps(t)
 	tmp := setupTempWorkspace(t)
 	enableLapsInWorkspace(t, tmp)
 	overrideWorkspaceDir(t, tmp)
@@ -210,6 +211,7 @@ func TestProgressHandoff(t *testing.T) {
 }
 
 func TestProgressWrapupNoHandoff(t *testing.T) {
+	installFakeLaps(t)
 	tmp := setupTempWorkspace(t)
 	enableLapsInWorkspace(t, tmp)
 	overrideWorkspaceDir(t, tmp)
@@ -314,6 +316,35 @@ func TestProgressNoAction(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "no action specified") {
 		t.Errorf("error = %q, want no action specified", err.Error())
+	}
+}
+
+func TestProgressPublicCompleteShorthand(t *testing.T) {
+	tmp := setupTempWorkspace(t)
+	overrideWorkspaceDir(t, tmp)
+
+	cmd := NewProgressCmd()
+	cmd.SetArgs([]string{
+		"--summary", "Did Y",
+		"--followup", "Next step",
+	})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Execute error: %v", err)
+	}
+
+	pl, err := LoadProgress(tmp)
+	if err != nil {
+		t.Fatalf("LoadProgress error: %v", err)
+	}
+	if len(pl.RecentRuns) != 1 {
+		t.Fatalf("len(RecentRuns) = %d, want 1", len(pl.RecentRuns))
+	}
+	entry := pl.RecentRuns[0]
+	if entry.Summary != "Did Y" {
+		t.Errorf("Summary = %q, want Did Y", entry.Summary)
+	}
+	if entry.LapsCompleted != nil {
+		t.Errorf("expected no LapsCompleted, got %v", entry.LapsCompleted)
 	}
 }
 

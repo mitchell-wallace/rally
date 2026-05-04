@@ -60,7 +60,7 @@ Do not exit the run without calling one of the above.
 	} else {
 		fmt.Fprintf(&b, `## Run Exit Action
 Before exiting, record your progress:
-  rally progress --complete --summary "<one-line summary>" --followup "<next task>"
+  rally progress --summary "<one-line summary>" --followup "<next task>"
 
 Calling rally directly from the agent is the documented exception in no-backend mode.
 `)

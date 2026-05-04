@@ -81,6 +81,11 @@ func NewProgressCmd() *cobra.Command {
 				mode = "wrapup"
 			}
 
+			if mode == "" && summary != "" {
+				// Public no-backend form: `rally progress --summary ...`
+				mode = "complete"
+			}
+
 			if mode == "" {
 				if len(recordLaps) > 0 || setHandoffFlag {
 					return nil

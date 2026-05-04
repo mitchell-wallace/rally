@@ -17,6 +17,9 @@ func TestBuildPrompt_LapsEnabled(t *testing.T) {
 	if !strings.Contains(p, "laps handoff") {
 		t.Error("expected prompt to contain 'laps handoff'")
 	}
+	if strings.Contains(p, "laps wrapup") {
+		t.Error("expected prompt NOT to contain 'laps wrapup'")
+	}
 	if strings.Contains(p, "rally progress") {
 		t.Error("expected prompt NOT to contain 'rally progress'")
 	}
@@ -31,8 +34,11 @@ func TestBuildPrompt_NoBackend(t *testing.T) {
 	}
 	p := BuildPrompt(opts)
 
-	if !strings.Contains(p, "rally progress --complete") {
-		t.Error("expected prompt to contain 'rally progress --complete'")
+	if !strings.Contains(p, "rally progress --summary") {
+		t.Error("expected prompt to contain 'rally progress --summary'")
+	}
+	if strings.Contains(p, "rally progress --complete") {
+		t.Error("expected prompt NOT to contain 'rally progress --complete'")
 	}
 	if strings.Contains(p, "laps done") {
 		t.Error("expected prompt NOT to contain 'laps done'")

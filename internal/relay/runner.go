@@ -16,6 +16,7 @@ import (
 	"github.com/mitchell-wallace/rally/internal/agent"
 	"github.com/mitchell-wallace/rally/internal/gitx"
 	"github.com/mitchell-wallace/rally/internal/keyboard"
+	"github.com/mitchell-wallace/rally/internal/laps"
 	"github.com/mitchell-wallace/rally/internal/monitor"
 	"github.com/mitchell-wallace/rally/internal/progress"
 	"github.com/mitchell-wallace/rally/internal/store"
@@ -43,6 +44,10 @@ type Runner struct {
 	log        io.WriteCloser
 	resilience *Resilience
 	relayStart time.Time
+}
+
+var headPullLap = func(ctx context.Context, workspaceDir string) (laps.Lap, error) {
+	return (&laps.Adapter{WorkspaceDir: workspaceDir}).HeadPull(ctx)
 }
 
 func NewRunner(s *store.Store, cfg Config, executors map[string]agent.Executor) *Runner {
@@ -345,6 +350,11 @@ func (r *Runner) runOne(ctx context.Context, relay *store.RelayRecord, runIndex 
 	var lastResult *agent.TryResult
 	success := false
 
+	taskName, taskRequirements, taskPrompt, err := r.resolveRunTask(ctx)
+	if err != nil {
+		return false, false, false, err
+	}
+
 	maxAttempts := 3
 	if isHourlyRetry {
 		maxAttempts = 1
@@ -359,8 +369,9 @@ func (r *Runner) runOne(ctx context.Context, relay *store.RelayRecord, runIndex 
 
 		opts := agent.RunOptions{
 			Persona:          agentType,
-			TaskName:         "relay run",
-			TaskPrompt:       r.cfg.TaskPrompt,
+			TaskName:         taskName,
+			TaskRequirements: taskRequirements,
+			TaskPrompt:       taskPrompt,
 			Instructions:     r.cfg.Instructions,
 			InboxMessage:     inbox,
 			RelayMessage:     relayMessage,
@@ -590,6 +601,42 @@ func (r *Runner) runOne(ctx context.Context, relay *store.RelayRecord, runIndex 
 		addressed = *lastResult.MessageAddressed
 	}
 	return success, addressed, false, nil
+}
+
+func (r *Runner) resolveRunTask(ctx context.Context) (string, string, string, error) {
+	taskName := "relay run"
+	taskRequirements := ""
+	taskPrompt := r.cfg.TaskPrompt
+
+	if !r.cfg.LapsEnabled {
+		return taskName, taskRequirements, taskPrompt, nil
+	}
+
+	lap, err := headPullLap(ctx, r.cfg.WorkspaceDir)
+	if err != nil {
+		return "", "", "", fmt.Errorf("pull head lap: %w", err)
+	}
+	if lap == laps.NoLap {
+		return taskName, taskRequirements, taskPrompt, nil
+	}
+
+	taskName = lap.Title
+	if strings.TrimSpace(lap.Description) != "" {
+		taskPrompt = lap.Description
+	} else {
+		taskPrompt = lap.Title
+	}
+
+	var details []string
+	if lap.ID != "" {
+		details = append(details, "Lap ID: "+lap.ID)
+	}
+	if lap.Assignee != "" {
+		details = append(details, "Assignee: "+lap.Assignee)
+	}
+	taskRequirements = strings.Join(details, "\n")
+
+	return taskName, taskRequirements, taskPrompt, nil
 }
 
 func (r *Runner) executeTry(ctx context.Context, agentType string, opts agent.RunOptions) (*agent.TryResult, error) {
