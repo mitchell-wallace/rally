@@ -1,18 +1,18 @@
 ## Targeted Rally brief
 
-Purpose: add lightweight role-aware routing and role-specific instructions while keeping `microbeads` process-neutral.
+Purpose: add lightweight role-aware routing and role-specific instructions while keeping `laps` process-neutral.
 
 The key design is:
 
 ```txt
-microbeads owns lightweight work tracking.
+laps owns lightweight work tracking.
 rally owns execution policy.
 .rally/ owns repo-local, user-editable process policy.
 ```
 
 ### Required changes
 
-Add support for an optional `assignee` field on beads.
+Add support for an optional `assignee` field on laps.
 
 This should be a plain string, not an enum. Examples:
 
@@ -24,9 +24,9 @@ assignee: QA
 assignee: VERIFY
 ```
 
-`microbeads` should not attach semantics to the value beyond storing/displaying/editing it. No hardcoded validation, no workflow logic, no definition-of-done logic.
+`laps` should not attach semantics to the value beyond storing/displaying/editing it. No hardcoded validation, no workflow logic, no definition-of-done logic.
 
-Rally should read the bead’s `assignee` value and use it to select:
+Rally should read the lap's `assignee` value and use it to select:
 
 1. a model/harness route list
 2. an optional role instruction file from `.rally/agents/{ASSIGNEE}.md`
@@ -72,7 +72,7 @@ routes:
 
 Fallback should happen within the selected route list when a model times out, rate-limits, or fails before useful work starts. Avoid cross-role fallback by default, especially from `VERIFY` to weaker implementation roles.
 
-If a bead has no `assignee`, Rally should use the current default behavior or a configured default route.
+If a lap has no `assignee`, Rally should use the current default behavior or a configured default route.
 
 Suggested repo-local files:
 
@@ -97,11 +97,11 @@ Rally should inject matching role instructions into the agent prompt in addition
 
 `QA` performs user-style behavioural verification. It should run the app, act like a user, follow the feature’s smoke/verification plan, and produce a structured report. It should not normally modify production code.
 
-`VERIFY` is the technical gatekeeper. It reads plans/specs/tasks/QA reports/test results, decides whether the change is actually complete, and creates follow-up beads for gaps. It should not rubber-stamp based on checkboxes.
+`VERIFY` is the technical gatekeeper. It reads plans/specs/tasks/QA reports/test results, decides whether the change is actually complete, and creates follow-up laps for gaps. It should not rubber-stamp based on checkboxes.
 
 ### Explicit non-goals for v0.1
 
-Do not add risk enums, boundary enums, workflow engines, verification-state machines, or hardcoded OpenSpec semantics to `microbeads`.
+Do not add risk enums, boundary enums, workflow engines, verification-state machines, or hardcoded OpenSpec semantics to `laps`.
 
 Do not make Rally understand every possible definition of done. For now, Rally only needs role-aware routing and role instruction loading.
 

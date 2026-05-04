@@ -5,7 +5,7 @@ import "path/filepath"
 const (
 	BinaryName          = "rally"
 	ContainerDataRoot   = "/persist/agent/rally"
-	DefaultRepoProgress = "docs/orchestration/rally-progress.yaml"
+	DefaultRepoProgress = ".rally/progress.yaml"
 	EnvContainerName    = "RALLY_CONTAINER_NAME"
 	EnvDataDir          = "RALLY_DATA_DIR"
 	EnvRepoProgressPath = "RALLY_REPO_PROGRESS_PATH"
@@ -15,7 +15,6 @@ const (
 	EnvAgent            = "RALLY_AGENT"
 	EnvSessionDir       = "RALLY_SESSION_DIR"
 	EnvWorkspaceDir     = "RALLY_WORKSPACE_DIR"
-	EnvBeads            = "RALLY_BEADS"
 	EnvNoUpdateCheck    = "RALLY_NO_UPDATE_CHECK"
 	SchemaVersion       = 1
 	RepoHistoryWindow   = 50

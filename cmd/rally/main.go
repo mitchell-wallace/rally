@@ -421,7 +421,16 @@ func init() {
 	instructionsCmd.AddCommand(instructionsShowCmd)
 	rootCmd.AddCommand(versionCmd)
 	rootCmd.AddCommand(updateCmd)
-	rootCmd.AddCommand(progress.NewProgressCmd())
+	progressCmd := progress.NewProgressCmd()
+	rootCmd.AddCommand(progressCmd)
+
+	// Dynamic visibility: hide progress from help when laps is enabled.
+	originalHelp := rootCmd.HelpFunc()
+	rootCmd.SetHelpFunc(func(cmd *cobra.Command, args []string) {
+		workspaceDir, _ := resolveWorkspaceDir()
+		progressCmd.Hidden = laps.Detect(workspaceDir)
+		originalHelp(cmd, args)
+	})
 
 	relayCmd.Flags().Int("iterations", 1, "Number of iterations")
 	relayCmd.Flags().StringArray("agent", nil, "Agent mix (repeatable; quoted lists allowed, e.g. \"cc:2 cx:1\")")
