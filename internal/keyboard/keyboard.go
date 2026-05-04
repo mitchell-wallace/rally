@@ -36,6 +36,7 @@ type Keyboard struct {
 	out           io.Writer
 	state         *term.State
 	confirmWindow time.Duration
+	closeOnStop   bool
 
 	mu       sync.Mutex
 	cancel   context.CancelFunc
@@ -94,11 +95,18 @@ func (k *Keyboard) Stop() error {
 	if k.cancel != nil {
 		k.cancel()
 	}
-	if c, ok := k.in.(io.Closer); ok {
-		_ = c.Close()
+	if k.closeOnStop {
+		if c, ok := k.in.(io.Closer); ok {
+			_ = c.Close()
+		}
 	}
 	k.wg.Wait()
 	return k.RestoreMode()
+}
+
+// SetCloseOnStop configures whether Stop should close the input reader.
+func (k *Keyboard) SetCloseOnStop(v bool) {
+	k.closeOnStop = v
 }
 
 func (k *Keyboard) readLoop(ctx context.Context, byteCh chan<- byte) {

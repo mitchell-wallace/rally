@@ -1,6 +1,7 @@
 package relay
 
 import (
+	"bufio"
 	"context"
 	"errors"
 	"fmt"
@@ -526,7 +527,7 @@ func (r *Runner) runOne(ctx context.Context, relay *store.RelayRecord, runIndex 
 				return false, false, false, nil
 			}
 			fmt.Println("Paused — press Enter to resume")
-			fmt.Scanln()
+			bufio.NewReader(os.Stdin).ReadString('\n')
 			if result != nil {
 				previousSummary = result.Summary
 				lastResult = result

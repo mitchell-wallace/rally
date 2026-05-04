@@ -27,6 +27,7 @@ func TestSinglePressShowsConfirmation(t *testing.T) {
 	defer pi.w.Close()
 	out := &bytes.Buffer{}
 	kb := NewKeyboard(pr, out)
+	kb.SetCloseOnStop(true)
 	kb.SetConfirmWindow(100 * time.Millisecond)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -51,6 +52,7 @@ func TestDoublePressEmitsAction(t *testing.T) {
 	defer pi.w.Close()
 	out := &bytes.Buffer{}
 	kb := NewKeyboard(pr, out)
+	kb.SetCloseOnStop(true)
 	kb.SetConfirmWindow(100 * time.Millisecond)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -78,6 +80,7 @@ func TestTimeoutResetsState(t *testing.T) {
 	defer pi.w.Close()
 	out := &bytes.Buffer{}
 	kb := NewKeyboard(pr, out)
+	kb.SetCloseOnStop(true)
 	kb.SetConfirmWindow(50 * time.Millisecond)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -107,6 +110,7 @@ func TestDifferentShortcutsDontInterfere(t *testing.T) {
 	defer pi.w.Close()
 	out := &bytes.Buffer{}
 	kb := NewKeyboard(pr, out)
+	kb.SetCloseOnStop(true)
 	kb.SetConfirmWindow(100 * time.Millisecond)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -145,6 +149,7 @@ func TestAllShortcuts(t *testing.T) {
 		defer pi.w.Close()
 		out := &bytes.Buffer{}
 		kb := NewKeyboard(pr, out)
+		kb.SetCloseOnStop(true)
 		kb.SetConfirmWindow(100 * time.Millisecond)
 
 		ctx, cancel := context.WithCancel(context.Background())
@@ -173,6 +178,7 @@ func TestIgnoredBytes(t *testing.T) {
 	defer pi.w.Close()
 	out := &bytes.Buffer{}
 	kb := NewKeyboard(pr, out)
+	kb.SetCloseOnStop(true)
 	kb.SetConfirmWindow(100 * time.Millisecond)
 
 	ctx, cancel := context.WithCancel(context.Background())
