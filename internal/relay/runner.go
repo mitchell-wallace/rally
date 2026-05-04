@@ -27,7 +27,6 @@ type Config struct {
 	AgentMixSpecs        []string
 	TargetIterations     int
 	RunHooksOnAutoCommit bool
-	BeadsEnabled         bool
 	Instructions         string
 	TaskPrompt           string
 	OverwriteMixOnResume bool
@@ -358,7 +357,6 @@ func (r *Runner) runOne(ctx context.Context, relay *store.RelayRecord, runIndex 
 			RelayMessage:     relayMessage,
 			PreviousSummary:  previousSummary,
 			RecentTryContext: recentContext.String(),
-			BeadsEnabled:     r.cfg.BeadsEnabled,
 		}
 		prompt := agent.BuildPrompt(opts)
 

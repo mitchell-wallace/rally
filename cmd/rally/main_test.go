@@ -22,7 +22,7 @@ func TestRunRelayLoadsInstructions(t *testing.T) {
 codex_model = ""
 gemini_model = ""
 opencode_model = ""
-beads = "auto"
+laps_instructions = ""
 run_hooks_on_autocommit = false
 data_dir = ""
 `
@@ -55,7 +55,7 @@ data_dir = ""
 		t.Errorf("expected sonnet model, got %q", cfg.ClaudeModel)
 	}
 
-	expectedFields := []string{"claude_model", "codex_model", "gemini_model", "opencode_model", "beads", "run_hooks_on_autocommit", "data_dir"}
+	expectedFields := []string{"claude_model", "codex_model", "gemini_model", "opencode_model", "laps_instructions", "run_hooks_on_autocommit", "data_dir"}
 	for _, f := range expectedFields {
 		if !strings.Contains(configContent, f) {
 			t.Errorf("init template missing field %q", f)

@@ -12,7 +12,6 @@ type RunOptions struct {
 	RelayMessage     string
 	PreviousSummary  string
 	RecentTryContext string
-	BeadsEnabled     bool
 	Prompt           string // explicit override
 	LogPath          string // path to write try transcript log
 	OnStart          func(pid int)

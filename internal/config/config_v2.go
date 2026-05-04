@@ -4,7 +4,6 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
-	"strings"
 
 	toml "github.com/pelletier/go-toml/v2"
 )
@@ -14,7 +13,6 @@ type V2Config struct {
 	CodexModel           string `toml:"codex_model,omitempty"`
 	GeminiModel          string `toml:"gemini_model,omitempty"`
 	OpenCodeModel        string `toml:"opencode_model,omitempty"`
-	Beads                string `toml:"beads,omitempty"`
 	RunHooksOnAutoCommit bool   `toml:"run_hooks_on_autocommit"`
 	DataDir              string `toml:"data_dir,omitempty"`
 }
@@ -28,7 +26,7 @@ func LoadV2(workspaceDir string) (V2Config, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			return V2Config{Beads: "auto"}, nil
+			return V2Config{}, nil
 		}
 		return V2Config{}, err
 	}
@@ -36,22 +34,11 @@ func LoadV2(workspaceDir string) (V2Config, error) {
 	if err := toml.Unmarshal(data, &cfg); err != nil {
 		return V2Config{}, err
 	}
-	cfg.Beads = normalizeBeads(cfg.Beads)
 	return cfg, nil
-}
-
-func normalizeBeads(value string) string {
-	switch strings.TrimSpace(strings.ToLower(value)) {
-	case "true", "false", "auto":
-		return strings.TrimSpace(strings.ToLower(value))
-	default:
-		return ""
-	}
 }
 
 func SaveV2(workspaceDir string, cfg V2Config) error {
 	path := V2Path(workspaceDir)
-	cfg.Beads = normalizeBeads(cfg.Beads)
 	data, err := toml.Marshal(cfg)
 	if err != nil {
 		return err

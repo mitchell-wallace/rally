@@ -15,7 +15,7 @@ tracking iterations, or rebuilding progress files after every pass.
   string: `--agent "cc:1 cx:2 op:1"`.
 - Stores transcripts and per-session metadata outside the repo by default.
 - Auto-commits dirty workspace changes after a session completes.
-- Can pull tasks from Beads when enabled.
+- Can pull tasks from Laps when enabled.
 
 ## Supported Agent CLIs
 
@@ -121,7 +121,7 @@ claude_model = "claude-opus-4.7"
 codex_model = "gpt-5.4"
 gemini_model = "gemini-3.1-pro-preview"
 opencode_model = "zai-coding-plan/glm-5.1"
-beads = "auto"
+laps_instructions = ""
 run_hooks_on_autocommit = false
 ```
 

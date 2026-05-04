@@ -116,7 +116,6 @@ func runRelay(cmd *cobra.Command, args []string) error {
 		AgentMixSpecs:        expandedAgents,
 		TargetIterations:     iterations,
 		RunHooksOnAutoCommit: cfg.RunHooksOnAutoCommit,
-		BeadsEnabled:         cfg.Beads == "true",
 	}
 
 	instructionsPath := filepath.Join(rallyDir, "instructions.md")
@@ -266,7 +265,7 @@ func runInit(cmd *cobra.Command, args []string) error {
 codex_model = ""
 gemini_model = ""
 opencode_model = ""
-beads = "auto"
+laps_instructions = ""
 run_hooks_on_autocommit = false
 data_dir = ""
 `
