@@ -1,28 +1,32 @@
 ## MODIFIED Requirements
 
 ### Requirement: Agent mix cycling
-The system SHALL cycle through agents in a deterministic rotation based on the configured agent mix. The mix SHALL accept three entry forms: weighted harness shortcuts as in v0.2.x (e.g. `cc:2 cx:1`), raw `harness:model` strings, and shortcut keys defined in `[providers]`. All three forms MAY be combined in the same mix.
+The system SHALL cycle through agents in a deterministic rotation based on the configured agent mix. The mix SHALL accept four entry forms in any combination: bare alias (`claude`), weighted alias (`cc:2 cx:1`, digits-after-colon → weight), named-model entry (`harness:model-name`), and raw harness:model string (`opencode:opencode-go/kimi-k2.6`). A third colon-separated segment (`cc:opus:2`) SHALL be rejected in v0.5.0.
 
 #### Scenario: Deterministic agent selection
 - **WHEN** a run is about to start within a relay
 - **THEN** the system SHALL select the agent using `cycle[(runIndex) % len(cycle)]`
 
-#### Scenario: Agent mix parsed from spec
+#### Scenario: Weighted alias parsed (v0.2.x form)
 - **WHEN** agent specs like `"cc:2 cx:1"` are provided
-- **THEN** the system SHALL parse them into weighted cycles preserving declaration order
+- **THEN** the system SHALL parse them into weighted cycles preserving declaration order, with each entry resolving to `(harness, default-model-from-flat-field)`
 
-#### Scenario: Mix accepts shortcut keys
-- **WHEN** `--mix "claude,op:z,op:gk"` is provided and `op:z`, `op:gk` are defined in `[providers]`
-- **THEN** the parser SHALL resolve each shortcut to its `(harness, model)` tuple via the config-layer resolver and SHALL produce a cycle whose entries are the resolved tuples
+#### Scenario: Mix accepts named-model entries
+- **WHEN** `--mix "claude,op:z,op:gk"` is provided and `op:z`, `op:gk` are defined under `[harness.op.models]`
+- **THEN** the parser SHALL resolve each named entry to its `(harness, model)` tuple via the config-layer resolver and SHALL produce a cycle whose entries are the resolved tuples
 
-#### Scenario: Mix mixes raw and shortcut forms
-- **WHEN** `--mix "claude,op:z,opencode:opencode-go/kimi-k2.6"` is provided
-- **THEN** the parser SHALL accept the mix, resolving `op:z` via shortcut and using the raw form verbatim, producing a three-entry cycle
+#### Scenario: Mix mixes weighted, named, and raw forms
+- **WHEN** `--mix "cc:2,op:z,opencode:opencode-go/kimi-k2.6"` is provided
+- **THEN** the parser SHALL accept the mix, expanding `cc:2` into two `(claude, default-model)` cycle entries, resolving `op:z` via the named-model table, and using the raw form verbatim
+
+#### Scenario: Third colon segment rejected
+- **WHEN** a mix contains `cc:opus:2`
+- **THEN** parsing SHALL exit non-zero with an error explaining that weight-on-named-model is not supported in v0.5.0
 
 ## ADDED Requirements
 
 ### Requirement: Defaults sourced from `[defaults]` config section
-The system SHALL read `iterations`, `mix`, and `verbose` from the `[defaults]` section of `.rally/config.toml` when the corresponding CLI flag is not supplied. CLI flags SHALL continue to take precedence when present.
+The system SHALL read `iterations` and `mix` from the `[defaults]` section of `.rally/config.toml` when the corresponding CLI flag is not supplied. CLI flags SHALL continue to take precedence when present.
 
 #### Scenario: Iterations from config
 - **WHEN** `[defaults].iterations = 25` is set and `rally relay` is invoked without `--iterations`
@@ -30,7 +34,7 @@ The system SHALL read `iterations`, `mix`, and `verbose` from the `[defaults]` s
 
 #### Scenario: Mix from config
 - **WHEN** `[defaults].mix = "claude,op:z"` is set and `rally relay` is invoked without `--mix`
-- **THEN** the relay SHALL use the configured mix (after shortcut resolution)
+- **THEN** the relay SHALL use the configured mix (after named-model resolution)
 
 #### Scenario: CLI flag wins over config default
 - **WHEN** both `[defaults].iterations = 25` is set and `rally relay --iterations 5` is invoked
@@ -44,5 +48,16 @@ The system SHALL inject the `[fallback].instructions_file` content (or a built-i
 - **THEN** the prompt body SHALL be the contents of `[fallback].instructions_file` if configured and readable, otherwise the built-in default fallback content
 
 #### Scenario: No-backend with ready bead
-- **WHEN** rally is in no-backend mode and a ready bead exists (e.g. via the configured fallback file describing a task that the relay then "claims")
+- **WHEN** rally is in no-backend mode and a ready bead exists
 - **THEN** the bead body SHALL be used as the prompt body and the fallback file SHALL NOT be substituted
+
+### Requirement: User-defined harness dispatch
+The system SHALL dispatch runs whose resolved harness has a `[harness.<name>]` entry with a `command` field through a generic executor that templates `$MODEL` and `$PROMPT` and applies the configured output strategy. Runs whose resolved harness is built-in SHALL continue to dispatch through the built-in executors.
+
+#### Scenario: User harness dispatched generically
+- **WHEN** a run resolves to a harness with a `command` field declared
+- **THEN** the relay-runner SHALL invoke the generic executor, passing the resolved model and prompt body for templating
+
+#### Scenario: Built-in harness dispatched conventionally
+- **WHEN** a run resolves to a built-in harness (`cc`/`cx`/`ge`/`op`)
+- **THEN** the relay-runner SHALL invoke the built-in executor for that harness, regardless of whether `[harness.<name>.models]` was declared
