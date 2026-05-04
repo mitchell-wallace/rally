@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/mitchell-wallace/rally/internal/agent"
+	"github.com/mitchell-wallace/rally/internal/progress"
 	"github.com/mitchell-wallace/rally/internal/store"
 )
 
@@ -888,5 +889,58 @@ func TestAllAgentsFrozenEndsRelay(t *testing.T) {
 	}
 	if err.Error() != "all agents frozen" {
 		t.Fatalf("expected 'all agents frozen' error, got %q", err.Error())
+	}
+}
+
+func TestStubEntryOnIncompleteRun(t *testing.T) {
+	workspaceDir := t.TempDir()
+	rallyDir := filepath.Join(workspaceDir, ".rally")
+	os.MkdirAll(rallyDir, 0o755)
+	initRepo(t, workspaceDir)
+
+	s := newTestStore(t, rallyDir)
+	exec := &funcExecutor{
+		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+			return &agent.TryResult{Completed: false, Summary: "agent stopped early"}, nil
+		},
+	}
+	executors := map[string]agent.Executor{"claude": exec}
+
+	r := NewRunner(s, Config{
+		WorkspaceDir:     workspaceDir,
+		DataDir:          t.TempDir(),
+		AgentMixSpecs:    []string{"cc:1"},
+		TargetIterations: 1,
+		LapsEnabled:      true,
+	}, executors)
+	r.resilience = &Resilience{
+		Store:                     s,
+		PauseDuration:             time.Millisecond,
+		HourlyRetriesBeforeFreeze: 0,
+		NowFunc:                   time.Now,
+	}
+
+	_ = r.Run(context.Background())
+
+	pl, err := progress.LoadProgress(workspaceDir)
+	if err != nil {
+		t.Fatalf("LoadProgress error: %v", err)
+	}
+	if len(pl.RecentRuns) == 0 {
+		t.Fatal("expected at least one stub entry in progress.yaml")
+	}
+	found := false
+	for _, entry := range pl.RecentRuns {
+		if entry.Summary == "agent stopped early" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("expected a stub entry with summary 'agent stopped early', got %v", pl.RecentRuns)
+	}
+
+	if _, err := os.Stat(progress.RunStatePath(workspaceDir)); !os.IsNotExist(err) {
+		t.Fatal("expected run-state.json to be cleared")
 	}
 }
