@@ -425,6 +425,10 @@ func TestGitHelpers(t *testing.T) {
 	tmp := t.TempDir()
 	mustExec(t, tmp, "git", "init")
 
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("GIT_CONFIG_GLOBAL", "/dev/null")
+	t.Setenv("GIT_CONFIG_SYSTEM", "/dev/null")
+
 	root, ok, err := gitx.GitRepoRoot(tmp)
 	if err != nil {
 		t.Fatalf("GitRepoRoot error: %v", err)

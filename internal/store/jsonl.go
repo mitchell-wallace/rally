@@ -42,6 +42,12 @@ func readJSONL[T any](path string) ([]T, error) {
 
 	var records []T
 	scanner := bufio.NewScanner(f)
+	
+	// Increase maximum token size to 10MB for large JSON payloads.
+	const maxCapacity = 10 * 1024 * 1024
+	buf := make([]byte, bufio.MaxScanTokenSize)
+	scanner.Buffer(buf, maxCapacity)
+
 	for scanner.Scan() {
 		line := scanner.Bytes()
 		if len(line) == 0 {
@@ -61,23 +67,42 @@ func readJSONL[T any](path string) ([]T, error) {
 
 // rewriteJSONL overwrites a JSONL file with all provided records.
 func rewriteJSONL[T any](path string, records []T) error {
-	f, err := os.Create(path)
+	tmpPath := path + ".tmp"
+	f, err := os.Create(tmpPath)
 	if err != nil {
-		return fmt.Errorf("create %s: %w", path, err)
+		return fmt.Errorf("create %s: %w", tmpPath, err)
 	}
-	defer f.Close()
-
+	
+	var writeErr error
 	for _, rec := range records {
 		data, err := json.Marshal(rec)
 		if err != nil {
-			return fmt.Errorf("marshal record: %w", err)
+			writeErr = fmt.Errorf("marshal record: %w", err)
+			break
 		}
 		if _, err := f.Write(data); err != nil {
-			return fmt.Errorf("write record to %s: %w", path, err)
+			writeErr = fmt.Errorf("write record to %s: %w", tmpPath, err)
+			break
 		}
 		if _, err := f.WriteString("\n"); err != nil {
-			return fmt.Errorf("write newline to %s: %w", path, err)
+			writeErr = fmt.Errorf("write newline to %s: %w", tmpPath, err)
+			break
 		}
 	}
+
+	if err := f.Close(); err != nil && writeErr == nil {
+		writeErr = fmt.Errorf("close %s: %w", tmpPath, err)
+	}
+
+	if writeErr != nil {
+		os.Remove(tmpPath)
+		return writeErr
+	}
+
+	if err := os.Rename(tmpPath, path); err != nil {
+		os.Remove(tmpPath)
+		return fmt.Errorf("rename %s to %s: %w", tmpPath, path, err)
+	}
+
 	return nil
 }

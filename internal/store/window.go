@@ -33,30 +33,43 @@ func commitThenTruncate(path string, windowSize int) error {
 	}
 
 	// 3. Rewrite file with kept records
-	f, err := os.Create(path)
+	tmpPath := path + ".tmp"
+	f, err := os.Create(tmpPath)
 	if err != nil {
-		return fmt.Errorf("create %s: %w", path, err)
+		return fmt.Errorf("create %s: %w", tmpPath, err)
 	}
+	
+	var writeErr error
 	for i, line := range lines {
 		if i > 0 {
 			if _, err := f.WriteString("\n"); err != nil {
-				f.Close()
-				return fmt.Errorf("write newline: %w", err)
+				writeErr = fmt.Errorf("write newline: %w", err)
+				break
 			}
 		}
 		if _, err := f.WriteString(line); err != nil {
-			f.Close()
-			return fmt.Errorf("write line: %w", err)
+			writeErr = fmt.Errorf("write line: %w", err)
+			break
 		}
 	}
-	if len(lines) > 0 {
+	if len(lines) > 0 && writeErr == nil {
 		if _, err := f.WriteString("\n"); err != nil {
-			f.Close()
-			return fmt.Errorf("write trailing newline: %w", err)
+			writeErr = fmt.Errorf("write trailing newline: %w", err)
 		}
 	}
-	if err := f.Close(); err != nil {
-		return fmt.Errorf("close %s: %w", path, err)
+
+	if err := f.Close(); err != nil && writeErr == nil {
+		writeErr = fmt.Errorf("close %s: %w", tmpPath, err)
+	}
+
+	if writeErr != nil {
+		os.Remove(tmpPath)
+		return writeErr
+	}
+
+	if err := os.Rename(tmpPath, path); err != nil {
+		os.Remove(tmpPath)
+		return fmt.Errorf("rename %s to %s: %w", tmpPath, path, err)
 	}
 
 	// 4. Commit truncated file (git only)
