@@ -412,3 +412,351 @@ func TestLoadV2_NoConfigFile(t *testing.T) {
 		t.Error("Harnesses should be non-nil map")
 	}
 }
+
+func TestLoadV2_InvalidHarnessName(t *testing.T) {
+	dir := t.TempDir()
+	writeConfig(t, dir, `
+[harness."bad name"]
+command = ["tool"]
+`)
+	_, err := LoadV2(dir)
+	if err == nil {
+		t.Fatal("expected error for invalid harness name with spaces")
+	}
+	if !strings.Contains(err.Error(), "invalid harness name") {
+		t.Errorf("error = %q, want 'invalid harness name'", err.Error())
+	}
+}
+
+func TestLoadV2_BuiltInRejectsCommand(t *testing.T) {
+	dir := t.TempDir()
+	writeConfig(t, dir, `
+[harness.cc]
+command = ["echo", "hi"]
+`)
+	_, err := LoadV2(dir)
+	if err == nil {
+		t.Fatal("expected error for built-in harness with command")
+	}
+	if !strings.Contains(err.Error(), "cannot declare command") {
+		t.Errorf("error = %q, want 'cannot declare command'", err.Error())
+	}
+}
+
+func TestLoadV2_BuiltInRejectsModelFlag(t *testing.T) {
+	dir := t.TempDir()
+	writeConfig(t, dir, `
+[harness.claude]
+model_flag = "--model"
+`)
+	_, err := LoadV2(dir)
+	if err == nil {
+		t.Fatal("expected error for built-in harness with model_flag")
+	}
+	if !strings.Contains(err.Error(), "cannot declare model_flag") {
+		t.Errorf("error = %q, want 'cannot declare model_flag'", err.Error())
+	}
+}
+
+func TestLoadV2_BuiltInRejectsOutputStrategy(t *testing.T) {
+	dir := t.TempDir()
+	writeConfig(t, dir, `
+[harness.op]
+output_strategy = "tail"
+`)
+	_, err := LoadV2(dir)
+	if err == nil {
+		t.Fatal("expected error for built-in harness with output_strategy")
+	}
+	if !strings.Contains(err.Error(), "cannot declare output_strategy") {
+		t.Errorf("error = %q, want 'cannot declare output_strategy'", err.Error())
+	}
+}
+
+func TestLoadV2_BuiltInRejectsTailStream(t *testing.T) {
+	dir := t.TempDir()
+	writeConfig(t, dir, `
+[harness.gemini]
+tail_stream = "stdout"
+`)
+	_, err := LoadV2(dir)
+	if err == nil {
+		t.Fatal("expected error for built-in harness with tail_stream")
+	}
+	if !strings.Contains(err.Error(), "cannot declare tail_stream") {
+		t.Errorf("error = %q, want 'cannot declare tail_stream'", err.Error())
+	}
+}
+
+func TestLoadV2_BuiltInAllowsModelsOnly(t *testing.T) {
+	dir := t.TempDir()
+	writeConfig(t, dir, `
+[harness.cc.models]
+opus = "claude-opus-4-7"
+`)
+	cfg, err := LoadV2(dir)
+	if err != nil {
+		t.Fatalf("expected no error for built-in harness with only models: %v", err)
+	}
+	h := cfg.Harnesses["cc"]
+	if h.Models["opus"] != "claude-opus-4-7" {
+		t.Errorf("Models['opus'] = %q, want 'claude-opus-4-7'", h.Models["opus"])
+	}
+}
+
+func TestLoadV2_NumericModelNameRejected(t *testing.T) {
+	dir := t.TempDir()
+	writeConfig(t, dir, `
+[harness.droid]
+command = ["droid"]
+
+[harness.droid.models]
+4 = "some-model"
+`)
+	_, err := LoadV2(dir)
+	if err == nil {
+		t.Fatal("expected error for numeric-only model name")
+	}
+	if !strings.Contains(err.Error(), "4") || !strings.Contains(err.Error(), "invalid") {
+		t.Errorf("error = %q, want complaint about numeric model name", err.Error())
+	}
+}
+
+func TestLoadV2_EmptyModelStringRejected(t *testing.T) {
+	dir := t.TempDir()
+	writeConfig(t, dir, `
+[harness.droid]
+command = ["droid"]
+
+[harness.droid.models]
+fast = ""
+`)
+	_, err := LoadV2(dir)
+	if err == nil {
+		t.Fatal("expected error for empty model string")
+	}
+	if !strings.Contains(err.Error(), "empty model string") {
+		t.Errorf("error = %q, want 'empty model string'", err.Error())
+	}
+}
+
+func TestLoadV2_DollarModelInCommandRejected(t *testing.T) {
+	dir := t.TempDir()
+	writeConfig(t, dir, `
+[harness.droid]
+command = ["droid", "$MODEL"]
+`)
+	_, err := LoadV2(dir)
+	if err == nil {
+		t.Fatal("expected error for $MODEL in command")
+	}
+	if !strings.Contains(err.Error(), "$MODEL") || !strings.Contains(err.Error(), "model_flag") {
+		t.Errorf("error = %q, want $MODEL and model_flag", err.Error())
+	}
+}
+
+func TestLoadV2_DollarModelPartialInCommandRejected(t *testing.T) {
+	dir := t.TempDir()
+	writeConfig(t, dir, `
+[harness.droid]
+command = ["droid", "--model=$MODEL"]
+`)
+	_, err := LoadV2(dir)
+	if err == nil {
+		t.Fatal("expected error for $MODEL in command element")
+	}
+	if !strings.Contains(err.Error(), "$MODEL") {
+		t.Errorf("error = %q, want $MODEL", err.Error())
+	}
+}
+
+func TestResolveAgent_BareAlias(t *testing.T) {
+	cfg := V2Config{Harnesses: map[string]*HarnessConfig{}}
+	resolved, err := cfg.ResolveAgent("cc")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if resolved.Harness != "claude" {
+		t.Errorf("Harness = %q, want 'claude'", resolved.Harness)
+	}
+	if resolved.Model != "" {
+		t.Errorf("Model = %q, want empty for bare alias", resolved.Model)
+	}
+}
+
+func TestResolveAgent_WeightPassthrough(t *testing.T) {
+	cfg := V2Config{Harnesses: map[string]*HarnessConfig{}}
+	resolved, err := cfg.ResolveAgent("cc:2")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if resolved.Harness != "claude" {
+		t.Errorf("Harness = %q, want 'claude'", resolved.Harness)
+	}
+	if resolved.Model != "" {
+		t.Errorf("Model = %q, want empty for weight passthrough", resolved.Model)
+	}
+}
+
+func TestResolveAgent_NamedModel(t *testing.T) {
+	cfg := V2Config{
+		Harnesses: map[string]*HarnessConfig{
+			"op": {Models: map[string]string{
+				"z":  "zai-coding-plan/glm-5.1",
+				"gk": "opencode-go/kimi-k2.6",
+			}},
+		},
+	}
+	resolved, err := cfg.ResolveAgent("op:z")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if resolved.Harness != "opencode" {
+		t.Errorf("Harness = %q, want 'opencode'", resolved.Harness)
+	}
+	if resolved.Model != "zai-coding-plan/glm-5.1" {
+		t.Errorf("Model = %q, want 'zai-coding-plan/glm-5.1'", resolved.Model)
+	}
+}
+
+func TestResolveAgent_RawModelString(t *testing.T) {
+	cfg := V2Config{Harnesses: map[string]*HarnessConfig{}}
+	resolved, err := cfg.ResolveAgent("opencode:zai-coding-plan/glm-5.1")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if resolved.Harness != "opencode" {
+		t.Errorf("Harness = %q, want 'opencode'", resolved.Harness)
+	}
+	if resolved.Model != "zai-coding-plan/glm-5.1" {
+		t.Errorf("Model = %q, want 'zai-coding-plan/glm-5.1'", resolved.Model)
+	}
+}
+
+func TestResolveAgent_UnknownHarness(t *testing.T) {
+	cfg := V2Config{Harnesses: map[string]*HarnessConfig{}}
+	_, err := cfg.ResolveAgent("unknown")
+	if err == nil {
+		t.Fatal("expected error for unknown harness")
+	}
+	if !strings.Contains(err.Error(), "unknown agent alias") {
+		t.Errorf("error = %q, want 'unknown agent alias'", err.Error())
+	}
+}
+
+func TestResolveAgent_UnresolvedModelDidYouMean(t *testing.T) {
+	cfg := V2Config{
+		Harnesses: map[string]*HarnessConfig{
+			"op": {Models: map[string]string{
+				"z":  "zai-coding-plan/glm-5.1",
+				"gk": "opencode-go/kimi-k2.6",
+			}},
+		},
+	}
+	_, err := cfg.ResolveAgent("op:gp")
+	if err == nil {
+		t.Fatal("expected error for unresolved model name")
+	}
+	if !strings.Contains(err.Error(), "did you mean") {
+		t.Errorf("error = %q, want 'did you mean'", err.Error())
+	}
+	if !strings.Contains(err.Error(), "gk") {
+		t.Errorf("error = %q, should suggest 'gk'", err.Error())
+	}
+}
+
+func TestResolveAgent_NumericOnlyModelRejected(t *testing.T) {
+	cfg := V2Config{Harnesses: map[string]*HarnessConfig{}}
+	_, err := cfg.ResolveAgent("cc:2")
+	if err != nil {
+		t.Fatalf("numeric right side should be treated as weight: %v", err)
+	}
+}
+
+func TestResolveAgent_ThirdSegmentRejected(t *testing.T) {
+	cfg := V2Config{Harnesses: map[string]*HarnessConfig{}}
+	_, err := cfg.ResolveAgent("cc:opus:2")
+	if err == nil {
+		t.Fatal("expected error for third colon segment")
+	}
+	if !strings.Contains(err.Error(), "not supported") {
+		t.Errorf("error = %q, want 'not supported'", err.Error())
+	}
+}
+
+func TestResolveAgent_UserDefinedHarness(t *testing.T) {
+	cfg := V2Config{
+		Harnesses: map[string]*HarnessConfig{
+			"droid": {
+				Command: []string{"droid", "run"},
+				Models:  map[string]string{"v1": "droid-v1"},
+			},
+		},
+	}
+	resolved, err := cfg.ResolveAgent("droid:v1")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if resolved.Harness != "droid" {
+		t.Errorf("Harness = %q, want 'droid'", resolved.Harness)
+	}
+	if resolved.Model != "droid-v1" {
+		t.Errorf("Model = %q, want 'droid-v1'", resolved.Model)
+	}
+}
+
+func TestResolveAgent_BuiltInNamedModelUsesCanonicalKey(t *testing.T) {
+	cfg := V2Config{
+		Harnesses: map[string]*HarnessConfig{
+			"cc": {Models: map[string]string{
+				"opus": "claude-opus-4-7",
+			}},
+		},
+	}
+	resolved, err := cfg.ResolveAgent("cc:opus")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if resolved.Harness != "claude" {
+		t.Errorf("Harness = %q, want 'claude'", resolved.Harness)
+	}
+	if resolved.Model != "claude-opus-4-7" {
+		t.Errorf("Model = %q, want 'claude-opus-4-7'", resolved.Model)
+	}
+}
+
+func TestResolveAgent_DidYouMeanTop3(t *testing.T) {
+	cfg := V2Config{
+		Harnesses: map[string]*HarnessConfig{
+			"cc": {Models: map[string]string{
+				"opus":   "claude-opus-4-7",
+				"sonnet": "claude-sonnet-4-6",
+				"haiku":  "claude-haiku-3-5",
+				"mini":   "claude-mini",
+			}},
+		},
+	}
+	_, err := cfg.ResolveAgent("cc:opux")
+	if err == nil {
+		t.Fatal("expected error for typo")
+	}
+	errStr := err.Error()
+	if !strings.Contains(errStr, "opus") {
+		t.Errorf("error = %q, should suggest 'opus' as closest", errStr)
+	}
+}
+
+func TestResolveAgent_NoModelsDefined(t *testing.T) {
+	cfg := V2Config{
+		Harnesses: map[string]*HarnessConfig{
+			"droid": {Command: []string{"droid"}},
+		},
+	}
+	_, err := cfg.ResolveAgent("droid:fast")
+	if err == nil {
+		t.Fatal("expected error for unresolved model with no models defined")
+	}
+	if !strings.Contains(err.Error(), "no models defined") {
+		t.Errorf("error = %q, want 'no models defined'", err.Error())
+	}
+}

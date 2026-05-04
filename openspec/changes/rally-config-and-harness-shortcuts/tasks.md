@@ -9,11 +9,11 @@
 
 ## 2. Harness/model resolution
 
-- [ ] 2.1 Validate every `[harness.<name>]` entry at load: harness name matches `^[A-Za-z][A-Za-z0-9_-]*$`; if a built-in name (`cc`/`cx`/`ge`/`op`/`claude`/`codex`/`gemini`/`opencode`), reject `command`, `model_flag`, `output_strategy`, and `tail_stream` fields with a clear error
-- [ ] 2.2 Validate every `[harness.<name>.models]` entry: model name matches `^[A-Za-z][A-Za-z0-9_-]*$` (non-numeric); model string is non-empty
-- [ ] 2.3 Reject any `command` array element containing the literal `$MODEL` at config load with a clear error directing operators to `model_flag` instead
-- [ ] 2.4 Add `ResolveAgent(spec string) (harness, model string, err error)` to the config layer; accepts bare aliases, `harness:weight` (digits — preserved as weight metadata), `harness:model-name`, and raw `harness:model-string`; errors on unresolved model names with `did-you-mean` suggestions (Levenshtein-ranked, top 3, scoped to the same harness)
-- [ ] 2.5 Unit tests: model name resolution, bare-alias passthrough, weight passthrough, did-you-mean suggestions on typo, numeric-only model name rejected, unknown harness rejected, built-in harness rejecting `command`/`model_flag`/`output_strategy`/`tail_stream`, `$MODEL` in `command` rejected
+- [x] 2.1 Validate every `[harness.<name>]` entry at load: harness name matches `^[A-Za-z][A-Za-z0-9_-]*$`; if a built-in name (`cc`/`cx`/`ge`/`op`/`claude`/`codex`/`gemini`/`opencode`), reject `command`, `model_flag`, `output_strategy`, and `tail_stream` fields with a clear error
+- [x] 2.2 Validate every `[harness.<name>.models]` entry: model name matches `^[A-Za-z][A-Za-z0-9_-]*$` (non-numeric); model string is non-empty
+- [x] 2.3 Reject any `command` array element containing the literal `$MODEL` at config load with a clear error directing operators to `model_flag` instead
+- [x] 2.4 Add `ResolveAgent(spec string) (harness, model string, err error)` to the config layer; accepts bare aliases, `harness:weight` (digits — preserved as weight metadata), `harness:model-name`, and raw `harness:model-string`; errors on unresolved model names with `did-you-mean` suggestions (Levenshtein-ranked, top 3, scoped to the same harness)
+- [x] 2.5 Unit tests: model name resolution, bare-alias passthrough, weight passthrough, did-you-mean suggestions on typo, numeric-only model name rejected, unknown harness rejected, built-in harness rejecting `command`/`model_flag`/`output_strategy`/`tail_stream`, `$MODEL` in `command` rejected
 
 ## 3. User-defined harness executor
 

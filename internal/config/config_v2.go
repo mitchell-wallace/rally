@@ -3,13 +3,45 @@ package config
 import (
 	"errors"
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
+	"regexp"
+	"sort"
+	"strings"
 
 	toml "github.com/pelletier/go-toml/v2"
 )
 
 const ExpectedSchemaVersion = 2
+
+var harnessNamePattern = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_-]*$`)
+
+var modelNamePattern = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_-]*$`)
+
+var numericOnlyPattern = regexp.MustCompile(`^\d+$`)
+
+var builtInAliases = map[string]string{
+	"cc":       "claude",
+	"claude":   "claude",
+	"cx":       "codex",
+	"codex":    "codex",
+	"ge":       "gemini",
+	"gemini":   "gemini",
+	"op":       "opencode",
+	"opencode": "opencode",
+}
+
+var builtInCanonical = map[string]bool{
+	"cc":       true,
+	"cx":       true,
+	"ge":       true,
+	"op":       true,
+	"claude":   true,
+	"codex":    true,
+	"gemini":   true,
+	"opencode": true,
+}
 
 type DefaultsConfig struct {
 	Iterations    int    `toml:"iterations,omitempty"`
@@ -137,6 +169,10 @@ func LoadV2(workspaceDir string) (V2Config, error) {
 		}
 	}
 
+	if err := validateHarnesses(cfg.Harnesses); err != nil {
+		return V2Config{}, err
+	}
+
 	if raw.SchemaVersion != 0 && raw.SchemaVersion != ExpectedSchemaVersion {
 		cfg.SchemaWarning = fmt.Sprintf(
 			"config: schema_version is %d, expected %d — proceed with caution",
@@ -144,6 +180,199 @@ func LoadV2(workspaceDir string) (V2Config, error) {
 	}
 
 	return cfg, nil
+}
+
+func validateHarnesses(harnesses map[string]*HarnessConfig) error {
+	for name, h := range harnesses {
+		if !harnessNamePattern.MatchString(name) {
+			return fmt.Errorf("config: invalid harness name %q: must match ^[A-Za-z][A-Za-z0-9_-]*$", name)
+		}
+		if builtInCanonical[name] {
+			if err := validateBuiltInHarness(name, h); err != nil {
+				return err
+			}
+		}
+		if len(h.Command) > 0 {
+			for _, elem := range h.Command {
+				if strings.Contains(elem, "$MODEL") {
+					return fmt.Errorf("config: harness %q command contains $MODEL; use model_flag instead of $MODEL placeholder", name)
+				}
+			}
+		}
+		for modelName, modelString := range h.Models {
+			if !modelNamePattern.MatchString(modelName) || numericOnlyPattern.MatchString(modelName) {
+				return fmt.Errorf("config: harness %q model name %q is invalid: must be a non-numeric identifier matching ^[A-Za-z][A-Za-z0-9_-]*$", name, modelName)
+			}
+			if modelString == "" {
+				return fmt.Errorf("config: harness %q model name %q has an empty model string", name, modelName)
+			}
+		}
+	}
+	return nil
+}
+
+func validateBuiltInHarness(name string, h *HarnessConfig) error {
+	if len(h.Command) > 0 {
+		return fmt.Errorf("config: built-in harness %q cannot declare command", name)
+	}
+	if h.ModelFlag != nil {
+		return fmt.Errorf("config: built-in harness %q cannot declare model_flag", name)
+	}
+	if h.OutputStrategy != "" {
+		return fmt.Errorf("config: built-in harness %q cannot declare output_strategy", name)
+	}
+	if h.TailStream != "" {
+		return fmt.Errorf("config: built-in harness %q cannot declare tail_stream", name)
+	}
+	return nil
+}
+
+type ResolvedAgent struct {
+	Harness string
+	Model   string
+}
+
+func (c V2Config) ResolveAgent(spec string) (ResolvedAgent, error) {
+	parts := strings.SplitN(spec, ":", 3)
+	if len(parts) == 3 {
+		return ResolvedAgent{}, fmt.Errorf("invalid agent spec %q: weight-on-named-model (e.g. cc:opus:2) is not supported", spec)
+	}
+
+	alias := parts[0]
+	harness, ok := builtInAliases[alias]
+	if !ok {
+		if c.Harnesses != nil {
+			if _, userOk := c.Harnesses[alias]; userOk {
+				harness = alias
+				ok = true
+			}
+		}
+	}
+	if !ok {
+		return ResolvedAgent{}, fmt.Errorf("unknown agent alias %q", alias)
+	}
+
+	if len(parts) == 1 {
+		return ResolvedAgent{Harness: harness}, nil
+	}
+
+	right := parts[1]
+	if numericOnlyPattern.MatchString(right) {
+		return ResolvedAgent{Harness: harness}, nil
+	}
+
+	if modelNamePattern.MatchString(right) && !numericOnlyPattern.MatchString(right) {
+		hc, found := c.Harnesses[harness]
+		if !found {
+			hc, found = c.Harnesses[alias]
+		}
+		if found && hc.Models != nil {
+			if modelStr, modelOk := hc.Models[right]; modelOk {
+				return ResolvedAgent{Harness: harness, Model: modelStr}, nil
+			}
+		}
+		suggestions := didYouMean(right, modelNamesForHarness(c.Harnesses, harness, alias))
+		if suggestions != "" {
+			return ResolvedAgent{}, fmt.Errorf("unknown model %q for harness %q; did you mean %s?", right, harness, suggestions)
+		}
+		return ResolvedAgent{}, fmt.Errorf("unknown model %q for harness %q (no models defined for this harness)", right, harness)
+	}
+
+	return ResolvedAgent{Harness: harness, Model: right}, nil
+}
+
+func resolveToCanonical(harness string) string {
+	if c, ok := builtInAliases[harness]; ok {
+		return c
+	}
+	return ""
+}
+
+func modelNamesForHarness(harnesses map[string]*HarnessConfig, harness string, alias string) []string {
+	names := []string{}
+	seen := map[string]bool{}
+	for _, key := range []string{harness, alias} {
+		if key == "" {
+			continue
+		}
+		if h, ok := harnesses[key]; ok && h.Models != nil {
+			for k := range h.Models {
+				if !seen[k] {
+					names = append(names, k)
+					seen[k] = true
+				}
+			}
+		}
+	}
+	return names
+}
+
+func didYouMean(target string, candidates []string) string {
+	if len(candidates) == 0 {
+		return ""
+	}
+	type scored struct {
+		name  string
+		score int
+	}
+	var ranked []scored
+	for _, c := range candidates {
+		d := levenshtein(target, c)
+		ranked = append(ranked, scored{c, d})
+	}
+	sort.Slice(ranked, func(i, j int) bool {
+		return ranked[i].score < ranked[j].score
+	})
+	maxSuggestions := 3
+	if len(ranked) < maxSuggestions {
+		maxSuggestions = len(ranked)
+	}
+	top := make([]string, maxSuggestions)
+	for i := 0; i < maxSuggestions; i++ {
+		top[i] = ranked[i].name
+	}
+	return strings.Join(top, ", ")
+}
+
+func levenshtein(a, b string) int {
+	la, lb := len(a), len(b)
+	if la == 0 {
+		return lb
+	}
+	if lb == 0 {
+		return la
+	}
+	prev := make([]int, lb+1)
+	curr := make([]int, lb+1)
+	for j := 0; j <= lb; j++ {
+		prev[j] = j
+	}
+	for i := 1; i <= la; i++ {
+		curr[0] = i
+		for j := 1; j <= lb; j++ {
+			cost := 1
+			if a[i-1] == b[j-1] {
+				cost = 0
+			}
+			curr[j] = min(
+				prev[j]+1,
+				curr[j-1]+1,
+				prev[j-1]+cost,
+			)
+		}
+		prev, curr = curr, prev
+	}
+	return prev[lb]
+}
+
+func min(vals ...int) int {
+	m := math.MaxInt
+	for _, v := range vals {
+		if v < m {
+			m = v
+		}
+	}
+	return m
 }
 
 func SaveV2(workspaceDir string, cfg V2Config) error {
