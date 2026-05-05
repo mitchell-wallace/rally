@@ -293,7 +293,7 @@ func (c V2Config) ResolveAgent(spec string) (agent.ResolvedAgent, error) {
 		return agent.ResolvedAgent{Harness: harness, Model: c.defaultModelForHarness(harness)}, nil
 	}
 
-	if modelNamePattern.MatchString(right) && !numericOnlyPattern.MatchString(right) {
+	if modelNamePattern.MatchString(right) {
 		hc, found := c.Harnesses[harness]
 		if !found {
 			hc, found = c.Harnesses[alias]
