@@ -1,10 +1,10 @@
 version: 1
-updated_at: "2026-05-05T10:13:56Z"
+updated_at: "2026-05-05T10:19:41Z"
 active_batch:
     agent_mix:
         - op
     batch_id: 7
-    completed_iterations: 1
+    completed_iterations: 2
     ended_at: ""
     started_at: "2026-05-05T10:08:47Z"
     target_iterations: 5
@@ -321,3 +321,21 @@ recent_sessions:
       follow_ups:
         - 'Phase 2 (Quota-syntax parser) is next: implement internal/routing/parse.go'
       transcript_path: /home/agent/.local/share/rally/sessions/session-20/terminal.log
+    - session_id: 21
+      batch_id: 7
+      iteration_index: 2
+      agent: opencode
+      status: completed
+      started_at: "2026-05-05T10:13:56Z"
+      ended_at: "2026-05-05T10:19:41Z"
+      runtime_seconds: 344
+      summary: 'Phase 2 complete: implemented quota-syntax parser in internal/routing/parse.go with 27 passing unit tests'
+      files_touched:
+        - internal/routing/parse.go
+        - internal/routing/parse_test.go
+        - openspec/changes/role-aware-routing/tasks.md
+      commits:
+        - 0fc854a
+      follow_ups:
+        - 'Phase 3: Scheduler core (internal/routing/scheduler.go)'
+      transcript_path: /home/agent/.local/share/rally/sessions/session-21/terminal.log
