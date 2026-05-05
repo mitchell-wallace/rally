@@ -1,10 +1,10 @@
 version: 1
-updated_at: "2026-05-05T03:07:45Z"
+updated_at: "2026-05-05T03:13:44Z"
 active_batch:
     agent_mix:
         - op
     batch_id: 6
-    completed_iterations: 3
+    completed_iterations: 4
     ended_at: ""
     started_at: "2026-05-05T02:18:32Z"
     target_iterations: 5
@@ -272,3 +272,17 @@ recent_sessions:
       follow_ups:
         - Phase 16 (edge cases and errors) still has 7 unchecked tasks
       transcript_path: /home/agent/.local/share/rally/sessions/session-17/terminal.log
+    - session_id: 18
+      batch_id: 6
+      iteration_index: 4
+      agent: opencode
+      status: completed
+      started_at: "2026-05-05T03:07:45Z"
+      ended_at: "2026-05-05T03:13:44Z"
+      runtime_seconds: 359
+      summary: Verified all phase 16 edge-case/error tasks are covered by existing tests and marked complete in tasks.md
+      files_touched:
+        - openspec/changes/rally-config-and-harness-shortcuts/tasks.md
+      commits:
+        - c1001fc
+      transcript_path: /home/agent/.local/share/rally/sessions/session-18/terminal.log
