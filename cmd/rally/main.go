@@ -70,11 +70,13 @@ func runRelay(cmd *cobra.Command, args []string) error {
 
 	var expandedAgents []string
 	for _, spec := range agentSpecs {
-		fields := strings.Fields(spec)
-		if len(fields) == 0 {
-			return fmt.Errorf("empty value for --agent")
+		for _, commaPart := range strings.Split(spec, ",") {
+			fields := strings.Fields(strings.TrimSpace(commaPart))
+			if len(fields) == 0 {
+				return fmt.Errorf("empty value for --agent")
+			}
+			expandedAgents = append(expandedAgents, fields...)
 		}
-		expandedAgents = append(expandedAgents, fields...)
 	}
 
 	workspaceDir, err := resolveWorkspaceDir()
@@ -453,7 +455,7 @@ func init() {
 	})
 
 	relayCmd.Flags().Int("iterations", 1, "Number of iterations")
-	relayCmd.Flags().StringArray("agent", nil, "Agent mix (repeatable; quoted lists allowed, e.g. \"cc:2 cx:1\")")
+	relayCmd.Flags().StringArray("agent", nil, "Agent mix (repeatable; comma- or space-separated, e.g. \"cc:2,cx:1\" or \"cc:2 cx:1\")")
 	relayCmd.Flags().Bool("resume", false, "Resume the last unfinished batch explicitly")
 	relayCmd.Flags().Bool("new", false, "Start a new batch explicitly, discarding unfinished batch state")
 }

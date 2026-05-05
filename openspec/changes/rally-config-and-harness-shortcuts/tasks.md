@@ -86,11 +86,11 @@ After phases 4–8 land, grep for residual references to the old shape. Each pat
 
 ## 10. Mix parsing extension
 
-- [ ] 10.1 Update the relay-runner's mix parser to call `ResolveAgent` for every comma- or space-separated entry
-- [ ] 10.2 Confirm the existing `cc:2 cx:1` weighted form still parses correctly (digits-after-colon → weight)
-- [ ] 10.3 Allow mix entries to combine bare aliases, weighted aliases, and named-model entries in the same string
-- [ ] 10.4 Reject `cc:opus:2` (third colon segment) with a clear error in v0.5.0; reserved for v0.6.0
-- [ ] 10.5 Unit tests: each combination of bare/weighted/named; mixed forms in one mix; error cases for unresolved names and third colon segment
+- [x] 10.1 Update the relay-runner's mix parser to call `ResolveAgent` for every comma- or space-separated entry
+- [x] 10.2 Confirm the existing `cc:2 cx:1` weighted form still parses correctly (digits-after-colon → weight)
+- [x] 10.3 Allow mix entries to combine bare aliases, weighted aliases, and named-model entries in the same string
+- [x] 10.4 Reject `cc:opus:2` (third colon segment) with a clear error in v0.5.0; reserved for v0.6.0
+- [x] 10.5 Unit tests: each combination of bare/weighted/named; mixed forms in one mix; error cases for unresolved names and third colon segment
 
 ## 11. Defaults loading and init config
 

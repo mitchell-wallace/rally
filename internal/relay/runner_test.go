@@ -1225,3 +1225,81 @@ func TestPerHarnessPauseSkipsAllModels(t *testing.T) {
 		t.Fatalf("expected 'all agents paused' error, got %q", err.Error())
 	}
 }
+
+func TestParseAgentMixThirdColonSegmentRejected(t *testing.T) {
+	_, err := ParseAgentMix([]string{"cc:opus:2"}, Resolver(testResolver))
+	if err == nil {
+		t.Fatal("expected error for third colon segment")
+	}
+	if !strings.Contains(err.Error(), "weight-on-named-model") {
+		t.Fatalf("error = %q, want mention of weight-on-named-model", err.Error())
+	}
+}
+
+func TestParseAgentMixUnresolvedModelError(t *testing.T) {
+	strictResolver := func(spec string) (ResolvedAgent, error) {
+		ra, err := testResolver(spec)
+		if err != nil {
+			return ra, err
+		}
+		if ra.Model != "" && ra.Model != "z" && ra.Model != "opus" && ra.Model != "sonnet" {
+			return ResolvedAgent{}, fmt.Errorf("unknown model %q for harness %q", ra.Model, ra.Harness)
+		}
+		return ra, nil
+	}
+	_, err := ParseAgentMix([]string{"cc:unknown_model"}, Resolver(strictResolver))
+	if err == nil {
+		t.Fatal("expected error for unresolved model name")
+	}
+	if !strings.Contains(err.Error(), "unknown model") {
+		t.Fatalf("error = %q, want mention of unknown model", err.Error())
+	}
+}
+
+func TestParseAgentMixUnknownHarnessError(t *testing.T) {
+	_, err := ParseAgentMix([]string{"unknown:foo"}, Resolver(testResolver))
+	if err == nil {
+		t.Fatal("expected error for unknown harness")
+	}
+	if !strings.Contains(err.Error(), "unknown agent alias") {
+		t.Fatalf("error = %q, want mention of unknown agent alias", err.Error())
+	}
+}
+
+func TestParseAgentMixBareAlias(t *testing.T) {
+	mix, err := ParseAgentMix([]string{"cc"}, Resolver(testResolver))
+	if err != nil {
+		t.Fatalf("ParseAgentMix failed: %v", err)
+	}
+	if len(mix.Cycle) != 1 {
+		t.Fatalf("expected 1 cycle entry, got %d", len(mix.Cycle))
+	}
+	if mix.Cycle[0] != (ResolvedAgent{Harness: "claude"}) {
+		t.Fatalf("cycle[0] = %+v, want {claude}", mix.Cycle[0])
+	}
+	if mix.Label != "claude" {
+		t.Fatalf("label = %q, want %q", mix.Label, "claude")
+	}
+}
+
+func TestParseAgentMixAllFormsCombined(t *testing.T) {
+	mix, err := ParseAgentMix([]string{"cc", "cx:2", "op:z"}, Resolver(testResolver))
+	if err != nil {
+		t.Fatalf("ParseAgentMix failed: %v", err)
+	}
+	if len(mix.Cycle) != 4 {
+		t.Fatalf("expected 4 cycle entries, got %d: %+v", len(mix.Cycle), mix.Cycle)
+	}
+	if mix.Cycle[0] != (ResolvedAgent{Harness: "claude"}) {
+		t.Fatalf("cycle[0] = %+v, want {claude}", mix.Cycle[0])
+	}
+	if mix.Cycle[1] != (ResolvedAgent{Harness: "codex"}) {
+		t.Fatalf("cycle[1] = %+v, want {codex}", mix.Cycle[1])
+	}
+	if mix.Cycle[2] != (ResolvedAgent{Harness: "codex"}) {
+		t.Fatalf("cycle[2] = %+v, want {codex}", mix.Cycle[2])
+	}
+	if mix.Cycle[3] != (ResolvedAgent{Harness: "opencode", Model: "z"}) {
+		t.Fatalf("cycle[3] = %+v, want {opencode z}", mix.Cycle[3])
+	}
+}
