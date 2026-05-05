@@ -1,13 +1,5 @@
 version: 1
-updated_at: "2026-05-05T03:13:44Z"
-active_batch:
-    agent_mix:
-        - op
-    batch_id: 6
-    completed_iterations: 4
-    ended_at: ""
-    started_at: "2026-05-05T02:18:32Z"
-    target_iterations: 5
+updated_at: "2026-05-05T03:20:33Z"
 history_window: 50
 recent_sessions:
     - session_id: 1
@@ -286,3 +278,20 @@ recent_sessions:
       commits:
         - c1001fc
       transcript_path: /home/agent/.local/share/rally/sessions/session-18/terminal.log
+    - session_id: 19
+      batch_id: 6
+      iteration_index: 5
+      agent: opencode
+      status: completed
+      started_at: "2026-05-05T03:13:44Z"
+      ended_at: "2026-05-05T03:20:33Z"
+      runtime_seconds: 408
+      summary: 'Verified all 16 phases of rally-config-and-harness-shortcuts change. All phases complete, build and tests pass. Fixed a gap: added output_strategy and tail_stream validation for user-defined harnesses at config load time.'
+      files_touched:
+        - internal/config/config_v2.go
+        - internal/config/config_v2_test.go
+      commits:
+        - 208df2e
+      follow_ups:
+        - All phases complete. Ready for archive via openspec-archive-change.
+      transcript_path: /home/agent/.local/share/rally/sessions/session-19/terminal.log
