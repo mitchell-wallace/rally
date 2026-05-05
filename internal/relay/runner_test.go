@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/mitchell-wallace/rally/internal/agent"
+	"github.com/mitchell-wallace/rally/internal/config"
 	"github.com/mitchell-wallace/rally/internal/laps"
 	"github.com/mitchell-wallace/rally/internal/progress"
 	"github.com/mitchell-wallace/rally/internal/store"
@@ -1678,5 +1679,449 @@ func TestFallbackInstructionsUnconfiguredUsesBuiltInDefault(t *testing.T) {
 
 	if receivedTaskPrompt != builtInDefaultFallback {
 		t.Errorf("expected built-in default fallback, got %q", receivedTaskPrompt)
+	}
+}
+
+// --- Phase 15: Verification — execution paths ---
+
+func writeRelayScript(t *testing.T, dir, name, scriptContent string) string {
+	t.Helper()
+	p := filepath.Join(dir, name)
+	if err := os.WriteFile(p, []byte("#!/bin/sh\n"+scriptContent), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	return p
+}
+
+func TestE2E_FullConfig_NamedModelsAndFallback(t *testing.T) {
+	workspaceDir := t.TempDir()
+	rallyDir := filepath.Join(workspaceDir, ".rally")
+	os.MkdirAll(rallyDir, 0o755)
+	initRepo(t, workspaceDir)
+
+	fallbackFile := filepath.Join(workspaceDir, "fallback.md")
+	os.WriteFile(fallbackFile, []byte("Custom fallback instructions."), 0o644)
+
+	configContent := fmt.Sprintf(`schema_version = 2
+
+[defaults]
+iterations = 2
+mix = "cc:opus"
+
+[harness.cc.models]
+opus = "claude-opus-4-7"
+
+[fallback]
+instructions_file = %q
+`, fallbackFile)
+	os.WriteFile(filepath.Join(rallyDir, "config.toml"), []byte(configContent), 0o644)
+
+	cfg, err := config.LoadV2(workspaceDir)
+	if err != nil {
+		t.Fatalf("LoadV2: %v", err)
+	}
+	if cfg.Defaults.Iterations != 2 {
+		t.Fatalf("iterations = %d, want 2", cfg.Defaults.Iterations)
+	}
+	if cfg.Defaults.Mix != "cc:opus" {
+		t.Fatalf("mix = %q, want 'cc:opus'", cfg.Defaults.Mix)
+	}
+
+	resolver := func(spec string) (ResolvedAgent, error) {
+		ra, err := cfg.ResolveAgent(spec)
+		if err != nil {
+			return ResolvedAgent{}, err
+		}
+		return ResolvedAgent{Harness: ra.Harness, Model: ra.Model}, nil
+	}
+
+	s := newTestStore(t, rallyDir)
+	var capturedModel string
+	var capturedTaskPrompt string
+	changeCounter := 0
+	exec := &funcExecutor{
+		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+			capturedModel = opts.Model
+			capturedTaskPrompt = opts.TaskPrompt
+			changeCounter++
+			f, _ := os.OpenFile(filepath.Join(workspaceDir, "changes.txt"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+			fmt.Fprintf(f, "change %d\n", changeCounter)
+			f.Close()
+			return &agent.TryResult{Completed: true}, nil
+		},
+	}
+	executors := map[string]agent.Executor{"claude": exec}
+
+	mixSpecs := strings.Fields(cfg.Defaults.Mix)
+	r := NewRunner(s, Config{
+		WorkspaceDir:             workspaceDir,
+		DataDir:                  t.TempDir(),
+		AgentMixSpecs:            mixSpecs,
+		TargetIterations:         cfg.Defaults.Iterations,
+		Resolver:                 resolver,
+		FallbackInstructionsFile: cfg.Fallback.InstructionsFile,
+	}, executors)
+
+	if err := r.Run(context.Background()); err != nil {
+		t.Fatalf("run failed: %v", err)
+	}
+
+	if capturedModel != "claude-opus-4-7" {
+		t.Errorf("expected model 'claude-opus-4-7' from named resolution, got %q", capturedModel)
+	}
+	if capturedTaskPrompt != "Custom fallback instructions." {
+		t.Errorf("expected fallback instructions as task prompt, got %q", capturedTaskPrompt)
+	}
+
+	relays := s.AllRelays()
+	if len(relays) != 1 || relays[0].CompletedIterations != 2 {
+		t.Fatalf("expected 2 completed iterations, got %+v", relays)
+	}
+}
+
+func TestE2E_UserDefinedHarness_ModelFlagSet(t *testing.T) {
+	workspaceDir := t.TempDir()
+	rallyDir := filepath.Join(workspaceDir, ".rally")
+	os.MkdirAll(rallyDir, 0o755)
+	initRepo(t, workspaceDir)
+
+	argsFile := filepath.Join(workspaceDir, "recorded_args.txt")
+	changeFile := filepath.Join(workspaceDir, "changes.txt")
+	script := writeRelayScript(t, workspaceDir, "droid.sh", fmt.Sprintf(
+		`echo "ARGS:$@" > %q; touch %q; echo "ok"`, argsFile, changeFile))
+
+	modelFlag := "--model"
+	droidExec := &agent.GenericExecutor{
+		Command:   []string{script},
+		ModelFlag: &modelFlag,
+	}
+
+	resolver := func(spec string) (ResolvedAgent, error) {
+		if spec == "droid:v1" {
+			return ResolvedAgent{Harness: "droid", Model: "droid-v1"}, nil
+		}
+		if spec == "droid" {
+			return ResolvedAgent{Harness: "droid"}, nil
+		}
+		return testResolver(spec)
+	}
+
+	s := newTestStore(t, rallyDir)
+	executors := map[string]agent.Executor{"droid": droidExec}
+
+	r := NewRunner(s, Config{
+		WorkspaceDir:     workspaceDir,
+		DataDir:          t.TempDir(),
+		AgentMixSpecs:    []string{"droid:v1"},
+		TargetIterations: 1,
+		Resolver:         resolver,
+		TaskPrompt:       "test prompt",
+	}, executors)
+
+	if err := r.Run(context.Background()); err != nil {
+		t.Fatalf("run failed: %v", err)
+	}
+
+	data, err := os.ReadFile(argsFile)
+	if err != nil {
+		t.Fatalf("read args: %v", err)
+	}
+	content := string(data)
+	if !strings.Contains(content, "--model") || !strings.Contains(content, "droid-v1") {
+		t.Errorf("expected '--model droid-v1' in args, got %q", content)
+	}
+}
+
+func TestE2E_UserDefinedHarness_BareAliasNoModel(t *testing.T) {
+	workspaceDir := t.TempDir()
+	rallyDir := filepath.Join(workspaceDir, ".rally")
+	os.MkdirAll(rallyDir, 0o755)
+	initRepo(t, workspaceDir)
+
+	argsFile := filepath.Join(workspaceDir, "recorded_args.txt")
+	changeFile := filepath.Join(workspaceDir, "changes.txt")
+	script := writeRelayScript(t, workspaceDir, "droid.sh", fmt.Sprintf(
+		`echo "ARGS:$@" > %q; touch %q; echo "ok"`, argsFile, changeFile))
+
+	modelFlag := "--model"
+	droidExec := &agent.GenericExecutor{
+		Command:   []string{script},
+		ModelFlag: &modelFlag,
+	}
+
+	resolver := func(spec string) (ResolvedAgent, error) {
+		if spec == "droid" {
+			return ResolvedAgent{Harness: "droid"}, nil
+		}
+		return testResolver(spec)
+	}
+
+	s := newTestStore(t, rallyDir)
+	executors := map[string]agent.Executor{"droid": droidExec}
+
+	r := NewRunner(s, Config{
+		WorkspaceDir:     workspaceDir,
+		DataDir:          t.TempDir(),
+		AgentMixSpecs:    []string{"droid"},
+		TargetIterations: 1,
+		Resolver:         resolver,
+		TaskPrompt:       "test prompt",
+	}, executors)
+
+	if err := r.Run(context.Background()); err != nil {
+		t.Fatalf("run failed: %v", err)
+	}
+
+	data, err := os.ReadFile(argsFile)
+	if err != nil {
+		t.Fatalf("read args: %v", err)
+	}
+	content := string(data)
+	if strings.Contains(content, "--model") || strings.Contains(content, "droid-v1") {
+		t.Errorf("expected no model in args for bare alias, got %q", content)
+	}
+}
+
+func TestE2E_UserDefinedHarness_ModelFlagEmpty(t *testing.T) {
+	workspaceDir := t.TempDir()
+	rallyDir := filepath.Join(workspaceDir, ".rally")
+	os.MkdirAll(rallyDir, 0o755)
+	initRepo(t, workspaceDir)
+
+	argsFile := filepath.Join(workspaceDir, "recorded_args.txt")
+	changeFile := filepath.Join(workspaceDir, "changes.txt")
+	script := writeRelayScript(t, workspaceDir, "droid.sh", fmt.Sprintf(
+		`echo "ARGS:$@" > %q; touch %q; echo "ok"`, argsFile, changeFile))
+
+	modelFlag := ""
+	droidExec := &agent.GenericExecutor{
+		Command:   []string{script},
+		ModelFlag: &modelFlag,
+	}
+
+	resolver := func(spec string) (ResolvedAgent, error) {
+		if spec == "droid:v1" {
+			return ResolvedAgent{Harness: "droid", Model: "droid-v1"}, nil
+		}
+		return testResolver(spec)
+	}
+
+	s := newTestStore(t, rallyDir)
+	executors := map[string]agent.Executor{"droid": droidExec}
+
+	r := NewRunner(s, Config{
+		WorkspaceDir:     workspaceDir,
+		DataDir:          t.TempDir(),
+		AgentMixSpecs:    []string{"droid:v1"},
+		TargetIterations: 1,
+		Resolver:         resolver,
+		TaskPrompt:       "test prompt",
+	}, executors)
+
+	if err := r.Run(context.Background()); err != nil {
+		t.Fatalf("run failed: %v", err)
+	}
+
+	data, err := os.ReadFile(argsFile)
+	if err != nil {
+		t.Fatalf("read args: %v", err)
+	}
+	content := string(data)
+	if !strings.Contains(content, "droid-v1") {
+		t.Errorf("expected positional model 'droid-v1' in args, got %q", content)
+	}
+	if strings.Contains(content, "--model") {
+		t.Errorf("expected no '--model' flag, got %q", content)
+	}
+}
+
+func TestE2E_UserDefinedHarness_ModelFlagUnset_InfoNote(t *testing.T) {
+	workspaceDir := t.TempDir()
+	rallyDir := filepath.Join(workspaceDir, ".rally")
+	os.MkdirAll(rallyDir, 0o755)
+	initRepo(t, workspaceDir)
+
+	argsFile := filepath.Join(workspaceDir, "recorded_args.txt")
+	changeFile := filepath.Join(workspaceDir, "changes.txt")
+	script := writeRelayScript(t, workspaceDir, "droid.sh", fmt.Sprintf(
+		`echo "ARGS:$@" > %q; touch %q; echo "ok"`, argsFile, changeFile))
+
+	droidExec := &agent.GenericExecutor{
+		Command:   []string{script},
+		ModelFlag: nil,
+	}
+
+	resolver := func(spec string) (ResolvedAgent, error) {
+		if spec == "droid:v1" {
+			return ResolvedAgent{Harness: "droid", Model: "droid-v1"}, nil
+		}
+		return testResolver(spec)
+	}
+
+	s := newTestStore(t, rallyDir)
+	executors := map[string]agent.Executor{"droid": droidExec}
+
+	r := NewRunner(s, Config{
+		WorkspaceDir:     workspaceDir,
+		DataDir:          t.TempDir(),
+		AgentMixSpecs:    []string{"droid:v1"},
+		TargetIterations: 1,
+		Resolver:         resolver,
+		TaskPrompt:       "test prompt",
+	}, executors)
+
+	if err := r.Run(context.Background()); err != nil {
+		t.Fatalf("run failed: %v", err)
+	}
+
+	data, err := os.ReadFile(argsFile)
+	if err != nil {
+		t.Fatalf("read args: %v", err)
+	}
+	content := string(data)
+	if strings.Contains(content, "droid-v1") {
+		t.Errorf("expected no model in args when model_flag unset, got %q", content)
+	}
+}
+
+func TestE2E_BackwardsCompat_RootModelFields(t *testing.T) {
+	workspaceDir := t.TempDir()
+	rallyDir := filepath.Join(workspaceDir, ".rally")
+	os.MkdirAll(rallyDir, 0o755)
+	initRepo(t, workspaceDir)
+
+	configContent := `claude_model = "root-sonnet"
+codex_model = "root-codex"
+data_dir = "/tmp/data"
+run_hooks_on_autocommit = true
+`
+	os.WriteFile(filepath.Join(rallyDir, "config.toml"), []byte(configContent), 0o644)
+
+	cfg, err := config.LoadV2(workspaceDir)
+	if err != nil {
+		t.Fatalf("LoadV2: %v", err)
+	}
+	if len(cfg.DeprecationNotes) != 2 {
+		t.Fatalf("expected 2 deprecation notes, got %d: %v", len(cfg.DeprecationNotes), cfg.DeprecationNotes)
+	}
+
+	resolved, err := cfg.ResolveAgent("cc")
+	if err != nil {
+		t.Fatalf("ResolveAgent cc: %v", err)
+	}
+	if resolved.Model != "root-sonnet" {
+		t.Errorf("expected model 'root-sonnet' from root-level field, got %q", resolved.Model)
+	}
+
+	resolver := func(spec string) (ResolvedAgent, error) {
+		ra, err := cfg.ResolveAgent(spec)
+		if err != nil {
+			return ResolvedAgent{}, err
+		}
+		return ResolvedAgent{Harness: ra.Harness, Model: ra.Model}, nil
+	}
+
+	s := newTestStore(t, rallyDir)
+	var capturedModel string
+	changeCounter := 0
+	exec := &funcExecutor{
+		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+			capturedModel = opts.Model
+			changeCounter++
+			f, _ := os.OpenFile(filepath.Join(workspaceDir, "changes.txt"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+			fmt.Fprintf(f, "change %d\n", changeCounter)
+			f.Close()
+			return &agent.TryResult{Completed: true}, nil
+		},
+	}
+	executors := map[string]agent.Executor{"claude": exec}
+
+	r := NewRunner(s, Config{
+		WorkspaceDir:     workspaceDir,
+		DataDir:          t.TempDir(),
+		AgentMixSpecs:    []string{"cc"},
+		TargetIterations: 1,
+		Resolver:         resolver,
+		TaskPrompt:       "test prompt",
+	}, executors)
+
+	if err := r.Run(context.Background()); err != nil {
+		t.Fatalf("run failed: %v", err)
+	}
+
+	if capturedModel != "root-sonnet" {
+		t.Errorf("expected model 'root-sonnet' reaching executor, got %q", capturedModel)
+	}
+}
+
+func TestE2E_DefaultsSection_NoDeprecation(t *testing.T) {
+	workspaceDir := t.TempDir()
+	rallyDir := filepath.Join(workspaceDir, ".rally")
+	os.MkdirAll(rallyDir, 0o755)
+	initRepo(t, workspaceDir)
+
+	configContent := `schema_version = 2
+
+[defaults]
+claude_model = "defaults-opus"
+iterations = 1
+mix = "cc"
+`
+	os.WriteFile(filepath.Join(rallyDir, "config.toml"), []byte(configContent), 0o644)
+
+	cfg, err := config.LoadV2(workspaceDir)
+	if err != nil {
+		t.Fatalf("LoadV2: %v", err)
+	}
+	if len(cfg.DeprecationNotes) != 0 {
+		t.Fatalf("expected 0 deprecation notes, got %d: %v", len(cfg.DeprecationNotes), cfg.DeprecationNotes)
+	}
+
+	resolved, err := cfg.ResolveAgent("cc")
+	if err != nil {
+		t.Fatalf("ResolveAgent cc: %v", err)
+	}
+	if resolved.Model != "defaults-opus" {
+		t.Errorf("expected model 'defaults-opus' from [defaults], got %q", resolved.Model)
+	}
+
+	resolver := func(spec string) (ResolvedAgent, error) {
+		ra, err := cfg.ResolveAgent(spec)
+		if err != nil {
+			return ResolvedAgent{}, err
+		}
+		return ResolvedAgent{Harness: ra.Harness, Model: ra.Model}, nil
+	}
+
+	s := newTestStore(t, rallyDir)
+	var capturedModel string
+	changeCounter := 0
+	exec := &funcExecutor{
+		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+			capturedModel = opts.Model
+			changeCounter++
+			f, _ := os.OpenFile(filepath.Join(workspaceDir, "changes.txt"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+			fmt.Fprintf(f, "change %d\n", changeCounter)
+			f.Close()
+			return &agent.TryResult{Completed: true}, nil
+		},
+	}
+	executors := map[string]agent.Executor{"claude": exec}
+
+	r := NewRunner(s, Config{
+		WorkspaceDir:     workspaceDir,
+		DataDir:          t.TempDir(),
+		AgentMixSpecs:    strings.Fields(cfg.Defaults.Mix),
+		TargetIterations: cfg.Defaults.Iterations,
+		Resolver:         resolver,
+		TaskPrompt:       "test prompt",
+	}, executors)
+
+	if err := r.Run(context.Background()); err != nil {
+		t.Fatalf("run failed: %v", err)
+	}
+
+	if capturedModel != "defaults-opus" {
+		t.Errorf("expected model 'defaults-opus' reaching executor, got %q", capturedModel)
 	}
 }

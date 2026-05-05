@@ -130,13 +130,13 @@ After phases 4–8 land, grep for residual references to the old shape. Each pat
 
 ## 15. Verification: execution paths
 
-- [ ] 15.1 End-to-end: workspace with full new-config sections — relay reads iterations/mix from `[defaults]`, resolves named models in mix, picks up fallback prompt in no-backend + no-bead case
-- [ ] 15.2 End-to-end: workspace with a user-defined `droid` harness (`model_flag = "--model"`) — relay invokes `command` with model appended and `$PROMPT` piped; tail parser surfaces last 40 lines from the configured stream
-- [ ] 15.3 End-to-end: same workspace with a bare `droid` alias (no model resolved) — model not appended, harness uses its own default
-- [ ] 15.4 End-to-end: harness with `model_flag = ""` (positional) — model appended without a flag
-- [ ] 15.5 End-to-end: harness with `model_flag` unset and a model resolved — model not appended, log shows the informational note
-- [ ] 15.6 Backwards-compat: workspace with v0.2.x root-level `claude_model` (no `[defaults]`) — loads, bare alias `cc` resolves through the root-level field, deprecation note logged once
-- [ ] 15.7 New shape: workspace with `[defaults].claude_model` only — loads with no deprecation note, bare alias `cc` resolves through `[defaults]`
+- [x] 15.1 End-to-end: workspace with full new-config sections — relay reads iterations/mix from `[defaults]`, resolves named models in mix, picks up fallback prompt in no-backend + no-bead case
+- [x] 15.2 End-to-end: workspace with a user-defined `droid` harness (`model_flag = "--model"`) — relay invokes `command` with model appended and `$PROMPT` piped; tail parser surfaces last 40 lines from the configured stream
+- [x] 15.3 End-to-end: same workspace with a bare `droid` alias (no model resolved) — model not appended, harness uses its own default
+- [x] 15.4 End-to-end: harness with `model_flag = ""` (positional) — model appended without a flag
+- [x] 15.5 End-to-end: harness with `model_flag` unset and a model resolved — model not appended, log shows the informational note
+- [x] 15.6 Backwards-compat: workspace with v0.2.x root-level `claude_model` (no `[defaults]`) — loads, bare alias `cc` resolves through the root-level field, deprecation note logged once
+- [x] 15.7 New shape: workspace with `[defaults].claude_model` only — loads with no deprecation note, bare alias `cc` resolves through `[defaults]`
 
 ## 16. Verification: edge cases and errors
 
