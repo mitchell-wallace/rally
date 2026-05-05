@@ -114,9 +114,9 @@ func LoadV2(workspaceDir string) (V2Config, error) {
 	path := V2Path(workspaceDir)
 	data, err := os.ReadFile(path)
 	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-		return V2Config{Harnesses: make(map[string]*HarnessConfig)}, nil
-	}
+			if errors.Is(err, os.ErrNotExist) {
+			return V2Config{Harnesses: make(map[string]*HarnessConfig)}, nil
+		}
 		return V2Config{}, err
 	}
 
@@ -311,13 +311,6 @@ func (c V2Config) ResolveAgent(spec string) (agent.ResolvedAgent, error) {
 	}
 
 	return agent.ResolvedAgent{Harness: harness, Model: right}, nil
-}
-
-func resolveToCanonical(harness string) string {
-	if c, ok := builtInAliases[harness]; ok {
-		return c
-	}
-	return ""
 }
 
 func modelNamesForHarness(harnesses map[string]*HarnessConfig, harness string, alias string) []string {

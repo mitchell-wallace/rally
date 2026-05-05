@@ -1100,8 +1100,8 @@ func TestAgentMixNamedModels(t *testing.T) {
 	if mix.Weights["claude"] != 1 {
 		t.Fatalf("weights[claude] = %d, want 1", mix.Weights["claude"])
 	}
-	if mix.Label != "opencode:z claude:opus" {
-		t.Fatalf("label = %q, want %q", mix.Label, "opencode:z claude:opus")
+	if mix.Label != "op:z cc:opus" {
+		t.Fatalf("label = %q, want %q", mix.Label, "op:z cc:opus")
 	}
 }
 
@@ -1123,8 +1123,8 @@ func TestAgentMixMixedForms(t *testing.T) {
 	if mix.Cycle[2] != (agent.ResolvedAgent{Harness: "opencode", Model: "z"}) {
 		t.Fatalf("cycle[2] = %+v, want {opencode z}", mix.Cycle[2])
 	}
-	if mix.Label != "claude claude opencode:z" {
-		t.Fatalf("label = %q, want %q", mix.Label, "claude claude opencode:z")
+	if mix.Label != "claude claude op:z" {
+		t.Fatalf("label = %q, want %q", mix.Label, "claude claude op:z")
 	}
 }
 
@@ -1191,6 +1191,45 @@ func TestResumeFromStoredLabelWithMixedForms(t *testing.T) {
 		if mix1.Cycle[i] != mix2.Cycle[i] {
 			t.Fatalf("cycle[%d] mismatch: %+v vs %+v", i, mix1.Cycle[i], mix2.Cycle[i])
 		}
+	}
+}
+
+// TestResumeRoundTripWithRealResolver uses the real config resolver to catch
+// the case where resolved model strings look like identifier-like keys (e.g.
+// "claude-opus-4-7") and must not be stored literally in the label.
+func TestResumeRoundTripWithRealResolver(t *testing.T) {
+	cfg := config.V2Config{
+		Harnesses: map[string]*config.HarnessConfig{
+			"cc": {Models: map[string]string{
+				"opus": "claude-opus-4-7",
+			}},
+			"op": {Models: map[string]string{
+				"z": "zai-coding-plan/glm-5.1",
+			}},
+		},
+	}
+	resolver := Resolver(cfg.ResolveAgent)
+
+	mix1, err := ParseAgentMix([]string{"cc:opus", "op:z"}, resolver)
+	if err != nil {
+		t.Fatalf("initial ParseAgentMix failed: %v", err)
+	}
+
+	mix2, err := ParseAgentMix(strings.Fields(mix1.Label), resolver)
+	if err != nil {
+		t.Fatalf("re-parse of label %q failed: %v — label must store short alias, not resolved model string", mix1.Label, err)
+	}
+
+	if len(mix1.Cycle) != len(mix2.Cycle) {
+		t.Fatalf("cycle length mismatch after resume: %d vs %d", len(mix1.Cycle), len(mix2.Cycle))
+	}
+	for i := range mix1.Cycle {
+		if mix1.Cycle[i] != mix2.Cycle[i] {
+			t.Fatalf("cycle[%d] mismatch after resume: %+v vs %+v", i, mix1.Cycle[i], mix2.Cycle[i])
+		}
+	}
+	if mix1.Label != mix2.Label {
+		t.Fatalf("label changed after resume: %q -> %q", mix1.Label, mix2.Label)
 	}
 }
 

@@ -70,7 +70,7 @@ func (g *GenericExecutor) Execute(ctx context.Context, opts RunOptions) (*TryRes
 func (g *GenericExecutor) runGenericCommand(
 	cmd *exec.Cmd,
 	prompt string,
-	pipeStdin bool,
+	promptInArgs bool, // true when $PROMPT was substituted; stdin not used
 	tailStream string,
 	outputLines int,
 	opts RunOptions,
@@ -93,7 +93,7 @@ func (g *GenericExecutor) runGenericCommand(
 		return nil, fmt.Errorf("generic harness: stderr pipe: %w", err)
 	}
 
-	if !pipeStdin {
+	if !promptInArgs {
 		cmd.Stdin = strings.NewReader(prompt)
 	}
 
