@@ -1,5 +1,13 @@
 version: 1
-updated_at: "2026-05-04T23:56:00Z"
+updated_at: "2026-05-05T00:04:44Z"
+active_batch:
+    agent_mix:
+        - op
+    batch_id: 5
+    completed_iterations: 1
+    ended_at: ""
+    started_at: "2026-05-05T00:00:04Z"
+    target_iterations: 5
 history_window: 50
 recent_sessions:
     - session_id: 1
@@ -110,3 +118,26 @@ recent_sessions:
       follow_ups:
         - 'Phase 7: Update built-in executors to read opts.Model, and generic executor integration'
       transcript_path: /home/agent/.local/share/rally/sessions/session-9/terminal.log
+    - session_id: 10
+      batch_id: 5
+      iteration_index: 1
+      agent: opencode
+      status: completed
+      started_at: "2026-05-05T00:00:04Z"
+      ended_at: "2026-05-05T00:04:44Z"
+      runtime_seconds: 280
+      summary: 'Phase 7 complete: wired opts.Model through all executors (claude, codex, gemini, opencode, generic) with fallback to construction-time defaults; added Resolver to runner.Config so stored mix labels with named models round-trip correctly through ParseAgentMix on resume; all tests pass'
+      files_touched:
+        - cmd/rally/main.go
+        - internal/agent/claude.go
+        - internal/agent/codex.go
+        - internal/agent/gemini.go
+        - internal/agent/generic.go
+        - internal/agent/opencode.go
+        - internal/relay/runner.go
+        - openspec/changes/rally-config-and-harness-shortcuts/tasks.md
+      commits:
+        - d3ae364
+      follow_ups:
+        - 'Phase 8 (AgentMix tests) is next: update runner_test.go callsites for ResolvedAgent, add test resolver, add named-model test cases'
+      transcript_path: /home/agent/.local/share/rally/sessions/session-10/terminal.log
