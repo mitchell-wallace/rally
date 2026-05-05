@@ -1,10 +1,10 @@
 version: 1
-updated_at: "2026-05-05T02:37:22Z"
+updated_at: "2026-05-05T02:41:33Z"
 active_batch:
     agent_mix:
         - op
     batch_id: 6
-    completed_iterations: 1
+    completed_iterations: 2
     ended_at: ""
     started_at: "2026-05-05T02:18:32Z"
     target_iterations: 5
@@ -238,3 +238,20 @@ recent_sessions:
         - Phase 13 (Schema version handshake) is the next incomplete phase
         - Phase 14 (Documentation) and Phases 15-16 (Verification) remain
       transcript_path: /home/agent/.local/share/rally/sessions/session-15/terminal.log
+    - session_id: 16
+      batch_id: 6
+      iteration_index: 2
+      agent: opencode
+      status: completed
+      started_at: "2026-05-05T02:37:22Z"
+      ended_at: "2026-05-05T02:41:33Z"
+      runtime_seconds: 251
+      summary: Completed phase 13 (already implemented, marked complete) and phase 14 (documentation) of rally-config-and-harness-shortcuts change. Updated README with comprehensive config docs covering [defaults], [microbeads], [fallback], [harness.<name>.models], user-defined harnesses, model_flag modes, schema_version, backwards compatibility, and v0.5.0/v0.4.0 release notes.
+      files_touched:
+        - README.md
+        - openspec/changes/rally-config-and-harness-shortcuts/tasks.md
+      commits:
+        - 032fb52
+      follow_ups:
+        - 'Phases 15-16 (verification: execution paths, edge cases) remain incomplete'
+      transcript_path: /home/agent/.local/share/rally/sessions/session-16/terminal.log
