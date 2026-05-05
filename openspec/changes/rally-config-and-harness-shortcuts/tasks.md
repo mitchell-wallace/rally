@@ -76,13 +76,13 @@
 
 After phases 4–8 land, grep for residual references to the old shape. Each pattern below should return zero results in non-test, non-spec files (test files may legitimately reference the new typed shape):
 
-- [ ] 9.1 `grep -rn 'AgentForRun' --include='*.go' .` — uses must reference the new `ResolvedAgent` return
-- [ ] 9.2 `grep -rn 'mix\.Cycle\[' --include='*.go' .` — every access should treat the result as a `ResolvedAgent`, not a string
-- [ ] 9.3 `grep -rn 'range mix\.Cycle' --include='*.go' .` — loop variables should be records, not strings
-- [ ] 9.4 `grep -rn 'Cycle:\s*\[\]string' --include='*.go' .` — should return zero hits
-- [ ] 9.5 `grep -rn 'Cycle:\s*cycle' --include='*.go' .` followed by checking `cycle` is `[]ResolvedAgent`
-- [ ] 9.6 `grep -rn 'agentType\s*string' --include='*.go' .` — surviving uses are fine if they take just the harness name (e.g. resilience pause); flag any that should now take a full `ResolvedAgent`
-- [ ] 9.7 Build the binary with `go build ./...` and run the full test suite — type errors surface any remaining callsite
+- [x] 9.1 `grep -rn 'AgentForRun' --include='*.go' .` — uses must reference the new `ResolvedAgent` return
+- [x] 9.2 `grep -rn 'mix\.Cycle\[' --include='*.go' .` — every access should treat the result as a `ResolvedAgent`, not a string
+- [x] 9.3 `grep -rn 'range mix\.Cycle' --include='*.go' .` — loop variables should be records, not strings
+- [x] 9.4 `grep -rn 'Cycle:\s*\[\]string' --include='*.go' .` — should return zero hits
+- [x] 9.5 `grep -rn 'Cycle:\s*cycle' --include='*.go' .` followed by checking `cycle` is `[]ResolvedAgent`
+- [x] 9.6 `grep -rn 'agentType\s*string' --include='*.go' .` — surviving uses are fine if they take just the harness name (e.g. resilience pause); flag any that should now take a full `ResolvedAgent`
+- [x] 9.7 Build the binary with `go build ./...` and run the full test suite — type errors surface any remaining callsite
 
 ## 10. Mix parsing extension
 
