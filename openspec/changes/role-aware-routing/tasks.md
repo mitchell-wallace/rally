@@ -7,11 +7,11 @@
 
 ## 2. Quota-syntax parser
 
-- [ ] 2.1 In `internal/routing/parse.go`, implement positional `:`-split with last-segment-as-quota detection (`^\d+$` or `^\d+-\d+$`)
-- [ ] 2.2 Resolve the agent identifier portion (1 segment → shortcut, 2 segments → harness:model, 3+ → error)
-- [ ] 2.3 Validate quota bounds (`min <= max`, `min > 0`); error on out-of-bounds with the offending entry named
-- [ ] 2.4 Confirm models with embedded digits (`gpt-4`, `claude-4.5-sonnet`) parse correctly because they contain non-digits
-- [ ] 2.5 Unit tests: every entry shape (1/2/3-segment), every quota form (none/single/range/invalid), shortcut + quota combinations
+- [x] 2.1 In `internal/routing/parse.go`, implement positional `:`-split with last-segment-as-quota detection (`^\d+$` or `^\d+-\d+$`)
+- [x] 2.2 Resolve the agent identifier portion (1 segment → shortcut, 2 segments → harness:model, 3+ → error)
+- [x] 2.3 Validate quota bounds (`min <= max`, `min > 0`); error on out-of-bounds with the offending entry named
+- [x] 2.4 Confirm models with embedded digits (`gpt-4`, `claude-4.5-sonnet`) parse correctly because they contain non-digits
+- [x] 2.5 Unit tests: every entry shape (1/2/3-segment), every quota form (none/single/range/invalid), shortcut + quota combinations
 
 ## 3. Scheduler — core
 
