@@ -1,10 +1,10 @@
 version: 1
-updated_at: "2026-05-05T00:11:37Z"
+updated_at: "2026-05-05T00:13:32Z"
 active_batch:
     agent_mix:
         - op
     batch_id: 5
-    completed_iterations: 2
+    completed_iterations: 3
     ended_at: ""
     started_at: "2026-05-05T00:00:04Z"
     target_iterations: 5
@@ -159,3 +159,19 @@ recent_sessions:
         - Phase 9 (final-check sweep) is next incomplete phase
         - Phases 10-16 remain after that
       transcript_path: /home/agent/.local/share/rally/sessions/session-11/terminal.log
+    - session_id: 12
+      batch_id: 5
+      iteration_index: 3
+      agent: opencode
+      status: completed
+      started_at: "2026-05-05T00:11:38Z"
+      ended_at: "2026-05-05T00:13:32Z"
+      runtime_seconds: 114
+      summary: 'Phase 9 (AgentMix final-check sweep) verified and marked complete. All 7 grep checks passed: no residual old-shape references (AgentForRun, Cycle: []string) found; all mix.Cycle accesses and range loops use ResolvedAgent correctly; agentType string uses are legitimate harness-name-only parameters; build and relay tests pass.'
+      files_touched:
+        - openspec/changes/rally-config-and-harness-shortcuts/tasks.md
+      commits:
+        - 665adef
+      follow_ups:
+        - Phase 10 (Mix parsing extension) is the next incomplete phase
+      transcript_path: /home/agent/.local/share/rally/sessions/session-12/terminal.log
