@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -55,6 +56,27 @@ func newTestStore(t *testing.T, dir string) *store.Store {
 		t.Fatal(err)
 	}
 	return s
+}
+
+func testResolver(spec string) (ResolvedAgent, error) {
+	aliases := map[string]string{
+		"cc": "claude", "claude": "claude",
+		"cx": "codex", "codex": "codex",
+		"ge": "gemini", "gemini": "gemini",
+		"op": "opencode", "opencode": "opencode",
+	}
+	parts := strings.SplitN(spec, ":", 2)
+	harness, ok := aliases[parts[0]]
+	if !ok {
+		return ResolvedAgent{}, fmt.Errorf("unknown agent alias %q", parts[0])
+	}
+	if len(parts) == 2 {
+		if _, err := strconv.Atoi(parts[1]); err == nil {
+			return ResolvedAgent{Harness: harness}, nil
+		}
+		return ResolvedAgent{Harness: harness, Model: parts[1]}, nil
+	}
+	return ResolvedAgent{Harness: harness}, nil
 }
 
 func TestInstructionsPassedToExecutor(t *testing.T) {
@@ -954,17 +976,17 @@ func TestHourlyRetryWithOtherAgentActive(t *testing.T) {
 
 	resilience.NowFunc = func() time.Time { return baseTime.Add(2 * time.Hour) }
 
-	mix, err := ParseAgentMix([]string{"cc:2", "cx:1"}, nil)
+	mix, err := ParseAgentMix([]string{"cc:2", "cx:1"}, Resolver(testResolver))
 	if err != nil {
 		t.Fatalf("ParseAgentMix failed: %v", err)
 	}
 
-	agent, nextRunIndex, isHourlyRetry, err := resilience.SelectActiveAgent(mix, 0)
+	picked, nextRunIndex, isHourlyRetry, err := resilience.SelectActiveAgent(mix, 0)
 	if err != nil {
 		t.Fatalf("SelectActiveAgent failed: %v", err)
 	}
-	if agent.Harness != "claude" {
-		t.Fatalf("expected claude (hourly retry), got %s", agent.Harness)
+	if picked.Harness != "claude" {
+		t.Fatalf("expected claude (hourly retry), got %s", picked.Harness)
 	}
 	if nextRunIndex != 1 {
 		t.Fatalf("expected nextRunIndex 1, got %d", nextRunIndex)
@@ -989,7 +1011,7 @@ func TestAllAgentsFrozenEndsRelay(t *testing.T) {
 		t.Fatalf("FreezeAgent codex failed: %v", err)
 	}
 
-	mix, err := ParseAgentMix([]string{"cc:1", "cx:1"}, nil)
+	mix, err := ParseAgentMix([]string{"cc:1", "cx:1"}, Resolver(testResolver))
 	if err != nil {
 		t.Fatalf("ParseAgentMix failed: %v", err)
 	}
@@ -1053,5 +1075,153 @@ func TestStubEntryOnIncompleteRun(t *testing.T) {
 
 	if _, err := os.Stat(progress.RunStatePath(workspaceDir)); !os.IsNotExist(err) {
 		t.Fatal("expected run-state.json to be cleared")
+	}
+}
+
+func TestAgentMixNamedModels(t *testing.T) {
+	mix, err := ParseAgentMix([]string{"op:z", "cc:opus"}, Resolver(testResolver))
+	if err != nil {
+		t.Fatalf("ParseAgentMix failed: %v", err)
+	}
+
+	if len(mix.Cycle) != 2 {
+		t.Fatalf("expected 2 cycle entries, got %d", len(mix.Cycle))
+	}
+	if mix.Cycle[0] != (ResolvedAgent{Harness: "opencode", Model: "z"}) {
+		t.Fatalf("cycle[0] = %+v, want {opencode z}", mix.Cycle[0])
+	}
+	if mix.Cycle[1] != (ResolvedAgent{Harness: "claude", Model: "opus"}) {
+		t.Fatalf("cycle[1] = %+v, want {claude opus}", mix.Cycle[1])
+	}
+	if mix.Weights["opencode"] != 1 {
+		t.Fatalf("weights[opencode] = %d, want 1", mix.Weights["opencode"])
+	}
+	if mix.Weights["claude"] != 1 {
+		t.Fatalf("weights[claude] = %d, want 1", mix.Weights["claude"])
+	}
+	if mix.Label != "opencode:z claude:opus" {
+		t.Fatalf("label = %q, want %q", mix.Label, "opencode:z claude:opus")
+	}
+}
+
+func TestAgentMixMixedForms(t *testing.T) {
+	mix, err := ParseAgentMix([]string{"cc:2", "op:z"}, Resolver(testResolver))
+	if err != nil {
+		t.Fatalf("ParseAgentMix failed: %v", err)
+	}
+
+	if len(mix.Cycle) != 3 {
+		t.Fatalf("expected 3 cycle entries, got %d: %+v", len(mix.Cycle), mix.Cycle)
+	}
+	if mix.Cycle[0] != (ResolvedAgent{Harness: "claude"}) {
+		t.Fatalf("cycle[0] = %+v, want {claude}", mix.Cycle[0])
+	}
+	if mix.Cycle[1] != (ResolvedAgent{Harness: "claude"}) {
+		t.Fatalf("cycle[1] = %+v, want {claude}", mix.Cycle[1])
+	}
+	if mix.Cycle[2] != (ResolvedAgent{Harness: "opencode", Model: "z"}) {
+		t.Fatalf("cycle[2] = %+v, want {opencode z}", mix.Cycle[2])
+	}
+	if mix.Label != "claude claude opencode:z" {
+		t.Fatalf("label = %q, want %q", mix.Label, "claude claude opencode:z")
+	}
+}
+
+func TestAgentMixMixedNamedAndWeighted(t *testing.T) {
+	mix, err := ParseAgentMix([]string{"cc:2", "op:z", "cc:sonnet"}, Resolver(testResolver))
+	if err != nil {
+		t.Fatalf("ParseAgentMix failed: %v", err)
+	}
+
+	if len(mix.Cycle) != 2 {
+		t.Fatalf("expected 2 cycle entries (1 named opencode + 1 named claude), got %d: %+v", len(mix.Cycle), mix.Cycle)
+	}
+	if mix.Cycle[0] != (ResolvedAgent{Harness: "claude", Model: "sonnet"}) {
+		t.Fatalf("cycle[0] = %+v, want {claude sonnet}", mix.Cycle[0])
+	}
+	if mix.Cycle[1] != (ResolvedAgent{Harness: "opencode", Model: "z"}) {
+		t.Fatalf("cycle[1] = %+v, want {opencode z}", mix.Cycle[1])
+	}
+}
+
+func TestResumeFromStoredLabelWithNamedModels(t *testing.T) {
+	resolver := Resolver(testResolver)
+
+	mix1, err := ParseAgentMix([]string{"op:z", "cc:opus"}, resolver)
+	if err != nil {
+		t.Fatalf("initial ParseAgentMix failed: %v", err)
+	}
+
+	mix2, err := ParseAgentMix(strings.Fields(mix1.Label), resolver)
+	if err != nil {
+		t.Fatalf("re-parse of label %q failed: %v", mix1.Label, err)
+	}
+
+	if len(mix1.Cycle) != len(mix2.Cycle) {
+		t.Fatalf("cycle length mismatch: %d vs %d", len(mix1.Cycle), len(mix2.Cycle))
+	}
+	for i := range mix1.Cycle {
+		if mix1.Cycle[i] != mix2.Cycle[i] {
+			t.Fatalf("cycle[%d] mismatch: %+v vs %+v", i, mix1.Cycle[i], mix2.Cycle[i])
+		}
+	}
+	if mix1.Label != mix2.Label {
+		t.Fatalf("label mismatch: %q vs %q", mix1.Label, mix2.Label)
+	}
+}
+
+func TestResumeFromStoredLabelWithMixedForms(t *testing.T) {
+	resolver := Resolver(testResolver)
+
+	mix1, err := ParseAgentMix([]string{"cc:2", "op:z"}, resolver)
+	if err != nil {
+		t.Fatalf("initial ParseAgentMix failed: %v", err)
+	}
+
+	mix2, err := ParseAgentMix(strings.Fields(mix1.Label), resolver)
+	if err != nil {
+		t.Fatalf("re-parse of label %q failed: %v", mix1.Label, err)
+	}
+
+	if len(mix1.Cycle) != len(mix2.Cycle) {
+		t.Fatalf("cycle length mismatch: %d vs %d", len(mix1.Cycle), len(mix2.Cycle))
+	}
+	for i := range mix1.Cycle {
+		if mix1.Cycle[i] != mix2.Cycle[i] {
+			t.Fatalf("cycle[%d] mismatch: %+v vs %+v", i, mix1.Cycle[i], mix2.Cycle[i])
+		}
+	}
+}
+
+func TestPerHarnessPauseSkipsAllModels(t *testing.T) {
+	workspaceDir := t.TempDir()
+	rallyDir := filepath.Join(workspaceDir, ".rally")
+	os.MkdirAll(rallyDir, 0o755)
+
+	s := newTestStore(t, rallyDir)
+	resilience := NewResilience(s)
+
+	if err := resilience.PauseAgent("claude", 1); err != nil {
+		t.Fatalf("PauseAgent failed: %v", err)
+	}
+
+	mix, err := ParseAgentMix([]string{"cc:opus", "cc:sonnet"}, Resolver(testResolver))
+	if err != nil {
+		t.Fatalf("ParseAgentMix failed: %v", err)
+	}
+
+	if len(mix.Cycle) != 2 {
+		t.Fatalf("expected 2 cycle entries, got %d", len(mix.Cycle))
+	}
+	if mix.Cycle[0].Model != "opus" || mix.Cycle[1].Model != "sonnet" {
+		t.Fatalf("expected opus+sonnet models, got %+v", mix.Cycle)
+	}
+
+	_, _, _, err = resilience.SelectActiveAgent(mix, 0)
+	if err == nil {
+		t.Fatal("expected error when all agents are paused")
+	}
+	if err.Error() != "all agents paused" {
+		t.Fatalf("expected 'all agents paused' error, got %q", err.Error())
 	}
 }

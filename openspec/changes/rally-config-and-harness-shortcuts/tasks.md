@@ -66,11 +66,11 @@
 
 ## 8. AgentMix tests
 
-- [ ] 8.1 `internal/relay/runner_test.go` — ~17 callsites construct `AgentMixSpecs: []string{"cc:1"}`. Inputs stay strings; assertions on `mix.Cycle[i] == "claude"` flip to `mix.Cycle[i].Harness == "claude"` (and possibly `.Model` too)
-- [ ] 8.2 `internal/relay/runner_test.go:957, 992` — direct `ParseAgentMix(...)` calls; pass a test resolver
-- [ ] 8.3 `internal/relay/runner_test.go:962, 997` — `SelectActiveAgent` return-value assertions update from `agent string` to `agent ResolvedAgent`
-- [ ] 8.4 Add new test cases: cycle with named models (`op:z`, `cc:opus`); cycle with mixed weighted/named/raw forms; resume from a stored label that includes named models
-- [ ] 8.5 Add new test case: resilience pauses harness `claude` and a cycle with `cc:opus` and `cc:sonnet` correctly skips both (because pause is per-harness)
+- [x] 8.1 `internal/relay/runner_test.go` — ~17 callsites construct `AgentMixSpecs: []string{"cc:1"}`. Inputs stay strings; assertions on `mix.Cycle[i] == "claude"` flip to `mix.Cycle[i].Harness == "claude"` (and possibly `.Model` too)
+- [x] 8.2 `internal/relay/runner_test.go:957, 992` — direct `ParseAgentMix(...)` calls; pass a test resolver
+- [x] 8.3 `internal/relay/runner_test.go:962, 997` — `SelectActiveAgent` return-value assertions update from `agent string` to `agent ResolvedAgent`
+- [x] 8.4 Add new test cases: cycle with named models (`op:z`, `cc:opus`); cycle with mixed weighted/named/raw forms; resume from a stored label that includes named models
+- [x] 8.5 Add new test case: resilience pauses harness `claude` and a cycle with `cc:opus` and `cc:sonnet` correctly skips both (because pause is per-harness)
 
 ## 9. AgentMix final-check sweep
 
