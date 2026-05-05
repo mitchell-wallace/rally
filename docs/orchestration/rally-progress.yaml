@@ -1,10 +1,10 @@
 version: 1
-updated_at: "2026-05-05T00:04:44Z"
+updated_at: "2026-05-05T00:11:37Z"
 active_batch:
     agent_mix:
         - op
     batch_id: 5
-    completed_iterations: 1
+    completed_iterations: 2
     ended_at: ""
     started_at: "2026-05-05T00:00:04Z"
     target_iterations: 5
@@ -141,3 +141,21 @@ recent_sessions:
       follow_ups:
         - 'Phase 8 (AgentMix tests) is next: update runner_test.go callsites for ResolvedAgent, add test resolver, add named-model test cases'
       transcript_path: /home/agent/.local/share/rally/sessions/session-10/terminal.log
+    - session_id: 11
+      batch_id: 5
+      iteration_index: 2
+      agent: opencode
+      status: completed
+      started_at: "2026-05-05T00:04:44Z"
+      ended_at: "2026-05-05T00:11:37Z"
+      runtime_seconds: 413
+      summary: 'Implement phase 8 (AgentMix tests): added testResolver helper, updated existing ParseAgentMix/SelectActiveAgent callsites, added 6 new test functions covering named models, mixed weighted/named forms, label round-trip resume, and per-harness pause behavior'
+      files_touched:
+        - internal/relay/runner_test.go
+        - openspec/changes/rally-config-and-harness-shortcuts/tasks.md
+      commits:
+        - c72bd00
+      follow_ups:
+        - Phase 9 (final-check sweep) is next incomplete phase
+        - Phases 10-16 remain after that
+      transcript_path: /home/agent/.local/share/rally/sessions/session-11/terminal.log
