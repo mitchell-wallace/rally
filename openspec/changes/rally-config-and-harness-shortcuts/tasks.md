@@ -140,10 +140,10 @@ After phases 4–8 land, grep for residual references to the old shape. Each pat
 
 ## 16. Verification: edge cases and errors
 
-- [ ] 16.1 Conflict: workspace with both root-level `claude_model = "X"` and `[defaults].claude_model = "Y"` — `Y` wins, deprecation note logged
-- [ ] 16.2 `rally init` writes a fresh config with `[defaults]` populated and `schema_version = 2`
-- [ ] 16.3 Resume: a relay started with `--mix "claude,op:z"` is killed and resumed; the stored label re-parses through the resolver and produces an identical typed cycle
-- [ ] 16.4 Did-you-mean: typo in a `harness:model-name` reference produces an error with closest matches scoped to that harness
-- [ ] 16.5 Numeric-only model name produces a clear error at config load
-- [ ] 16.6 Built-in harness with `command` / `model_flag` / `output_strategy` / `tail_stream` field produces a clear error at config load
-- [ ] 16.7 `$MODEL` literal in any `command` array produces a clear error at config load
+- [x] 16.1 Conflict: workspace with both root-level `claude_model = "X"` and `[defaults].claude_model = "Y"` — `Y` wins, deprecation note logged
+- [x] 16.2 `rally init` writes a fresh config with `[defaults]` populated and `schema_version = 2`
+- [x] 16.3 Resume: a relay started with `--mix "claude,op:z"` is killed and resumed; the stored label re-parses through the resolver and produces an identical typed cycle
+- [x] 16.4 Did-you-mean: typo in a `harness:model-name` reference produces an error with closest matches scoped to that harness
+- [x] 16.5 Numeric-only model name produces a clear error at config load
+- [x] 16.6 Built-in harness with `command` / `model_flag` / `output_strategy` / `tail_stream` field produces a clear error at config load
+- [x] 16.7 `$MODEL` literal in any `command` array produces a clear error at config load
