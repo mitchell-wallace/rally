@@ -1,10 +1,10 @@
 version: 1
-updated_at: "2026-05-05T02:41:33Z"
+updated_at: "2026-05-05T03:07:45Z"
 active_batch:
     agent_mix:
         - op
     batch_id: 6
-    completed_iterations: 2
+    completed_iterations: 3
     ended_at: ""
     started_at: "2026-05-05T02:18:32Z"
     target_iterations: 5
@@ -255,3 +255,20 @@ recent_sessions:
       follow_ups:
         - 'Phases 15-16 (verification: execution paths, edge cases) remain incomplete'
       transcript_path: /home/agent/.local/share/rally/sessions/session-16/terminal.log
+    - session_id: 17
+      batch_id: 6
+      iteration_index: 3
+      agent: opencode
+      status: completed
+      started_at: "2026-05-05T02:41:33Z"
+      ended_at: "2026-05-05T03:07:45Z"
+      runtime_seconds: 1571
+      summary: 'Phase 15 complete: Added 7 E2E verification tests for execution paths covering full config loading with named models and fallback (15.1), user-defined harness with model_flag set/empty/unset (15.2-15.5), backwards-compat root-level model fields (15.6), and [defaults] section resolution (15.7). All tests pass.'
+      files_touched:
+        - internal/relay/runner_test.go
+        - openspec/changes/rally-config-and-harness-shortcuts/tasks.md
+      commits:
+        - 0fa3b92 "Add Phase 15 E2E verification tests for execution paths"
+      follow_ups:
+        - Phase 16 (edge cases and errors) still has 7 unchecked tasks
+      transcript_path: /home/agent/.local/share/rally/sessions/session-17/terminal.log
