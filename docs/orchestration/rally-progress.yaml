@@ -1,10 +1,10 @@
 version: 1
-updated_at: "2026-05-05T00:13:32Z"
+updated_at: "2026-05-05T00:18:49Z"
 active_batch:
     agent_mix:
         - op
     batch_id: 5
-    completed_iterations: 3
+    completed_iterations: 4
     ended_at: ""
     started_at: "2026-05-05T00:00:04Z"
     target_iterations: 5
@@ -175,3 +175,26 @@ recent_sessions:
       follow_ups:
         - Phase 10 (Mix parsing extension) is the next incomplete phase
       transcript_path: /home/agent/.local/share/rally/sessions/session-12/terminal.log
+    - session_id: 13
+      batch_id: 5
+      iteration_index: 4
+      agent: opencode
+      status: completed
+      started_at: "2026-05-05T00:13:32Z"
+      ended_at: "2026-05-05T00:18:49Z"
+      runtime_seconds: 316
+      summary: 'Phase 10 complete: mix parsing extension — comma-separated entry support in CLI layer, unit tests for error cases (third colon segment, unresolved model, unknown harness, bare alias, all forms combined)'
+      files_touched:
+        - cmd/rally/main.go
+        - internal/relay/runner_test.go
+        - openspec/changes/rally-config-and-harness-shortcuts/tasks.md
+      commits:
+        - d924aa3
+      follow_ups:
+        - 'Phase 11: Defaults loading and init config'
+        - 'Phase 12: Content sources'
+        - 'Phase 13: Schema version handshake'
+        - 'Phase 14: Documentation'
+        - 'Phase 15: Verification execution paths'
+        - 'Phase 16: Verification edge cases'
+      transcript_path: /home/agent/.local/share/rally/sessions/session-13/terminal.log
