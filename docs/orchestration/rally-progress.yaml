@@ -1,5 +1,13 @@
 version: 1
-updated_at: "2026-05-05T00:29:03Z"
+updated_at: "2026-05-05T02:37:22Z"
+active_batch:
+    agent_mix:
+        - op
+    batch_id: 6
+    completed_iterations: 1
+    ended_at: ""
+    started_at: "2026-05-05T02:18:32Z"
+    target_iterations: 5
 history_window: 50
 recent_sessions:
     - session_id: 1
@@ -210,3 +218,23 @@ recent_sessions:
       follow_ups:
         - Phase 12 (Content sources) is next incomplete phase
       transcript_path: /home/agent/.local/share/rally/sessions/session-14/terminal.log
+    - session_id: 15
+      batch_id: 6
+      iteration_index: 1
+      agent: opencode
+      status: completed
+      started_at: "2026-05-05T02:18:32Z"
+      ended_at: "2026-05-05T02:37:22Z"
+      runtime_seconds: 1129
+      summary: 'Implemented Phase 12 (Content Sources): wired [microbeads].instructions_file and [fallback].instructions_file config into the relay runner with lazy loading, first-use warnings, and built-in defaults. Added 9 unit tests covering all scenarios.'
+      files_touched:
+        - cmd/rally/main.go
+        - internal/relay/runner.go
+        - internal/relay/runner_test.go
+        - openspec/changes/rally-config-and-harness-shortcuts/tasks.md
+      commits:
+        - c5a2412
+      follow_ups:
+        - Phase 13 (Schema version handshake) is the next incomplete phase
+        - Phase 14 (Documentation) and Phases 15-16 (Verification) remain
+      transcript_path: /home/agent/.local/share/rally/sessions/session-15/terminal.log
