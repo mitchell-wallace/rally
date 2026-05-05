@@ -104,6 +104,18 @@ Or pass the same mix as one string:
 rally relay --agent "cc:1 cx:2 ge:1"
 ```
 
+Named models (defined in `[harness.<name>.models]`):
+
+```sh
+rally relay --agent "cc:opus op:z"
+```
+
+Mix bare aliases, weighted aliases, and named models in one string:
+
+```sh
+rally relay --agent "cc:opus cx:2 op:z"
+```
+
 If you do not provide `--agent`, Rally defaults to a mix of:
 
 ```text
@@ -112,20 +124,146 @@ claude:1 codex:2
 
 ## Configuration
 
-Rally reads `.rally/config.toml` from the workspace.
+Rally reads `.rally/config.toml` from the workspace. Run `rally init` to
+generate a starter config with sensible defaults.
 
-Example:
+Example (v2 schema):
 
 ```toml
+schema_version = 2
+laps_instructions = ""
+run_hooks_on_autocommit = false
+data_dir = ""
+
+[defaults]
+iterations = 1
+mix = "cc cx"
 claude_model = "claude-opus-4.7"
 codex_model = "gpt-5.4"
 gemini_model = "gemini-3.1-pro-preview"
 opencode_model = "zai-coding-plan/glm-5.1"
-laps_instructions = ""
-run_hooks_on_autocommit = false
+
+[microbeads]
+instructions_file = ".rally/mb_instructions.md"
+
+[fallback]
+instructions_file = ".rally/fallback_instructions.md"
 ```
 
-You can create the file manually or let `rally init` write the initial config.
+### `[defaults]`
+
+Per-harness default models and relay defaults live here. A bare alias like `cc`
+in a mix resolves through `[defaults].claude_model` first, then falls back to
+the harness's hard-coded internal default.
+
+| Field              | Type   | Purpose                                        |
+|--------------------|--------|------------------------------------------------|
+| `iterations`       | int    | Default iteration count when `--iterations` is absent |
+| `mix`              | string | Default agent mix when `--agent` is absent     |
+| `claude_model`     | string | Default model for the `cc`/`claude` alias      |
+| `codex_model`      | string | Default model for the `cx`/`codex` alias       |
+| `gemini_model`     | string | Default model for the `ge`/`gemini` alias      |
+| `opencode_model`   | string | Default model for the `op`/`opencode` alias    |
+
+### `[microbeads]`
+
+| Field               | Type   | Purpose                                               |
+|----------------------|--------|-------------------------------------------------------|
+| `instructions_file`  | string | Path to instruction content injected in microbeads-backed mode. Falls back to the built-in default when absent or unreadable. |
+
+Injection is unconditional in microbeads-backed mode (per v0.4.0). There is no
+toggle.
+
+### `[fallback]`
+
+| Field               | Type   | Purpose                                               |
+|----------------------|--------|-------------------------------------------------------|
+| `instructions_file`  | string | Path to prompt content used in no-backend mode when no ready bead exists. Falls back to the built-in default. |
+
+The fallback file has no effect in microbeads-backed mode.
+
+### `[harness.<name>]` — Named models and user-defined harnesses
+
+Each harness can declare named model shortcuts under `[harness.<name>.models]`.
+A mix entry of the form `<alias>:<model-name>` resolves through this table.
+
+```toml
+[harness.cc.models]
+opus = "claude-opus-4-7"
+sonnet = "claude-sonnet-4-6"
+
+[harness.op.models]
+z = "zai-coding-plan/glm-5.1"
+gk = "opencode-go/kimi-k2.6"
+```
+
+With the above, `--agent "cc:opus op:z"` resolves to Claude with
+`claude-opus-4-7` and Opencode with `zai-coding-plan/glm-5.1`.
+
+Built-in harnesses (`cc`/`cx`/`ge`/`op` and their full names) can declare
+named models but **cannot** declare `command`, `model_flag`, `output_strategy`,
+or `tail_stream`.
+
+### User-defined harnesses
+
+A harness that declares `command` registers a new CLI agent. This is how you
+add support for a custom tool without recompiling rally.
+
+Example — a `droid` harness:
+
+```toml
+[harness.droid]
+command = ["droid", "run", "$PROMPT"]
+model_flag = "--model"
+output_strategy = "tail"
+tail_stream = "combined"
+output_lines = 40
+
+[harness.droid.models]
+default = "droid-v1"
+fast = "droid-v1-turbo"
+```
+
+**`command`** is an array of strings passed to `exec`. The literal `$PROMPT` is
+replaced positionally with the prompt body. If `$PROMPT` does not appear
+anywhere in `command`, the prompt is piped on stdin instead. Substitution is
+**positional, not shell** — no shell interpolation occurs, so shell
+metacharacters in the prompt are safe.
+
+**`model_flag`** controls how the resolved model is appended to the command:
+
+| `model_flag` value | Behaviour                                                    |
+|--------------------|--------------------------------------------------------------|
+| `"--model"` (set)  | Appends `[model_flag, model]` when a model is resolved      |
+| `""` (empty)       | Appends `[model]` positionally when a model is resolved     |
+| omitted            | Never appends a model; harness uses its own internal default|
+
+When `model_flag` is omitted and a non-empty model is resolved, rally logs a
+one-line note that the model could not be passed to the harness.
+
+**`tail_stream`** selects which output stream to capture: `stdout`, `stderr`,
+or `combined` (default). **`output_lines`** controls how many trailing lines
+to surface (default 40). The only supported `output_strategy` is `"tail"`.
+
+`$MODEL` is **not** a recognised placeholder in `command`. If present, the
+config loader rejects it with a clear error directing you to `model_flag`.
+
+### `schema_version`
+
+The config file carries a top-level `schema_version` integer (currently `2`).
+If absent, the file is treated as version 1 and accepted silently. On mismatch,
+rally logs a one-line warning and proceeds. Every config write emits
+`schema_version = 2`.
+
+### Backwards compatibility
+
+v0.2.x configs with root-level `claude_model`, `codex_model`, etc. still load.
+If both root-level and `[defaults]` values exist, `[defaults]` takes precedence
+and a deprecation note is logged. Config writes always emit the new shape
+(models under `[defaults]`).
+
+### Other settings
+
 By default Rally uses `--no-verify` for its post-run autocommit checkpoint so
 repo hooks cannot block progress/logging commits. Set
 `run_hooks_on_autocommit = true` if you want those fallback commits to run the
@@ -201,3 +339,38 @@ Rally v0.2.0 uses a new internal architecture:
   logic, error resilience (pause/freeze), and graceful stop support.
 - **Cobra CLI** (`cmd/rally/main.go`) — subcommands: `relay`, `init`,
   `instructions`, `update`, `version`.
+
+## Release Notes
+
+### v0.5.0
+
+**Harnesses + models structure.** The config file gains namespaced sections
+for per-harness model shortcuts, defaults, and user-defined harnesses.
+
+- **`[defaults]`** section: `iterations`, `mix`, and per-harness default models
+  (`claude_model`, `codex_model`, `gemini_model`, `opencode_model`) move here
+  from the file root. Root-level model fields still load with a deprecation
+  note; `[defaults]` takes precedence on conflict.
+- **`[harness.<name>.models]`**: declare named model shortcuts per harness.
+  Use them in mixes as `cc:opus`, `op:z`, etc. Unresolved names get
+  did-you-mean suggestions scoped to the same harness.
+- **`[harness.<name>]` with `command`**: register a user-defined CLI agent.
+  Supports `model_flag` (set / empty / omitted), `$PROMPT` positional
+  substitution (or stdin fallback), `tail_stream`, and `output_lines`.
+  Substitution is positional, not shell.
+- **`[microbeads]`** and **`[fallback]`** sections for instruction content
+  sources in microbeads-backed and no-backend modes respectively.
+- **`AgentMix.Cycle`** is re-typed from `[]string` (harness aliases) to
+  `[]ResolvedAgent` (typed `(harness, model)` records). External code that
+  imports `internal/relay` and reads `Cycle` directly will need updating.
+- **`schema_version = 2`** is emitted on every config write. Absent version is
+  treated as 1; mismatch produces a warning.
+- No migration of progress YAML is required — the relay label format
+  round-trips through the new resolver.
+
+### v0.4.0
+
+- Microbeads integration: bead head-pull surfaces `assignee` field.
+- Injection of microbeads instructions is unconditional in microbeads-backed
+  mode. The legacy `Beads` flat field has been removed (no rename — the field
+  is gone). Progress log remains YAML.

@@ -115,18 +115,18 @@ After phases 4–8 land, grep for residual references to the old shape. Each pat
 
 ## 13. Schema version handshake
 
-- [ ] 13.1 Recognise top-level `schema_version` int; expected value `2`
-- [ ] 13.2 Absent → treat as version 1, accept silently
-- [ ] 13.3 Mismatch → log a one-line warning naming the expected version, proceed with load
-- [ ] 13.4 Every config write SHALL emit `schema_version = 2` at the root
-- [ ] 13.5 Unit tests: absent, matching, mismatched cases
+- [x] 13.1 Recognise top-level `schema_version` int; expected value `2`
+- [x] 13.2 Absent → treat as version 1, accept silently
+- [x] 13.3 Mismatch → log a one-line warning naming the expected version, proceed with load
+- [x] 13.4 Every config write SHALL emit `schema_version = 2` at the root
+- [x] 13.5 Unit tests: absent, matching, mismatched cases
 
 ## 14. Documentation
 
-- [ ] 14.1 Update README's config section with the new sections and example `[harness.<name>.models]` entries
-- [ ] 14.2 Add a README example for a user-defined harness (`droid`) showing `command` + `model_flag`, `tail_stream`, the three `model_flag` modes (set / empty / unset), and a callout that substitution is **positional, not shell** (no shell interpolation; metacharacters in `$PROMPT` are safe)
-- [ ] 14.3 v0.5.0 release notes: harnesses+models structure, `[defaults]`/`[microbeads]`/`[fallback]` sections, user-defined harnesses with templated commands and `tail_stream`, `AgentMix.Cycle` re-typed (callout for any external code that imports the package), no migration of progress YAML
-- [ ] 14.4 Cross-link to v0.4.0 release notes for the `Beads` field removal — no rename, the field is gone
+- [x] 14.1 Update README's config section with the new sections and example `[harness.<name>.models]` entries
+- [x] 14.2 Add a README example for a user-defined harness (`droid`) showing `command` + `model_flag`, `tail_stream`, the three `model_flag` modes (set / empty / unset), and a callout that substitution is **positional, not shell** (no shell interpolation; metacharacters in `$PROMPT` are safe)
+- [x] 14.3 v0.5.0 release notes: harnesses+models structure, `[defaults]`/`[microbeads]`/`[fallback]` sections, user-defined harnesses with templated commands and `tail_stream`, `AgentMix.Cycle` re-typed (callout for any external code that imports the package), no migration of progress YAML
+- [x] 14.4 Cross-link to v0.4.0 release notes for the `Beads` field removal — no rename, the field is gone
 
 ## 15. Verification: execution paths
 
