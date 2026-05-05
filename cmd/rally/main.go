@@ -151,12 +151,14 @@ func runRelay(cmd *cobra.Command, args []string) error {
 	}
 
 	runnerCfg := relay.Config{
-		WorkspaceDir:         workspaceDir,
-		DataDir:              dataDir,
-		AgentMixSpecs:        expandedAgents,
-		TargetIterations:     iterations,
-		RunHooksOnAutoCommit: cfg.RunHooksOnAutoCommit,
-		LapsEnabled:          lapsEnabled,
+		WorkspaceDir:               workspaceDir,
+		DataDir:                    dataDir,
+		AgentMixSpecs:              expandedAgents,
+		TargetIterations:           iterations,
+		RunHooksOnAutoCommit:       cfg.RunHooksOnAutoCommit,
+		LapsEnabled:                lapsEnabled,
+		MicrobeadsInstructionsFile: cfg.Microbeads.InstructionsFile,
+		FallbackInstructionsFile:   cfg.Fallback.InstructionsFile,
 	}
 
 	runnerCfg.Resolver = func(spec string) (relay.ResolvedAgent, error) {

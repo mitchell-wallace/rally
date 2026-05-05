@@ -105,13 +105,13 @@ After phases 4–8 land, grep for residual references to the old shape. Each pat
 
 ## 12. Content sources
 
-- [ ] 12.1 In microbeads-backed mode, source instruction content from `[microbeads].instructions_file` when configured and readable; fall back to the built-in default otherwise
-- [ ] 12.2 Log a warning on first use (not at config load) if the configured path doesn't exist or isn't readable
-- [ ] 12.3 No instructions toggle (per v0.4.0 alignment) — injection is unconditional in microbeads-backed mode
-- [ ] 12.4 Unit tests: configured file used when present, built-in default used when absent or unreadable, warning emitted on first use with missing path
-- [ ] 12.5 Add fallback-injection logic to the prompt-building path: when in no-backend mode AND no ready bead exists, substitute `[fallback].instructions_file` content (or built-in default) for the bead body
-- [ ] 12.6 In microbeads-backed mode, fallback file SHALL have no effect even if configured
-- [ ] 12.7 Unit tests: no-backend + no-bead path uses fallback, microbeads-backed path ignores fallback, missing/unreadable file falls back to built-in default
+- [x] 12.1 In microbeads-backed mode, source instruction content from `[microbeads].instructions_file` when configured and readable; fall back to the built-in default otherwise
+- [x] 12.2 Log a warning on first use (not at config load) if the configured path doesn't exist or isn't readable
+- [x] 12.3 No instructions toggle (per v0.4.0 alignment) — injection is unconditional in microbeads-backed mode
+- [x] 12.4 Unit tests: configured file used when present, built-in default used when absent or unreadable, warning emitted on first use with missing path
+- [x] 12.5 Add fallback-injection logic to the prompt-building path: when in no-backend mode AND no ready bead exists, substitute `[fallback].instructions_file` content (or built-in default) for the bead body
+- [x] 12.6 In microbeads-backed mode, fallback file SHALL have no effect even if configured
+- [x] 12.7 Unit tests: no-backend + no-bead path uses fallback, microbeads-backed path ignores fallback, missing/unreadable file falls back to built-in default
 
 ## 13. Schema version handshake
 

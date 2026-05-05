@@ -1303,3 +1303,380 @@ func TestParseAgentMixAllFormsCombined(t *testing.T) {
 		t.Fatalf("cycle[3] = %+v, want {opencode z}", mix.Cycle[3])
 	}
 }
+
+func TestMicrobeadsInstructionsFileUsed(t *testing.T) {
+	workspaceDir := t.TempDir()
+	rallyDir := filepath.Join(workspaceDir, ".rally")
+	os.MkdirAll(rallyDir, 0o755)
+	initRepo(t, workspaceDir)
+
+	instructionsFile := filepath.Join(workspaceDir, "custom_microbeads.md")
+	os.WriteFile(instructionsFile, []byte("Custom microbeads instructions."), 0o644)
+
+	s := newTestStore(t, rallyDir)
+	var receivedInstructions string
+	exec := &funcExecutor{
+		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+			receivedInstructions = opts.Instructions
+			f, _ := os.OpenFile(filepath.Join(workspaceDir, "changes.txt"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+			fmt.Fprintf(f, "change\n")
+			f.Close()
+			return &agent.TryResult{Completed: true}, nil
+		},
+	}
+	executors := map[string]agent.Executor{"claude": exec}
+
+	oldHeadPull := headPullLap
+	headPullLap = func(context.Context, string) (laps.Lap, error) {
+		return laps.Lap{Title: "task", Description: "do work"}, nil
+	}
+	defer func() { headPullLap = oldHeadPull }()
+
+	r := NewRunner(s, Config{
+		WorkspaceDir:               workspaceDir,
+		DataDir:                    t.TempDir(),
+		AgentMixSpecs:              []string{"cc:1"},
+		TargetIterations:           1,
+		LapsEnabled:                true,
+		Instructions:               "Default instructions.",
+		MicrobeadsInstructionsFile: instructionsFile,
+	}, executors)
+
+	if err := r.Run(context.Background()); err != nil {
+		t.Fatalf("run failed: %v", err)
+	}
+
+	if receivedInstructions != "Custom microbeads instructions." {
+		t.Errorf("expected microbeads instructions, got %q", receivedInstructions)
+	}
+}
+
+func TestMicrobeadsInstructionsFileFallsBackToDefault(t *testing.T) {
+	workspaceDir := t.TempDir()
+	rallyDir := filepath.Join(workspaceDir, ".rally")
+	os.MkdirAll(rallyDir, 0o755)
+	initRepo(t, workspaceDir)
+
+	s := newTestStore(t, rallyDir)
+	var receivedInstructions string
+	exec := &funcExecutor{
+		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+			receivedInstructions = opts.Instructions
+			f, _ := os.OpenFile(filepath.Join(workspaceDir, "changes.txt"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+			fmt.Fprintf(f, "change\n")
+			f.Close()
+			return &agent.TryResult{Completed: true}, nil
+		},
+	}
+	executors := map[string]agent.Executor{"claude": exec}
+
+	oldHeadPull := headPullLap
+	headPullLap = func(context.Context, string) (laps.Lap, error) {
+		return laps.Lap{Title: "task", Description: "do work"}, nil
+	}
+	defer func() { headPullLap = oldHeadPull }()
+
+	r := NewRunner(s, Config{
+		WorkspaceDir:               workspaceDir,
+		DataDir:                    t.TempDir(),
+		AgentMixSpecs:              []string{"cc:1"},
+		TargetIterations:           1,
+		LapsEnabled:                true,
+		Instructions:               "Default instructions.",
+		MicrobeadsInstructionsFile: filepath.Join(workspaceDir, "nonexistent.md"),
+	}, executors)
+
+	if err := r.Run(context.Background()); err != nil {
+		t.Fatalf("run failed: %v", err)
+	}
+
+	if receivedInstructions != "Default instructions." {
+		t.Errorf("expected default instructions when microbeads file missing, got %q", receivedInstructions)
+	}
+}
+
+func TestMicrobeadsInstructionsNotUsedInNoBackendMode(t *testing.T) {
+	workspaceDir := t.TempDir()
+	rallyDir := filepath.Join(workspaceDir, ".rally")
+	os.MkdirAll(rallyDir, 0o755)
+	initRepo(t, workspaceDir)
+
+	instructionsFile := filepath.Join(workspaceDir, "custom_microbeads.md")
+	os.WriteFile(instructionsFile, []byte("Custom microbeads instructions."), 0o644)
+
+	s := newTestStore(t, rallyDir)
+	var receivedInstructions string
+	exec := &funcExecutor{
+		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+			receivedInstructions = opts.Instructions
+			f, _ := os.OpenFile(filepath.Join(workspaceDir, "changes.txt"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+			fmt.Fprintf(f, "change\n")
+			f.Close()
+			return &agent.TryResult{Completed: true}, nil
+		},
+	}
+	executors := map[string]agent.Executor{"claude": exec}
+
+	r := NewRunner(s, Config{
+		WorkspaceDir:               workspaceDir,
+		DataDir:                    t.TempDir(),
+		AgentMixSpecs:              []string{"cc:1"},
+		TargetIterations:           1,
+		LapsEnabled:                false,
+		Instructions:               "Default instructions.",
+		TaskPrompt:                 "Do some work.",
+		MicrobeadsInstructionsFile: instructionsFile,
+	}, executors)
+
+	if err := r.Run(context.Background()); err != nil {
+		t.Fatalf("run failed: %v", err)
+	}
+
+	if receivedInstructions != "Default instructions." {
+		t.Errorf("expected default instructions in no-backend mode, got %q", receivedInstructions)
+	}
+}
+
+func TestMicrobeadsInstructionsUnconfiguredUsesDefault(t *testing.T) {
+	workspaceDir := t.TempDir()
+	rallyDir := filepath.Join(workspaceDir, ".rally")
+	os.MkdirAll(rallyDir, 0o755)
+	initRepo(t, workspaceDir)
+
+	s := newTestStore(t, rallyDir)
+	var receivedInstructions string
+	exec := &funcExecutor{
+		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+			receivedInstructions = opts.Instructions
+			f, _ := os.OpenFile(filepath.Join(workspaceDir, "changes.txt"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+			fmt.Fprintf(f, "change\n")
+			f.Close()
+			return &agent.TryResult{Completed: true}, nil
+		},
+	}
+	executors := map[string]agent.Executor{"claude": exec}
+
+	oldHeadPull := headPullLap
+	headPullLap = func(context.Context, string) (laps.Lap, error) {
+		return laps.Lap{Title: "task", Description: "do work"}, nil
+	}
+	defer func() { headPullLap = oldHeadPull }()
+
+	r := NewRunner(s, Config{
+		WorkspaceDir:     workspaceDir,
+		DataDir:          t.TempDir(),
+		AgentMixSpecs:    []string{"cc:1"},
+		TargetIterations: 1,
+		LapsEnabled:      true,
+		Instructions:     "Default instructions.",
+	}, executors)
+
+	if err := r.Run(context.Background()); err != nil {
+		t.Fatalf("run failed: %v", err)
+	}
+
+	if receivedInstructions != "Default instructions." {
+		t.Errorf("expected default instructions when no microbeads file configured, got %q", receivedInstructions)
+	}
+}
+
+func TestFallbackInstructionsUsedInNoBackendMode(t *testing.T) {
+	workspaceDir := t.TempDir()
+	rallyDir := filepath.Join(workspaceDir, ".rally")
+	os.MkdirAll(rallyDir, 0o755)
+	initRepo(t, workspaceDir)
+
+	fallbackFile := filepath.Join(workspaceDir, "fallback.md")
+	os.WriteFile(fallbackFile, []byte("Fallback prompt content."), 0o644)
+
+	s := newTestStore(t, rallyDir)
+	var receivedTaskPrompt string
+	exec := &funcExecutor{
+		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+			receivedTaskPrompt = opts.TaskPrompt
+			f, _ := os.OpenFile(filepath.Join(workspaceDir, "changes.txt"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+			fmt.Fprintf(f, "change\n")
+			f.Close()
+			return &agent.TryResult{Completed: true}, nil
+		},
+	}
+	executors := map[string]agent.Executor{"claude": exec}
+
+	r := NewRunner(s, Config{
+		WorkspaceDir:             workspaceDir,
+		DataDir:                  t.TempDir(),
+		AgentMixSpecs:            []string{"cc:1"},
+		TargetIterations:         1,
+		LapsEnabled:              false,
+		FallbackInstructionsFile: fallbackFile,
+	}, executors)
+
+	if err := r.Run(context.Background()); err != nil {
+		t.Fatalf("run failed: %v", err)
+	}
+
+	if receivedTaskPrompt != "Fallback prompt content." {
+		t.Errorf("expected fallback file content as task prompt, got %q", receivedTaskPrompt)
+	}
+}
+
+func TestFallbackInstructionsIgnoredWhenCLIPromptProvided(t *testing.T) {
+	workspaceDir := t.TempDir()
+	rallyDir := filepath.Join(workspaceDir, ".rally")
+	os.MkdirAll(rallyDir, 0o755)
+	initRepo(t, workspaceDir)
+
+	fallbackFile := filepath.Join(workspaceDir, "fallback.md")
+	os.WriteFile(fallbackFile, []byte("Fallback prompt content."), 0o644)
+
+	s := newTestStore(t, rallyDir)
+	var receivedTaskPrompt string
+	exec := &funcExecutor{
+		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+			receivedTaskPrompt = opts.TaskPrompt
+			f, _ := os.OpenFile(filepath.Join(workspaceDir, "changes.txt"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+			fmt.Fprintf(f, "change\n")
+			f.Close()
+			return &agent.TryResult{Completed: true}, nil
+		},
+	}
+	executors := map[string]agent.Executor{"claude": exec}
+
+	r := NewRunner(s, Config{
+		WorkspaceDir:             workspaceDir,
+		DataDir:                  t.TempDir(),
+		AgentMixSpecs:            []string{"cc:1"},
+		TargetIterations:         1,
+		LapsEnabled:              false,
+		TaskPrompt:               "CLI prompt",
+		FallbackInstructionsFile: fallbackFile,
+	}, executors)
+
+	if err := r.Run(context.Background()); err != nil {
+		t.Fatalf("run failed: %v", err)
+	}
+
+	if receivedTaskPrompt != "CLI prompt" {
+		t.Errorf("expected CLI prompt to take precedence over fallback, got %q", receivedTaskPrompt)
+	}
+}
+
+func TestFallbackInstructionsIgnoredInMicrobeadsMode(t *testing.T) {
+	workspaceDir := t.TempDir()
+	rallyDir := filepath.Join(workspaceDir, ".rally")
+	os.MkdirAll(rallyDir, 0o755)
+	initRepo(t, workspaceDir)
+
+	fallbackFile := filepath.Join(workspaceDir, "fallback.md")
+	os.WriteFile(fallbackFile, []byte("Fallback prompt content."), 0o644)
+
+	s := newTestStore(t, rallyDir)
+	var receivedTaskPrompt string
+	exec := &funcExecutor{
+		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+			receivedTaskPrompt = opts.TaskPrompt
+			f, _ := os.OpenFile(filepath.Join(workspaceDir, "changes.txt"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+			fmt.Fprintf(f, "change\n")
+			f.Close()
+			return &agent.TryResult{Completed: true}, nil
+		},
+	}
+	executors := map[string]agent.Executor{"claude": exec}
+
+	oldHeadPull := headPullLap
+	headPullLap = func(context.Context, string) (laps.Lap, error) {
+		return laps.NoLap, nil
+	}
+	defer func() { headPullLap = oldHeadPull }()
+
+	r := NewRunner(s, Config{
+		WorkspaceDir:             workspaceDir,
+		DataDir:                  t.TempDir(),
+		AgentMixSpecs:            []string{"cc:1"},
+		TargetIterations:         1,
+		LapsEnabled:              true,
+		TaskPrompt:               "configured prompt",
+		FallbackInstructionsFile: fallbackFile,
+	}, executors)
+
+	if err := r.Run(context.Background()); err != nil {
+		t.Fatalf("run failed: %v", err)
+	}
+
+	if receivedTaskPrompt != "configured prompt" {
+		t.Errorf("expected configured prompt, fallback should be ignored in laps mode, got %q", receivedTaskPrompt)
+	}
+}
+
+func TestFallbackInstructionsMissingFileUsesBuiltInDefault(t *testing.T) {
+	workspaceDir := t.TempDir()
+	rallyDir := filepath.Join(workspaceDir, ".rally")
+	os.MkdirAll(rallyDir, 0o755)
+	initRepo(t, workspaceDir)
+
+	s := newTestStore(t, rallyDir)
+	var receivedTaskPrompt string
+	exec := &funcExecutor{
+		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+			receivedTaskPrompt = opts.TaskPrompt
+			f, _ := os.OpenFile(filepath.Join(workspaceDir, "changes.txt"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+			fmt.Fprintf(f, "change\n")
+			f.Close()
+			return &agent.TryResult{Completed: true}, nil
+		},
+	}
+	executors := map[string]agent.Executor{"claude": exec}
+
+	r := NewRunner(s, Config{
+		WorkspaceDir:             workspaceDir,
+		DataDir:                  t.TempDir(),
+		AgentMixSpecs:            []string{"cc:1"},
+		TargetIterations:         1,
+		LapsEnabled:              false,
+		FallbackInstructionsFile: filepath.Join(workspaceDir, "nonexistent.md"),
+	}, executors)
+
+	if err := r.Run(context.Background()); err != nil {
+		t.Fatalf("run failed: %v", err)
+	}
+
+	if receivedTaskPrompt != builtInDefaultFallback {
+		t.Errorf("expected built-in default fallback, got %q", receivedTaskPrompt)
+	}
+}
+
+func TestFallbackInstructionsUnconfiguredUsesBuiltInDefault(t *testing.T) {
+	workspaceDir := t.TempDir()
+	rallyDir := filepath.Join(workspaceDir, ".rally")
+	os.MkdirAll(rallyDir, 0o755)
+	initRepo(t, workspaceDir)
+
+	s := newTestStore(t, rallyDir)
+	var receivedTaskPrompt string
+	exec := &funcExecutor{
+		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+			receivedTaskPrompt = opts.TaskPrompt
+			f, _ := os.OpenFile(filepath.Join(workspaceDir, "changes.txt"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+			fmt.Fprintf(f, "change\n")
+			f.Close()
+			return &agent.TryResult{Completed: true}, nil
+		},
+	}
+	executors := map[string]agent.Executor{"claude": exec}
+
+	r := NewRunner(s, Config{
+		WorkspaceDir:     workspaceDir,
+		DataDir:          t.TempDir(),
+		AgentMixSpecs:    []string{"cc:1"},
+		TargetIterations: 1,
+		LapsEnabled:      false,
+	}, executors)
+
+	if err := r.Run(context.Background()); err != nil {
+		t.Fatalf("run failed: %v", err)
+	}
+
+	if receivedTaskPrompt != builtInDefaultFallback {
+		t.Errorf("expected built-in default fallback, got %q", receivedTaskPrompt)
+	}
+}

@@ -24,16 +24,18 @@ import (
 )
 
 type Config struct {
-	WorkspaceDir         string
-	DataDir              string
-	AgentMixSpecs        []string
-	TargetIterations     int
-	RunHooksOnAutoCommit bool
-	LapsEnabled          bool
-	Instructions         string
-	TaskPrompt           string
-	OverwriteMixOnResume bool
-	Resolver             Resolver
+	WorkspaceDir               string
+	DataDir                    string
+	AgentMixSpecs              []string
+	TargetIterations           int
+	RunHooksOnAutoCommit       bool
+	LapsEnabled                bool
+	Instructions               string
+	TaskPrompt                 string
+	OverwriteMixOnResume       bool
+	Resolver                   Resolver
+	MicrobeadsInstructionsFile string
+	FallbackInstructionsFile   string
 }
 
 type Runner struct {
@@ -45,6 +47,11 @@ type Runner struct {
 	log        io.WriteCloser
 	resilience *Resilience
 	relayStart time.Time
+
+	microbeadsInstructionsCache string
+	microbeadsWarned            bool
+	fallbackInstructionsCache   string
+	fallbackWarned              bool
 }
 
 var headPullLap = func(ctx context.Context, workspaceDir string) (laps.Lap, error) {
@@ -57,6 +64,49 @@ func NewRunner(s *store.Store, cfg Config, executors map[string]agent.Executor) 
 		cfg:       cfg,
 		executors: executors,
 	}
+}
+
+const builtInDefaultFallback = "Continue the relay run. Review the current state of the codebase and continue making progress on the project."
+
+func (r *Runner) resolveInstructions() string {
+	if !r.cfg.LapsEnabled {
+		return r.cfg.Instructions
+	}
+	if r.cfg.MicrobeadsInstructionsFile == "" {
+		return r.cfg.Instructions
+	}
+	if r.microbeadsInstructionsCache != "" {
+		return r.microbeadsInstructionsCache
+	}
+	data, err := os.ReadFile(r.cfg.MicrobeadsInstructionsFile)
+	if err != nil {
+		if !r.microbeadsWarned {
+			fmt.Fprintf(os.Stderr, "warning: microbeads instructions file %q not readable: %v; using default\n", r.cfg.MicrobeadsInstructionsFile, err)
+			r.microbeadsWarned = true
+		}
+		return r.cfg.Instructions
+	}
+	r.microbeadsInstructionsCache = string(data)
+	return r.microbeadsInstructionsCache
+}
+
+func (r *Runner) loadFallbackInstructions() string {
+	if r.fallbackInstructionsCache != "" {
+		return r.fallbackInstructionsCache
+	}
+	if r.cfg.FallbackInstructionsFile != "" {
+		data, err := os.ReadFile(r.cfg.FallbackInstructionsFile)
+		if err != nil {
+			if !r.fallbackWarned {
+				fmt.Fprintf(os.Stderr, "warning: fallback instructions file %q not readable: %v; using built-in default\n", r.cfg.FallbackInstructionsFile, err)
+				r.fallbackWarned = true
+			}
+			return builtInDefaultFallback
+		}
+		r.fallbackInstructionsCache = string(data)
+		return r.fallbackInstructionsCache
+	}
+	return builtInDefaultFallback
 }
 
 func (r *Runner) RequestStop() {
@@ -372,7 +422,7 @@ func (r *Runner) runOne(ctx context.Context, relay *store.RelayRecord, runIndex 
 			TaskName:         taskName,
 			TaskRequirements: taskRequirements,
 			TaskPrompt:       taskPrompt,
-			Instructions:     r.cfg.Instructions,
+			Instructions:     r.resolveInstructions(),
 			InboxMessage:     inbox,
 			RelayMessage:     relayMessage,
 			PreviousSummary:  previousSummary,
@@ -609,6 +659,9 @@ func (r *Runner) resolveRunTask(ctx context.Context) (string, string, string, er
 	taskPrompt := r.cfg.TaskPrompt
 
 	if !r.cfg.LapsEnabled {
+		if taskPrompt == "" {
+			taskPrompt = r.loadFallbackInstructions()
+		}
 		return taskName, taskRequirements, taskPrompt, nil
 	}
 
