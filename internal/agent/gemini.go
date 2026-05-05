@@ -20,9 +20,14 @@ type geminiWrapper struct {
 func (g *GeminiExecutor) Execute(ctx context.Context, opts RunOptions) (*TryResult, error) {
 	prompt := BuildPrompt(opts)
 
+	model := g.Model
+	if opts.Model != "" {
+		model = opts.Model
+	}
+
 	args := []string{"--prompt", prompt, "--yolo", "--output-format", "json"}
-	if g.Model != "" {
-		args = append(args, "--model", g.Model)
+	if model != "" {
+		args = append(args, "--model", model)
 	}
 
 	cmd := exec.CommandContext(ctx, "gemini", args...)

@@ -21,9 +21,14 @@ type claudeJSONEvent struct {
 func (c *ClaudeExecutor) Execute(ctx context.Context, opts RunOptions) (*TryResult, error) {
 	prompt := BuildPrompt(opts)
 
+	model := c.Model
+	if opts.Model != "" {
+		model = opts.Model
+	}
+
 	args := []string{"-p", prompt, "--dangerously-skip-permissions", "--output-format", "stream-json", "--verbose"}
-	if c.Model != "" {
-		args = append(args, "--model", c.Model)
+	if model != "" {
+		args = append(args, "--model", model)
 	}
 
 	cmd := exec.CommandContext(ctx, "claude", args...)

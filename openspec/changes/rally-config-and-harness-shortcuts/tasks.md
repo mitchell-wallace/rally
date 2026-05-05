@@ -58,11 +58,11 @@
 
 ## 7. AgentMix executor interface and store
 
-- [ ] 7.1 Add `Model string` to `RunOptions` ([executor.go:5-19](internal/agent/executor.go#L5-L19)) so each run can carry its resolved model into the executor
-- [ ] 7.2 Update built-in executors (claude, codex, gemini, opencode) to read `opts.Model` when set, falling back to their construction-time per-harness default when empty (preserves v0.2.x behaviour for bare aliases)
-- [ ] 7.3 The generic user-harness executor reads `opts.Model` for the `model_flag` injection logic in 3.4
-- [ ] 7.4 `Relay.AgentMix string` ([records.go:39](internal/store/records.go#L39)) stays a string, but the format must round-trip the typed cycle. Confirm `mix.Label` (as updated in 4.4) can be re-parsed by `ParseAgentMix` at runner.go:89 to reconstruct the same typed cycle. No schema migration of the JSONL store is required since the field stays `string`
-- [ ] 7.5 Verify resume path: a relay started with named-model mix is correctly resumed after a restart — the stored label re-parses through the same resolver
+- [x] 7.1 Add `Model string` to `RunOptions` ([executor.go:5-19](internal/agent/executor.go#L5-L19)) so each run can carry its resolved model into the executor
+- [x] 7.2 Update built-in executors (claude, codex, gemini, opencode) to read `opts.Model` when set, falling back to their construction-time per-harness default when empty (preserves v0.2.x behaviour for bare aliases)
+- [x] 7.3 The generic user-harness executor reads `opts.Model` for the `model_flag` injection logic in 3.4
+- [x] 7.4 `Relay.AgentMix string` ([records.go:39](internal/store/records.go#L39)) stays a string, but the format must round-trip the typed cycle. Confirm `mix.Label` (as updated in 4.4) can be re-parsed by `ParseAgentMix` at runner.go:89 to reconstruct the same typed cycle. No schema migration of the JSONL store is required since the field stays `string`
+- [x] 7.5 Verify resume path: a relay started with named-model mix is correctly resumed after a restart — the stored label re-parses through the same resolver
 
 ## 8. AgentMix tests
 

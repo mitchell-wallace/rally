@@ -40,14 +40,19 @@ func (g *GenericExecutor) Execute(ctx context.Context, opts RunOptions) (*TryRes
 		}
 	}
 
-	if g.ModelFlag != nil && g.Model != "" {
+	model := g.Model
+	if opts.Model != "" {
+		model = opts.Model
+	}
+
+	if g.ModelFlag != nil && model != "" {
 		if *g.ModelFlag != "" {
-			args = append(args, *g.ModelFlag, g.Model)
+			args = append(args, *g.ModelFlag, model)
 		} else {
-			args = append(args, g.Model)
+			args = append(args, model)
 		}
-	} else if g.ModelFlag == nil && g.Model != "" {
-		fmt.Printf("info: model %q resolved but harness has no model_flag configured — passing model not supported, harness default will be used\n", g.Model)
+	} else if g.ModelFlag == nil && model != "" {
+		fmt.Printf("info: model %q resolved but harness has no model_flag configured — passing model not supported, harness default will be used\n", model)
 	}
 
 	baseCmd := args[0]

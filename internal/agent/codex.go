@@ -51,9 +51,14 @@ func (c *CodexExecutor) Execute(ctx context.Context, opts RunOptions) (*TryResul
 	reportPath := reportFile.Name()
 	reportFile.Close()
 
+	model := c.Model
+	if opts.Model != "" {
+		model = opts.Model
+	}
+
 	args := []string{"exec", "--dangerously-bypass-approvals-and-sandbox", "--full-auto"}
-	if c.Model != "" {
-		args = append(args, "--model", c.Model)
+	if model != "" {
+		args = append(args, "--model", model)
 	}
 	args = append(args, "--output-schema", schemaPath, "-o", reportPath, prompt)
 

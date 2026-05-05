@@ -146,6 +146,14 @@ func runRelay(cmd *cobra.Command, args []string) error {
 		LapsEnabled:          lapsEnabled,
 	}
 
+	runnerCfg.Resolver = func(spec string) (relay.ResolvedAgent, error) {
+		ra, err := cfg.ResolveAgent(spec)
+		if err != nil {
+			return relay.ResolvedAgent{}, err
+		}
+		return relay.ResolvedAgent{Harness: ra.Harness, Model: ra.Model}, nil
+	}
+
 	instructionsPath := filepath.Join(rallyDir, "instructions.md")
 	if data, err := os.ReadFile(instructionsPath); err == nil {
 		runnerCfg.Instructions = string(data)

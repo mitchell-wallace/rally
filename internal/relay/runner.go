@@ -33,6 +33,7 @@ type Config struct {
 	Instructions         string
 	TaskPrompt           string
 	OverwriteMixOnResume bool
+	Resolver             Resolver
 }
 
 type Runner struct {
@@ -71,12 +72,12 @@ func (r *Runner) Run(ctx context.Context) error {
 		return err
 	}
 
+	resolver := r.cfg.Resolver
+
 	var mix AgentMix
 	if resumed {
-		// Resuming an existing relay
 		if r.cfg.OverwriteMixOnResume {
-			// Use new mix from CLI and update relay record
-			mix, err = ParseAgentMix(r.cfg.AgentMixSpecs, nil)
+			mix, err = ParseAgentMix(r.cfg.AgentMixSpecs, resolver)
 			if err != nil {
 				return err
 			}
@@ -85,15 +86,13 @@ func (r *Runner) Run(ctx context.Context) error {
 				return err
 			}
 		} else {
-			// Use stored mix from relay
-			mix, err = ParseAgentMix(strings.Fields(relay.AgentMix), nil)
+			mix, err = ParseAgentMix(strings.Fields(relay.AgentMix), resolver)
 			if err != nil {
 				return err
 			}
 		}
 	} else {
-		// New relay
-		mix, err = ParseAgentMix(r.cfg.AgentMixSpecs, nil)
+		mix, err = ParseAgentMix(r.cfg.AgentMixSpecs, resolver)
 		if err != nil {
 			return err
 		}

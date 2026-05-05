@@ -22,9 +22,14 @@ type opencodeJSONEvent struct {
 func (o *OpenCodeExecutor) Execute(ctx context.Context, opts RunOptions) (*TryResult, error) {
 	prompt := BuildPrompt(opts)
 
+	model := o.Model
+	if opts.Model != "" {
+		model = opts.Model
+	}
+
 	args := []string{"run", prompt, "--format", "json"}
-	if o.Model != "" {
-		args = append(args, "--model", o.Model)
+	if model != "" {
+		args = append(args, "--model", model)
 	}
 
 	cmd := exec.CommandContext(ctx, "opencode", args...)
