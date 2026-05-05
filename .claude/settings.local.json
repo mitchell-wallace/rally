@@ -8,7 +8,9 @@
       "Bash(git commit -m ' *)",
       "Bash(git commit -m ':*)",
       "Bash(find:*)",
-      "Bash(git commit:*)"
+      "Bash(git commit:*)",
+      "Bash(go test *)",
+      "Bash(go version *)"
     ]
   }
 }
