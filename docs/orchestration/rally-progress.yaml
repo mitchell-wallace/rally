@@ -1,13 +1,5 @@
 version: 1
-updated_at: "2026-05-05T00:18:49Z"
-active_batch:
-    agent_mix:
-        - op
-    batch_id: 5
-    completed_iterations: 4
-    ended_at: ""
-    started_at: "2026-05-05T00:00:04Z"
-    target_iterations: 5
+updated_at: "2026-05-05T00:29:03Z"
 history_window: 50
 recent_sessions:
     - session_id: 1
@@ -198,3 +190,23 @@ recent_sessions:
         - 'Phase 15: Verification execution paths'
         - 'Phase 16: Verification edge cases'
       transcript_path: /home/agent/.local/share/rally/sessions/session-13/terminal.log
+    - session_id: 14
+      batch_id: 5
+      iteration_index: 5
+      agent: opencode
+      status: completed
+      started_at: "2026-05-05T00:18:49Z"
+      ended_at: "2026-05-05T00:29:03Z"
+      runtime_seconds: 614
+      summary: 'Phase 11 complete: defaults loading, bare-alias model resolution, init config shape'
+      files_touched:
+        - cmd/rally/main.go
+        - cmd/rally/main_test.go
+        - internal/config/config_v2.go
+        - internal/config/config_v2_test.go
+        - openspec/changes/rally-config-and-harness-shortcuts/tasks.md
+      commits:
+        - '3c00769 Phase 11: defaults loading, bare-alias model resolution, and init config shape'
+      follow_ups:
+        - Phase 12 (Content sources) is next incomplete phase
+      transcript_path: /home/agent/.local/share/rally/sessions/session-14/terminal.log
