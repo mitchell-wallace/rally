@@ -1,5 +1,13 @@
 version: 1
-updated_at: "2026-05-05T03:20:33Z"
+updated_at: "2026-05-05T10:13:56Z"
+active_batch:
+    agent_mix:
+        - op
+    batch_id: 7
+    completed_iterations: 1
+    ended_at: ""
+    started_at: "2026-05-05T10:08:47Z"
+    target_iterations: 5
 history_window: 50
 recent_sessions:
     - session_id: 1
@@ -295,3 +303,21 @@ recent_sessions:
       follow_ups:
         - All phases complete. Ready for archive via openspec-archive-change.
       transcript_path: /home/agent/.local/share/rally/sessions/session-19/terminal.log
+    - session_id: 20
+      batch_id: 7
+      iteration_index: 1
+      agent: opencode
+      status: completed
+      started_at: "2026-05-05T10:08:47Z"
+      ended_at: "2026-05-05T10:13:56Z"
+      runtime_seconds: 309
+      summary: 'Phase 1 (Schema extension) of role-aware-routing: added [routes] table to V2Config with case-insensitive duplicate key validation and role-name-as-entry rejection. All tests pass.'
+      files_touched:
+        - internal/config/config_v2.go
+        - internal/config/config_v2_test.go
+        - openspec/changes/role-aware-routing/tasks.md
+      commits:
+        - f899d73
+      follow_ups:
+        - 'Phase 2 (Quota-syntax parser) is next: implement internal/routing/parse.go'
+      transcript_path: /home/agent/.local/share/rally/sessions/session-20/terminal.log
