@@ -94,14 +94,14 @@ After phases 4–8 land, grep for residual references to the old shape. Each pat
 
 ## 11. Defaults loading and init config
 
-- [ ] 11.1 At relay startup, read `[defaults].iterations` and `.mix` from config when the corresponding CLI flag is absent
-- [ ] 11.2 Bare-alias resolution for built-in harnesses uses `[defaults].<harness>_model` first; falls back to root-level `<harness>_model` (with the deprecation note from 1.4); falls back to the harness's hard-coded internal default if neither is set
-- [ ] 11.3 Validate that `[defaults].mix` parses cleanly through the resolver at config load (so a typo errors at startup, not at run-time)
-- [ ] 11.4 Unit tests: each default applied; CLI flag overrides; malformed default errors at startup; bare-alias resolution prefers `[defaults]` over root-level; bare-alias resolution falls through cleanly when nothing is set
-- [ ] 11.5 Update `runInit` ([cmd/rally/main.go:236](cmd/rally/main.go#L236)) so the example `.rally/config.toml` it writes uses the new shape: `schema_version = 2`, a populated `[defaults]` section with `iterations` and the four `<harness>_model` keys, and root-level runtime fields (`data_dir`, `run_hooks_on_autocommit`, `laps_instructions`)
-- [ ] 11.6 Existing init tests at [cmd/rally/main_test.go:25,58](cmd/rally/main_test.go#L25-L58) reference the v0.2.x flat shape — update assertions to expect the new `[defaults]` shape
-- [ ] 11.7 Confirm the existing "do not overwrite an existing config" behaviour is preserved (the new template only writes when no config exists)
-- [ ] 11.8 Unit test: `rally init` in a fresh workspace writes a config with `[defaults]` populated and `schema_version = 2`
+- [x] 11.1 At relay startup, read `[defaults].iterations` and `.mix` from config when the corresponding CLI flag is absent
+- [x] 11.2 Bare-alias resolution for built-in harnesses uses `[defaults].<harness>_model` first; falls back to root-level `<harness>_model` (with the deprecation note from 1.4); falls back to the harness's hard-coded internal default if neither is set
+- [x] 11.3 Validate that `[defaults].mix` parses cleanly through the resolver at config load (so a typo errors at startup, not at run-time)
+- [x] 11.4 Unit tests: each default applied; CLI flag overrides; malformed default errors at startup; bare-alias resolution prefers `[defaults]` over root-level; bare-alias resolution falls through cleanly when nothing is set
+- [x] 11.5 Update `runInit` ([cmd/rally/main.go:236](cmd/rally/main.go#L236)) so the example `.rally/config.toml` it writes uses the new shape: `schema_version = 2`, a populated `[defaults]` section with `iterations` and the four `<harness>_model` keys, and root-level runtime fields (`data_dir`, `run_hooks_on_autocommit`, `laps_instructions`)
+- [x] 11.6 Existing init tests at [cmd/rally/main_test.go:25,58](cmd/rally/main_test.go#L25-L58) reference the v0.2.x flat shape — update assertions to expect the new `[defaults]` shape
+- [x] 11.7 Confirm the existing "do not overwrite an existing config" behaviour is preserved (the new template only writes when no config exists)
+- [x] 11.8 Unit test: `rally init` in a fresh workspace writes a config with `[defaults]` populated and `schema_version = 2`
 
 ## 12. Content sources
 

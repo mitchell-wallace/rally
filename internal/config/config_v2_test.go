@@ -570,7 +570,7 @@ command = ["droid", "--model=$MODEL"]
 	}
 }
 
-func TestResolveAgent_BareAlias(t *testing.T) {
+func TestResolveAgent_BareAlias_NoDefault(t *testing.T) {
 	cfg := V2Config{Harnesses: map[string]*HarnessConfig{}}
 	resolved, err := cfg.ResolveAgent("cc")
 	if err != nil {
@@ -580,7 +580,21 @@ func TestResolveAgent_BareAlias(t *testing.T) {
 		t.Errorf("Harness = %q, want 'claude'", resolved.Harness)
 	}
 	if resolved.Model != "" {
-		t.Errorf("Model = %q, want empty for bare alias", resolved.Model)
+		t.Errorf("Model = %q, want empty when no default configured", resolved.Model)
+	}
+}
+
+func TestResolveAgent_BareAlias_WithDefault(t *testing.T) {
+	cfg := V2Config{ClaudeModel: "sonnet-4", Harnesses: map[string]*HarnessConfig{}}
+	resolved, err := cfg.ResolveAgent("cc")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if resolved.Harness != "claude" {
+		t.Errorf("Harness = %q, want 'claude'", resolved.Harness)
+	}
+	if resolved.Model != "sonnet-4" {
+		t.Errorf("Model = %q, want 'sonnet-4' from config default", resolved.Model)
 	}
 }
 
@@ -594,7 +608,21 @@ func TestResolveAgent_WeightPassthrough(t *testing.T) {
 		t.Errorf("Harness = %q, want 'claude'", resolved.Harness)
 	}
 	if resolved.Model != "" {
-		t.Errorf("Model = %q, want empty for weight passthrough", resolved.Model)
+		t.Errorf("Model = %q, want empty for weight passthrough with no default", resolved.Model)
+	}
+}
+
+func TestResolveAgent_WeightPassthrough_WithDefault(t *testing.T) {
+	cfg := V2Config{ClaudeModel: "sonnet-4", Harnesses: map[string]*HarnessConfig{}}
+	resolved, err := cfg.ResolveAgent("cc:2")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if resolved.Harness != "claude" {
+		t.Errorf("Harness = %q, want 'claude'", resolved.Harness)
+	}
+	if resolved.Model != "sonnet-4" {
+		t.Errorf("Model = %q, want 'sonnet-4' from config default", resolved.Model)
 	}
 }
 
@@ -758,5 +786,135 @@ func TestResolveAgent_NoModelsDefined(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "no models defined") {
 		t.Errorf("error = %q, want 'no models defined'", err.Error())
+	}
+}
+
+func TestLoadV2_DefaultsMixValidatesAtLoad(t *testing.T) {
+	dir := t.TempDir()
+	writeConfig(t, dir, `schema_version = 2
+[defaults]
+mix = "cc cx"
+`)
+	cfg, err := LoadV2(dir)
+	if err != nil {
+		t.Fatalf("valid mix should load: %v", err)
+	}
+	if cfg.Defaults.Mix != "cc cx" {
+		t.Errorf("Mix = %q, want 'cc cx'", cfg.Defaults.Mix)
+	}
+}
+
+func TestLoadV2_DefaultsMixInvalidRejects(t *testing.T) {
+	dir := t.TempDir()
+	writeConfig(t, dir, `schema_version = 2
+[defaults]
+mix = "cc unknown_harness"
+`)
+	_, err := LoadV2(dir)
+	if err == nil {
+		t.Fatal("expected error for invalid mix")
+	}
+	if !strings.Contains(err.Error(), "[defaults].mix") {
+		t.Errorf("error = %q, want reference to [defaults].mix", err.Error())
+	}
+}
+
+func TestLoadV2_DefaultsMixWithNamedModel(t *testing.T) {
+	dir := t.TempDir()
+	writeConfig(t, dir, `schema_version = 2
+[defaults]
+mix = "cc cx:1"
+
+[harness.cc.models]
+opus = "claude-opus-4-7"
+`)
+	cfg, err := LoadV2(dir)
+	if err != nil {
+		t.Fatalf("valid named-model mix should load: %v", err)
+	}
+	_ = cfg
+}
+
+func TestLoadV2_DefaultsMixInvalidModelName(t *testing.T) {
+	dir := t.TempDir()
+	writeConfig(t, dir, `schema_version = 2
+[defaults]
+mix = "cc:nonexistent"
+`)
+	_, err := LoadV2(dir)
+	if err == nil {
+		t.Fatal("expected error for unresolved model name in mix")
+	}
+	if !strings.Contains(err.Error(), "[defaults].mix") {
+		t.Errorf("error = %q, want reference to [defaults].mix", err.Error())
+	}
+}
+
+func TestResolveAgent_BareAlias_PrefersDefaultsOverRoot(t *testing.T) {
+	dir := t.TempDir()
+	writeConfig(t, dir, `claude_model = "root-sonnet"
+
+[defaults]
+claude_model = "defaults-opus"
+`)
+	cfg, err := LoadV2(dir)
+	if err != nil {
+		t.Fatalf("LoadV2 failed: %v", err)
+	}
+	resolved, err := cfg.ResolveAgent("cc")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if resolved.Model != "defaults-opus" {
+		t.Errorf("Model = %q, want 'defaults-opus' (defaults should win)", resolved.Model)
+	}
+}
+
+func TestResolveAgent_BareAlias_FallsBackToRoot(t *testing.T) {
+	dir := t.TempDir()
+	writeConfig(t, dir, `claude_model = "root-sonnet"
+`)
+	cfg, err := LoadV2(dir)
+	if err != nil {
+		t.Fatalf("LoadV2 failed: %v", err)
+	}
+	resolved, err := cfg.ResolveAgent("cc")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if resolved.Model != "root-sonnet" {
+		t.Errorf("Model = %q, want 'root-sonnet' (root fallback)", resolved.Model)
+	}
+}
+
+func TestResolveAgent_BareAlias_FallsThroughWhenNothingSet(t *testing.T) {
+	dir := t.TempDir()
+	writeConfig(t, dir, `schema_version = 2
+`)
+	cfg, err := LoadV2(dir)
+	if err != nil {
+		t.Fatalf("LoadV2 failed: %v", err)
+	}
+	resolved, err := cfg.ResolveAgent("cc")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if resolved.Model != "" {
+		t.Errorf("Model = %q, want empty when nothing configured", resolved.Model)
+	}
+}
+
+func TestResolveAgent_UserDefinedHarness_BareAlias_NoModel(t *testing.T) {
+	cfg := V2Config{
+		Harnesses: map[string]*HarnessConfig{
+			"droid": {Command: []string{"droid"}},
+		},
+	}
+	resolved, err := cfg.ResolveAgent("droid")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if resolved.Model != "" {
+		t.Errorf("Model = %q, want empty for user-defined bare alias", resolved.Model)
 	}
 }

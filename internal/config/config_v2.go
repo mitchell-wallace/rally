@@ -173,6 +173,16 @@ func LoadV2(workspaceDir string) (V2Config, error) {
 		return V2Config{}, err
 	}
 
+	if raw.Defaults.Mix != "" {
+		for _, commaPart := range strings.Split(raw.Defaults.Mix, ",") {
+			for _, token := range strings.Fields(strings.TrimSpace(commaPart)) {
+				if _, err := cfg.ResolveAgent(token); err != nil {
+					return V2Config{}, fmt.Errorf("config: [defaults].mix: %w", err)
+				}
+			}
+		}
+	}
+
 	if raw.SchemaVersion != 0 && raw.SchemaVersion != ExpectedSchemaVersion {
 		cfg.SchemaWarning = fmt.Sprintf(
 			"config: schema_version is %d, expected %d — proceed with caution",
@@ -232,6 +242,21 @@ type ResolvedAgent struct {
 	Model   string
 }
 
+func (c V2Config) defaultModelForHarness(harness string) string {
+	switch harness {
+	case "claude":
+		return c.ClaudeModel
+	case "codex":
+		return c.CodexModel
+	case "gemini":
+		return c.GeminiModel
+	case "opencode":
+		return c.OpenCodeModel
+	default:
+		return ""
+	}
+}
+
 func (c V2Config) ResolveAgent(spec string) (ResolvedAgent, error) {
 	parts := strings.SplitN(spec, ":", 3)
 	if len(parts) == 3 {
@@ -253,12 +278,12 @@ func (c V2Config) ResolveAgent(spec string) (ResolvedAgent, error) {
 	}
 
 	if len(parts) == 1 {
-		return ResolvedAgent{Harness: harness}, nil
+		return ResolvedAgent{Harness: harness, Model: c.defaultModelForHarness(harness)}, nil
 	}
 
 	right := parts[1]
 	if numericOnlyPattern.MatchString(right) {
-		return ResolvedAgent{Harness: harness}, nil
+		return ResolvedAgent{Harness: harness, Model: c.defaultModelForHarness(harness)}, nil
 	}
 
 	if modelNamePattern.MatchString(right) && !numericOnlyPattern.MatchString(right) {

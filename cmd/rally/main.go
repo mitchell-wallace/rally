@@ -90,6 +90,17 @@ func runRelay(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("load config: %w", err)
 	}
 
+	if !cmd.Flags().Changed("iterations") && cfg.Defaults.Iterations > 0 {
+		iterations = cfg.Defaults.Iterations
+	}
+
+	if len(expandedAgents) == 0 && cfg.Defaults.Mix != "" {
+		for _, commaPart := range strings.Split(cfg.Defaults.Mix, ",") {
+			fields := strings.Fields(strings.TrimSpace(commaPart))
+			expandedAgents = append(expandedAgents, fields...)
+		}
+	}
+
 	dataDir := ""
 	if home, err := os.UserHomeDir(); err == nil {
 		dataDir = filepath.Join(home, ".local", "share", "rally")
@@ -299,13 +310,18 @@ func runInit(cmd *cobra.Command, args []string) error {
 		}
 	}
 	if _, err := os.Stat(configPath); os.IsNotExist(err) {
-		content := `claude_model = ""
-codex_model = ""
-gemini_model = ""
-opencode_model = ""
+		content := `schema_version = 2
 laps_instructions = ""
 run_hooks_on_autocommit = false
 data_dir = ""
+
+[defaults]
+iterations = 1
+mix = "cc cx"
+claude_model = ""
+codex_model = ""
+gemini_model = ""
+opencode_model = ""
 `
 		if err := os.WriteFile(configPath, []byte(content), 0o644); err != nil {
 			return err
