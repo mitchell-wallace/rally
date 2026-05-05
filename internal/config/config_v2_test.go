@@ -973,3 +973,185 @@ func TestResolveAgent_UserDefinedHarness_BareAlias_NoModel(t *testing.T) {
 		t.Errorf("Model = %q, want empty for user-defined bare alias", resolved.Model)
 	}
 }
+
+func TestLoadV2_RoutesEmptySection(t *testing.T) {
+	dir := t.TempDir()
+	writeConfig(t, dir, `schema_version = 2
+
+[routes]
+`)
+	cfg, err := LoadV2(dir)
+	if err != nil {
+		t.Fatalf("LoadV2 with empty routes failed: %v", err)
+	}
+	if cfg.Routes == nil {
+		t.Error("Routes should be non-nil map when [routes] is present but empty")
+	}
+	if len(cfg.Routes) != 0 {
+		t.Errorf("Routes = %v, want empty map", cfg.Routes)
+	}
+}
+
+func TestLoadV2_RoutesOnlyDefault(t *testing.T) {
+	dir := t.TempDir()
+	writeConfig(t, dir, `schema_version = 2
+
+[routes]
+default = ["cc", "cx"]
+`)
+	cfg, err := LoadV2(dir)
+	if err != nil {
+		t.Fatalf("LoadV2 failed: %v", err)
+	}
+	if len(cfg.Routes) != 1 {
+		t.Fatalf("Routes has %d entries, want 1", len(cfg.Routes))
+	}
+	if len(cfg.Routes["default"]) != 2 || cfg.Routes["default"][0] != "cc" || cfg.Routes["default"][1] != "cx" {
+		t.Errorf("Routes['default'] = %v, want [cc cx]", cfg.Routes["default"])
+	}
+}
+
+func TestLoadV2_RoutesOnlyNonDefault(t *testing.T) {
+	dir := t.TempDir()
+	writeConfig(t, dir, `schema_version = 2
+
+[routes]
+SENIOR = ["cc:opus", "cx"]
+`)
+	cfg, err := LoadV2(dir)
+	if err != nil {
+		t.Fatalf("LoadV2 failed: %v", err)
+	}
+	if len(cfg.Routes) != 1 {
+		t.Fatalf("Routes has %d entries, want 1", len(cfg.Routes))
+	}
+	if len(cfg.Routes["SENIOR"]) != 2 {
+		t.Errorf("Routes['SENIOR'] = %v, want 2 entries", cfg.Routes["SENIOR"])
+	}
+}
+
+func TestLoadV2_RoutesDuplicateByCaseRejected(t *testing.T) {
+	dir := t.TempDir()
+	writeConfig(t, dir, `schema_version = 2
+
+[routes]
+SENIOR = ["cc"]
+senior = ["cx"]
+`)
+	_, err := LoadV2(dir)
+	if err == nil {
+		t.Fatal("expected error for duplicate route keys differing only by case")
+	}
+	if !strings.Contains(err.Error(), "differ only by case") {
+		t.Errorf("error = %q, want 'differ only by case'", err.Error())
+	}
+}
+
+func TestLoadV2_RoutesRoleNameAsEntryRejected(t *testing.T) {
+	dir := t.TempDir()
+	writeConfig(t, dir, `schema_version = 2
+
+[routes]
+default = ["cc", "cx"]
+SENIOR = ["default"]
+`)
+	_, err := LoadV2(dir)
+	if err == nil {
+		t.Fatal("expected error for role name used as entry in [routes]")
+	}
+	if !strings.Contains(err.Error(), "role name") || !strings.Contains(err.Error(), "--agent") {
+		t.Errorf("error = %q, want role name and --agent reference", err.Error())
+	}
+}
+
+func TestLoadV2_RoutesAbsentEmptyMap(t *testing.T) {
+	dir := t.TempDir()
+	writeConfig(t, dir, `schema_version = 2
+`)
+	cfg, err := LoadV2(dir)
+	if err != nil {
+		t.Fatalf("LoadV2 failed: %v", err)
+	}
+	if cfg.Routes == nil {
+		t.Error("Routes should be non-nil empty map when [routes] absent")
+	}
+	if len(cfg.Routes) != 0 {
+		t.Errorf("Routes should be empty, got %v", cfg.Routes)
+	}
+}
+
+func TestLoadV2_RoutesWithQuotaSyntax(t *testing.T) {
+	dir := t.TempDir()
+	writeConfig(t, dir, `schema_version = 2
+
+[routes]
+default = ["cc:opus:1", "cx:3", "op:z"]
+`)
+	cfg, err := LoadV2(dir)
+	if err != nil {
+		t.Fatalf("LoadV2 failed: %v", err)
+	}
+	if len(cfg.Routes["default"]) != 3 {
+		t.Fatalf("Routes['default'] has %d entries, want 3", len(cfg.Routes["default"]))
+	}
+	if cfg.Routes["default"][0] != "cc:opus:1" {
+		t.Errorf("entry[0] = %q, want 'cc:opus:1'", cfg.Routes["default"][0])
+	}
+}
+
+func TestLoadV2_RoutesRoleNameCaseInsensitiveMatch(t *testing.T) {
+	dir := t.TempDir()
+	writeConfig(t, dir, `schema_version = 2
+
+[routes]
+DEFAULT = ["cc"]
+SENIOR = ["DEFAULT"]
+`)
+	_, err := LoadV2(dir)
+	if err == nil {
+		t.Fatal("expected error: SENIOR references 'DEFAULT' which is a route key (role name)")
+	}
+	if !strings.Contains(err.Error(), "role name") {
+		t.Errorf("error = %q, want 'role name'", err.Error())
+	}
+}
+
+func TestLoadV2_RoutesCaseInsensitiveKeyCollision(t *testing.T) {
+	dir := t.TempDir()
+	writeConfig(t, dir, `schema_version = 2
+
+[routes]
+default = ["cc"]
+DEFAULT = ["cx"]
+`)
+	_, err := LoadV2(dir)
+	if err == nil {
+		t.Fatal("expected error for duplicate route keys differing only by case")
+	}
+	if !strings.Contains(err.Error(), "differ only by case") {
+		t.Errorf("error = %q, want 'differ only by case'", err.Error())
+	}
+}
+
+func TestLoadV2_RoutesEntryNotMatchingRouteKeyAllowed(t *testing.T) {
+	dir := t.TempDir()
+	writeConfig(t, dir, `schema_version = 2
+
+[routes]
+default = ["cc", "cx"]
+SENIOR = ["cc:opus", "cx"]
+`)
+	cfg, err := LoadV2(dir)
+	if err != nil {
+		t.Fatalf("LoadV2 failed: %v", err)
+	}
+	if len(cfg.Routes) != 2 {
+		t.Errorf("Routes has %d entries, want 2", len(cfg.Routes))
+	}
+}
+
+func TestValidateRoutes_EmptyMapAllowed(t *testing.T) {
+	if err := validateRoutes(map[string][]string{}); err != nil {
+		t.Errorf("empty routes map should be allowed: %v", err)
+	}
+}

@@ -1,9 +1,9 @@
 ## 1. Schema extension
 
-- [ ] 1.1 Extend the v0.5.0 config schema with a top-level `[routes]` table; each entry is a string array
-- [ ] 1.2 Validate at config load that route keys are strings of any case, that no two keys differ only in case, and that `default` is treated as a reserved key
-- [ ] 1.3 Validate role names referenced inside `[routes]` entries are NOT permitted (role refs are `--agent`-only)
-- [ ] 1.4 Unit tests: empty routes section, only-default, only-non-default, duplicate-by-case rejected, role-name-as-entry rejected
+- [x] 1.1 Extend the v0.5.0 config schema with a top-level `[routes]` table; each entry is a string array
+- [x] 1.2 Validate at config load that route keys are strings of any case, that no two keys differ only in case, and that `default` is treated as a reserved key
+- [x] 1.3 Validate role names referenced inside `[routes]` entries are NOT permitted (role refs are `--agent`-only)
+- [x] 1.4 Unit tests: empty routes section, only-default, only-non-default, duplicate-by-case rejected, role-name-as-entry rejected
 
 ## 2. Quota-syntax parser
 

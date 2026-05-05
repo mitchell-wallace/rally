@@ -85,6 +85,7 @@ type V2Config struct {
 	Microbeads MicrobeadsConfig
 	Fallback   FallbackConfig
 	Harnesses  map[string]*HarnessConfig
+	Routes     map[string][]string
 
 	DeprecationNotes []string
 	SchemaWarning    string
@@ -104,6 +105,7 @@ type rawConfig struct {
 	Microbeads MicrobeadsConfig          `toml:"microbeads"`
 	Fallback   FallbackConfig            `toml:"fallback"`
 	Harnesses  map[string]*HarnessConfig `toml:"harness"`
+	Routes     map[string][]string       `toml:"routes"`
 }
 
 func V2Path(workspaceDir string) string {
@@ -134,6 +136,7 @@ func LoadV2(workspaceDir string) (V2Config, error) {
 		Microbeads:           raw.Microbeads,
 		Fallback:             raw.Fallback,
 		Harnesses:            raw.Harnesses,
+		Routes:               raw.Routes,
 	}
 
 	if cfg.Harnesses == nil {
@@ -172,6 +175,14 @@ func LoadV2(workspaceDir string) (V2Config, error) {
 	}
 
 	if err := validateHarnesses(cfg.Harnesses); err != nil {
+		return V2Config{}, err
+	}
+
+	if cfg.Routes == nil {
+		cfg.Routes = make(map[string][]string)
+	}
+
+	if err := validateRoutes(cfg.Routes); err != nil {
 		return V2Config{}, err
 	}
 
@@ -246,6 +257,34 @@ func validateBuiltInHarness(name string, h *HarnessConfig) error {
 	if h.TailStream != "" {
 		return fmt.Errorf("config: built-in harness %q cannot declare tail_stream", name)
 	}
+	return nil
+}
+
+func validateRoutes(routes map[string][]string) error {
+	lowerSeen := map[string]string{}
+	for key := range routes {
+		lower := strings.ToLower(key)
+		if prev, exists := lowerSeen[lower]; exists {
+			return fmt.Errorf("config: duplicate route keys %q and %q differ only by case", prev, key)
+		}
+		lowerSeen[lower] = key
+	}
+
+	lowerRouteKeys := map[string]bool{}
+	for key := range routes {
+		lowerRouteKeys[strings.ToLower(key)] = true
+	}
+
+	for key, entries := range routes {
+		for _, entry := range entries {
+			parts := strings.Split(entry, ":")
+			idPart := parts[0]
+			if lowerRouteKeys[strings.ToLower(idPart)] {
+				return fmt.Errorf("config: route %q references role name %q as an entry; role names are only valid in --agent, not in [routes]", key, idPart)
+			}
+		}
+	}
+
 	return nil
 }
 
@@ -419,6 +458,7 @@ func SaveV2(workspaceDir string, cfg V2Config) error {
 		Microbeads: cfg.Microbeads,
 		Fallback:   cfg.Fallback,
 		Harnesses:  cfg.Harnesses,
+		Routes:     cfg.Routes,
 	}
 
 	data, err := toml.Marshal(raw)
