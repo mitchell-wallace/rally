@@ -11,6 +11,8 @@ import (
 	"strings"
 
 	toml "github.com/pelletier/go-toml/v2"
+
+	"github.com/mitchell-wallace/rally/internal/agent"
 )
 
 const ExpectedSchemaVersion = 2
@@ -247,11 +249,6 @@ func validateBuiltInHarness(name string, h *HarnessConfig) error {
 	return nil
 }
 
-type ResolvedAgent struct {
-	Harness string
-	Model   string
-}
-
 func (c V2Config) defaultModelForHarness(harness string) string {
 	switch harness {
 	case "claude":
@@ -267,10 +264,10 @@ func (c V2Config) defaultModelForHarness(harness string) string {
 	}
 }
 
-func (c V2Config) ResolveAgent(spec string) (ResolvedAgent, error) {
+func (c V2Config) ResolveAgent(spec string) (agent.ResolvedAgent, error) {
 	parts := strings.SplitN(spec, ":", 3)
 	if len(parts) == 3 {
-		return ResolvedAgent{}, fmt.Errorf("invalid agent spec %q: weight-on-named-model (e.g. cc:opus:2) is not supported", spec)
+		return agent.ResolvedAgent{}, fmt.Errorf("invalid agent spec %q: weight-on-named-model (e.g. cc:opus:2) is not supported", spec)
 	}
 
 	alias := parts[0]
@@ -284,16 +281,16 @@ func (c V2Config) ResolveAgent(spec string) (ResolvedAgent, error) {
 		}
 	}
 	if !ok {
-		return ResolvedAgent{}, fmt.Errorf("unknown agent alias %q", alias)
+		return agent.ResolvedAgent{}, fmt.Errorf("unknown agent alias %q", alias)
 	}
 
 	if len(parts) == 1 {
-		return ResolvedAgent{Harness: harness, Model: c.defaultModelForHarness(harness)}, nil
+		return agent.ResolvedAgent{Harness: harness, Model: c.defaultModelForHarness(harness)}, nil
 	}
 
 	right := parts[1]
 	if numericOnlyPattern.MatchString(right) {
-		return ResolvedAgent{Harness: harness, Model: c.defaultModelForHarness(harness)}, nil
+		return agent.ResolvedAgent{Harness: harness, Model: c.defaultModelForHarness(harness)}, nil
 	}
 
 	if modelNamePattern.MatchString(right) && !numericOnlyPattern.MatchString(right) {
@@ -303,17 +300,17 @@ func (c V2Config) ResolveAgent(spec string) (ResolvedAgent, error) {
 		}
 		if found && hc.Models != nil {
 			if modelStr, modelOk := hc.Models[right]; modelOk {
-				return ResolvedAgent{Harness: harness, Model: modelStr}, nil
+				return agent.ResolvedAgent{Harness: harness, Model: modelStr}, nil
 			}
 		}
 		suggestions := didYouMean(right, modelNamesForHarness(c.Harnesses, harness, alias))
 		if suggestions != "" {
-			return ResolvedAgent{}, fmt.Errorf("unknown model %q for harness %q; did you mean %s?", right, harness, suggestions)
+			return agent.ResolvedAgent{}, fmt.Errorf("unknown model %q for harness %q; did you mean %s?", right, harness, suggestions)
 		}
-		return ResolvedAgent{}, fmt.Errorf("unknown model %q for harness %q (no models defined for this harness)", right, harness)
+		return agent.ResolvedAgent{}, fmt.Errorf("unknown model %q for harness %q (no models defined for this harness)", right, harness)
 	}
 
-	return ResolvedAgent{Harness: harness, Model: right}, nil
+	return agent.ResolvedAgent{Harness: harness, Model: right}, nil
 }
 
 func resolveToCanonical(harness string) string {

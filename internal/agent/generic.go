@@ -19,6 +19,10 @@ type GenericExecutor struct {
 }
 
 func (g *GenericExecutor) Execute(ctx context.Context, opts RunOptions) (*TryResult, error) {
+	if g.OutputStrategy != "" && g.OutputStrategy != "tail" {
+		return nil, fmt.Errorf("generic harness: unsupported output_strategy %q", g.OutputStrategy)
+	}
+
 	prompt := BuildPrompt(opts)
 	outputLines := g.OutputLines
 	if outputLines <= 0 {
@@ -139,10 +143,11 @@ func tailLines(s string, n int) string {
 	if n <= 0 {
 		return s
 	}
-	lines := strings.Split(s, "\n")
-	if len(lines) > 0 && lines[len(lines)-1] == "" {
-		lines = lines[:len(lines)-1]
+	s = strings.TrimRight(s, " \t\n\r")
+	if s == "" {
+		return ""
 	}
+	lines := strings.Split(s, "\n")
 	if len(lines) > n {
 		lines = lines[len(lines)-n:]
 	}

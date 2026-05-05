@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/mitchell-wallace/rally/internal/agent"
 	"github.com/mitchell-wallace/rally/internal/store"
 )
 
@@ -58,10 +59,10 @@ func (r *Resilience) getState(agentType string) (AgentState, time.Time) {
 
 // SelectActiveAgent returns the agent to use for the next run, the new runIndex
 // to advance to, and whether the selected agent is undergoing an hourly retry.
-func (r *Resilience) SelectActiveAgent(mix AgentMix, runIndex int) (ResolvedAgent, int, bool, error) {
+func (r *Resilience) SelectActiveAgent(mix AgentMix, runIndex int) (agent.ResolvedAgent, int, bool, error) {
 	cycleLen := len(mix.Cycle)
 	if cycleLen == 0 {
-		return ResolvedAgent{Harness: "claude"}, runIndex + 1, false, nil
+		return agent.ResolvedAgent{Harness: "claude"}, runIndex + 1, false, nil
 	}
 
 	allFrozen := true
@@ -81,7 +82,7 @@ func (r *Resilience) SelectActiveAgent(mix AgentMix, runIndex int) (ResolvedAgen
 		}
 	}
 	if allFrozen {
-		return ResolvedAgent{}, runIndex, false, fmt.Errorf("all agents frozen")
+		return agent.ResolvedAgent{}, runIndex, false, fmt.Errorf("all agents frozen")
 	}
 
 	// Look for an agent starting at runIndex
@@ -100,9 +101,9 @@ func (r *Resilience) SelectActiveAgent(mix AgentMix, runIndex int) (ResolvedAgen
 	}
 
 	if !anyActive {
-		return ResolvedAgent{}, runIndex, false, fmt.Errorf("all agents paused")
+		return agent.ResolvedAgent{}, runIndex, false, fmt.Errorf("all agents paused")
 	}
-	return ResolvedAgent{}, runIndex, false, fmt.Errorf("no active agent found")
+	return agent.ResolvedAgent{}, runIndex, false, fmt.Errorf("no active agent found")
 }
 
 func (r *Resilience) PauseAgent(agentType string, relayID int) error {

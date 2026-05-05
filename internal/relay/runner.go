@@ -375,7 +375,7 @@ func timeUntilNextRetry(resilience *Resilience, mix AgentMix) time.Duration {
 	return minWait
 }
 
-func (r *Runner) runOne(ctx context.Context, relay *store.RelayRecord, runIndex int, picked ResolvedAgent, consumedMsg *store.MessageRecord, relayMsg *store.MessageRecord, isHourlyRetry bool, log io.Writer) (bool, bool, bool, error) {
+func (r *Runner) runOne(ctx context.Context, relay *store.RelayRecord, runIndex int, picked agent.ResolvedAgent, consumedMsg *store.MessageRecord, relayMsg *store.MessageRecord, isHourlyRetry bool, log io.Writer) (bool, bool, bool, error) {
 	// Initialize run-state for this run.
 	runID := fmt.Sprintf("relay-%d-run-%d", relay.ID, runIndex+1)
 	_ = progress.SaveRunState(r.cfg.WorkspaceDir, &progress.RunState{RunID: runID, HandoffState: 0, RecordedLaps: []string{}})
@@ -692,7 +692,7 @@ func (r *Runner) resolveRunTask(ctx context.Context) (string, string, string, er
 	return taskName, taskRequirements, taskPrompt, nil
 }
 
-func (r *Runner) executeTry(ctx context.Context, picked ResolvedAgent, opts agent.RunOptions) (*agent.TryResult, error) {
+func (r *Runner) executeTry(ctx context.Context, picked agent.ResolvedAgent, opts agent.RunOptions) (*agent.TryResult, error) {
 	exec, ok := r.executors[picked.Harness]
 	if !ok {
 		return nil, fmt.Errorf("no executor for agent %s", picked.Harness)

@@ -2,6 +2,11 @@ package agent
 
 import "context"
 
+type ResolvedAgent struct {
+	Harness string
+	Model   string
+}
+
 type RunOptions struct {
 	Persona          string
 	Model            string

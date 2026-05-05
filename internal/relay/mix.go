@@ -4,20 +4,13 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+
+	"github.com/mitchell-wallace/rally/internal/agent"
 )
 
-// ResolvedAgent is a typed (harness, model) record. Harness is always the
-// canonical harness name (e.g. "claude", "opencode"). Model is empty for a bare
-// alias (the harness uses its default model) or a non-empty model string when
-// resolved via a named-model entry or raw harness:model-string form.
-type ResolvedAgent struct {
-	Harness string
-	Model   string
-}
-
 // Resolver converts a mix token (e.g. "cc", "op:z", "opencode:provider/model")
-// into a ResolvedAgent. The config layer provides the concrete implementation.
-type Resolver func(spec string) (ResolvedAgent, error)
+// into an agent.ResolvedAgent. The config layer provides the concrete implementation.
+type Resolver func(spec string) (agent.ResolvedAgent, error)
 
 // Weights and Order are keyed by harness alias (not by (harness, model) tuple).
 // Weighting is per-harness: if claude is weighted 2, all models under claude
@@ -26,7 +19,7 @@ type Resolver func(spec string) (ResolvedAgent, error)
 type AgentMix struct {
 	Weights map[string]int
 	Order   []string
-	Cycle   []ResolvedAgent
+	Cycle   []agent.ResolvedAgent
 	Label   string
 }
 
@@ -116,12 +109,12 @@ func ParseAgentMix(specs []string, resolver Resolver) (AgentMix, error) {
 	//   Raw model:    "opencode:provider/model"
 	// This expanded form round-trips through ParseAgentMix with the same resolver.
 	// When a harness has weight > 1 and no model, the alias is repeated.
-	cycle := []ResolvedAgent{}
+	cycle := []agent.ResolvedAgent{}
 	labelParts := []string{}
 	for _, harness := range order {
 		// Collect all named-model entries for this harness from the specs,
 		// but only when resolver was provided. Otherwise use bare entries.
-		namedEntries := []ResolvedAgent{}
+		namedEntries := []agent.ResolvedAgent{}
 		if resolver != nil {
 			for _, spec := range specs {
 				ra, _ := resolver(spec)
@@ -138,7 +131,7 @@ func ParseAgentMix(specs []string, resolver Resolver) (AgentMix, error) {
 			}
 		} else {
 			for i := 0; i < weights[harness]; i++ {
-				cycle = append(cycle, ResolvedAgent{Harness: harness})
+				cycle = append(cycle, agent.ResolvedAgent{Harness: harness})
 				labelParts = append(labelParts, harness)
 			}
 		}

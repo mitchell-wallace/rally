@@ -36,7 +36,7 @@ run_hooks_on_autocommit = false
 data_dir = ""
 
 [defaults]
-iterations = 1
+iterations = 5
 mix = "cc cx"
 claude_model = "sonnet"
 codex_model = ""
@@ -124,8 +124,8 @@ func TestRunInit_WritesNewShapeConfig(t *testing.T) {
 	if cfg.SchemaVersion != 2 {
 		t.Errorf("SchemaVersion = %d, want 2", cfg.SchemaVersion)
 	}
-	if cfg.Defaults.Iterations != 1 {
-		t.Errorf("Defaults.Iterations = %d, want 1", cfg.Defaults.Iterations)
+	if cfg.Defaults.Iterations != 5 {
+		t.Errorf("Defaults.Iterations = %d, want 5", cfg.Defaults.Iterations)
 	}
 }
 

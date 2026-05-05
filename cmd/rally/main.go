@@ -161,12 +161,12 @@ func runRelay(cmd *cobra.Command, args []string) error {
 		FallbackInstructionsFile:   cfg.Fallback.InstructionsFile,
 	}
 
-	runnerCfg.Resolver = func(spec string) (relay.ResolvedAgent, error) {
+	runnerCfg.Resolver = func(spec string) (agent.ResolvedAgent, error) {
 		ra, err := cfg.ResolveAgent(spec)
 		if err != nil {
-			return relay.ResolvedAgent{}, err
+			return agent.ResolvedAgent{}, err
 		}
-		return relay.ResolvedAgent{Harness: ra.Harness, Model: ra.Model}, nil
+		return agent.ResolvedAgent{Harness: ra.Harness, Model: ra.Model}, nil
 	}
 
 	instructionsPath := filepath.Join(rallyDir, "instructions.md")
@@ -318,7 +318,7 @@ run_hooks_on_autocommit = false
 data_dir = ""
 
 [defaults]
-iterations = 1
+iterations = 5
 mix = "cc cx"
 claude_model = ""
 codex_model = ""

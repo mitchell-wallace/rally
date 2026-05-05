@@ -59,7 +59,7 @@ func newTestStore(t *testing.T, dir string) *store.Store {
 	return s
 }
 
-func testResolver(spec string) (ResolvedAgent, error) {
+func testResolver(spec string) (agent.ResolvedAgent, error) {
 	aliases := map[string]string{
 		"cc": "claude", "claude": "claude",
 		"cx": "codex", "codex": "codex",
@@ -69,15 +69,15 @@ func testResolver(spec string) (ResolvedAgent, error) {
 	parts := strings.SplitN(spec, ":", 2)
 	harness, ok := aliases[parts[0]]
 	if !ok {
-		return ResolvedAgent{}, fmt.Errorf("unknown agent alias %q", parts[0])
+		return agent.ResolvedAgent{}, fmt.Errorf("unknown agent alias %q", parts[0])
 	}
 	if len(parts) == 2 {
 		if _, err := strconv.Atoi(parts[1]); err == nil {
-			return ResolvedAgent{Harness: harness}, nil
+			return agent.ResolvedAgent{Harness: harness}, nil
 		}
-		return ResolvedAgent{Harness: harness, Model: parts[1]}, nil
+		return agent.ResolvedAgent{Harness: harness, Model: parts[1]}, nil
 	}
-	return ResolvedAgent{Harness: harness}, nil
+	return agent.ResolvedAgent{Harness: harness}, nil
 }
 
 func TestInstructionsPassedToExecutor(t *testing.T) {
@@ -1088,10 +1088,10 @@ func TestAgentMixNamedModels(t *testing.T) {
 	if len(mix.Cycle) != 2 {
 		t.Fatalf("expected 2 cycle entries, got %d", len(mix.Cycle))
 	}
-	if mix.Cycle[0] != (ResolvedAgent{Harness: "opencode", Model: "z"}) {
+	if mix.Cycle[0] != (agent.ResolvedAgent{Harness: "opencode", Model: "z"}) {
 		t.Fatalf("cycle[0] = %+v, want {opencode z}", mix.Cycle[0])
 	}
-	if mix.Cycle[1] != (ResolvedAgent{Harness: "claude", Model: "opus"}) {
+	if mix.Cycle[1] != (agent.ResolvedAgent{Harness: "claude", Model: "opus"}) {
 		t.Fatalf("cycle[1] = %+v, want {claude opus}", mix.Cycle[1])
 	}
 	if mix.Weights["opencode"] != 1 {
@@ -1114,13 +1114,13 @@ func TestAgentMixMixedForms(t *testing.T) {
 	if len(mix.Cycle) != 3 {
 		t.Fatalf("expected 3 cycle entries, got %d: %+v", len(mix.Cycle), mix.Cycle)
 	}
-	if mix.Cycle[0] != (ResolvedAgent{Harness: "claude"}) {
+	if mix.Cycle[0] != (agent.ResolvedAgent{Harness: "claude"}) {
 		t.Fatalf("cycle[0] = %+v, want {claude}", mix.Cycle[0])
 	}
-	if mix.Cycle[1] != (ResolvedAgent{Harness: "claude"}) {
+	if mix.Cycle[1] != (agent.ResolvedAgent{Harness: "claude"}) {
 		t.Fatalf("cycle[1] = %+v, want {claude}", mix.Cycle[1])
 	}
-	if mix.Cycle[2] != (ResolvedAgent{Harness: "opencode", Model: "z"}) {
+	if mix.Cycle[2] != (agent.ResolvedAgent{Harness: "opencode", Model: "z"}) {
 		t.Fatalf("cycle[2] = %+v, want {opencode z}", mix.Cycle[2])
 	}
 	if mix.Label != "claude claude opencode:z" {
@@ -1137,10 +1137,10 @@ func TestAgentMixMixedNamedAndWeighted(t *testing.T) {
 	if len(mix.Cycle) != 2 {
 		t.Fatalf("expected 2 cycle entries (1 named opencode + 1 named claude), got %d: %+v", len(mix.Cycle), mix.Cycle)
 	}
-	if mix.Cycle[0] != (ResolvedAgent{Harness: "claude", Model: "sonnet"}) {
+	if mix.Cycle[0] != (agent.ResolvedAgent{Harness: "claude", Model: "sonnet"}) {
 		t.Fatalf("cycle[0] = %+v, want {claude sonnet}", mix.Cycle[0])
 	}
-	if mix.Cycle[1] != (ResolvedAgent{Harness: "opencode", Model: "z"}) {
+	if mix.Cycle[1] != (agent.ResolvedAgent{Harness: "opencode", Model: "z"}) {
 		t.Fatalf("cycle[1] = %+v, want {opencode z}", mix.Cycle[1])
 	}
 }
@@ -1238,13 +1238,13 @@ func TestParseAgentMixThirdColonSegmentRejected(t *testing.T) {
 }
 
 func TestParseAgentMixUnresolvedModelError(t *testing.T) {
-	strictResolver := func(spec string) (ResolvedAgent, error) {
+	strictResolver := func(spec string) (agent.ResolvedAgent, error) {
 		ra, err := testResolver(spec)
 		if err != nil {
 			return ra, err
 		}
 		if ra.Model != "" && ra.Model != "z" && ra.Model != "opus" && ra.Model != "sonnet" {
-			return ResolvedAgent{}, fmt.Errorf("unknown model %q for harness %q", ra.Model, ra.Harness)
+			return agent.ResolvedAgent{}, fmt.Errorf("unknown model %q for harness %q", ra.Model, ra.Harness)
 		}
 		return ra, nil
 	}
@@ -1275,7 +1275,7 @@ func TestParseAgentMixBareAlias(t *testing.T) {
 	if len(mix.Cycle) != 1 {
 		t.Fatalf("expected 1 cycle entry, got %d", len(mix.Cycle))
 	}
-	if mix.Cycle[0] != (ResolvedAgent{Harness: "claude"}) {
+	if mix.Cycle[0] != (agent.ResolvedAgent{Harness: "claude"}) {
 		t.Fatalf("cycle[0] = %+v, want {claude}", mix.Cycle[0])
 	}
 	if mix.Label != "claude" {
@@ -1291,16 +1291,16 @@ func TestParseAgentMixAllFormsCombined(t *testing.T) {
 	if len(mix.Cycle) != 4 {
 		t.Fatalf("expected 4 cycle entries, got %d: %+v", len(mix.Cycle), mix.Cycle)
 	}
-	if mix.Cycle[0] != (ResolvedAgent{Harness: "claude"}) {
+	if mix.Cycle[0] != (agent.ResolvedAgent{Harness: "claude"}) {
 		t.Fatalf("cycle[0] = %+v, want {claude}", mix.Cycle[0])
 	}
-	if mix.Cycle[1] != (ResolvedAgent{Harness: "codex"}) {
+	if mix.Cycle[1] != (agent.ResolvedAgent{Harness: "codex"}) {
 		t.Fatalf("cycle[1] = %+v, want {codex}", mix.Cycle[1])
 	}
-	if mix.Cycle[2] != (ResolvedAgent{Harness: "codex"}) {
+	if mix.Cycle[2] != (agent.ResolvedAgent{Harness: "codex"}) {
 		t.Fatalf("cycle[2] = %+v, want {codex}", mix.Cycle[2])
 	}
-	if mix.Cycle[3] != (ResolvedAgent{Harness: "opencode", Model: "z"}) {
+	if mix.Cycle[3] != (agent.ResolvedAgent{Harness: "opencode", Model: "z"}) {
 		t.Fatalf("cycle[3] = %+v, want {opencode z}", mix.Cycle[3])
 	}
 }
@@ -1727,12 +1727,12 @@ instructions_file = %q
 		t.Fatalf("mix = %q, want 'cc:opus'", cfg.Defaults.Mix)
 	}
 
-	resolver := func(spec string) (ResolvedAgent, error) {
+	resolver := func(spec string) (agent.ResolvedAgent, error) {
 		ra, err := cfg.ResolveAgent(spec)
 		if err != nil {
-			return ResolvedAgent{}, err
+			return agent.ResolvedAgent{}, err
 		}
-		return ResolvedAgent{Harness: ra.Harness, Model: ra.Model}, nil
+		return agent.ResolvedAgent{Harness: ra.Harness, Model: ra.Model}, nil
 	}
 
 	s := newTestStore(t, rallyDir)
@@ -1796,12 +1796,12 @@ func TestE2E_UserDefinedHarness_ModelFlagSet(t *testing.T) {
 		ModelFlag: &modelFlag,
 	}
 
-	resolver := func(spec string) (ResolvedAgent, error) {
+	resolver := func(spec string) (agent.ResolvedAgent, error) {
 		if spec == "droid:v1" {
-			return ResolvedAgent{Harness: "droid", Model: "droid-v1"}, nil
+			return agent.ResolvedAgent{Harness: "droid", Model: "droid-v1"}, nil
 		}
 		if spec == "droid" {
-			return ResolvedAgent{Harness: "droid"}, nil
+			return agent.ResolvedAgent{Harness: "droid"}, nil
 		}
 		return testResolver(spec)
 	}
@@ -1849,9 +1849,9 @@ func TestE2E_UserDefinedHarness_BareAliasNoModel(t *testing.T) {
 		ModelFlag: &modelFlag,
 	}
 
-	resolver := func(spec string) (ResolvedAgent, error) {
+	resolver := func(spec string) (agent.ResolvedAgent, error) {
 		if spec == "droid" {
-			return ResolvedAgent{Harness: "droid"}, nil
+			return agent.ResolvedAgent{Harness: "droid"}, nil
 		}
 		return testResolver(spec)
 	}
@@ -1899,9 +1899,9 @@ func TestE2E_UserDefinedHarness_ModelFlagEmpty(t *testing.T) {
 		ModelFlag: &modelFlag,
 	}
 
-	resolver := func(spec string) (ResolvedAgent, error) {
+	resolver := func(spec string) (agent.ResolvedAgent, error) {
 		if spec == "droid:v1" {
-			return ResolvedAgent{Harness: "droid", Model: "droid-v1"}, nil
+			return agent.ResolvedAgent{Harness: "droid", Model: "droid-v1"}, nil
 		}
 		return testResolver(spec)
 	}
@@ -1951,9 +1951,9 @@ func TestE2E_UserDefinedHarness_ModelFlagUnset_InfoNote(t *testing.T) {
 		ModelFlag: nil,
 	}
 
-	resolver := func(spec string) (ResolvedAgent, error) {
+	resolver := func(spec string) (agent.ResolvedAgent, error) {
 		if spec == "droid:v1" {
-			return ResolvedAgent{Harness: "droid", Model: "droid-v1"}, nil
+			return agent.ResolvedAgent{Harness: "droid", Model: "droid-v1"}, nil
 		}
 		return testResolver(spec)
 	}
@@ -2013,12 +2013,12 @@ run_hooks_on_autocommit = true
 		t.Errorf("expected model 'root-sonnet' from root-level field, got %q", resolved.Model)
 	}
 
-	resolver := func(spec string) (ResolvedAgent, error) {
+	resolver := func(spec string) (agent.ResolvedAgent, error) {
 		ra, err := cfg.ResolveAgent(spec)
 		if err != nil {
-			return ResolvedAgent{}, err
+			return agent.ResolvedAgent{}, err
 		}
-		return ResolvedAgent{Harness: ra.Harness, Model: ra.Model}, nil
+		return agent.ResolvedAgent{Harness: ra.Harness, Model: ra.Model}, nil
 	}
 
 	s := newTestStore(t, rallyDir)
@@ -2085,12 +2085,12 @@ mix = "cc"
 		t.Errorf("expected model 'defaults-opus' from [defaults], got %q", resolved.Model)
 	}
 
-	resolver := func(spec string) (ResolvedAgent, error) {
+	resolver := func(spec string) (agent.ResolvedAgent, error) {
 		ra, err := cfg.ResolveAgent(spec)
 		if err != nil {
-			return ResolvedAgent{}, err
+			return agent.ResolvedAgent{}, err
 		}
-		return ResolvedAgent{Harness: ra.Harness, Model: ra.Model}, nil
+		return agent.ResolvedAgent{Harness: ra.Harness, Model: ra.Model}, nil
 	}
 
 	s := newTestStore(t, rallyDir)

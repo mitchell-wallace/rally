@@ -230,6 +230,37 @@ func TestGenericExecutor_PromptSubstitutionPartial(t *testing.T) {
 	}
 }
 
+func TestGenericExecutor_InvalidOutputStrategy(t *testing.T) {
+	g := &GenericExecutor{
+		Command:        []string{"echo"},
+		OutputStrategy: "json",
+	}
+	_, err := g.Execute(context.Background(), RunOptions{})
+	if err == nil {
+		t.Fatal("expected error for unsupported output_strategy")
+	}
+	if !strings.Contains(err.Error(), "unsupported output_strategy") {
+		t.Errorf("expected 'unsupported output_strategy' in error, got %q", err.Error())
+	}
+}
+
+func TestGenericExecutor_ValidOutputStrategyTail(t *testing.T) {
+	dir := t.TempDir()
+	script := writeScript(t, dir, "run.sh", `echo "hello"`)
+	g := &GenericExecutor{
+		Command:        []string{script},
+		OutputStrategy: "tail",
+		OutputLines:    40,
+	}
+	res, err := g.Execute(context.Background(), RunOptions{})
+	if err != nil {
+		t.Fatalf("execute failed: %v", err)
+	}
+	if !strings.Contains(res.Summary, "hello") {
+		t.Errorf("expected 'hello' in output, got %q", res.Summary)
+	}
+}
+
 func TestTailLines(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -241,6 +272,9 @@ func TestTailLines(t *testing.T) {
 		{"exactly n", "a\nb\nc", 3, 3},
 		{"more than n", "a\nb\nc\nd\ne", 3, 3},
 		{"empty", "", 5, 1},
+		{"trailing newline", "a\nb\nc\n", 5, 3},
+		{"trailing whitespace", "a\nb\nc  \n", 5, 3},
+		{"only whitespace", "  \n\t\n", 5, 1},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
