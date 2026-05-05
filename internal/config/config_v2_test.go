@@ -570,6 +570,61 @@ command = ["droid", "--model=$MODEL"]
 	}
 }
 
+func TestLoadV2_UserHarnessRejectsBadOutputStrategy(t *testing.T) {
+	dir := t.TempDir()
+	writeConfig(t, dir, `
+[harness.droid]
+command = ["droid"]
+output_strategy = "json"
+`)
+	_, err := LoadV2(dir)
+	if err == nil {
+		t.Fatal("expected error for unsupported output_strategy")
+	}
+	if !strings.Contains(err.Error(), "output_strategy") || !strings.Contains(err.Error(), "tail") {
+		t.Errorf("error = %q, want complaint about output_strategy", err.Error())
+	}
+}
+
+func TestLoadV2_UserHarnessRejectsBadTailStream(t *testing.T) {
+	dir := t.TempDir()
+	writeConfig(t, dir, `
+[harness.droid]
+command = ["droid"]
+output_strategy = "tail"
+tail_stream = "both"
+`)
+	_, err := LoadV2(dir)
+	if err == nil {
+		t.Fatal("expected error for unsupported tail_stream")
+	}
+	if !strings.Contains(err.Error(), "tail_stream") {
+		t.Errorf("error = %q, want complaint about tail_stream", err.Error())
+	}
+}
+
+func TestLoadV2_UserHarnessAcceptsValidOutputStrategy(t *testing.T) {
+	dir := t.TempDir()
+	writeConfig(t, dir, `
+[harness.droid]
+command = ["droid"]
+output_strategy = "tail"
+output_lines = 100
+tail_stream = "stderr"
+`)
+	cfg, err := LoadV2(dir)
+	if err != nil {
+		t.Fatalf("expected no error: %v", err)
+	}
+	h := cfg.Harnesses["droid"]
+	if h.OutputLines != 100 {
+		t.Errorf("OutputLines = %d, want 100", h.OutputLines)
+	}
+	if h.TailStream != "stderr" {
+		t.Errorf("TailStream = %q, want 'stderr'", h.TailStream)
+	}
+}
+
 func TestResolveAgent_BareAlias_NoDefault(t *testing.T) {
 	cfg := V2Config{Harnesses: map[string]*HarnessConfig{}}
 	resolved, err := cfg.ResolveAgent("cc")

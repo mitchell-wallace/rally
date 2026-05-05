@@ -209,6 +209,16 @@ func validateHarnesses(harnesses map[string]*HarnessConfig) error {
 				}
 			}
 		}
+		if h.OutputStrategy != "" && h.OutputStrategy != "tail" {
+			return fmt.Errorf("config: harness %q output_strategy %q is not supported; only \"tail\" is accepted in this version", name, h.OutputStrategy)
+		}
+		if h.TailStream != "" {
+			switch h.TailStream {
+			case "stdout", "stderr", "combined":
+			default:
+				return fmt.Errorf("config: harness %q tail_stream %q is invalid; must be one of stdout, stderr, combined", name, h.TailStream)
+			}
+		}
 		for modelName, modelString := range h.Models {
 			if !modelNamePattern.MatchString(modelName) || numericOnlyPattern.MatchString(modelName) {
 				return fmt.Errorf("config: harness %q model name %q is invalid: must be a non-numeric identifier matching ^[A-Za-z][A-Za-z0-9_-]*$", name, modelName)
