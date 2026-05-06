@@ -1,10 +1,10 @@
 version: 1
-updated_at: "2026-05-06T07:51:57Z"
+updated_at: "2026-05-06T08:40:38Z"
 active_batch:
     agent_mix:
         - cx
     batch_id: 9
-    completed_iterations: 3
+    completed_iterations: 4
     ended_at: ""
     started_at: "2026-05-06T07:36:30Z"
     target_iterations: 5
@@ -429,3 +429,25 @@ recent_sessions:
         - Phase 6 in openspec/changes/role-aware-routing/tasks.md is the next incomplete phase.
         - The broader command `go test ./internal/agent` still has an unrelated pre-existing failure in `TestGenericExecutor_ValidOutputStrategyTail`.
       transcript_path: /home/agent/.local/share/rally/sessions/session-28/terminal.log
+    - session_id: 29
+      batch_id: 9
+      iteration_index: 4
+      agent: codex
+      status: completed
+      started_at: "2026-05-06T07:51:57Z"
+      ended_at: "2026-05-06T08:40:38Z"
+      runtime_seconds: 2921
+      summary: Implemented phase 6 of role-aware-routing by adding override-roster parsing, role-reference expansion, legacy --mix precedence handling, and phase-specific tests.
+      files_touched:
+        - cmd/rally/main.go
+        - cmd/rally/relay_flags.go
+        - cmd/rally/relay_flags_test.go
+        - internal/routing/override.go
+        - internal/routing/override_test.go
+        - openspec/changes/role-aware-routing/tasks.md
+      commits:
+        - f0b4b6dc96e209be54c955406ade84ae23f2194a
+      follow_ups:
+        - Phase 7 can build on internal/routing override parsing for routes validation.
+        - Phase 9 still needs to wire override rosters into the relay-runner selection path.
+      transcript_path: /home/agent/.local/share/rally/sessions/session-29/terminal.log
