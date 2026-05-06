@@ -1,10 +1,10 @@
 version: 1
-updated_at: "2026-05-06T11:42:26Z"
+updated_at: "2026-05-06T11:57:30Z"
 active_batch:
     agent_mix:
         - cx
     batch_id: 10
-    completed_iterations: 1
+    completed_iterations: 2
     ended_at: ""
     started_at: "2026-05-06T11:35:08Z"
     target_iterations: 5
@@ -490,3 +490,21 @@ recent_sessions:
       follow_ups:
         - 'Phase 9 remains next: relay-runner integration of route selection and scheduler state.'
       transcript_path: /home/agent/.local/share/rally/sessions/session-31/terminal.log
+    - session_id: 32
+      batch_id: 10
+      iteration_index: 2
+      agent: codex
+      status: completed
+      started_at: "2026-05-06T11:42:27Z"
+      summary: Implemented phase 9 relay-runner integration for role-aware routing, including route selection, per-route schedulers, override/default resume handling, and integration coverage for freezes, quotas, role files, and no-backend fallback prompts.
+      files_touched:
+        - cmd/rally/main.go
+        - internal/relay/runner.go
+        - internal/relay/route_runtime.go
+        - internal/relay/runner_test.go
+        - openspec/changes/role-aware-routing/tasks.md
+      commits:
+        - 6c9e4eb
+      follow_ups:
+        - Proceed to phase 10 documentation updates for role-aware routing.
+      transcript_path: /home/agent/.local/share/rally/sessions/session-32/terminal.log
