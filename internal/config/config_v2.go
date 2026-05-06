@@ -116,7 +116,7 @@ func LoadV2(workspaceDir string) (V2Config, error) {
 	path := V2Path(workspaceDir)
 	data, err := os.ReadFile(path)
 	if err != nil {
-			if errors.Is(err, os.ErrNotExist) {
+		if errors.Is(err, os.ErrNotExist) {
 			return V2Config{Harnesses: make(map[string]*HarnessConfig)}, nil
 		}
 		return V2Config{}, err
@@ -154,10 +154,10 @@ func LoadV2(workspaceDir string) (V2Config, error) {
 	}
 
 	type modelField struct {
-		name      string
-		rootVal   string
-		defaults  string
-		assign    func(string)
+		name     string
+		rootVal  string
+		defaults string
+		assign   func(string)
 	}
 	fields := []modelField{
 		{"claude_model", raw.ClaudeModel, raw.Defaults.ClaudeModel, func(v string) { cfg.ClaudeModel = v }},
@@ -286,6 +286,10 @@ func validateRoutes(routes map[string][]string) error {
 	}
 
 	return nil
+}
+
+func ValidateRoutesTable(routes map[string][]string) error {
+	return validateRoutes(routes)
 }
 
 func (c V2Config) defaultModelForHarness(harness string) string {

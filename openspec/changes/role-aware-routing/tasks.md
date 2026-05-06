@@ -58,11 +58,11 @@
 
 ## 8. Startup-time validation
 
-- [ ] 8.1 Run the same validator at `rally relay` startup before any iteration begins
-- [ ] 8.2 Hard errors (quota out of bounds, duplicate-by-case, role-ref in routes) → exit non-zero
-- [ ] 8.3 Partial-failure cases (some routes valid, some broken) → warn and prompt y/N; on `n` or stdin EOF exit non-zero
-- [ ] 8.4 Missing default + non-default routes + empty bead queue → warn-and-exit (no prompt, no relay started)
-- [ ] 8.5 Unit tests: each gate, prompt behaviour with stdin EOF, empty-queue early exit
+- [x] 8.1 Run the same validator at `rally relay` startup before any iteration begins
+- [x] 8.2 Hard errors (quota out of bounds, duplicate-by-case, role-ref in routes) → exit non-zero
+- [x] 8.3 Partial-failure cases (some routes valid, some broken) → warn and prompt y/N; on `n` or stdin EOF exit non-zero
+- [x] 8.4 Missing default + non-default routes + empty bead queue → warn-and-exit (no prompt, no relay started)
+- [x] 8.5 Unit tests: each gate, prompt behaviour with stdin EOF, empty-queue early exit
 
 ## 9. Relay-runner integration
 

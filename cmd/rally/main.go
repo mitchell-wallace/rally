@@ -94,6 +94,17 @@ func runRelay(cmd *cobra.Command, args []string) error {
 		fmt.Fprintln(os.Stderr, warning)
 	}
 
+	lapsEnabled := laps.Detect(workspaceDir)
+	validRoutes, err := cli.ValidateRelayStartupRoutes(context.Background(), workspaceDir, cfg, cli.RelayStartupRouteOptions{
+		In:          os.Stdin,
+		Out:         os.Stderr,
+		LapsEnabled: lapsEnabled,
+	})
+	if err != nil {
+		return err
+	}
+	cfg.Routes = validRoutes
+
 	dataDir := ""
 	if home, err := os.UserHomeDir(); err == nil {
 		dataDir = filepath.Join(home, ".local", "share", "rally")
@@ -129,8 +140,6 @@ func runRelay(cmd *cobra.Command, args []string) error {
 			}
 		}
 	}
-
-	lapsEnabled := laps.Detect(workspaceDir)
 
 	if lapsEnabled {
 		lapsDir := filepath.Join(workspaceDir, ".laps")
