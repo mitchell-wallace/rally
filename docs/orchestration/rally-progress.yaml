@@ -1,10 +1,10 @@
 version: 1
-updated_at: "2026-05-06T07:42:59Z"
+updated_at: "2026-05-06T07:46:55Z"
 active_batch:
     agent_mix:
         - cx
     batch_id: 9
-    completed_iterations: 1
+    completed_iterations: 2
     ended_at: ""
     started_at: "2026-05-06T07:36:30Z"
     target_iterations: 5
@@ -387,3 +387,21 @@ recent_sessions:
       follow_ups:
         - Implement phase 4 in openspec/changes/role-aware-routing/tasks.md.
       transcript_path: /home/agent/.local/share/rally/sessions/session-26/terminal.log
+    - session_id: 27
+      batch_id: 9
+      iteration_index: 2
+      agent: codex
+      status: completed
+      started_at: "2026-05-06T07:42:59Z"
+      ended_at: "2026-05-06T07:46:55Z"
+      runtime_seconds: 235
+      summary: Implemented the routing-layer selector for role-aware routing with override priority, case-insensitive assignee matching, default fallback warnings, and missing-default errors.
+      files_touched:
+        - internal/routing/select.go
+        - internal/routing/select_test.go
+        - openspec/changes/role-aware-routing/tasks.md
+      commits:
+        - 2b194a1
+      follow_ups:
+        - Phase 5 can now wire role-instruction loading onto the selected route/assignee path.
+      transcript_path: /home/agent/.local/share/rally/sessions/session-27/terminal.log
