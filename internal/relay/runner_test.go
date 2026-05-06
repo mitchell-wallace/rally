@@ -1520,6 +1520,144 @@ func TestMicrobeadsInstructionsUnconfiguredUsesDefault(t *testing.T) {
 	}
 }
 
+func TestRoleInstructionsLoadedForAssignee(t *testing.T) {
+	workspaceDir := t.TempDir()
+	rallyDir := filepath.Join(workspaceDir, ".rally")
+	agentsDir := filepath.Join(rallyDir, "agents")
+	if err := os.MkdirAll(agentsDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	initRepo(t, workspaceDir)
+	if err := os.WriteFile(filepath.Join(agentsDir, "alice.md"), []byte("Role-specific guidance."), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	s := newTestStore(t, rallyDir)
+	var receivedRoleInstructions string
+	exec := &funcExecutor{
+		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+			receivedRoleInstructions = opts.RoleInstructions
+			f, _ := os.OpenFile(filepath.Join(workspaceDir, "changes.txt"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+			fmt.Fprintf(f, "change\n")
+			f.Close()
+			return &agent.TryResult{Completed: true}, nil
+		},
+	}
+	executors := map[string]agent.Executor{"claude": exec}
+
+	oldHeadPull := headPullLap
+	headPullLap = func(context.Context, string) (laps.Lap, error) {
+		return laps.Lap{Title: "task", Description: "do work", Assignee: "ALICE"}, nil
+	}
+	defer func() { headPullLap = oldHeadPull }()
+
+	r := NewRunner(s, Config{
+		WorkspaceDir:     workspaceDir,
+		DataDir:          t.TempDir(),
+		AgentMixSpecs:    []string{"cc:1"},
+		TargetIterations: 1,
+		LapsEnabled:      true,
+		Instructions:     "Default instructions.",
+	}, executors)
+
+	if err := r.Run(context.Background()); err != nil {
+		t.Fatalf("run failed: %v", err)
+	}
+
+	if receivedRoleInstructions != "Role-specific guidance." {
+		t.Fatalf("role instructions = %q, want %q", receivedRoleInstructions, "Role-specific guidance.")
+	}
+}
+
+func TestRoleInstructionsMissingFileIsSilent(t *testing.T) {
+	workspaceDir := t.TempDir()
+	rallyDir := filepath.Join(workspaceDir, ".rally")
+	if err := os.MkdirAll(rallyDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	initRepo(t, workspaceDir)
+
+	s := newTestStore(t, rallyDir)
+	var receivedRoleInstructions string
+	exec := &funcExecutor{
+		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+			receivedRoleInstructions = opts.RoleInstructions
+			f, _ := os.OpenFile(filepath.Join(workspaceDir, "changes.txt"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+			fmt.Fprintf(f, "change\n")
+			f.Close()
+			return &agent.TryResult{Completed: true}, nil
+		},
+	}
+	executors := map[string]agent.Executor{"claude": exec}
+
+	oldHeadPull := headPullLap
+	headPullLap = func(context.Context, string) (laps.Lap, error) {
+		return laps.Lap{Title: "task", Description: "do work", Assignee: "missing"}, nil
+	}
+	defer func() { headPullLap = oldHeadPull }()
+
+	r := NewRunner(s, Config{
+		WorkspaceDir:     workspaceDir,
+		DataDir:          t.TempDir(),
+		AgentMixSpecs:    []string{"cc:1"},
+		TargetIterations: 1,
+		LapsEnabled:      true,
+		Instructions:     "Default instructions.",
+	}, executors)
+
+	if err := r.Run(context.Background()); err != nil {
+		t.Fatalf("run failed: %v", err)
+	}
+
+	if receivedRoleInstructions != "" {
+		t.Fatalf("role instructions = %q, want empty string", receivedRoleInstructions)
+	}
+}
+
+func TestRoleInstructionsSkippedInNoBackendMode(t *testing.T) {
+	workspaceDir := t.TempDir()
+	rallyDir := filepath.Join(workspaceDir, ".rally")
+	agentsDir := filepath.Join(rallyDir, "agents")
+	if err := os.MkdirAll(agentsDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	initRepo(t, workspaceDir)
+	if err := os.WriteFile(filepath.Join(agentsDir, "alice.md"), []byte("Role-specific guidance."), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	s := newTestStore(t, rallyDir)
+	var receivedRoleInstructions string
+	exec := &funcExecutor{
+		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+			receivedRoleInstructions = opts.RoleInstructions
+			f, _ := os.OpenFile(filepath.Join(workspaceDir, "changes.txt"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+			fmt.Fprintf(f, "change\n")
+			f.Close()
+			return &agent.TryResult{Completed: true}, nil
+		},
+	}
+	executors := map[string]agent.Executor{"claude": exec}
+
+	r := NewRunner(s, Config{
+		WorkspaceDir:     workspaceDir,
+		DataDir:          t.TempDir(),
+		AgentMixSpecs:    []string{"cc:1"},
+		TargetIterations: 1,
+		LapsEnabled:      false,
+		Instructions:     "Default instructions.",
+		TaskPrompt:       "Do some work.",
+	}, executors)
+
+	if err := r.Run(context.Background()); err != nil {
+		t.Fatalf("run failed: %v", err)
+	}
+
+	if receivedRoleInstructions != "" {
+		t.Fatalf("role instructions = %q, want empty string", receivedRoleInstructions)
+	}
+}
+
 func TestFallbackInstructionsUsedInNoBackendMode(t *testing.T) {
 	workspaceDir := t.TempDir()
 	rallyDir := filepath.Join(workspaceDir, ".rally")

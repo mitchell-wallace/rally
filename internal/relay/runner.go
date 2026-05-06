@@ -19,6 +19,7 @@ import (
 	"github.com/mitchell-wallace/rally/internal/laps"
 	"github.com/mitchell-wallace/rally/internal/monitor"
 	"github.com/mitchell-wallace/rally/internal/progress"
+	"github.com/mitchell-wallace/rally/internal/prompt/roleloader"
 	"github.com/mitchell-wallace/rally/internal/store"
 	"github.com/mitchell-wallace/rally/internal/style"
 )
@@ -67,6 +68,13 @@ func NewRunner(s *store.Store, cfg Config, executors map[string]agent.Executor) 
 }
 
 const builtInDefaultFallback = "Continue the relay run. Review the current state of the codebase and continue making progress on the project."
+
+type runTask struct {
+	Name         string
+	Requirements string
+	Prompt       string
+	Assignee     string
+}
 
 func (r *Runner) resolveInstructions() string {
 	if !r.cfg.LapsEnabled {
@@ -399,7 +407,11 @@ func (r *Runner) runOne(ctx context.Context, relay *store.RelayRecord, runIndex 
 	var lastResult *agent.TryResult
 	success := false
 
-	taskName, taskRequirements, taskPrompt, err := r.resolveRunTask(ctx)
+	task, err := r.resolveRunTask(ctx)
+	if err != nil {
+		return false, false, false, err
+	}
+	roleInstructions, err := r.resolveRoleInstructions(task.Assignee)
 	if err != nil {
 		return false, false, false, err
 	}
@@ -419,10 +431,11 @@ func (r *Runner) runOne(ctx context.Context, relay *store.RelayRecord, runIndex 
 		opts := agent.RunOptions{
 			Persona:          picked.Harness,
 			Model:            picked.Model,
-			TaskName:         taskName,
-			TaskRequirements: taskRequirements,
-			TaskPrompt:       taskPrompt,
+			TaskName:         task.Name,
+			TaskRequirements: task.Requirements,
+			TaskPrompt:       task.Prompt,
 			Instructions:     r.resolveInstructions(),
+			RoleInstructions: roleInstructions,
 			InboxMessage:     inbox,
 			RelayMessage:     relayMessage,
 			PreviousSummary:  previousSummary,
@@ -653,32 +666,34 @@ func (r *Runner) runOne(ctx context.Context, relay *store.RelayRecord, runIndex 
 	return success, addressed, false, nil
 }
 
-func (r *Runner) resolveRunTask(ctx context.Context) (string, string, string, error) {
-	taskName := "relay run"
-	taskRequirements := ""
-	taskPrompt := r.cfg.TaskPrompt
+func (r *Runner) resolveRunTask(ctx context.Context) (runTask, error) {
+	task := runTask{
+		Name:   "relay run",
+		Prompt: r.cfg.TaskPrompt,
+	}
 
 	if !r.cfg.LapsEnabled {
-		if taskPrompt == "" {
-			taskPrompt = r.loadFallbackInstructions()
+		if task.Prompt == "" {
+			task.Prompt = r.loadFallbackInstructions()
 		}
-		return taskName, taskRequirements, taskPrompt, nil
+		return task, nil
 	}
 
 	lap, err := headPullLap(ctx, r.cfg.WorkspaceDir)
 	if err != nil {
-		return "", "", "", fmt.Errorf("pull head lap: %w", err)
+		return runTask{}, fmt.Errorf("pull head lap: %w", err)
 	}
 	if lap == laps.NoLap {
-		return taskName, taskRequirements, taskPrompt, nil
+		return task, nil
 	}
 
-	taskName = lap.Title
+	task.Name = lap.Title
 	if strings.TrimSpace(lap.Description) != "" {
-		taskPrompt = lap.Description
+		task.Prompt = lap.Description
 	} else {
-		taskPrompt = lap.Title
+		task.Prompt = lap.Title
 	}
+	task.Assignee = lap.Assignee
 
 	var details []string
 	if lap.ID != "" {
@@ -687,9 +702,17 @@ func (r *Runner) resolveRunTask(ctx context.Context) (string, string, string, er
 	if lap.Assignee != "" {
 		details = append(details, "Assignee: "+lap.Assignee)
 	}
-	taskRequirements = strings.Join(details, "\n")
+	task.Requirements = strings.Join(details, "\n")
 
-	return taskName, taskRequirements, taskPrompt, nil
+	return task, nil
+}
+
+func (r *Runner) resolveRoleInstructions(assignee string) (string, error) {
+	if !r.cfg.LapsEnabled || strings.TrimSpace(assignee) == "" {
+		return "", nil
+	}
+
+	return roleloader.Loader{WorkspaceDir: r.cfg.WorkspaceDir}.Load(assignee)
 }
 
 func (r *Runner) executeTry(ctx context.Context, picked agent.ResolvedAgent, opts agent.RunOptions) (*agent.TryResult, error) {

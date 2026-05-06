@@ -13,6 +13,7 @@ type RunOptions struct {
 	TaskName         string
 	TaskRequirements string
 	Instructions     string
+	RoleInstructions string
 	TaskPrompt       string
 	InboxMessage     string
 	RelayMessage     string

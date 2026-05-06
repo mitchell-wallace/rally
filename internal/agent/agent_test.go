@@ -87,6 +87,25 @@ func TestBuildPrompt_Instructions(t *testing.T) {
 	}
 }
 
+func TestBuildPrompt_RoleInstructionsBetweenProjectInstructionsAndTask(t *testing.T) {
+	opts := RunOptions{
+		Instructions:     "Base instructions.",
+		RoleInstructions: "Role instructions.",
+		TaskPrompt:       "Task body.",
+	}
+	p := BuildPrompt(opts)
+
+	projectIndex := strings.Index(p, "## Project Instructions\nBase instructions.")
+	roleIndex := strings.Index(p, "## Role Instructions\nRole instructions.")
+	taskIndex := strings.Index(p, "## Task\nTask body.")
+	if projectIndex == -1 || roleIndex == -1 || taskIndex == -1 {
+		t.Fatalf("prompt missing expected sections:\n%s", p)
+	}
+	if !(projectIndex < roleIndex && roleIndex < taskIndex) {
+		t.Fatalf("expected project instructions before role instructions before task, got:\n%s", p)
+	}
+}
+
 func TestBuildPrompt_TaskPrompt(t *testing.T) {
 	opts := RunOptions{
 		TaskPrompt: "Fix the race condition.",

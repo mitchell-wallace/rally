@@ -33,12 +33,12 @@
 
 ## 5. Role-instruction loader
 
-- [ ] 5.1 Add `internal/prompt/roleloader/loader.go` with case-insensitive directory scan of `.rally/agents/` (sorted, deterministic)
-- [ ] 5.2 Return file content as opaque string (no parsing, no front-matter)
-- [ ] 5.3 Return empty string on missing file (silent, not an error)
-- [ ] 5.4 Wire into prompt-building path: insert content between base instructions and bead body
-- [ ] 5.5 Skip entirely in no-backend mode
-- [ ] 5.6 Unit tests: exact match, case-variant match, multiple variants on disk → deterministic pick, missing file silent, no-backend skip
+- [x] 5.1 Add `internal/prompt/roleloader/loader.go` with case-insensitive directory scan of `.rally/agents/` (sorted, deterministic)
+- [x] 5.2 Return file content as opaque string (no parsing, no front-matter)
+- [x] 5.3 Return empty string on missing file (silent, not an error)
+- [x] 5.4 Wire into prompt-building path: insert content between base instructions and bead body
+- [x] 5.5 Skip entirely in no-backend mode
+- [x] 5.6 Unit tests: exact match, case-variant match, multiple variants on disk → deterministic pick, missing file silent, no-backend skip
 
 ## 6. `--agent` flag and override roster
 

@@ -27,6 +27,10 @@ func BuildPrompt(opts RunOptions) string {
 		fmt.Fprintf(&b, "## Project Instructions\n%s\n\n", opts.Instructions)
 	}
 
+	if opts.RoleInstructions != "" {
+		fmt.Fprintf(&b, "## Role Instructions\n%s\n\n", opts.RoleInstructions)
+	}
+
 	if opts.TaskPrompt != "" {
 		fmt.Fprintf(&b, "## Task\n%s\n\n", opts.TaskPrompt)
 	}
