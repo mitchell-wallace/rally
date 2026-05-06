@@ -130,7 +130,7 @@ func newResolvedRouteRuntime(routeSpecs map[string][]string, resolver Resolver, 
 }
 
 func (r *routeRuntime) next(task runTask, resilience *Resilience) (routeSelection, error) {
-	route, err := r.selector.ActiveRoute(routing.Bead{Assignee: task.Assignee}, r.overrideRoute())
+	route, err := r.selector.ActiveRoute(routing.Lap{Assignee: task.Assignee}, r.overrideRoute())
 	if err != nil {
 		return routeSelection{}, err
 	}

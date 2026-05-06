@@ -25,7 +25,7 @@ func TestSelector_OverrideWins(t *testing.T) {
 		t.Fatalf("ParseRoute() error = %v", err)
 	}
 
-	route, err := selector.ActiveRoute(Bead{Assignee: "SENIOR"}, &override)
+	route, err := selector.ActiveRoute(Lap{Assignee: "SENIOR"}, &override)
 	if err != nil {
 		t.Fatalf("ActiveRoute() error = %v", err)
 	}
@@ -50,7 +50,7 @@ func TestSelector_AssigneeMatchIsCaseInsensitive(t *testing.T) {
 		"SENIOR":  {"codex:gpt-5.5:3"},
 	}, false)
 
-	route, err := selector.ActiveRoute(Bead{Assignee: "Senior"}, nil)
+	route, err := selector.ActiveRoute(Lap{Assignee: "Senior"}, nil)
 	if err != nil {
 		t.Fatalf("ActiveRoute() error = %v", err)
 	}
@@ -74,7 +74,7 @@ func TestSelector_FallsBackToDefaultWhenAssigneeMissing(t *testing.T) {
 		"default": {"claude:opus-4.7"},
 	}, false)
 
-	route, err := selector.ActiveRoute(Bead{Assignee: "ROLEX"}, nil)
+	route, err := selector.ActiveRoute(Lap{Assignee: "ROLEX"}, nil)
 	if err != nil {
 		t.Fatalf("ActiveRoute() error = %v", err)
 	}
@@ -99,7 +99,7 @@ func TestSelector_UsesDefaultWithoutWarningWhenNoAssignee(t *testing.T) {
 		"SENIOR":  {"codex:gpt-5.5"},
 	}, false)
 
-	route, err := selector.ActiveRoute(Bead{}, nil)
+	route, err := selector.ActiveRoute(Lap{}, nil)
 	if err != nil {
 		t.Fatalf("ActiveRoute() error = %v", err)
 	}
@@ -117,7 +117,7 @@ func TestSelector_ErrorsWhenAssigneeMissingRouteAndNoDefault(t *testing.T) {
 		"SENIOR": {"codex:gpt-5.5"},
 	}, false)
 
-	_, err := selector.ActiveRoute(Bead{Assignee: "ROLEX"}, nil)
+	_, err := selector.ActiveRoute(Lap{Assignee: "ROLEX"}, nil)
 	if err == nil {
 		t.Fatal("ActiveRoute() error = nil, want missing default error")
 	}
@@ -135,7 +135,7 @@ func TestSelector_NoBackendAlwaysUsesDefault(t *testing.T) {
 		"SENIOR":  {"codex:gpt-5.5"},
 	}, true)
 
-	route, err := selector.ActiveRoute(Bead{Assignee: "SENIOR"}, nil)
+	route, err := selector.ActiveRoute(Lap{Assignee: "SENIOR"}, nil)
 	if err != nil {
 		t.Fatalf("ActiveRoute() error = %v", err)
 	}
@@ -164,7 +164,7 @@ func TestSelector_NoBackendOverrideStillWins(t *testing.T) {
 		t.Fatalf("ParseRoute() error = %v", err)
 	}
 
-	route, err := selector.ActiveRoute(Bead{}, &override)
+	route, err := selector.ActiveRoute(Lap{}, &override)
 	if err != nil {
 		t.Fatalf("ActiveRoute() error = %v", err)
 	}

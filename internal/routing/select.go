@@ -15,7 +15,7 @@ const (
 	RouteSourceDefault  RouteSource = "default"
 )
 
-type Bead struct {
+type Lap struct {
 	Assignee string
 }
 
@@ -69,7 +69,7 @@ func NewSelector(routeSpecs map[string][]string, noBackend bool) (*Selector, err
 	}, nil
 }
 
-func (s *Selector) ActiveRoute(bead Bead, override *Route) (Route, error) {
+func (s *Selector) ActiveRoute(lap Lap, override *Route) (Route, error) {
 	if override != nil {
 		route := cloneRoute(*override)
 		route.Source = RouteSourceOverride
@@ -84,7 +84,7 @@ func (s *Selector) ActiveRoute(bead Bead, override *Route) (Route, error) {
 		return s.selectDefault("")
 	}
 
-	assignee := strings.TrimSpace(bead.Assignee)
+	assignee := strings.TrimSpace(lap.Assignee)
 	if assignee == "" {
 		return s.selectDefault("")
 	}

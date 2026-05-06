@@ -46,10 +46,10 @@ A separate concern: the per-role agent prompt fragments (`SENIOR.md`, `JUNIOR.md
 ### Resolution order: `--agent` > lap `assignee` > `default`
 **Chosen**: Per iteration, in priority order:
 1. `--agent` flag overrides everything (if supplied)
-2. Bead's `assignee` (case-insensitive match against `[routes]` keys)
+2. Lap's `assignee` (case-insensitive match against `[routes]` keys)
 3. `default` route (when assignee is unset or didn't match)
 
-**Alternative considered**: Roll bead-`assignee` and `default` into a single fallback chain.
+**Alternative considered**: Roll lap-`assignee` and `default` into a single fallback chain.
 
 **Why**: The three sources answer different questions ("operator override," "what does this lap need," "what's the catch-all"). Keeping them ordered keeps the mental model simple. `--agent` is the manual lever; `assignee` is the per-lap policy; `default` is the no-policy escape hatch. Operators learn each layer separately.
 

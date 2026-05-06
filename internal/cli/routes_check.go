@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"bufio"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -106,7 +105,7 @@ func CheckRoutes(workspaceDir string, cfg config.V2Config) (RouteCheckResult, er
 			continue
 		}
 		result.Infos = append(result.Infos,
-			fmt.Sprintf("info: route %q is declared but not referenced by any current bead assignee", name))
+			fmt.Sprintf("info: route %q is declared but not referenced by any current lap assignee", name))
 	}
 
 	return result, nil
@@ -214,15 +213,6 @@ func aliasCandidates(cfg config.V2Config) []string {
 func collectActiveAssignees(workspaceDir string) (map[string]struct{}, string, error) {
 	assignees := map[string]struct{}{}
 
-	beadsPath := filepath.Join(workspaceDir, ".beads", "issues.jsonl")
-	if _, err := os.Stat(beadsPath); err == nil {
-		found, err := collectBeadsAssignees(beadsPath)
-		if err != nil {
-			return nil, "", err
-		}
-		mergeAssignees(assignees, found)
-	}
-
 	lapsPath := filepath.Join(workspaceDir, ".laps", "laps.json")
 	if _, err := os.Stat(lapsPath); err == nil {
 		found, err := collectJSONAssignees(lapsPath)
@@ -233,39 +223,6 @@ func collectActiveAssignees(workspaceDir string) (map[string]struct{}, string, e
 	}
 
 	return assignees, "", nil
-}
-
-func collectBeadsAssignees(path string) (map[string]struct{}, error) {
-	f, err := os.Open(path)
-	if err != nil {
-		return nil, err
-	}
-	defer f.Close()
-
-	assignees := map[string]struct{}{}
-	scanner := bufio.NewScanner(f)
-	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-		if line == "" {
-			continue
-		}
-
-		var record struct {
-			Status   string `json:"status"`
-			Assignee string `json:"assignee"`
-		}
-		if err := json.Unmarshal([]byte(line), &record); err != nil {
-			return nil, fmt.Errorf("parse %s: %w", path, err)
-		}
-		if strings.EqualFold(record.Status, "closed") {
-			continue
-		}
-		addAssignee(assignees, record.Assignee)
-	}
-	if err := scanner.Err(); err != nil {
-		return nil, err
-	}
-	return assignees, nil
 }
 
 func collectJSONAssignees(path string) (map[string]struct{}, error) {

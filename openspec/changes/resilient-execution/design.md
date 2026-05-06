@@ -101,7 +101,7 @@ Patterns are matched against the last N lines of the try log (deterministic, no 
 
 **Alternative considered**: Persist the flag across fresh-start retries.
 
-**Why**: Carrying state across fresh starts conflates two different agent contexts. The bead-still-open property guarantees the work isn't lost; only the half-formed handoff intent is lost, which is the cheaper failure mode. Operators see in the progress log that the bead remained open.
+**Why**: Carrying state across fresh starts conflates two different agent contexts. The lap-still-open property guarantees the work isn't lost; only the half-formed handoff intent is lost, which is the cheaper failure mode. Operators see in the progress log that the lap remained open.
 
 ## Risks / Trade-offs
 

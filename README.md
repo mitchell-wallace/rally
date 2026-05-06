@@ -11,7 +11,7 @@ tracking iterations, or rebuilding progress files after every pass.
 
 - Runs one or more agent sessions against the current workspace.
 - Cycles deterministically through an agent mix such as `cc:1 cx:2 ge:1`,
-  or through role-aware routes selected from a bead's `assignee`.
+  or through role-aware routes selected from a lap's `assignee`.
 - Accepts agent mixes either by repeating the flag or by passing one quoted
   string: `--agent "cc:1 cx:2 op:1"`.
 - Stores transcripts and per-session metadata outside the repo by default.
@@ -207,14 +207,14 @@ toggle.
 
 | Field               | Type   | Purpose                                               |
 |----------------------|--------|-------------------------------------------------------|
-| `instructions_file`  | string | Path to prompt content used in no-backend mode when no ready bead exists. Falls back to the built-in default. |
+| `instructions_file`  | string | Path to prompt content used in no-backend mode when no ready lap exists. Falls back to the built-in default. |
 
 The fallback file has no effect in laps-backed mode.
 
 ### `[routes]`
 
 `[routes]` enables role-aware routing. Route keys are matched
-case-insensitively against the active bead's `assignee` value, with
+case-insensitively against the active lap's `assignee` value, with
 `default` reserved for the no-role / no-match case. The current in-repo
 `assignee` documentation lives in [openspec/HANDOFF.md](openspec/HANDOFF.md)
 and [openspec/changes/laps-first-class/specs/laps-only-integration/spec.md](openspec/changes/laps-first-class/specs/laps-only-integration/spec.md).
@@ -236,18 +236,18 @@ Quota rules:
 Routing priority on each iteration is:
 
 1. `--agent` override route, if supplied
-2. bead `assignee` match
+2. lap `assignee` match
 3. `default`
 
-In no-backend mode there is no bead and no `assignee`, so Rally always uses
+In no-backend mode there is no lap and no `assignee`, so Rally always uses
 `default`. Non-default routes still load, but they are never selected.
 
 ### Role Instruction Files
 
-When a bead has an `assignee`, Rally looks for a matching file in
+When a lap has an `assignee`, Rally looks for a matching file in
 `.rally/agents/{ASSIGNEE}.md` using a case-insensitive directory scan. If a
 file is found, its contents are inserted between Rally's base instructions and
-the bead body. Missing files are silent. Rally treats the file contents as
+the lap body. Missing files are silent. Rally treats the file contents as
 opaque text; it does not parse front-matter or impose a template.
 
 ### `[harness.<name>]` — Named models and user-defined harnesses
@@ -344,7 +344,7 @@ rally routes check
 
 The command exits non-zero on parse, resolution, or quota errors. It prints
 warnings for soft problems such as a missing `default` route, and info lines
-for declared non-default routes that no current bead `assignee` references.
+for declared non-default routes that no current lap `assignee` references.
 
 Example Make target:
 
@@ -412,7 +412,7 @@ Rally also performs a background update check on normal startup unless
 
 Each iteration:
 
-1. Selects the active route (`--agent` override, bead `assignee`, or
+1. Selects the active route (`--agent` override, lap `assignee`, or
    `default`) and then picks the next agent from that route.
 2. Builds a prompt from your project instructions, inbox messages, and recent
    try context, plus any matching `.rally/agents/{ASSIGNEE}.md` file.
@@ -444,7 +444,7 @@ Rally v0.2.0 uses a new internal architecture:
 ### v0.6.0
 
 **Role-aware routing.** Rally adds a top-level `[routes]` table in
-`.rally/config.toml`, selected per iteration by `--agent` override, bead
+`.rally/config.toml`, selected per iteration by `--agent` override, lap
 `assignee`, then `default`.
 
 - Route entries use positional `:` splitting with the last segment treated as a

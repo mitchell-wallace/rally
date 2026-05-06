@@ -153,7 +153,7 @@ MARKETING = ["cx"]
 	if err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
-	if !strings.Contains(output, `info: route "MARKETING" is declared but not referenced by any current bead assignee`) {
+	if !strings.Contains(output, `info: route "MARKETING" is declared but not referenced by any current lap assignee`) {
 		t.Fatalf("output = %q, want unreachable route info", output)
 	}
 }
