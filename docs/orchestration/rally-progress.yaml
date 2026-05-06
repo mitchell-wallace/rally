@@ -1,13 +1,5 @@
 version: 1
-updated_at: "2026-05-06T08:49:37Z"
-active_batch:
-    agent_mix:
-        - cx
-    batch_id: 9
-    completed_iterations: 5
-    ended_at: ""
-    started_at: "2026-05-06T07:36:30Z"
-    target_iterations: 5
+updated_at: "2026-05-06T08:49:57Z"
 history_window: 50
 recent_sessions:
     - session_id: 1
@@ -457,6 +449,8 @@ recent_sessions:
       agent: codex
       status: completed
       started_at: "2026-05-06T08:40:38Z"
+      ended_at: "2026-05-06T08:49:57Z"
+      runtime_seconds: 558
       summary: Implemented phase 7 of role-aware-routing by adding `rally routes check`, wiring it into Cobra, validating route parsing/resolution/quota handling, and covering the validator with unit tests.
       files_touched:
         - cmd/rally/main.go
