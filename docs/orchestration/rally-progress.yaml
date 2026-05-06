@@ -1,12 +1,12 @@
 version: 1
-updated_at: "2026-05-05T11:16:23Z"
+updated_at: "2026-05-06T07:42:43Z"
 active_batch:
     agent_mix:
-        - op
-    batch_id: 7
-    completed_iterations: 3
+        - cx
+    batch_id: 9
+    completed_iterations: 1
     ended_at: ""
-    started_at: "2026-05-05T10:08:47Z"
+    started_at: "2026-05-06T07:36:30Z"
     target_iterations: 5
 history_window: 50
 recent_sessions:
@@ -348,3 +348,40 @@ recent_sessions:
       ended_at: "2026-05-05T11:16:23Z"
       runtime_seconds: 3401
       transcript_path: /home/agent/.local/share/rally/sessions/session-22/terminal.log
+    - session_id: 23
+      batch_id: 7
+      iteration_index: 4
+      agent: opencode
+      status: running
+      started_at: "2026-05-05T11:16:23Z"
+      transcript_path: /home/agent/.local/share/rally/sessions/session-23/terminal.log
+    - session_id: 24
+      batch_id: 7
+      iteration_index: 5
+      agent: opencode
+      status: running
+      started_at: "2026-05-05T11:31:27Z"
+      transcript_path: /home/agent/.local/share/rally/sessions/session-24/terminal.log
+    - session_id: 25
+      batch_id: 8
+      iteration_index: 1
+      agent: opencode
+      status: running
+      started_at: "2026-05-06T07:27:40Z"
+      transcript_path: /home/agent/.local/share/rally/sessions/session-25/terminal.log
+    - session_id: 26
+      batch_id: 9
+      iteration_index: 1
+      agent: codex
+      status: completed
+      started_at: "2026-05-06T07:36:30Z"
+      summary: Implemented phase 3 of role-aware routing by rebuilding the core quota scheduler, aligning freeze and range-quota behavior with the OpenSpec scenarios, and marking the scheduler tasks complete.
+      files_touched:
+        - internal/routing/scheduler.go
+        - internal/routing/scheduler_test.go
+        - openspec/changes/role-aware-routing/tasks.md
+      commits:
+        - dad0ce1 Implement routing scheduler core
+      follow_ups:
+        - Implement phase 4 in openspec/changes/role-aware-routing/tasks.md.
+      transcript_path: /home/agent/.local/share/rally/sessions/session-26/terminal.log
