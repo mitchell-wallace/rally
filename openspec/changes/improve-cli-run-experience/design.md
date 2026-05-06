@@ -48,18 +48,18 @@ The live monitor needs a reliable liveness signal. Workspace-file mtime is a poo
 **Why**: The operator is already watching the terminal. Keyboard shortcuts are immediate — no need to open another terminal, find the right workspace, or deal with stale PID files. Double-press confirmation prevents accidental triggers (same UX pattern as the existing Ctrl+C guard). The UDS approach adds complexity (PID file lifecycle, stale socket cleanup, cross-platform IPC) for a use case that's inherently interactive and terminal-bound.
 
 ### Skip means "next runner", not "next task"
-**Chosen**: Ctrl+S cancels the current try and assigns the same microbead to the next runner in the round-robin rotation (a new run). It does not advance to the next microbead or modify microbead task state. The rotation continues normally — skip just advances the runner pointer the same way a completed run would.
+**Chosen**: Ctrl+S cancels the current try and assigns the same lap to the next runner in the round-robin rotation (a new run). It does not advance to the next lap or modify lap task state. The rotation continues normally — skip just advances the runner pointer the same way a completed run would.
 
-**Alternative considered**: Skip advances to the next iteration/microbead entirely.
+**Alternative considered**: Skip advances to the next iteration/lap entirely.
 
-**Why**: Skip addresses a specific class of problem — "this runner can't handle this task right now" (e.g. API timing out). The task itself isn't invalid; it just needs a different runner. Abandoning the task would leave microbeads in limbo. The round-robin rotation keeps moving forward naturally; skip doesn't reset or jump the sequence.
+**Why**: Skip addresses a specific class of problem — "this runner can't handle this task right now" (e.g. API timing out). The task itself isn't invalid; it just needs a different runner. Abandoning the task would leave laps in limbo. The round-robin rotation keeps moving forward naturally; skip doesn't reset or jump the sequence.
 
 ### Pause for manual operator intervention
 **Chosen**: Ctrl+P cancels the current try and puts the relay in a waiting state. The operator presses Enter to resume, which starts a new try within the same run (same runner).
 
 **Alternative considered**: No pause — operators use Ctrl+C to quit and manually restart.
 
-**Why**: Common scenarios (rotating API keys, fixing a microbead description that's sending agents down rabbit holes, checking external state) require the relay to pause but not terminate. Ctrl+C loses relay state and requires the operator to re-invoke. Pause keeps the relay alive and resumes cleanly. Resuming with the same runner is correct — the operator paused to fix the environment, not because the runner was wrong (that's what skip is for).
+**Why**: Common scenarios (rotating API keys, fixing a lap description that's sending agents down rabbit holes, checking external state) require the relay to pause but not terminate. Ctrl+C loses relay state and requires the operator to re-invoke. Pause keeps the relay alive and resumes cleanly. Resuming with the same runner is correct — the operator paused to fix the environment, not because the runner was wrong (that's what skip is for).
 
 ### Retry deferred to resilient-execution
 **Chosen**: Ctrl+R (retry — new try, same runner, consuming retry budget but overridable when budget exhausted) is not included in this change. It ships with `resilient-execution`, which adds explicit retry budget management.

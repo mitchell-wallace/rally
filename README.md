@@ -157,8 +157,8 @@ codex_model = "gpt-5.4"
 gemini_model = "gemini-3.1-pro-preview"
 opencode_model = "zai-coding-plan/glm-5.1"
 
-[microbeads]
-instructions_file = ".rally/mb_instructions.md"
+[laps]
+instructions_file = ".rally/laps_instructions.md"
 
 [fallback]
 instructions_file = ".rally/fallback_instructions.md"
@@ -194,13 +194,13 @@ the harness's hard-coded internal default.
 | `gemini_model`     | string | Default model for the `ge`/`gemini` alias      |
 | `opencode_model`   | string | Default model for the `op`/`opencode` alias    |
 
-### `[microbeads]`
+### `[laps]`
 
 | Field               | Type   | Purpose                                               |
 |----------------------|--------|-------------------------------------------------------|
-| `instructions_file`  | string | Path to instruction content injected in microbeads-backed mode. Falls back to the built-in default when absent or unreadable. |
+| `instructions_file`  | string | Path to instruction content injected in laps-backed mode. Falls back to the built-in default when absent or unreadable. |
 
-Injection is unconditional in microbeads-backed mode (per v0.4.0). There is no
+Injection is unconditional in laps-backed mode (per v0.4.0). There is no
 toggle.
 
 ### `[fallback]`
@@ -209,7 +209,7 @@ toggle.
 |----------------------|--------|-------------------------------------------------------|
 | `instructions_file`  | string | Path to prompt content used in no-backend mode when no ready bead exists. Falls back to the built-in default. |
 
-The fallback file has no effect in microbeads-backed mode.
+The fallback file has no effect in laps-backed mode.
 
 ### `[routes]`
 
@@ -475,8 +475,8 @@ for per-harness model shortcuts, defaults, and user-defined harnesses.
   Supports `model_flag` (set / empty / omitted), `$PROMPT` positional
   substitution (or stdin fallback), `tail_stream`, and `output_lines`.
   Substitution is positional, not shell.
-- **`[microbeads]`** and **`[fallback]`** sections for instruction content
-  sources in microbeads-backed and no-backend modes respectively.
+- **`[laps]`** and **`[fallback]`** sections for instruction content
+  sources in laps-backed and no-backend modes respectively.
 - **`AgentMix.Cycle`** is re-typed from `[]string` (harness aliases) to
   `[]ResolvedAgent` (typed `(harness, model)` records). External code that
   imports `internal/relay` and reads `Cycle` directly will need updating.
@@ -487,7 +487,7 @@ for per-harness model shortcuts, defaults, and user-defined harnesses.
 
 ### v0.4.0
 
-- Microbeads integration: bead head-pull surfaces `assignee` field.
-- Injection of microbeads instructions is unconditional in microbeads-backed
+- Laps integration: lap head-pull surfaces `assignee` field.
+- Injection of laps instructions is unconditional in laps-backed
   mode. The legacy `Beads` flat field has been removed (no rename — the field
   is gone). Progress log remains YAML.

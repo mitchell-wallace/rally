@@ -87,7 +87,7 @@ func CheckRoutes(workspaceDir string, cfg config.V2Config) (RouteCheckResult, er
 	}
 
 	if len(cfg.Routes) > 0 && !hasDefaultRoute(cfg.Routes) {
-		result.Warnings = append(result.Warnings, "warning: no default route is configured; beads without a matching assignee will fail at run-time")
+		result.Warnings = append(result.Warnings, "warning: no default route is configured; laps without a matching assignee will fail at run-time")
 	}
 
 	activeAssignees, warning, err := collectActiveAssignees(workspaceDir)

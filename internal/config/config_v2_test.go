@@ -257,11 +257,11 @@ command = ["tool"]
 	}
 }
 
-func TestLoadV2_MicrobeadsAndFallback(t *testing.T) {
+func TestLoadV2_LapsAndFallback(t *testing.T) {
 	dir := t.TempDir()
 	writeConfig(t, dir, `schema_version = 2
-[microbeads]
-instructions_file = ".rally/mb_instructions.md"
+[laps]
+instructions_file = ".rally/laps_instructions.md"
 [fallback]
 instructions_file = ".rally/fallback_instructions.md"
 `)
@@ -270,8 +270,8 @@ instructions_file = ".rally/fallback_instructions.md"
 	if err != nil {
 		t.Fatalf("LoadV2 failed: %v", err)
 	}
-	if cfg.Microbeads.InstructionsFile != ".rally/mb_instructions.md" {
-		t.Errorf("Microbeads.InstructionsFile = %q, wrong", cfg.Microbeads.InstructionsFile)
+	if cfg.Laps.InstructionsFile != ".rally/laps_instructions.md" {
+		t.Errorf("Laps.InstructionsFile = %q, wrong", cfg.Laps.InstructionsFile)
 	}
 	if cfg.Fallback.InstructionsFile != ".rally/fallback_instructions.md" {
 		t.Errorf("Fallback.InstructionsFile = %q, wrong", cfg.Fallback.InstructionsFile)

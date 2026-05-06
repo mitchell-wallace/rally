@@ -1,10 +1,10 @@
 ## ADDED Requirements
 
 ### Requirement: `--agent` flag override
-The system SHALL accept a `--agent` flag on `rally relay` whose value is a space-separated list of agent entries forming an override roster. When present, the override roster SHALL replace per-bead `assignee` routing entirely — bead `assignee` values SHALL be ignored for the duration of the relay. The override is treated as a route by the scheduler (subject to the same quota rules and cycling).
+The system SHALL accept a `--agent` flag on `rally relay` whose value is a space-separated list of agent entries forming an override roster. When present, the override roster SHALL replace per-lap `assignee` routing entirely — lap `assignee` values SHALL be ignored for the duration of the relay. The override is treated as a route by the scheduler (subject to the same quota rules and cycling).
 
 #### Scenario: `--agent` overrides assignee
-- **WHEN** `rally relay --agent "claude:opus-4.7"` is invoked and beads carry various `assignee` values
+- **WHEN** `rally relay --agent "claude:opus-4.7"` is invoked and laps carry various `assignee` values
 - **THEN** the scheduler SHALL use the single-entry override roster for every iteration regardless of `assignee`
 
 #### Scenario: `--agent` accepts shortcuts

@@ -24,7 +24,7 @@
 
 ## 4. Routing layer
 
-- [x] 4.1 Add `internal/routing/select.go` with `ActiveRoute(bead, override) Route` selecting per priority: `--agent` override > bead assignee match > default
+- [x] 4.1 Add `internal/routing/select.go` with `ActiveRoute(lap, override) Route` selecting per priority: `--agent` override > lap assignee match > default
 - [x] 4.2 Case-insensitive matching of `assignee` against `[routes]` keys
 - [x] 4.3 Per-iteration warning when a non-default role has no match and falls back to default
 - [x] 4.4 Per-iteration error exit when no role match and no `default` exists
@@ -36,7 +36,7 @@
 - [x] 5.1 Add `internal/prompt/roleloader/loader.go` with case-insensitive directory scan of `.rally/agents/` (sorted, deterministic)
 - [x] 5.2 Return file content as opaque string (no parsing, no front-matter)
 - [x] 5.3 Return empty string on missing file (silent, not an error)
-- [x] 5.4 Wire into prompt-building path: insert content between base instructions and bead body
+- [x] 5.4 Wire into prompt-building path: insert content between base instructions and lap body
 - [x] 5.5 Skip entirely in no-backend mode
 - [x] 5.6 Unit tests: exact match, case-variant match, multiple variants on disk → deterministic pick, missing file silent, no-backend skip
 
@@ -61,7 +61,7 @@
 - [x] 8.1 Run the same validator at `rally relay` startup before any iteration begins
 - [x] 8.2 Hard errors (quota out of bounds, duplicate-by-case, role-ref in routes) → exit non-zero
 - [x] 8.3 Partial-failure cases (some routes valid, some broken) → warn and prompt y/N; on `n` or stdin EOF exit non-zero
-- [x] 8.4 Missing default + non-default routes + empty bead queue → warn-and-exit (no prompt, no relay started)
+- [x] 8.4 Missing default + non-default routes + empty lap queue → warn-and-exit (no prompt, no relay started)
 - [x] 8.5 Unit tests: each gate, prompt behaviour with stdin EOF, empty-queue early exit
 
 ## 9. Relay-runner integration
@@ -78,7 +78,7 @@
 - [x] 10.2 Document `--agent` syntax with role references
 - [x] 10.3 Document `rally routes check` as a CI/Makefile validator
 - [x] 10.4 v0.6.0 release notes: routing model, quota syntax (positional `:`-split, last-segment-as-quota, numeric-only key prohibition), per-role instruction file contract (loader-only — file contents authored separately)
-- [x] 10.5 Cross-link to microbeads SPEC `assignee` field documentation
+- [x] 10.5 Cross-link to laps SPEC `assignee` field documentation
 
 ## 11. Verification
 
@@ -86,5 +86,5 @@
 - [x] 11.2 No-backend mode collapses to `default` route correctly; non-default routes loaded but never selected
 - [x] 11.3 Case-insensitive role matching works on Linux ext4 and macOS APFS
 - [x] 11.4 `rally routes check` exits zero on clean config, non-zero on errors, with did-you-mean output for unresolved shortcuts
-- [x] 11.5 `--agent` overrides bead `assignee` for entire relay duration
+- [x] 11.5 `--agent` overrides lap `assignee` for entire relay duration
 - [x] 11.6 Role-instruction file injected when present, silent when absent; deterministic pick when multiple case variants exist

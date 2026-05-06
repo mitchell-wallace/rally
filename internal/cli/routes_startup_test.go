@@ -181,7 +181,7 @@ func TestValidateRelayStartupRoutes_MissingDefaultWithEmptyQueueWarnsAndExits(t 
 	if err == nil {
 		t.Fatal("ValidateRelayStartupRoutes() error = nil, want empty-queue failure")
 	}
-	if !strings.Contains(err.Error(), "no beads are available") {
+	if !strings.Contains(err.Error(), "no laps are available") {
 		t.Fatalf("error = %q, want empty-queue failure", err.Error())
 	}
 	if !strings.Contains(output.String(), "warning: no valid default route is configured") {

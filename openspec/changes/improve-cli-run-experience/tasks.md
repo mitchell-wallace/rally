@@ -37,7 +37,7 @@
 - [x] 5.1 Add `internal/keyboard/` package: put terminal in raw mode during try execution, restore on exit
 - [x] 5.2 Capture Ctrl+S, Ctrl+P, Ctrl+X, Ctrl+C in raw mode; route to handlers
 - [x] 5.3 Implement double-press confirmation for all four shortcuts (shared pattern with Ctrl+C guard)
-- [x] 5.4 Ctrl+S handler: signal skip to relay runner — cancel current try, assign same microbead to next runner in round-robin rotation (new run). Does not affect microbead task state. Continues normal rotation sequence
+- [x] 5.4 Ctrl+S handler: signal skip to relay runner — cancel current try, assign same lap to next runner in round-robin rotation (new run). Does not affect lap task state. Continues normal rotation sequence
 - [x] 5.5 Ctrl+P handler: signal pause to relay runner — cancel current try, display "Paused — press Enter to resume", wait for Enter. On resume, start new try within same run (same runner)
 - [x] 5.6 Ctrl+X handler: signal stop to relay runner — let current try finish, exit without starting next run
 - [x] 5.7 Render shortcut hints below the status line: `[Ctrl+S skip]  [Ctrl+P pause]  [Ctrl+X stop]  [Ctrl+C quit]`

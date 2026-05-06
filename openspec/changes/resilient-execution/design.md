@@ -41,11 +41,11 @@ With v0.3.0 monitoring signals (log-mtime, conn count, IO bytes), v0.5.0 provide
 **Why**: With resume-aware retries, each retry is much cheaper than today's fresh-start retry. The marginal cost of a 4th or 5th attempt is small (fast resume, log re-attach) while the operator-time savings are substantial (one more agent recovery rather than a route-advance to a different model). Operators who want stricter behaviour can set the value lower in config.
 
 ### `.rally/run-state.json` lifecycle: clear on fresh-start retry, preserve on resume
-**Chosen**: The v0.4.0 run-state file (handoff flag, accumulated bead IDs from `mb done` hook) is cleared at relay-runner start of next run. On resume retries, it is preserved so the agent can complete a partial workflow. On fresh-start retries, it is cleared to avoid confusing the new agent context with stale state.
+**Chosen**: The v0.4.0 run-state file (handoff flag, accumulated lap IDs from `laps done` hook) is cleared at relay-runner start of next run. On resume retries, it is preserved so the agent can complete a partial workflow. On fresh-start retries, it is cleared to avoid confusing the new agent context with stale state.
 
 **Alternative considered**: Always preserve, or always clear.
 
-**Why**: Always-clear loses progress: a resume retry that already had `mb done` calls accumulated would lose them. Always-preserve risks: a fresh-start retry inherits a handoff flag from a crashed-mid-handoff run, and the new agent sees stale instructions. The split-by-retry-mode rule reflects that resume continues a session (state should follow) while fresh-start is a new session (state should reset).
+**Why**: Always-clear loses progress: a resume retry that already had `laps done` calls accumulated would lose them. Always-preserve risks: a fresh-start retry inherits a handoff flag from a crashed-mid-handoff run, and the new agent sees stale instructions. The split-by-retry-mode rule reflects that resume continues a session (state should follow) while fresh-start is a new session (state should reset).
 
 ### Same-harness next-entry advance uses cheap rotation
 **Chosen**: When the scheduler advances to a next entry whose `harness` matches the current entry's, the executor adapter's `RotateModel(newModel string) error` is invoked instead of full teardown/respawn. Cross-harness advances continue to use the v0.6.0 path.
@@ -97,7 +97,7 @@ Patterns are matched against the last N lines of the try log (deterministic, no 
 **Why**: The reliability/retry/freeze knobs are conceptually related and operators will tune them together. A dedicated section keeps the surface coherent. The `chars_per_token` migration from v0.3.0 hardcoded constants to v0.7.0 config-overridable is a small win that lands cleanly here.
 
 ### Stale handoff flag handling on crash-between-handoff-calls
-**Chosen**: If a run crashes between the first and second `mb handoff` calls AND resume isn't supported by the harness, the fresh-start retry clears the handoff flag in `.rally/run-state.json` (a stale handoff prompt would confuse the new agent). The original handoff intent is lost, but the bead remains open so the next run picks it up normally.
+**Chosen**: If a run crashes between the first and second `laps handoff` calls AND resume isn't supported by the harness, the fresh-start retry clears the handoff flag in `.rally/run-state.json` (a stale handoff prompt would confuse the new agent). The original handoff intent is lost, but the lap remains open so the next run picks it up normally.
 
 **Alternative considered**: Persist the flag across fresh-start retries.
 
@@ -108,7 +108,7 @@ Patterns are matched against the last N lines of the try log (deterministic, no 
 - **False-positive freeze kills waste partial work** → Mitigation: 180s default is conservative; resume-retry softens the cost (the killed try's session can be resumed). Tunable per workspace.
 - **Liveness probe could induce the failure it's diagnosing** → Mitigation: opt-in + per-adapter capability check. Default off. Adapters that don't declare support are skipped silently even when the global flag is on.
 - **Error patterns drift as harness CLIs evolve** → Mitigation: static table is the only place to update; integration tests exercise each pattern with fixture log content. Pattern misses fall through to "fresh restart" (the safe default), so a missing pattern degrades gracefully rather than mis-routing.
-- **Stale handoff flag in run-state when crash happens at the wrong moment** → Mitigation: cleared on fresh-start retry; bead remains open so work isn't lost; progress log shows the handoff intent absent. v0.7.0 doesn't try to reconstitute the handoff intent (deferred to a future change if needed).
+- **Stale handoff flag in run-state when crash happens at the wrong moment** → Mitigation: cleared on fresh-start retry; lap remains open so work isn't lost; progress log shows the handoff intent absent. v0.7.0 doesn't try to reconstitute the handoff intent (deferred to a future change if needed).
 - **Cheap-rotation path adds an `RotateModel` adapter method that has to be implemented per harness** → Mitigation: defaults to `false` (use teardown/respawn), so unimplemented harnesses still work correctly; adapters opt in incrementally.
 - **Resume + run-state preservation could leak across run boundaries if retry budget is exhausted** → Mitigation: retry-budget exhaustion always triggers route advance, which clears run-state at next-run start (per v0.4.0). Resume preserves only across retries within a single run.
 

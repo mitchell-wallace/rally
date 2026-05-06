@@ -1,7 +1,7 @@
 ## ADDED Requirements
 
 ### Requirement: Keyboard shortcuts for skip, pause, and stop during try execution
-The system SHALL capture Ctrl+S, Ctrl+P, and Ctrl+X as keyboard shortcuts during try execution. All SHALL require double-press confirmation (same pattern as Ctrl+C guard). Available shortcuts SHALL be displayed below the status line. None of these shortcuts SHALL modify microbead task state.
+The system SHALL capture Ctrl+S, Ctrl+P, and Ctrl+X as keyboard shortcuts during try execution. All SHALL require double-press confirmation (same pattern as Ctrl+C guard). Available shortcuts SHALL be displayed below the status line. None of these shortcuts SHALL modify lap task state.
 
 #### Scenario: Shortcut hint display
 - **WHEN** a try is executing
@@ -13,9 +13,9 @@ The system SHALL capture Ctrl+S, Ctrl+P, and Ctrl+X as keyboard shortcuts during
 
 #### Scenario: Ctrl+S skip — confirmed
 - **WHEN** the operator presses Ctrl+S a second time within the confirmation window
-- **THEN** the system SHALL cancel the current try and assign the same microbead to the next runner in the round-robin rotation (a new run)
+- **THEN** the system SHALL cancel the current try and assign the same lap to the next runner in the round-robin rotation (a new run)
 - **AND** the round-robin rotation SHALL continue its normal sequence (skip advances the rotation pointer, same as a completed run would)
-- **AND** microbead task state SHALL NOT be modified
+- **AND** lap task state SHALL NOT be modified
 
 #### Scenario: Ctrl+P pause — first press
 - **WHEN** the operator presses Ctrl+P while a try is executing

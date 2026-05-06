@@ -4,21 +4,21 @@ Rally today uses flat round-robin over a `--mix` of agents. That's the right pri
 
 - match heavier work to capable models and mechanical work to cheap ones
 - express usage caps for managing rate limits or cost (e.g. "use GLM up to 4 consecutive runs, then rotate")
-- route per role declared on the bead
+- route per role declared on the lap
 
 Abstracting over harnesses and providers to manage usage limits, pricing, and capability matching is one of rally's primary value propositions. v0.6.0 makes scheduling explicit and per-role.
 
-This proposal does three things: it adds role-aware route lookup driven by microbeads' `assignee` field (per `openspec/HANDOFF.md`); it generalises round-robin into a single quota-aware scheduler that subsumes both rotation and fallback semantics in one model; and it loads optional per-role instruction files into the prompt (parsing/loading only — the *contents* of `SENIOR.md` etc. are being authored separately).
+This proposal does three things: it adds role-aware route lookup driven by laps' `assignee` field (per `openspec/HANDOFF.md`); it generalises round-robin into a single quota-aware scheduler that subsumes both rotation and fallback semantics in one model; and it loads optional per-role instruction files into the prompt (parsing/loading only — the *contents* of `SENIOR.md` etc. are being authored separately).
 
 ## Prerequisites
 
-- v0.4.0 (`microbeads-first-class`) — bead head-pull surfaces the `assignee` field. Microbeads already specifies `assignee` as an optional string in `../microbeads/SPEC.md`, so this is purely a rally-side consumption change.
+- v0.4.0 (`laps-first-class`) — lap head-pull surfaces the `assignee` field. Laps already specifies `assignee` as an optional string in `../laps/SPEC.md`, so this is purely a rally-side consumption change.
 - v0.5.0 (`rally-config-and-harness-shortcuts`) — `[providers]` shortcut keys usable in route entries.
 
 ## What Changes
 
 ### Single config file: `[routes]` lives in `.rally/config.toml`
-No separate `routes.yml`. Rally has one TOML for all configuration; output data is JSON; microbeads has its own JSON/JSONL storage. Adding routes:
+No separate `routes.yml`. Rally has one TOML for all configuration; output data is JSON; laps has its own JSON/JSONL storage. Adding routes:
 
 ```toml
 [routes]
@@ -29,7 +29,7 @@ UI      = ["gemini-pro:2-5", "claude:sonnet-4.6"]
 VERIFY  = ["codex:gpt-5.5", "claude:opus-4.7"]
 ```
 
-Route keys are matched case-insensitively against the bead's `assignee`. `default` is a reserved key that handles the no-role and no-match cases.
+Route keys are matched case-insensitively against the lap's `assignee`. `default` is a reserved key that handles the no-role and no-match cases.
 
 ### Single scheduling model
 There is **one** scheduler. No `policy: fallback` vs. `policy: rotation` distinction — quota presence drives behaviour:
@@ -53,13 +53,13 @@ Resolution rules for the agent identifier (after the quota is split off):
 
 ### Resolution order for each iteration
 1. **`--agent` flag** (if supplied) — overrides everything for the run; see "agent override" below
-2. **Bead `assignee`** (case-insensitive match against route keys) — if matched, use that route. `assignee` is read from `mb get head`'s JSON output per the v0.4.0 microbeads adapter.
+2. **Lap `assignee`** (case-insensitive match against route keys) — if matched, use that route. `assignee` is read from `laps get head`'s JSON output per the v0.4.0 laps adapter.
 3. **`default` route** — when `assignee` is unset or no role matched
 
-**Within-list rotation/fallback only.** A non-default role never silently falls back to another non-default role. If a role isn't defined and `default` exists, rally falls back to `default` with a warning. If `default` isn't defined and a bead's role isn't defined either, rally exits with an error (see startup validation below).
+**Within-list rotation/fallback only.** A non-default role never silently falls back to another non-default role. If a role isn't defined and `default` exists, rally falls back to `default` with a warning. If `default` isn't defined and a lap's role isn't defined either, rally exits with an error (see startup validation below).
 
 ### Behaviour in no-backend mode
-In v0.4.0's no-backend mode (`.beads/mb.json` absent) there is no bead and no `assignee`. Routing collapses to the `default` route on every iteration — the scheduler still applies, quotas still work, and `--agent` overrides still apply. Per-role instruction file loading is also skipped (no role to look up). `[routes]` non-default entries declared in config are loaded but never selected; `rally routes check` flags them as unreachable in this mode.
+In v0.4.0's no-backend mode (`.laps/laps.json` absent) there is no lap and no `assignee`. Routing collapses to the `default` route on every iteration — the scheduler still applies, quotas still work, and `--agent` overrides still apply. Per-role instruction file loading is also skipped (no role to look up). `[routes]` non-default entries declared in config are loaded but never selected; `rally routes check` flags them as unreachable in this mode.
 
 ### `--agent` override (preserves the manual lever)
 `--agent` accepts a space-separated list of entries using the same syntax as a route. Entries can be:
@@ -68,11 +68,11 @@ In v0.4.0's no-backend mode (`.beads/mb.json` absent) there is no bead and no `a
 - A shortcut name (with optional quota)
 - A **role name** (with optional quota) — this is the only context where role names are valid as entries; the role's full route list is inlined into the override roster, optionally capped by the trailing quota (which applies per-cycle to the role's own internal cursor)
 
-When `--agent` is present, beads' `assignee` values are ignored entirely.
+When `--agent` is present, laps' `assignee` values are ignored entirely.
 
 ### Per-role instruction files (parsing/loading only)
 - Rally looks for `.rally/agents/{ASSIGNEE}.md` using case-insensitive matching against the on-disk file list (so `assignee: Senior` resolves to `SENIOR.md`, `senior.md`, or `Senior.md` — first hit on a sorted scan wins, deterministic)
-- If found, file contents are appended to the prompt template after base rally instructions and before the bead body
+- If found, file contents are appended to the prompt template after base rally instructions and before the lap body
 - If absent, no injection (silent — not an error)
 - Rally treats the file content as opaque text — no parsing, no front-matter
 - **Out of scope: the *contents* of role files** (`SENIOR.md`, `JUNIOR.md`, `UI.md`, `QA.md`, `VERIFY.md`). Those are authored on a separate track. Rally only ships the loader and the prompt wiring.
@@ -80,13 +80,13 @@ When `--agent` is present, beads' `assignee` values are ignored entirely.
 ### Startup validation
 - **Invalid syntax in `--agent`** → warn, exit
 - **Invalid syntax in `[routes]`, but at least one role parses cleanly** → warn, prompt `Would you like to continue anyway? Invalid roles will fall back to DEFAULT (y/N)`
-- **`default` route is invalid (or missing) and `[routes]` is otherwise present** → warn as above; only beads with valid routes can run; if no beads exist in the queue, warn-and-exit instead of prompting
+- **`default` route is invalid (or missing) and `[routes]` is otherwise present** → warn as above; only laps with valid routes can run; if no laps exist in the queue, warn-and-exit instead of prompting
 - **Quota out of bounds** (`min > max`, negative numbers) → warn, exit
 - **Numerical-only shortcut key in `[providers]`** → warn, exit
 - **Duplicate route keys differing only in case** → warn, exit (case-insensitive matching means they'd collide at lookup)
 
 ### Validator
-- `rally routes check` — parses `[routes]`, resolves all shortcut keys, verifies quotas (`min ≤ max`, `min ≥ 0`), lists declared routes that no current bead's `assignee` references (info-level), errors on parse/resolution failures
+- `rally routes check` — parses `[routes]`, resolves all shortcut keys, verifies quotas (`min ≤ max`, `min ≥ 0`), lists declared routes that no current lap's `assignee` references (info-level), errors on parse/resolution failures
 
 ## Canonical scenarios
 
@@ -96,11 +96,11 @@ These define the scheduler's behaviour. The implementation must make all seven e
 
 2. **Roles absent, `default = ["claude:opus-4.7:1", "codex:gpt-5.5:3", "opencode:opencode-go/kimi-k2.6"]`, no `--agent`.** Opus once, GPT thrice, Kimi until failure, loop.
 
-3. **Roles `ROLEA`, `ROLEB` exist on beads. `[routes]` defines `default` and `ROLEA`. No `--agent`.** ROLEA beads use ROLEA route; ROLEB beads have no match → warning, fall back to `default`.
+3. **Roles `ROLEA`, `ROLEB` exist on laps. `[routes]` defines `default` and `ROLEA`. No `--agent`.** ROLEA laps use ROLEA route; ROLEB laps have no match → warning, fall back to `default`.
 
-4. **Same as scenario 3 but `[routes]` defines `ROLEA` only (no `default`).** Startup warning + y/N prompt; if user proceeds, ROLEA beads run on ROLEA route, ROLEB beads cause rally to exit; if no beads exist at startup, rally warn-and-exits without prompting.
+4. **Same as scenario 3 but `[routes]` defines `ROLEA` only (no `default`).** Startup warning + y/N prompt; if user proceeds, ROLEA laps run on ROLEA route, ROLEB laps cause rally to exit; if no laps exist at startup, rally warn-and-exits without prompting.
 
-5. **Roles `ROLEA`, `ROLEB` exist, `[routes]` defines `ROLEA`, `ROLEB`, `default`. `--agent "op:opencode-go/fancy-new-model"`.** Override applies to all runs regardless of bead `assignee`. Single agent, no quota → run until failure forever (with retry budget).
+5. **Roles `ROLEA`, `ROLEB` exist, `[routes]` defines `ROLEA`, `ROLEB`, `default`. `--agent "op:opencode-go/fancy-new-model"`.** Override applies to all runs regardless of lap `assignee`. Single agent, no quota → run until failure forever (with retry budget).
 
 6. **Same routes as scenario 5. `--agent "op:opencode-go/fancy-new-model DEFAULT:1"`.** Two-entry roster: the harness:model string (no quota) and the role-reference `DEFAULT:1`. Run fancy-new-model until failure → consume one entry from `default` (e.g. opus once) → fancy-new-model until failure → next entry from `default` (gpt once) → ... `DEFAULT:1` advances `default`'s internal cursor by one each visit.
 
@@ -119,14 +119,14 @@ These define the scheduler's behaviour. The implementation must make all seven e
 - `relay-runner`: Per-iteration agent selection routed through the scheduler; legacy `--mix` becomes a synonym for a single-roster `--agent`; prompt assembly appends role-instruction file content when matched; new scheduler hooks (`onAgentFailed`/`onAgentRecovered`) feed exhaustion state
 - `repo-config`: `[routes]` table added to `.rally/config.toml` alongside the v0.5.0 sections
 
-_(Note: `microbeads-only-integration` already surfaces `assignee` per v0.4.0's bead head-pull adapter requirement; no spec delta is needed for this consumption change — v0.6.0 just reads what v0.4.0 exposes.)_
+_(Note: `laps-only-integration` already surfaces `assignee` per v0.4.0's lap head-pull adapter requirement; no spec delta is needed for this consumption change — v0.6.0 just reads what v0.4.0 exposes.)_
 
 ## Impact
 
 - New package: `internal/routing/` (TOML route loader, scheduler with quota tracker, freeze-aware rotation, agent-string parser shared with CLI)
 - New package or sibling: `internal/prompt/roleloader/` for instruction-file lookup (case-insensitive, deterministic)
 - New CLI flag: `--agent`; new validator subcommand: `rally routes check`
-- microbeads: zero changes needed — `assignee` field already in SPEC.md
+- laps: zero changes needed — `assignee` field already in SPEC.md
 - v0.7.0 dependency: provider-rotation reuses the scheduler's quota tracker and freeze-aware rotation logic
 - Risk: scheduler complexity — the seven canonical scenarios become the integration-test backbone; any deviation from those outcomes is a regression
 - Risk: `--agent` syntax is space-separated, which gets clumsy when entries themselves are long. Quoted form (`--agent "..."`) is the primary documented usage. Repeated `--agent` flag accumulating entries is an alternative but adds parsing weirdness — going with single-flag-quoted for now

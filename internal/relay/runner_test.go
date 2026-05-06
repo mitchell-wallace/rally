@@ -1344,14 +1344,14 @@ func TestParseAgentMixAllFormsCombined(t *testing.T) {
 	}
 }
 
-func TestMicrobeadsInstructionsFileUsed(t *testing.T) {
+func TestLapsInstructionsFileUsed(t *testing.T) {
 	workspaceDir := t.TempDir()
 	rallyDir := filepath.Join(workspaceDir, ".rally")
 	os.MkdirAll(rallyDir, 0o755)
 	initRepo(t, workspaceDir)
 
-	instructionsFile := filepath.Join(workspaceDir, "custom_microbeads.md")
-	os.WriteFile(instructionsFile, []byte("Custom microbeads instructions."), 0o644)
+	instructionsFile := filepath.Join(workspaceDir, "custom_laps.md")
+	os.WriteFile(instructionsFile, []byte("Custom laps instructions."), 0o644)
 
 	s := newTestStore(t, rallyDir)
 	var receivedInstructions string
@@ -1379,19 +1379,19 @@ func TestMicrobeadsInstructionsFileUsed(t *testing.T) {
 		TargetIterations:           1,
 		LapsEnabled:                true,
 		Instructions:               "Default instructions.",
-		MicrobeadsInstructionsFile: instructionsFile,
+		LapsInstructionsFile: instructionsFile,
 	}, executors)
 
 	if err := r.Run(context.Background()); err != nil {
 		t.Fatalf("run failed: %v", err)
 	}
 
-	if receivedInstructions != "Custom microbeads instructions." {
-		t.Errorf("expected microbeads instructions, got %q", receivedInstructions)
+	if receivedInstructions != "Custom laps instructions." {
+		t.Errorf("expected laps instructions, got %q", receivedInstructions)
 	}
 }
 
-func TestMicrobeadsInstructionsFileFallsBackToDefault(t *testing.T) {
+func TestLapsInstructionsFileFallsBackToDefault(t *testing.T) {
 	workspaceDir := t.TempDir()
 	rallyDir := filepath.Join(workspaceDir, ".rally")
 	os.MkdirAll(rallyDir, 0o755)
@@ -1423,7 +1423,7 @@ func TestMicrobeadsInstructionsFileFallsBackToDefault(t *testing.T) {
 		TargetIterations:           1,
 		LapsEnabled:                true,
 		Instructions:               "Default instructions.",
-		MicrobeadsInstructionsFile: filepath.Join(workspaceDir, "nonexistent.md"),
+		LapsInstructionsFile: filepath.Join(workspaceDir, "nonexistent.md"),
 	}, executors)
 
 	if err := r.Run(context.Background()); err != nil {
@@ -1431,18 +1431,18 @@ func TestMicrobeadsInstructionsFileFallsBackToDefault(t *testing.T) {
 	}
 
 	if receivedInstructions != "Default instructions." {
-		t.Errorf("expected default instructions when microbeads file missing, got %q", receivedInstructions)
+		t.Errorf("expected default instructions when laps file missing, got %q", receivedInstructions)
 	}
 }
 
-func TestMicrobeadsInstructionsNotUsedInNoBackendMode(t *testing.T) {
+func TestLapsInstructionsNotUsedInNoBackendMode(t *testing.T) {
 	workspaceDir := t.TempDir()
 	rallyDir := filepath.Join(workspaceDir, ".rally")
 	os.MkdirAll(rallyDir, 0o755)
 	initRepo(t, workspaceDir)
 
-	instructionsFile := filepath.Join(workspaceDir, "custom_microbeads.md")
-	os.WriteFile(instructionsFile, []byte("Custom microbeads instructions."), 0o644)
+	instructionsFile := filepath.Join(workspaceDir, "custom_laps.md")
+	os.WriteFile(instructionsFile, []byte("Custom laps instructions."), 0o644)
 
 	s := newTestStore(t, rallyDir)
 	var receivedInstructions string
@@ -1458,14 +1458,14 @@ func TestMicrobeadsInstructionsNotUsedInNoBackendMode(t *testing.T) {
 	executors := map[string]agent.Executor{"claude": exec}
 
 	r := NewRunner(s, Config{
-		WorkspaceDir:               workspaceDir,
-		DataDir:                    t.TempDir(),
-		AgentMixSpecs:              []string{"cc:1"},
-		TargetIterations:           1,
-		LapsEnabled:                false,
-		Instructions:               "Default instructions.",
-		TaskPrompt:                 "Do some work.",
-		MicrobeadsInstructionsFile: instructionsFile,
+		WorkspaceDir:           workspaceDir,
+		DataDir:                t.TempDir(),
+		AgentMixSpecs:          []string{"cc:1"},
+		TargetIterations:       1,
+		LapsEnabled:            false,
+		Instructions:           "Default instructions.",
+		TaskPrompt:             "Do some work.",
+		LapsInstructionsFile:   instructionsFile,
 	}, executors)
 
 	if err := r.Run(context.Background()); err != nil {
@@ -1477,7 +1477,7 @@ func TestMicrobeadsInstructionsNotUsedInNoBackendMode(t *testing.T) {
 	}
 }
 
-func TestMicrobeadsInstructionsUnconfiguredUsesDefault(t *testing.T) {
+func TestLapsInstructionsUnconfiguredUsesDefault(t *testing.T) {
 	workspaceDir := t.TempDir()
 	rallyDir := filepath.Join(workspaceDir, ".rally")
 	os.MkdirAll(rallyDir, 0o755)
@@ -1516,7 +1516,7 @@ func TestMicrobeadsInstructionsUnconfiguredUsesDefault(t *testing.T) {
 	}
 
 	if receivedInstructions != "Default instructions." {
-		t.Errorf("expected default instructions when no microbeads file configured, got %q", receivedInstructions)
+		t.Errorf("expected default instructions when no laps file configured, got %q", receivedInstructions)
 	}
 }
 
@@ -1739,7 +1739,7 @@ func TestFallbackInstructionsIgnoredWhenCLIPromptProvided(t *testing.T) {
 	}
 }
 
-func TestFallbackInstructionsIgnoredInMicrobeadsMode(t *testing.T) {
+func TestFallbackInstructionsIgnoredInLapsMode(t *testing.T) {
 	workspaceDir := t.TempDir()
 	rallyDir := filepath.Join(workspaceDir, ".rally")
 	os.MkdirAll(rallyDir, 0o755)

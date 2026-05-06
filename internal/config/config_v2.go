@@ -54,7 +54,7 @@ type DefaultsConfig struct {
 	OpenCodeModel string `toml:"opencode_model,omitempty"`
 }
 
-type MicrobeadsConfig struct {
+type LapsConfig struct {
 	InstructionsFile string `toml:"instructions_file,omitempty"`
 }
 
@@ -82,8 +82,8 @@ type V2Config struct {
 	LapsInstructions     string
 
 	Defaults   DefaultsConfig
-	Microbeads MicrobeadsConfig
-	Fallback   FallbackConfig
+	Laps     LapsConfig
+	Fallback FallbackConfig
 	Harnesses  map[string]*HarnessConfig
 	Routes     map[string][]string
 
@@ -102,7 +102,7 @@ type rawConfig struct {
 	LapsInstructions     string `toml:"laps_instructions,omitempty"`
 
 	Defaults   DefaultsConfig            `toml:"defaults"`
-	Microbeads MicrobeadsConfig          `toml:"microbeads"`
+	Laps     LapsConfig                 `toml:"laps"`
 	Fallback   FallbackConfig            `toml:"fallback"`
 	Harnesses  map[string]*HarnessConfig `toml:"harness"`
 	Routes     map[string][]string       `toml:"routes"`
@@ -133,7 +133,7 @@ func LoadV2(workspaceDir string) (V2Config, error) {
 		RunHooksOnAutoCommit: raw.RunHooksOnAutoCommit,
 		LapsInstructions:     raw.LapsInstructions,
 		Defaults:             raw.Defaults,
-		Microbeads:           raw.Microbeads,
+		Laps:     raw.Laps,
 		Fallback:             raw.Fallback,
 		Harnesses:            raw.Harnesses,
 		Routes:               raw.Routes,
@@ -459,7 +459,7 @@ func SaveV2(workspaceDir string, cfg V2Config) error {
 			GeminiModel:   effectiveModel(cfg.GeminiModel, cfg.Defaults.GeminiModel),
 			OpenCodeModel: effectiveModel(cfg.OpenCodeModel, cfg.Defaults.OpenCodeModel),
 		},
-		Microbeads: cfg.Microbeads,
+		Laps:     cfg.Laps,
 		Fallback:   cfg.Fallback,
 		Harnesses:  cfg.Harnesses,
 		Routes:     cfg.Routes,

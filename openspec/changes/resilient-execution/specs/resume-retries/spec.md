@@ -16,16 +16,16 @@ The system SHALL implement retries differently based on the active adapter's res
 
 #### Scenario: Retry preserves run-state on resume
 - **WHEN** a try fails, the adapter supports resume, and a retry is about to start
-- **THEN** `.rally/run-state.json` SHALL be preserved (the v0.4.0 handoff flag and accumulated bead IDs persist for the resumed agent)
+- **THEN** `.rally/run-state.json` SHALL be preserved (the v0.4.0 handoff flag and accumulated lap IDs persist for the resumed agent)
 
 #### Scenario: Retry clears run-state on fresh start
 - **WHEN** a try fails, the adapter does not support resume, and a fresh-start retry is about to begin
-- **THEN** `.rally/run-state.json` SHALL be cleared before the retry executes (handoff flag and accumulated bead IDs reset)
+- **THEN** `.rally/run-state.json` SHALL be cleared before the retry executes (handoff flag and accumulated lap IDs reset)
 
 #### Scenario: Resume across crash mid-handoff
-- **WHEN** a run crashes between the first and second `mb handoff` calls AND the adapter supports resume AND a resume retry is attempted
-- **THEN** the handoff flag in `.rally/run-state.json` SHALL be preserved so the agent can complete the second `mb handoff` call
+- **WHEN** a run crashes between the first and second `laps handoff` calls AND the adapter supports resume AND a resume retry is attempted
+- **THEN** the handoff flag in `.rally/run-state.json` SHALL be preserved so the agent can complete the second `laps handoff` call
 
 #### Scenario: Fresh start across crash mid-handoff
-- **WHEN** a run crashes between the first and second `mb handoff` calls AND the adapter does not support resume AND a fresh-start retry is attempted
-- **THEN** the handoff flag SHALL be cleared (the original handoff intent is lost; the bead remains open so the next run picks it up normally)
+- **WHEN** a run crashes between the first and second `laps handoff` calls AND the adapter does not support resume AND a fresh-start retry is attempted
+- **THEN** the handoff flag SHALL be cleared (the original handoff intent is lost; the lap remains open so the next run picks it up normally)

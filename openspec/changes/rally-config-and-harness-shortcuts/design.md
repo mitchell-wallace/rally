@@ -20,7 +20,7 @@ A separate concern: the four built-in harnesses (`cc`/`cx`/`ge`/`op`) are the on
 
 **Non-Goals:**
 - Migrating the progress log to TOML — that file stays YAML per the v0.4.0 deferred decision.
-- Reintroducing a microbeads-instruction toggle — v0.4.0 decided injection is unconditional in microbeads-backed mode.
+- Reintroducing a laps-instruction toggle — v0.4.0 decided injection is unconditional in laps-backed mode.
 - A full schema-version migration framework — `schema_version` is recorded for future use but v0.5.0 only emits a warning on mismatch.
 - Multiple output strategies for user-defined harnesses — v0.5.0 ships only `tail`. Block-and-report style parsers (as used by built-in claude) stay hard-coded for built-ins; user harnesses get one knob, expanded if and when the need surfaces.
 - Overriding built-in harness behaviour. Built-ins keep their hard-coded executor; `[harness.cc]` can declare model names but cannot supply `command` / `output_strategy` / `tail_stream`.
@@ -84,19 +84,19 @@ Built-in harnesses (`cc`/`cx`/`ge`/`op`) SHALL NOT declare `command`, `model_fla
 
 **Why**: Lazy resolution means a typo in a route entry doesn't surface until run N when that entry is reached, which can be hours into a relay. Up-front validation moves the failure to startup. Scoping `did-you-mean` per-harness keeps suggestions on-target — `op:gp` should suggest `op:gk` and `op:z`, not `cc:opus`.
 
-### Drop the microbeads-instruction toggle (alignment with v0.4.0)
-**Chosen**: `[microbeads]` contains only `instructions_file = "..."` (a path to the content rally injects when in microbeads-backed mode). There is no `instructions = "auto"|"include"|"skip"` toggle — injection is unconditional in microbeads-backed mode, omitted in no-backend mode.
+### Drop the laps-instruction toggle (alignment with v0.4.0)
+**Chosen**: `[laps]` contains only `instructions_file = "..."` (a path to the content rally injects when in laps-backed mode). There is no `instructions = "auto"|"include"|"skip"` toggle — injection is unconditional in laps-backed mode, omitted in no-backend mode.
 
 **Alternative considered**: Keep the `instructions` toggle from the original v0.5.0 draft.
 
-**Why**: v0.4.0 already decided injection is unconditional in microbeads-backed mode. Carrying a toggle in v0.5.0 would re-introduce the very surface v0.4.0 just removed. The only configurable piece is *what content* gets injected — that's `instructions_file`.
+**Why**: v0.4.0 already decided injection is unconditional in laps-backed mode. Carrying a toggle in v0.5.0 would re-introduce the very surface v0.4.0 just removed. The only configurable piece is *what content* gets injected — that's `instructions_file`.
 
 ### `[fallback].instructions_file` only used in no-backend mode
-**Chosen**: When rally is in no-backend mode AND no ready bead exists, rally injects the contents of `[fallback].instructions_file` as the prompt. A built-in default fallback ships with rally for workspaces that don't configure one. In microbeads-backed mode the fallback file has no effect.
+**Chosen**: When rally is in no-backend mode AND no ready lap exists, rally injects the contents of `[fallback].instructions_file` as the prompt. A built-in default fallback ships with rally for workspaces that don't configure one. In laps-backed mode the fallback file has no effect.
 
-**Alternative considered**: Fallback file used always, with bead body appended when present.
+**Alternative considered**: Fallback file used always, with lap body appended when present.
 
-**Why**: The fallback exists specifically because there is no bead. Injecting it alongside a real bead body would dilute the bead's instructions and confuse the agent. Scoping fallback to "no bead" preserves the bead's primacy when one exists.
+**Why**: The fallback exists specifically because there is no lap. Injecting it alongside a real lap body would dilute the lap's instructions and confuse the agent. Scoping fallback to "no lap" preserves the lap's primacy when one exists.
 
 ### Move per-harness default model fields under `[defaults]`; runtime fields stay at root
 **Chosen**: `claude_model` / `codex_model` / `gemini_model` / `opencode_model` move under `[defaults]` alongside `iterations` and `mix`. They continue to act as the *unnamed default model* for each built-in harness — referenced by a bare alias in a mix. The remaining root-level fields (`data_dir`, `run_hooks_on_autocommit`, `laps_instructions`) stay at the root: they are workspace runtime knobs, not per-harness defaults, and grouping them under a `[runtime]` section would be churn for no clarity gain.
@@ -108,7 +108,7 @@ The `rally init` template ([cmd/rally/main.go:236](cmd/rally/main.go#L236)) is u
 **Alternative considered (a)**: Keep flat fields at root for backwards-compat, accept the asymmetry between "default models live at root" and "named models live under `[harness.<name>.models]`."
 **Alternative considered (b)**: Move *all* flat fields under sections (`[runtime]` for `data_dir` etc.).
 
-**Why**: The v0.5.0 schema introduces enough new structure (`[defaults]`, `[microbeads]`, `[fallback]`, `[harness.*]`) that operators will be reading and editing it anyway. Leaving the four model defaults at root creates a cognitive split — "the *default* model for claude is at the root, but *named* models are under `[harness.cc.models]`" — that's hard to reason about. Moving them under `[defaults]` puts every model-related knob in two places (per-harness defaults under `[defaults]`, named alternatives under `[harness.<name>.models]`) with a clean rule. The backwards-compat read of root-level fields is cheap (a few lines) and keeps existing in-the-wild configs working without manual migration; the deprecation note nudges users to clean up at their own pace. Moving runtime fields too would be churn — they have no relationship to the model surface and would just rearrange config for the sake of it.
+**Why**: The v0.5.0 schema introduces enough new structure (`[defaults]`, `[laps]`, `[fallback]`, `[harness.*]`) that operators will be reading and editing it anyway. Leaving the four model defaults at root creates a cognitive split — "the *default* model for claude is at the root, but *named* models are under `[harness.cc.models]`" — that's hard to reason about. Moving them under `[defaults]` puts every model-related knob in two places (per-harness defaults under `[defaults]`, named alternatives under `[harness.<name>.models]`) with a clean rule. The backwards-compat read of root-level fields is cheap (a few lines) and keeps existing in-the-wild configs working without manual migration; the deprecation note nudges users to clean up at their own pace. Moving runtime fields too would be churn — they have no relationship to the model surface and would just rearrange config for the sake of it.
 
 ### Add a `schema_version` field but only warn on mismatch in v0.5.0
 **Chosen**: The TOML root gains a `schema_version = 2` field. v0.5.0 reads it; if absent, treat as version 1 and accept the file silently. On mismatch with what rally expects, log a warning but proceed. v0.6.0+ may use this to block load.
@@ -130,17 +130,17 @@ The `rally init` template ([cmd/rally/main.go:236](cmd/rally/main.go#L236)) is u
 - **User-defined harness `command` is a code-execution surface** → Mitigation: command is run with the same privileges as rally itself; the operator authored `.rally/config.toml`, so this is no broader than what they could do with a CLI flag. Templating is positional substitution, not shell interpolation, so `$PROMPT` containing shell metacharacters is safe.
 - **`model_flag` is silent when omitted** → An operator who omits `model_flag` and is surprised that the harness doesn't see their named model has no obvious diagnostic. Mitigation: when a run resolves to a non-empty model AND the dispatched harness has `model_flag` unset, log a one-line note ("model `X` resolved but harness `Y` has no `model_flag` configured — passing model not supported, harness default will be used"). Documented in README.
 - **`schema_version` warn-only is easy to ignore** → Mitigation: the warning prints a one-line "schema mismatch — please update or run `rally config check`" message; it's not a slap, but it's visible. v0.6.0+ tightens behaviour as the format stabilises.
-- **Fallback file path could resolve to a missing file** → Mitigation: when the fallback path is needed and missing, rally falls back to the built-in default content. No hard error — a missing fallback is weak signal for a no-bead session, not a startup blocker. The "missing file" warning is emitted at first-use, not at config load (avoids noise for workspaces that never enter no-backend + no-bead).
+- **Fallback file path could resolve to a missing file** → Mitigation: when the fallback path is needed and missing, rally falls back to the built-in default content. No hard error — a missing fallback is weak signal for a no-lap session, not a startup blocker. The "missing file" warning is emitted at first-use, not at config load (avoids noise for workspaces that never enter no-backend + no-lap).
 - **Tail-only output strategy may be inadequate for some user harnesses** → Mitigation: `tail_stream` lets operators pick the right stream (some CLIs spam progress on stderr and emit the answer on stdout); `output_lines` is configurable. Richer parsers can land additively in a later release without breaking the schema.
 
 ## Migration Plan
 
-1. **Schema additions**: extend `internal/config/config_v2.go` (or split as `v3.go` if the diff is sizeable) with `[defaults]` (including the four model fields), `[microbeads]`, `[fallback]`, `[harness.*]` sections and `schema_version`. Root-level model fields stay loadable for backwards-compat (with a deprecation note). Runtime fields (`data_dir`, `run_hooks_on_autocommit`, `laps_instructions`) untouched. New fields default to zero values when absent.
+1. **Schema additions**: extend `internal/config/config_v2.go` (or split as `v3.go` if the diff is sizeable) with `[defaults]` (including the four model fields), `[laps]`, `[fallback]`, `[harness.*]` sections and `schema_version`. Root-level model fields stay loadable for backwards-compat (with a deprecation note). Runtime fields (`data_dir`, `run_hooks_on_autocommit`, `laps_instructions`) untouched. New fields default to zero values when absent.
 2. **Resolution layer**: add `ResolveAgent(spec string) (harness, model string, err error)` to the config layer. Mix parsing, route parsing (v0.6.0), and rotation parsing (v0.7.0) all funnel through this single resolver.
 3. **AgentMix re-typing**: replace `AgentMix.Cycle []string` with a slice of resolved-agent records. Update `AgentForRun` and every caller. Land this in the same change as the resolver wiring.
 4. **Mix parsing extension**: update the relay-runner's mix parser to call the new resolver. Existing `cc:2 cx:1` weighted form continues to work; `harness:model-name` entries resolve via `[harness.<harness>.models]`.
 5. **User-harness executor**: add a generic harness executor in `internal/agent/` that runs `command` with `$PROMPT` substitution (or stdin), appends `[model_flag, model]` (or `[model]` if `model_flag = ""`) when a model is resolved, and applies the tail-N output parser using `tail_stream`. Wire it into the executor selection so a `harness.<name>` with a `command` field dispatches there instead of the built-in path.
-6. **Fallback wiring**: extend the prompt-building path so that no-backend mode + no-ready-bead substitutes `[fallback].instructions_file` content (or built-in default) for the bead body.
+6. **Fallback wiring**: extend the prompt-building path so that no-backend mode + no-ready-lap substitutes `[fallback].instructions_file` content (or built-in default) for the lap body.
 7. **Defaults wiring**: read `[defaults].iterations`, `.mix`, and the four `[defaults].<harness>_model` fields at relay startup. Bare-alias resolution uses `[defaults].<harness>_model` first, falls back to root-level `<harness>_model` (with a deprecation note), then to the harness's hard-coded internal default. CLI flags continue to override.
 8. **Init template**: update `runInit` ([cmd/rally/main.go:236](cmd/rally/main.go#L236)) so the example `.rally/config.toml` it writes uses the new `[defaults]` shape and includes `schema_version = 2`.
 9. **Schema version handshake**: emit `schema_version = 2` on every write; warn on read-time mismatch.

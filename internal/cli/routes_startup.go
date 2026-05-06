@@ -53,7 +53,7 @@ func ValidateRelayStartupRoutes(ctx context.Context, workspaceDir string, cfg co
 	}
 
 	if len(cfg.Routes) > 0 && !validDefault {
-		warnings = append(warnings, "warning: no valid default route is configured; beads without a matching assignee will fail at run-time")
+		warnings = append(warnings, "warning: no valid default route is configured; laps without a matching assignee will fail at run-time")
 
 		queueEmpty, err := relayQueueEmpty(ctx, workspaceDir, opts.LapsEnabled)
 		if err != nil {
@@ -62,7 +62,7 @@ func ValidateRelayStartupRoutes(ctx context.Context, workspaceDir string, cfg co
 		writeWarnings(opts.Out, warnings)
 		warningsWritten = true
 		if queueEmpty {
-			return nil, fmt.Errorf("route startup validation failed: no valid default route is configured and no beads are available")
+			return nil, fmt.Errorf("route startup validation failed: no valid default route is configured and no laps are available")
 		}
 		needsPrompt = true
 	}

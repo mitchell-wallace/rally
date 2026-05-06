@@ -86,16 +86,16 @@ The system's scheduler implementation SHALL exhibit the documented behaviour for
 - **THEN** Opus runs once, GPT runs three times, Kimi runs until failure, then loops
 
 #### Scenario: Scenario 3 — partial role coverage falls back to default
-- **WHEN** beads carry `assignee: ROLEA` or `assignee: ROLEB`; `[routes]` defines `default` and `ROLEA` only
-- **THEN** ROLEA beads use the ROLEA route; ROLEB beads have no match and fall back to `default` with a warning
+- **WHEN** laps carry `assignee: ROLEA` or `assignee: ROLEB`; `[routes]` defines `default` and `ROLEA` only
+- **THEN** ROLEA laps use the ROLEA route; ROLEB laps have no match and fall back to `default` with a warning
 
 #### Scenario: Scenario 4 — no default route
-- **WHEN** beads carry `ROLEA` or `ROLEB`; `[routes]` defines `ROLEA` only (no `default`)
-- **THEN** at startup, rally warns and prompts y/N; if confirmed, ROLEA beads run on ROLEA route while ROLEB beads cause exit; if no beads exist at startup, rally warn-and-exits without prompting
+- **WHEN** laps carry `ROLEA` or `ROLEB`; `[routes]` defines `ROLEA` only (no `default`)
+- **THEN** at startup, rally warns and prompts y/N; if confirmed, ROLEA laps run on ROLEA route while ROLEB laps cause exit; if no laps exist at startup, rally warn-and-exits without prompting
 
 #### Scenario: Scenario 5 — single-agent override
 - **WHEN** `[routes]` defines `ROLEA`, `ROLEB`, `default`; `--agent "op:opencode-go/fancy-new-model"` is supplied
-- **THEN** the override applies to all runs regardless of bead `assignee`; with no quota, the single agent runs until failure forever (within retry budget)
+- **THEN** the override applies to all runs regardless of lap `assignee`; with no quota, the single agent runs until failure forever (within retry budget)
 
 #### Scenario: Scenario 6 — override with role reference
 - **WHEN** `[routes]` defines `ROLEA`, `ROLEB`, `default`; `--agent "op:opencode-go/fancy-new-model DEFAULT:1"` is supplied

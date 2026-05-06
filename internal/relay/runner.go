@@ -37,7 +37,7 @@ type Config struct {
 	TaskPrompt                 string
 	OverwriteMixOnResume       bool
 	Resolver                   Resolver
-	MicrobeadsInstructionsFile string
+	LapsInstructionsFile     string
 	FallbackInstructionsFile   string
 }
 
@@ -51,8 +51,8 @@ type Runner struct {
 	resilience *Resilience
 	relayStart time.Time
 
-	microbeadsInstructionsCache string
-	microbeadsWarned            bool
+	lapsInstructionsCache     string
+	lapsWarned                bool
 	fallbackInstructionsCache   string
 	fallbackWarned              bool
 }
@@ -82,22 +82,22 @@ func (r *Runner) resolveInstructions() string {
 	if !r.cfg.LapsEnabled {
 		return r.cfg.Instructions
 	}
-	if r.cfg.MicrobeadsInstructionsFile == "" {
+	if r.cfg.LapsInstructionsFile == "" {
 		return r.cfg.Instructions
 	}
-	if r.microbeadsInstructionsCache != "" {
-		return r.microbeadsInstructionsCache
+	if r.lapsInstructionsCache != "" {
+		return r.lapsInstructionsCache
 	}
-	data, err := os.ReadFile(r.cfg.MicrobeadsInstructionsFile)
+	data, err := os.ReadFile(r.cfg.LapsInstructionsFile)
 	if err != nil {
-		if !r.microbeadsWarned {
-			fmt.Fprintf(os.Stderr, "warning: microbeads instructions file %q not readable: %v; using default\n", r.cfg.MicrobeadsInstructionsFile, err)
-			r.microbeadsWarned = true
+		if !r.lapsWarned {
+			fmt.Fprintf(os.Stderr, "warning: laps instructions file %q not readable: %v; using default\n", r.cfg.LapsInstructionsFile, err)
+			r.lapsWarned = true
 		}
 		return r.cfg.Instructions
 	}
-	r.microbeadsInstructionsCache = string(data)
-	return r.microbeadsInstructionsCache
+	r.lapsInstructionsCache = string(data)
+	return r.lapsInstructionsCache
 }
 
 func (r *Runner) loadFallbackInstructions() string {

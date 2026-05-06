@@ -20,7 +20,7 @@ The system SHALL extend the executor adapter interface with `RotateSupported() b
 - **THEN** the relay-runner SHALL fall back to teardown/respawn and SHALL log the rotation error for diagnostics
 
 ### Requirement: Provider rotation in no-backend mode
-The system SHALL apply same-harness cheap rotation to the `default` route in no-backend mode just as it does for any other route. The rotation path SHALL NOT depend on whether a bead's `assignee` matched a non-default route.
+The system SHALL apply same-harness cheap rotation to the `default` route in no-backend mode just as it does for any other route. The rotation path SHALL NOT depend on whether a lap's `assignee` matched a non-default route.
 
 #### Scenario: Cheap rotation on default route
 - **WHEN** rally is in no-backend mode and `[routes].default = ["op:z", "op:gk"]` (both opencode shortcuts)

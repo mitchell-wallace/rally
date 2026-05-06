@@ -161,7 +161,7 @@ func runRelay(cmd *cobra.Command, args []string) error {
 		TargetIterations:           iterations,
 		RunHooksOnAutoCommit:       cfg.RunHooksOnAutoCommit,
 		LapsEnabled:                lapsEnabled,
-		MicrobeadsInstructionsFile: cfg.Microbeads.InstructionsFile,
+		LapsInstructionsFile:     cfg.Laps.InstructionsFile,
 		FallbackInstructionsFile:   cfg.Fallback.InstructionsFile,
 	}
 

@@ -41,15 +41,15 @@ The system SHALL read `iterations` and `mix` from the `[defaults]` section of `.
 - **THEN** the relay SHALL use 5 iterations
 
 ### Requirement: Fallback prompt injection in no-backend mode
-The system SHALL inject the `[fallback].instructions_file` content (or a built-in default if unconfigured/missing) as the prompt body when (a) rally is in no-backend mode and (b) no ready bead exists for the current iteration. The injection SHALL replace the bead-body slot in the prompt template; other prompt sections (persona, retry context, etc.) SHALL be unaffected.
+The system SHALL inject the `[fallback].instructions_file` content (or a built-in default if unconfigured/missing) as the prompt body when (a) rally is in no-backend mode and (b) no ready lap exists for the current iteration. The injection SHALL replace the lap-body slot in the prompt template; other prompt sections (persona, retry context, etc.) SHALL be unaffected.
 
-#### Scenario: No-backend, no ready bead
-- **WHEN** rally is in no-backend mode and no ready bead exists for the iteration
+#### Scenario: No-backend, no ready lap
+- **WHEN** rally is in no-backend mode and no ready lap exists for the iteration
 - **THEN** the prompt body SHALL be the contents of `[fallback].instructions_file` if configured and readable, otherwise the built-in default fallback content
 
-#### Scenario: No-backend with ready bead
-- **WHEN** rally is in no-backend mode and a ready bead exists
-- **THEN** the bead body SHALL be used as the prompt body and the fallback file SHALL NOT be substituted
+#### Scenario: No-backend with ready lap
+- **WHEN** rally is in no-backend mode and a ready lap exists
+- **THEN** the lap body SHALL be used as the prompt body and the fallback file SHALL NOT be substituted
 
 ### Requirement: User-defined harness dispatch
 The system SHALL dispatch runs whose resolved harness has a `[harness.<name>]` entry with a `command` field through a generic executor that templates `$MODEL` and `$PROMPT` and applies the configured output strategy. Runs whose resolved harness is built-in SHALL continue to dispatch through the built-in executors.

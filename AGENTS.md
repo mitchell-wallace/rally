@@ -4,8 +4,8 @@
 
 ### Hierarchy: relay > run > try
 
-- **Relay**: a campaign of runs processing a queue of microbeads (tasks).
-- **Run**: one runner assigned to one microbead. A microbead can have multiple
+- **Relay**: a campaign of runs processing a queue of laps (tasks).
+- **Run**: one runner assigned to one lap. A lap can have multiple
   runs if skipped to a different runner. Each run tracks its own retry budget.
 - **Try**: one invocation of a runner. A run can have multiple tries (retries).
 

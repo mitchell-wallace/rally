@@ -56,8 +56,8 @@ The operator also needs ways to intervene mid-relay without killing the process 
   ⏱ 5m 34s  │  📁 11 files  │  last activity: 4s ago
   [Ctrl+S skip]  [Ctrl+P pause]  [Ctrl+X stop]  [Ctrl+C quit]
   ```
-- **Ctrl+S** (double-press): skip — cancel current try, assign this microbead to the next runner in the rotation (new run, same task). Continues the normal round-robin rotation; does not reset or jump the rotation sequence. Neither skip nor the resulting new run affect microbead task state
-- **Ctrl+P** (double-press): pause — cancel current try, relay waits for operator to press Enter to resume. On resume, starts a new try within the same run (same runner). Useful when the operator needs to update API keys, fix microbead descriptions, or intervene manually
+- **Ctrl+S** (double-press): skip — cancel current try, assign this lap to the next runner in the rotation (new run, same task). Continues the normal round-robin rotation; does not reset or jump the rotation sequence. Neither skip nor the resulting new run affect lap task state
+- **Ctrl+P** (double-press): pause — cancel current try, relay waits for operator to press Enter to resume. On resume, starts a new try within the same run (same runner). Useful when the operator needs to update API keys, fix lap descriptions, or intervene manually
 - **Ctrl+X** (double-press): stop — let the current try finish, then end the relay without starting the next run
 - All shortcuts require double-press within a confirmation window (same pattern as Ctrl+C guard) — first press shows confirmation prompt, second press executes
 - The relay applies the action at the next safe boundary (between try invocations or at the next monitor tick)

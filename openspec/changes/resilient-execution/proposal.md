@@ -16,7 +16,7 @@ With v0.3.0 monitoring signals and v0.5.0/v0.6.0 provider shortcuts in hand, we 
 - For harnesses that support session resume (capability declared in the executor adapter), retries pass the harness-specific resume flag instead of restarting from scratch when a session existed at failure time
 - Per-harness capability matrix lives in the adapter; rally falls back to a fresh start when resume is unsupported or the session ID is lost
 - Bump default per-try retry budget from 3 to 5 (configurable via `[reliability].retry_budget`)
-- Resume preserves run-scoped state in `.rally/run-state.json` (the v0.4.0 handoff flag, `mb done`-accumulated bead IDs). On a fresh start retry, that state is cleared so the resumed-vs-fresh boundary is clean. A handoff flag set in a crashed-before-finalisation run is also cleared on fresh start; on resume, it is left in place so the agent can complete the second `mb handoff` call.
+- Resume preserves run-scoped state in `.rally/run-state.json` (the v0.4.0 handoff flag, `laps done`-accumulated lap IDs). On a fresh start retry, that state is cleared so the resumed-vs-fresh boundary is clean. A handoff flag set in a crashed-before-finalisation run is also cleared on fresh start; on resume, it is left in place so the agent can complete the second `laps handoff` call.
 
 ### Provider rotation within a harness
 - v0.6.0 already advances the active route's cursor on retry-budget exhaustion. v0.7.0 adds a cheap-rotation path: when the next entry uses the **same harness** with a different model, rally swaps the model string in-place rather than tearing down and respawning the harness process
@@ -74,4 +74,4 @@ With v0.3.0 monitoring signals and v0.5.0/v0.6.0 provider shortcuts in hand, we 
 - Risk: false-positive freeze kills could waste partial work — threshold is conservative by default; resume-retry softens the cost
 - Risk: liveness probe could itself induce the failure it's diagnosing on harnesses that don't support concurrent prompts — gated behind explicit opt-in + adapter capability check
 - Risk: error patterns drift as harness CLIs evolve — patterns table is the only place to update; integration tests exercise each pattern
-- Risk: stale handoff flag in `.rally/run-state.json` if a run crashes between the first and second `mb handoff` calls AND resume isn't supported by the harness. On fresh-start retry rally clears the flag (a stale prompt would confuse the new agent); the original handoff intent is lost, but the bead remains open so the next run picks it up normally
+- Risk: stale handoff flag in `.rally/run-state.json` if a run crashes between the first and second `laps handoff` calls AND resume isn't supported by the harness. On fresh-start retry rally clears the flag (a stale prompt would confuse the new agent); the original handoff intent is lost, but the lap remains open so the next run picks it up normally
