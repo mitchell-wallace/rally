@@ -156,6 +156,8 @@ func runRelay(cmd *cobra.Command, args []string) error {
 		WorkspaceDir:               workspaceDir,
 		DataDir:                    dataDir,
 		AgentMixSpecs:              selectedSpecs,
+		RouteSpecs:                 cfg.Routes,
+		UseOverrideRoute:           usedOverride,
 		TargetIterations:           iterations,
 		RunHooksOnAutoCommit:       cfg.RunHooksOnAutoCommit,
 		LapsEnabled:                lapsEnabled,

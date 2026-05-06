@@ -1859,6 +1859,176 @@ func TestFallbackInstructionsUnconfiguredUsesBuiltInDefault(t *testing.T) {
 	}
 }
 
+func TestRunnerRouteIntegration_AssigneesQuotasFreezeAndRoleFiles(t *testing.T) {
+	workspaceDir := t.TempDir()
+	rallyDir := filepath.Join(workspaceDir, ".rally")
+	agentsDir := filepath.Join(rallyDir, "agents")
+	if err := os.MkdirAll(agentsDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	initRepo(t, workspaceDir)
+	if err := os.WriteFile(filepath.Join(agentsDir, "SENIOR.md"), []byte("Senior route guidance."), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(agentsDir, "junior.md"), []byte("Junior route guidance."), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	s := newTestStore(t, rallyDir)
+
+	type execution struct {
+		persona          string
+		roleInstructions string
+		taskPrompt       string
+	}
+
+	var executions []execution
+	failSeniorClaudeAttempts := 3
+	changeCounter := 0
+	exec := &funcExecutor{
+		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+			if opts.Persona == "claude" && opts.RoleInstructions == "Senior route guidance." && failSeniorClaudeAttempts > 0 {
+				failSeniorClaudeAttempts--
+				return &agent.TryResult{Completed: false, Summary: "rate limit"}, nil
+			}
+
+			executions = append(executions, execution{
+				persona:          opts.Persona,
+				roleInstructions: opts.RoleInstructions,
+				taskPrompt:       opts.TaskPrompt,
+			})
+			changeCounter++
+			f, _ := os.OpenFile(filepath.Join(workspaceDir, "changes.txt"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+			fmt.Fprintf(f, "change %d\n", changeCounter)
+			f.Close()
+			return &agent.TryResult{Completed: true, Summary: "ok"}, nil
+		},
+	}
+	executors := map[string]agent.Executor{
+		"claude": exec,
+		"codex":  exec,
+	}
+
+	oldHeadPull := headPullLap
+	headPullCalls := 0
+	headPullLap = func(context.Context, string) (laps.Lap, error) {
+		headPullCalls++
+		switch headPullCalls {
+		case 1, 2:
+			return laps.Lap{Title: "senior task", Description: "work senior item", Assignee: "SENIOR"}, nil
+		case 3, 4:
+			return laps.Lap{Title: "junior task", Description: "work junior item", Assignee: "JUNIOR"}, nil
+		default:
+			return laps.Lap{Title: "default task", Description: "work default item"}, nil
+		}
+	}
+	defer func() { headPullLap = oldHeadPull }()
+
+	r := NewRunner(s, Config{
+		WorkspaceDir: workspaceDir,
+		DataDir:      t.TempDir(),
+		RouteSpecs: map[string][]string{
+			"default": []string{"cx:1"},
+			"SENIOR":  []string{"cc:1", "cx:1"},
+			"JUNIOR":  []string{"cx:2"},
+		},
+		TargetIterations: 4,
+		LapsEnabled:      true,
+		Instructions:     "Base instructions.",
+		Resolver:         testResolver,
+	}, executors)
+	r.resilience = &Resilience{
+		Store:                     s,
+		PauseDuration:             time.Hour,
+		HourlyRetriesBeforeFreeze: 2,
+		NowFunc:                   time.Now,
+	}
+
+	if err := r.Run(context.Background()); err != nil {
+		t.Fatalf("run failed: %v", err)
+	}
+
+	wantPersonas := []string{"codex", "codex", "codex", "codex"}
+	wantRoleInstructions := []string{
+		"Senior route guidance.",
+		"Junior route guidance.",
+		"Junior route guidance.",
+		"",
+	}
+	wantPrompts := []string{
+		"work senior item",
+		"work junior item",
+		"work junior item",
+		"work default item",
+	}
+
+	if len(executions) != len(wantPersonas) {
+		t.Fatalf("executions = %d, want %d", len(executions), len(wantPersonas))
+	}
+	for i := range executions {
+		if executions[i].persona != wantPersonas[i] {
+			t.Fatalf("execution %d persona = %q, want %q", i+1, executions[i].persona, wantPersonas[i])
+		}
+		if executions[i].roleInstructions != wantRoleInstructions[i] {
+			t.Fatalf("execution %d role instructions = %q, want %q", i+1, executions[i].roleInstructions, wantRoleInstructions[i])
+		}
+		if executions[i].taskPrompt != wantPrompts[i] {
+			t.Fatalf("execution %d task prompt = %q, want %q", i+1, executions[i].taskPrompt, wantPrompts[i])
+		}
+	}
+
+	st, _ := r.resilience.getState("claude")
+	if st != StatePaused {
+		t.Fatalf("claude state = %s, want %s after simulated freeze", st, StatePaused)
+	}
+}
+
+func TestRunnerNoBackendUsesDefaultRouteAndFallbackPrompt(t *testing.T) {
+	workspaceDir := t.TempDir()
+	rallyDir := filepath.Join(workspaceDir, ".rally")
+	os.MkdirAll(rallyDir, 0o755)
+	initRepo(t, workspaceDir)
+
+	fallbackFile := filepath.Join(workspaceDir, "fallback.md")
+	os.WriteFile(fallbackFile, []byte("Fallback prompt content."), 0o644)
+
+	s := newTestStore(t, rallyDir)
+	var receivedPersona string
+	var receivedTaskPrompt string
+	exec := &funcExecutor{
+		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+			receivedPersona = opts.Persona
+			receivedTaskPrompt = opts.TaskPrompt
+			f, _ := os.OpenFile(filepath.Join(workspaceDir, "changes.txt"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+			fmt.Fprintf(f, "change\n")
+			f.Close()
+			return &agent.TryResult{Completed: true}, nil
+		},
+	}
+	executors := map[string]agent.Executor{"codex": exec}
+
+	r := NewRunner(s, Config{
+		WorkspaceDir:             workspaceDir,
+		DataDir:                  t.TempDir(),
+		RouteSpecs:               map[string][]string{"default": []string{"cx:1"}},
+		TargetIterations:         1,
+		LapsEnabled:              false,
+		FallbackInstructionsFile: fallbackFile,
+		Resolver:                 testResolver,
+	}, executors)
+
+	if err := r.Run(context.Background()); err != nil {
+		t.Fatalf("run failed: %v", err)
+	}
+
+	if receivedPersona != "codex" {
+		t.Fatalf("persona = %q, want codex", receivedPersona)
+	}
+	if receivedTaskPrompt != "Fallback prompt content." {
+		t.Fatalf("task prompt = %q, want fallback prompt", receivedTaskPrompt)
+	}
+}
+
 // --- Phase 15: Verification — execution paths ---
 
 func writeRelayScript(t *testing.T, dir, name, scriptContent string) string {

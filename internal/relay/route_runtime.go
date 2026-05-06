@@ -1,0 +1,334 @@
+package relay
+
+import (
+	"fmt"
+	"strings"
+	"time"
+
+	"github.com/mitchell-wallace/rally/internal/agent"
+	"github.com/mitchell-wallace/rally/internal/routing"
+)
+
+const (
+	relaySelectionModeRoutes         = "__routes__"
+	relaySelectionModeOverridePrefix = "__override__:"
+)
+
+type routeRuntime struct {
+	selector   *routing.Selector
+	override   *routing.OverrideRoute
+	schedulers map[string]*routing.Scheduler
+	resolver   Resolver
+}
+
+type routeSelection struct {
+	Agent       agent.ResolvedAgent
+	Route       routing.Route
+	Entry       *routing.EntryState
+	Scheduler   *routing.Scheduler
+	HourlyRetry bool
+}
+
+type routeSelectionError struct {
+	Wait      time.Duration
+	AllFrozen bool
+	message   string
+}
+
+func (e *routeSelectionError) Error() string {
+	return e.message
+}
+
+func newRouteRuntimeFromConfig(cfg Config) (*routeRuntime, string, error) {
+	switch {
+	case cfg.UseOverrideRoute:
+		return newOverrideRouteRuntime(cfg.AgentMixSpecs, cfg.RouteSpecs, cfg.Resolver, !cfg.LapsEnabled)
+	case len(cfg.RouteSpecs) > 0:
+		rt, err := newResolvedRouteRuntime(cfg.RouteSpecs, cfg.Resolver, !cfg.LapsEnabled, nil)
+		return rt, relaySelectionModeRoutes, err
+	default:
+		return newLegacyMixRouteRuntime(cfg.AgentMixSpecs, cfg.Resolver, !cfg.LapsEnabled)
+	}
+}
+
+func newRouteRuntimeFromStoredLabel(cfg Config, stored string) (*routeRuntime, string, error) {
+	switch {
+	case stored == relaySelectionModeRoutes:
+		if len(cfg.RouteSpecs) == 0 {
+			return nil, "", fmt.Errorf("resume relay: stored route-based relay requires configured routes")
+		}
+		rt, err := newResolvedRouteRuntime(cfg.RouteSpecs, cfg.Resolver, !cfg.LapsEnabled, nil)
+		return rt, relaySelectionModeRoutes, err
+	case strings.HasPrefix(stored, relaySelectionModeOverridePrefix):
+		specs := strings.Fields(strings.TrimSpace(strings.TrimPrefix(stored, relaySelectionModeOverridePrefix)))
+		return newOverrideRouteRuntime(specs, cfg.RouteSpecs, cfg.Resolver, !cfg.LapsEnabled)
+	default:
+		return newLegacyMixRouteRuntime(strings.Fields(stored), cfg.Resolver, !cfg.LapsEnabled)
+	}
+}
+
+func newLegacyMixRouteRuntime(specs []string, resolver Resolver, noBackend bool) (*routeRuntime, string, error) {
+	routeEntries, label, err := legacyMixRouteEntries(specs, resolver)
+	if err != nil {
+		return nil, "", err
+	}
+
+	rt, err := newResolvedRouteRuntime(map[string][]string{
+		"default": routeEntries,
+	}, nil, noBackend, nil)
+	if err != nil {
+		return nil, "", err
+	}
+
+	return rt, label, nil
+}
+
+func newOverrideRouteRuntime(specs []string, routeSpecs map[string][]string, resolver Resolver, noBackend bool) (*routeRuntime, string, error) {
+	override, err := routing.BuildOverrideRoute("override", specs, routeSpecs, routing.AgentResolver(resolver))
+	if err != nil {
+		return nil, "", err
+	}
+
+	rt, err := newResolvedRouteRuntime(routeSpecs, resolver, noBackend, override)
+	if err != nil {
+		return nil, "", err
+	}
+
+	return rt, relaySelectionModeOverridePrefix + strings.Join(specs, " "), nil
+}
+
+func newResolvedRouteRuntime(routeSpecs map[string][]string, resolver Resolver, noBackend bool, override *routing.OverrideRoute) (*routeRuntime, error) {
+	selector, err := routing.NewSelector(routeSpecs, noBackend)
+	if err != nil {
+		return nil, err
+	}
+
+	schedulers := make(map[string]*routing.Scheduler, len(routeSpecs)+1)
+	for name, rawEntries := range routeSpecs {
+		route, err := routing.ParseRoute(name, rawEntries)
+		if err != nil {
+			return nil, err
+		}
+
+		resolvedEntries, err := resolveRouteEntries(route.Entries, resolver)
+		if err != nil {
+			return nil, fmt.Errorf("routing: route %q: %w", name, err)
+		}
+		schedulers[strings.ToLower(name)] = routing.NewScheduler(resolvedEntries)
+	}
+
+	if override != nil {
+		schedulers[strings.ToLower(override.Name)] = routing.NewScheduler(cloneParsedEntries(override.Entries))
+	}
+
+	return &routeRuntime{
+		selector:   selector,
+		override:   override,
+		schedulers: schedulers,
+		resolver:   resolver,
+	}, nil
+}
+
+func (r *routeRuntime) next(task runTask, resilience *Resilience) (routeSelection, error) {
+	route, err := r.selector.ActiveRoute(routing.Bead{Assignee: task.Assignee}, r.overrideRoute())
+	if err != nil {
+		return routeSelection{}, err
+	}
+
+	scheduler := r.schedulers[strings.ToLower(route.Name)]
+	if scheduler == nil {
+		return routeSelection{}, fmt.Errorf("routing: no scheduler for route %q", route.Name)
+	}
+
+	r.syncRecoverySignals(scheduler, resilience)
+
+	entry, err := scheduler.Next()
+	if err != nil {
+		if strings.Contains(err.Error(), "all entries exhausted") {
+			return routeSelection{}, r.selectionWaitError(scheduler, resilience)
+		}
+		return routeSelection{}, err
+	}
+
+	selectedEntry := entry.Entry
+	if r.override != nil && strings.EqualFold(route.Name, r.override.Name) {
+		selectedEntry, err = r.override.ResolveSelection(entry.Entry)
+		if err != nil {
+			return routeSelection{}, err
+		}
+	}
+
+	picked, err := resolveAgentSpec(selectedEntry.Spec, nil)
+	if err != nil {
+		return routeSelection{}, err
+	}
+
+	st, since := resilience.getState(picked.Harness)
+	hourlyRetry := st == StatePaused && !resilience.NowFunc().Before(since.Add(resilience.PauseDuration))
+
+	return routeSelection{
+		Agent:       picked,
+		Route:       route,
+		Entry:       entry,
+		Scheduler:   scheduler,
+		HourlyRetry: hourlyRetry,
+	}, nil
+}
+
+func (r *routeRuntime) overrideRoute() *routing.Route {
+	if r.override == nil {
+		return nil
+	}
+	route := routing.Route{
+		Name:    r.override.Name,
+		Entries: cloneParsedEntries(r.override.Entries),
+	}
+	return &route
+}
+
+func (r *routeRuntime) syncRecoverySignals(scheduler *routing.Scheduler, resilience *Resilience) {
+	for _, state := range scheduler.EntryStates() {
+		resolved, err := resolveAgentSpec(state.Entry.Spec, nil)
+		if err != nil {
+			continue
+		}
+
+		status, since := resilience.getState(resolved.Harness)
+		switch status {
+		case StateActive:
+			if state.Frozen || state.Exhausted {
+				scheduler.OnAgentRecovered(state)
+			}
+		case StatePaused:
+			if !resilience.NowFunc().Before(since.Add(resilience.PauseDuration)) && (state.Frozen || state.Exhausted) {
+				scheduler.OnAgentRecovered(state)
+			} else if !state.Frozen || !state.Exhausted {
+				scheduler.OnAgentFailed(state, "paused")
+			}
+		case StateFrozen:
+			if !state.Frozen || !state.Exhausted {
+				scheduler.OnAgentFailed(state, "frozen")
+			}
+		}
+	}
+}
+
+func (r *routeRuntime) selectionWaitError(scheduler *routing.Scheduler, resilience *Resilience) error {
+	var minWait time.Duration
+	waitSet := false
+	seenHarnesses := map[string]struct{}{}
+
+	for _, state := range scheduler.EntryStates() {
+		resolved, err := resolveAgentSpec(state.Entry.Spec, nil)
+		if err != nil {
+			continue
+		}
+		if _, ok := seenHarnesses[resolved.Harness]; ok {
+			continue
+		}
+		seenHarnesses[resolved.Harness] = struct{}{}
+
+		status, since := resilience.getState(resolved.Harness)
+		if status != StatePaused {
+			continue
+		}
+
+		wait := since.Add(resilience.PauseDuration).Sub(resilience.NowFunc())
+		if wait < 0 {
+			wait = 0
+		}
+		if !waitSet || wait < minWait {
+			minWait = wait
+			waitSet = true
+		}
+	}
+
+	if waitSet {
+		return &routeSelectionError{
+			Wait:    minWait,
+			message: "all agents paused",
+		}
+	}
+
+	return &routeSelectionError{
+		AllFrozen: true,
+		message:   "all agents frozen",
+	}
+}
+
+func legacyMixRouteEntries(specs []string, resolver Resolver) ([]string, string, error) {
+	mix, err := ParseAgentMix(specs, resolver)
+	if err != nil {
+		return nil, "", err
+	}
+
+	if len(mix.Cycle) == 0 {
+		return nil, mix.Label, fmt.Errorf("routing: legacy mix produced no entries")
+	}
+
+	entries := make([]string, 0, len(mix.Cycle))
+	for i := 0; i < len(mix.Cycle); {
+		current := mix.Cycle[i]
+		count := 1
+		for j := i + 1; j < len(mix.Cycle); j++ {
+			if mix.Cycle[j] != current {
+				break
+			}
+			count++
+		}
+		entries = append(entries, fmt.Sprintf("%s:%d", agentRouteSpec(current), count))
+		i += count
+	}
+
+	return entries, mix.Label, nil
+}
+
+func resolveRouteEntries(entries []routing.ParsedEntry, resolver Resolver) ([]routing.ParsedEntry, error) {
+	resolved := make([]routing.ParsedEntry, len(entries))
+	for i, entry := range entries {
+		picked, err := resolveAgentSpec(entry.Spec, resolver)
+		if err != nil {
+			return nil, err
+		}
+		entry.Spec = agentRouteSpec(picked)
+		resolved[i] = entry
+	}
+	return resolved, nil
+}
+
+func resolveAgentSpec(spec string, resolver Resolver) (agent.ResolvedAgent, error) {
+	if resolver != nil {
+		return resolver(spec)
+	}
+
+	parts := strings.SplitN(spec, ":", 2)
+	aliases := map[string]string{
+		"cc": "claude", "claude": "claude",
+		"cx": "codex", "codex": "codex",
+		"ge": "gemini", "gemini": "gemini",
+		"op": "opencode", "opencode": "opencode",
+	}
+
+	harness := parts[0]
+	if mapped, ok := aliases[harness]; ok {
+		harness = mapped
+	}
+
+	resolved := agent.ResolvedAgent{Harness: harness}
+	if len(parts) == 2 {
+		resolved.Model = parts[1]
+	}
+	return resolved, nil
+}
+
+func agentRouteSpec(resolved agent.ResolvedAgent) string {
+	spec := resolved.Harness
+	if resolved.Model != "" {
+		spec += ":" + resolved.Model
+	}
+	return spec
+}
+
+func cloneParsedEntries(entries []routing.ParsedEntry) []routing.ParsedEntry {
+	return append([]routing.ParsedEntry(nil), entries...)
+}

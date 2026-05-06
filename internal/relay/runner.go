@@ -28,6 +28,8 @@ type Config struct {
 	WorkspaceDir               string
 	DataDir                    string
 	AgentMixSpecs              []string
+	RouteSpecs                 map[string][]string
+	UseOverrideRoute           bool
 	TargetIterations           int
 	RunHooksOnAutoCommit       bool
 	LapsEnabled                bool
@@ -130,31 +132,30 @@ func (r *Runner) Run(ctx context.Context) error {
 		return err
 	}
 
-	resolver := r.cfg.Resolver
-
-	var mix AgentMix
+	routeRuntime := (*routeRuntime)(nil)
+	selectionLabel := ""
 	if resumed {
 		if r.cfg.OverwriteMixOnResume {
-			mix, err = ParseAgentMix(r.cfg.AgentMixSpecs, resolver)
+			routeRuntime, selectionLabel, err = newRouteRuntimeFromConfig(r.cfg)
 			if err != nil {
 				return err
 			}
-			relay.AgentMix = mix.Label
+			relay.AgentMix = selectionLabel
 			if err := r.store.UpdateRelay(*relay); err != nil {
 				return err
 			}
 		} else {
-			mix, err = ParseAgentMix(strings.Fields(relay.AgentMix), resolver)
+			routeRuntime, selectionLabel, err = newRouteRuntimeFromStoredLabel(r.cfg, relay.AgentMix)
 			if err != nil {
 				return err
 			}
 		}
 	} else {
-		mix, err = ParseAgentMix(r.cfg.AgentMixSpecs, resolver)
+		routeRuntime, selectionLabel, err = newRouteRuntimeFromConfig(r.cfg)
 		if err != nil {
 			return err
 		}
-		relay, err = CreateRelay(r.store, r.cfg.TargetIterations, mix.Label)
+		relay, err = CreateRelay(r.store, r.cfg.TargetIterations, selectionLabel)
 		if err != nil {
 			return err
 		}
@@ -170,7 +171,7 @@ func (r *Runner) Run(ctx context.Context) error {
 		_ = log.Close()
 	}()
 
-	fmt.Fprintf(log, "relay %d started (target %d iterations, mix: %s)\n", relay.ID, relay.TargetIterations, mix.Label)
+	fmt.Fprintf(log, "relay %d started (target %d iterations, mix: %s)\n", relay.ID, relay.TargetIterations, relay.AgentMix)
 	r.relayStart = time.Now()
 
 	resilience := r.resilience
@@ -208,24 +209,33 @@ func (r *Runner) Run(ctx context.Context) error {
 			break
 		}
 
-		agent, nextRunIndex, isHourlyRetry, err := resilience.SelectActiveAgent(mix, runIndex)
+		task, err := r.resolveRunTask(ctx)
 		if err != nil {
-			if err.Error() == "all agents frozen" {
-				fmt.Fprintf(log, "relay %d failed: all agents frozen\n", relay.ID)
-				_ = CompleteRelay(r.store, relay.ID)
-				return fmt.Errorf("relay failed: all agents frozen")
-			}
-			if err.Error() == "all agents paused" {
-				sleepDuration := timeUntilNextRetry(resilience, mix)
-				fmt.Fprintf(log, "relay %d all agents paused, waiting %v\n", relay.ID, sleepDuration)
+			return err
+		}
+
+		selection, err := routeRuntime.next(task, resilience)
+		if err != nil {
+			var routeErr *routeSelectionError
+			if errors.As(err, &routeErr) {
+				if routeErr.AllFrozen {
+					fmt.Fprintf(log, "relay %d failed: all agents frozen\n", relay.ID)
+					_ = CompleteRelay(r.store, relay.ID)
+					return fmt.Errorf("relay failed: all agents frozen")
+				}
+				fmt.Fprintf(log, "relay %d all agents paused, waiting %v\n", relay.ID, routeErr.Wait)
 				select {
-				case <-time.After(sleepDuration):
+				case <-time.After(routeErr.Wait):
 					continue
 				case <-ctx.Done():
 					return ctx.Err()
 				}
 			}
 			return err
+		}
+		if selection.Route.Warning != "" {
+			fmt.Fprintln(os.Stderr, selection.Route.Warning)
+			fmt.Fprintln(log, selection.Route.Warning)
 		}
 
 		// Consume run-scoped message at start of each run
@@ -251,7 +261,7 @@ func (r *Runner) Run(ctx context.Context) error {
 			}
 		}
 
-		success, addressed, interrupted, err := r.runOne(ctx, relay, runIndex, agent, consumedMsg, relayMsg, isHourlyRetry, log)
+		success, addressed, interrupted, err := r.runOne(ctx, relay, runIndex, selection.Agent, task, consumedMsg, relayMsg, selection.HourlyRetry, log)
 		if err != nil {
 			fmt.Fprintf(log, "relay %d run %d error: %v\n", relay.ID, runIndex+1, err)
 			return err
@@ -264,7 +274,9 @@ func (r *Runner) Run(ctx context.Context) error {
 		// If skipped, don't pause the agent — just advance rotation
 		if r.skipFlag.Load() {
 			r.skipFlag.Store(false)
-			runIndex = nextRunIndex
+			selection.Entry.Exhausted = true
+			selection.Entry.Frozen = false
+			runIndex++
 			relay.LastTryID = r.store.NextTryID() - 1
 			if relay.FirstTryID == 0 {
 				relay.FirstTryID = relay.LastTryID
@@ -275,19 +287,21 @@ func (r *Runner) Run(ctx context.Context) error {
 			continue
 		}
 
-		if isHourlyRetry {
+		if selection.HourlyRetry {
 			if success {
-				if err := resilience.UnpauseAgent(agent.Harness, relay.ID); err != nil {
+				if err := resilience.UnpauseAgent(selection.Agent.Harness, relay.ID); err != nil {
 					return err
 				}
 			} else {
-				if err := resilience.RecordHourlyFailure(agent.Harness, relay.ID); err != nil {
+				selection.Scheduler.OnAgentFailed(selection.Entry, "retry-budget-exhausted")
+				if err := resilience.RecordHourlyFailure(selection.Agent.Harness, relay.ID); err != nil {
 					return err
 				}
 			}
 		} else {
 			if !success {
-				if err := resilience.PauseAgent(agent.Harness, relay.ID); err != nil {
+				selection.Scheduler.OnAgentFailed(selection.Entry, "retry-budget-exhausted")
+				if err := resilience.PauseAgent(selection.Agent.Harness, relay.ID); err != nil {
 					return err
 				}
 			}
@@ -295,7 +309,7 @@ func (r *Runner) Run(ctx context.Context) error {
 
 		if success {
 			relay.CompletedIterations++
-			runIndex = nextRunIndex
+			runIndex++
 			if consumedMsg != nil && addressed {
 				consumedMsg.Status = "addressed"
 				now := time.Now().UTC().Format(time.RFC3339)
@@ -321,7 +335,7 @@ func (r *Runner) Run(ctx context.Context) error {
 				}
 			}
 		} else {
-			runIndex = nextRunIndex
+			runIndex++
 		}
 
 		relay.LastTryID = r.store.NextTryID() - 1
@@ -362,28 +376,7 @@ func (r *Runner) Run(ctx context.Context) error {
 	return nil
 }
 
-func timeUntilNextRetry(resilience *Resilience, mix AgentMix) time.Duration {
-	minWait := time.Hour
-	now := resilience.NowFunc()
-	for _, a := range mix.Cycle {
-		st, since := resilience.getState(a.Harness)
-		if st == StatePaused {
-			wait := since.Add(resilience.PauseDuration).Sub(now)
-			if wait < minWait {
-				minWait = wait
-			}
-		}
-	}
-	if minWait < 0 {
-		minWait = 0
-	}
-	if minWait > time.Hour {
-		minWait = time.Hour
-	}
-	return minWait
-}
-
-func (r *Runner) runOne(ctx context.Context, relay *store.RelayRecord, runIndex int, picked agent.ResolvedAgent, consumedMsg *store.MessageRecord, relayMsg *store.MessageRecord, isHourlyRetry bool, log io.Writer) (bool, bool, bool, error) {
+func (r *Runner) runOne(ctx context.Context, relay *store.RelayRecord, runIndex int, picked agent.ResolvedAgent, task runTask, consumedMsg *store.MessageRecord, relayMsg *store.MessageRecord, isHourlyRetry bool, log io.Writer) (bool, bool, bool, error) {
 	// Initialize run-state for this run.
 	runID := fmt.Sprintf("relay-%d-run-%d", relay.ID, runIndex+1)
 	_ = progress.SaveRunState(r.cfg.WorkspaceDir, &progress.RunState{RunID: runID, HandoffState: 0, RecordedLaps: []string{}})
@@ -407,10 +400,6 @@ func (r *Runner) runOne(ctx context.Context, relay *store.RelayRecord, runIndex 
 	var lastResult *agent.TryResult
 	success := false
 
-	task, err := r.resolveRunTask(ctx)
-	if err != nil {
-		return false, false, false, err
-	}
 	roleInstructions, err := r.resolveRoleInstructions(task.Assignee)
 	if err != nil {
 		return false, false, false, err

@@ -66,11 +66,11 @@
 
 ## 9. Relay-runner integration
 
-- [ ] 9.1 Replace v0.5.0 round-robin with the routing+scheduler path: select route per iteration, ask scheduler for next entry, invoke executor
-- [ ] 9.2 Wire executor failure/recovery signals into `OnAgentFailed`/`OnAgentRecovered`
-- [ ] 9.3 Append role-instruction content to assembled prompt when assignee is set
-- [ ] 9.4 Preserve v0.5.0 fallback-prompt injection in no-backend mode (default route still applies)
-- [ ] 9.5 Integration test: long relay across multiple roles with quotas, simulated freezes, and role-instruction files
+- [x] 9.1 Replace v0.5.0 round-robin with the routing+scheduler path: select route per iteration, ask scheduler for next entry, invoke executor
+- [x] 9.2 Wire executor failure/recovery signals into `OnAgentFailed`/`OnAgentRecovered`
+- [x] 9.3 Append role-instruction content to assembled prompt when assignee is set
+- [x] 9.4 Preserve v0.5.0 fallback-prompt injection in no-backend mode (default route still applies)
+- [x] 9.5 Integration test: long relay across multiple roles with quotas, simulated freezes, and role-instruction files
 
 ## 10. Documentation
 
