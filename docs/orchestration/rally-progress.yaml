@@ -1,5 +1,5 @@
 version: 1
-updated_at: "2026-05-06T07:42:43Z"
+updated_at: "2026-05-06T07:42:59Z"
 active_batch:
     agent_mix:
         - cx
@@ -375,6 +375,8 @@ recent_sessions:
       agent: codex
       status: completed
       started_at: "2026-05-06T07:36:30Z"
+      ended_at: "2026-05-06T07:42:59Z"
+      runtime_seconds: 388
       summary: Implemented phase 3 of role-aware routing by rebuilding the core quota scheduler, aligning freeze and range-quota behavior with the OpenSpec scenarios, and marking the scheduler tasks complete.
       files_touched:
         - internal/routing/scheduler.go
