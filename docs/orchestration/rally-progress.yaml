@@ -1,13 +1,5 @@
 version: 1
-updated_at: "2026-05-06T12:56:29Z"
-active_batch:
-    agent_mix:
-        - op
-    batch_id: 12
-    completed_iterations: 2
-    ended_at: ""
-    started_at: "2026-05-06T12:22:35Z"
-    target_iterations: 3
+updated_at: "2026-05-06T12:58:46Z"
 history_window: 50
 recent_sessions:
     - session_id: 1
@@ -610,3 +602,19 @@ recent_sessions:
       commits:
         - 6c25294 "Rename remaining bead/Bead references to lap/Lap in Go source, README, and design docs"
       transcript_path: /home/agent/.local/share/rally/sessions/session-38/terminal.log
+    - session_id: 39
+      batch_id: 12
+      iteration_index: 3
+      agent: opencode
+      status: completed
+      started_at: "2026-05-06T12:56:29Z"
+      ended_at: "2026-05-06T12:58:46Z"
+      runtime_seconds: 137
+      summary: Updated remaining microbeads/Microbead references to laps in openspec docs (proposal.md, design.md) and scratchpad.md. Historical rally-progress.yaml entries left as-is.
+      files_touched:
+        - openspec/changes/laps-first-class/proposal.md
+        - openspec/changes/laps-first-class/design.md
+        - scratchpad.md
+      commits:
+        - 19f9cf4 "Update remaining microbeads references to laps in laps-first-class docs"
+      transcript_path: /home/agent/.local/share/rally/sessions/session-39/terminal.log
