@@ -1,10 +1,10 @@
 version: 1
-updated_at: "2026-05-06T07:46:55Z"
+updated_at: "2026-05-06T07:51:29Z"
 active_batch:
     agent_mix:
         - cx
     batch_id: 9
-    completed_iterations: 2
+    completed_iterations: 3
     ended_at: ""
     started_at: "2026-05-06T07:36:30Z"
     target_iterations: 5
@@ -405,3 +405,25 @@ recent_sessions:
       follow_ups:
         - Phase 5 can now wire role-instruction loading onto the selected route/assignee path.
       transcript_path: /home/agent/.local/share/rally/sessions/session-27/terminal.log
+    - session_id: 28
+      batch_id: 9
+      iteration_index: 3
+      agent: codex
+      status: completed
+      started_at: "2026-05-06T07:46:55Z"
+      summary: Implemented phase 5 of role-aware routing by adding deterministic case-insensitive role-instruction loading from .rally/agents, wiring the role prompt slot into relay prompt assembly, and marking the phase 5 tasks complete.
+      files_touched:
+        - internal/prompt/roleloader/loader.go
+        - internal/prompt/roleloader/loader_test.go
+        - internal/agent/executor.go
+        - internal/agent/prompt.go
+        - internal/agent/agent_test.go
+        - internal/relay/runner.go
+        - internal/relay/runner_test.go
+        - openspec/changes/role-aware-routing/tasks.md
+      commits:
+        - de726e0 Implement role instruction loader
+      follow_ups:
+        - Phase 6 in openspec/changes/role-aware-routing/tasks.md is the next incomplete phase.
+        - The broader command `go test ./internal/agent` still has an unrelated pre-existing failure in `TestGenericExecutor_ValidOutputStrategyTail`.
+      transcript_path: /home/agent/.local/share/rally/sessions/session-28/terminal.log
