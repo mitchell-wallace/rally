@@ -165,7 +165,7 @@ func TestScheduler_ExhaustedSkippedWithinCycle(t *testing.T) {
 	}
 }
 
-func TestScheduler_ExhaustionClearsAtCycleBoundary(t *testing.T) {
+func TestScheduler_CycleWrapResetsQuotaCountersButKeepsFrozenEntriesSkipped(t *testing.T) {
 	entries := parseEntriesOrDie(t, []string{
 		"claude:opus-4.7:1",
 		"codex:gpt-5.5:1",
@@ -175,15 +175,19 @@ func TestScheduler_ExhaustionClearsAtCycleBoundary(t *testing.T) {
 	opus := mustNext(t, s)
 	s.OnAgentFailed(opus, "error")
 
-	_ = mustNext(t, s) // gpt
-	_ = mustNext(t, s) // opus (cycle wraps, exhaustion cleared)
+	gpt := mustNext(t, s)
+	if gpt.Entry.Spec != "codex:gpt-5.5" {
+		t.Fatalf("pick 2 = %q, want gpt", gpt.Entry.Spec)
+	}
+
+	s.OnAgentRecovered(opus)
 
 	st := mustNext(t, s)
-	if st.Entry.Spec != "codex:gpt-5.5" {
-		t.Errorf("after full cycle, pick = %q, want gpt", st.Entry.Spec)
+	if st.Entry.Spec != "claude:opus-4.7" {
+		t.Errorf("after recovery and wrap, pick = %q, want opus", st.Entry.Spec)
 	}
-	if st.Exhausted {
-		t.Error("entry should not be exhausted after cycle wrap")
+	if st.ConsecutiveRuns != 1 {
+		t.Errorf("after wrap, consecutive = %d, want 1", st.ConsecutiveRuns)
 	}
 }
 
@@ -231,18 +235,12 @@ func TestScheduler_Scenario7_RangeQuotaUnderCascadingFreezes(t *testing.T) {
 	s.OnAgentFailed(gptState, "rate limit freeze")
 
 	// Opus and gpt both frozen → kimi can extend to max 5
-	st := mustNext(t, s)
-	if st.Entry.Spec != "opencode:opencode-go/kimi-k2.6" {
-		t.Fatalf("expected kimi range burst, got %q", st.Entry.Spec)
-	}
-
-	st = mustNext(t, s)
-	if st.Entry.Spec != "opencode:opencode-go/kimi-k2.6" {
-		t.Fatalf("expected kimi range burst 2, got %q", st.Entry.Spec)
-	}
-	st = mustNext(t, s)
-	if st.Entry.Spec != "opencode:opencode-go/kimi-k2.6" {
-		t.Fatalf("expected kimi range burst 3, got %q", st.Entry.Spec)
+	var st *EntryState
+	for i := 0; i < 4; i++ {
+		st = mustNext(t, s)
+		if st.Entry.Spec != "opencode:opencode-go/kimi-k2.6" {
+			t.Fatalf("expected kimi range burst %d, got %q", i+1, st.Entry.Spec)
+		}
 	}
 
 	// After 5 consecutive kimi runs (max), should be all exhausted
@@ -456,5 +454,8 @@ func TestScheduler_OnAgentRecovered(t *testing.T) {
 	s.OnAgentRecovered(opus)
 	if opus.Exhausted {
 		t.Error("opus should not be exhausted after recovery")
+	}
+	if opus.Frozen {
+		t.Error("opus should not be frozen after recovery")
 	}
 }

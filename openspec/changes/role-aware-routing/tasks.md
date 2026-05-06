@@ -15,12 +15,12 @@
 
 ## 3. Scheduler — core
 
-- [ ] 3.1 Add `internal/routing/scheduler.go` with state per route entry: position, consecutive-runs counter, exhausted/frozen flag, range-quota progress
-- [ ] 3.2 Implement `Next() Entry` per the quota rules: no-quota = until-failure, `:N` = rotate after N, `:N-M` = prefer N, allow up to M when others exhausted
-- [ ] 3.3 Implement `OnAgentFailed(entry, reason)` and `OnAgentRecovered(entry)` to mark/clear exhausted/frozen flags
-- [ ] 3.4 Implement cycle wrap: when end of list is reached, advance to head; clear exhausted flags (v0.6.0 behaviour; v0.7.0 may refine)
-- [ ] 3.5 Implement force-wait when all entries exhausted and no entry has remaining range-quota
-- [ ] 3.6 Unit tests: each canonical scenario (1–7) from the proposal, plus edge cases (single-entry route, all-quota route, all-no-quota route)
+- [x] 3.1 Add `internal/routing/scheduler.go` with state per route entry: position, consecutive-runs counter, exhausted/frozen flag, range-quota progress
+- [x] 3.2 Implement `Next() Entry` per the quota rules: no-quota = until-failure, `:N` = rotate after N, `:N-M` = prefer N, allow up to M when others exhausted
+- [x] 3.3 Implement `OnAgentFailed(entry, reason)` and `OnAgentRecovered(entry)` to mark/clear exhausted/frozen flags
+- [x] 3.4 Implement cycle wrap: when end of list is reached, advance to head; clear exhausted flags (v0.6.0 behaviour; v0.7.0 may refine)
+- [x] 3.5 Implement force-wait when all entries exhausted and no entry has remaining range-quota
+- [x] 3.6 Unit tests: each canonical scenario (1–7) from the proposal, plus edge cases (single-entry route, all-quota route, all-no-quota route)
 
 ## 4. Routing layer
 

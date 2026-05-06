@@ -6,9 +6,11 @@ import (
 )
 
 type EntryState struct {
+	Position        int
 	Entry           ParsedEntry
 	ConsecutiveRuns int
 	Exhausted       bool
+	Frozen          bool
 	RangeQuotaUsed  int
 }
 
@@ -21,26 +23,17 @@ type Scheduler struct {
 
 func NewScheduler(entries []ParsedEntry) *Scheduler {
 	states := make([]*EntryState, len(entries))
-	for i, e := range entries {
-		states[i] = &EntryState{Entry: e}
+	for i, entry := range entries {
+		states[i] = &EntryState{
+			Position: i,
+			Entry:    entry,
+		}
 	}
-	return &Scheduler{entries: states, pos: 0, cycle: 0}
-}
 
-func (s *Scheduler) quotaMet(st *EntryState, idx int) bool {
-	if !st.Entry.HasQuota {
-		return false
+	return &Scheduler{
+		entries: states,
+		pos:     -1,
 	}
-	if st.Entry.QuotaRange() {
-		if st.ConsecutiveRuns >= st.Entry.QuotaMax {
-			return true
-		}
-		if st.ConsecutiveRuns >= st.Entry.QuotaMin && s.anyOtherAvailable(idx) {
-			return true
-		}
-		return false
-	}
-	return st.ConsecutiveRuns >= st.Entry.QuotaMin
 }
 
 func (s *Scheduler) Next() (*EntryState, error) {
@@ -51,111 +44,174 @@ func (s *Scheduler) Next() (*EntryState, error) {
 		return nil, fmt.Errorf("scheduler: no entries in route")
 	}
 
-	st, idx := s.findValid()
-	if st != nil {
-		wrapped := idx < s.pos
-		if wrapped {
-			s.cycle++
-			s.resetCycle()
-		}
-		st.ConsecutiveRuns++
-		if st.Entry.QuotaRange() {
-			st.RangeQuotaUsed++
-		}
-		s.pos = idx
-		return st, nil
+	if s.pos == -1 {
+		return s.selectFromLocked(0)
 	}
 
-	allExhausted := true
-	for _, e := range s.entries {
-		if !e.Exhausted {
-			allExhausted = false
-			break
-		}
+	current := s.entries[s.pos]
+	if s.shouldStayOnCurrentLocked(current) {
+		return s.recordSelectionLocked(current), nil
 	}
-	if allExhausted {
-		return nil, fmt.Errorf("scheduler: all entries exhausted")
+
+	if current.Entry.QuotaRange() && current.ConsecutiveRuns >= current.Entry.QuotaMax && !s.hasAlternativeLocked(current.Position) {
+		return nil, fmt.Errorf("scheduler: all entries exhausted; waiting for recovery")
+	}
+
+	return s.advanceLocked()
+}
+
+func (s *Scheduler) shouldStayOnCurrentLocked(current *EntryState) bool {
+	if current.Frozen || current.Exhausted {
+		return false
+	}
+
+	if !current.Entry.HasQuota {
+		return true
+	}
+
+	if current.Entry.QuotaSingle() {
+		return current.ConsecutiveRuns < current.Entry.QuotaMin
+	}
+
+	if current.ConsecutiveRuns < current.Entry.QuotaMin {
+		return true
+	}
+
+	if current.ConsecutiveRuns >= current.Entry.QuotaMax {
+		return false
+	}
+
+	return !s.hasAlternativeLocked(current.Position)
+}
+
+func (s *Scheduler) advanceLocked() (*EntryState, error) {
+	next, ok := s.findSelectableLocked(s.pos + 1)
+	if ok {
+		return s.selectAtLocked(next), nil
 	}
 
 	s.cycle++
-	s.resetCycle()
-	s.pos = 0
+	s.resetCycleLocked()
 
-	st, idx = s.findValid()
-	if st != nil {
-		st.ConsecutiveRuns++
-		if st.Entry.QuotaRange() {
-			st.RangeQuotaUsed++
-		}
-		s.pos = idx
-		return st, nil
+	next, ok = s.findSelectableLocked(0)
+	if ok {
+		return s.selectAtLocked(next), nil
 	}
 
-	return nil, fmt.Errorf("scheduler: all entries exhausted")
+	return nil, fmt.Errorf("scheduler: all entries exhausted; waiting for recovery")
 }
 
-func (s *Scheduler) findValid() (*EntryState, int) {
-	for i := 0; i < len(s.entries); i++ {
-		idx := (s.pos + i) % len(s.entries)
-		st := s.entries[idx]
-		if st.Exhausted {
-			continue
-		}
-		if s.quotaMet(st, idx) {
-			continue
-		}
-		return st, idx
+func (s *Scheduler) findSelectableLocked(start int) (int, bool) {
+	if start < 0 {
+		start = 0
 	}
-	return nil, -1
+
+	for idx := start; idx < len(s.entries); idx++ {
+		if s.isSelectableLocked(s.entries[idx]) {
+			return idx, true
+		}
+	}
+
+	return -1, false
 }
 
-func (s *Scheduler) resetCycle() {
-	for _, st := range s.entries {
-		st.ConsecutiveRuns = 0
-		st.RangeQuotaUsed = 0
-		st.Exhausted = false
-	}
+func (s *Scheduler) isSelectableLocked(entry *EntryState) bool {
+	return !entry.Frozen && !entry.Exhausted
 }
 
-func (s *Scheduler) anyOtherAvailable(exclude int) bool {
-	for i := 0; i < len(s.entries); i++ {
-		if i == exclude {
+func (s *Scheduler) hasAlternativeLocked(exclude int) bool {
+	for _, entry := range s.entries {
+		if entry.Position == exclude {
 			continue
 		}
-		if s.entries[i].Exhausted {
-			continue
+		if s.isSelectableLocked(entry) {
+			return true
 		}
-		if s.entries[i].Entry.QuotaRange() && s.entries[i].ConsecutiveRuns >= s.entries[i].Entry.QuotaMax {
-			continue
-		}
-		return true
 	}
+
 	return false
+}
+
+func (s *Scheduler) selectFromLocked(start int) (*EntryState, error) {
+	next, ok := s.findSelectableLocked(start)
+	if !ok {
+		return nil, fmt.Errorf("scheduler: all entries exhausted; waiting for recovery")
+	}
+
+	return s.selectAtLocked(next), nil
+}
+
+func (s *Scheduler) selectAtLocked(idx int) *EntryState {
+	entry := s.entries[idx]
+	if s.pos != idx {
+		entry.ConsecutiveRuns = 0
+		entry.RangeQuotaUsed = 0
+	}
+
+	s.pos = idx
+	return s.recordSelectionLocked(entry)
+}
+
+func (s *Scheduler) recordSelectionLocked(entry *EntryState) *EntryState {
+	entry.Exhausted = false
+	entry.ConsecutiveRuns++
+	if entry.Entry.QuotaRange() {
+		entry.RangeQuotaUsed++
+	}
+	return entry
+}
+
+func (s *Scheduler) resetCycleLocked() {
+	for _, entry := range s.entries {
+		entry.ConsecutiveRuns = 0
+		entry.RangeQuotaUsed = 0
+		entry.Exhausted = false
+	}
 }
 
 func (s *Scheduler) OnAgentFailed(entry *EntryState, reason string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
+	_ = reason
 	entry.Exhausted = true
+	entry.Frozen = true
 }
 
 func (s *Scheduler) OnAgentRecovered(entry *EntryState) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
 	entry.Exhausted = false
+	entry.Frozen = false
+	entry.ConsecutiveRuns = 0
+	entry.RangeQuotaUsed = 0
 }
 
 func (s *Scheduler) AllExhausted() bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	for _, st := range s.entries {
-		if !st.Exhausted {
-			if st.Entry.QuotaRange() && st.ConsecutiveRuns >= st.Entry.QuotaMax {
-				continue
-			}
+
+	if len(s.entries) == 0 {
+		return true
+	}
+
+	if s.pos != -1 {
+		current := s.entries[s.pos]
+		if s.shouldStayOnCurrentLocked(current) {
+			return false
+		}
+		if current.Entry.QuotaRange() && current.ConsecutiveRuns >= current.Entry.QuotaMax && !s.hasAlternativeLocked(current.Position) {
+			return true
+		}
+	}
+
+	for _, entry := range s.entries {
+		if !entry.Frozen {
 			return false
 		}
 	}
+
 	return true
 }
 
@@ -174,6 +230,7 @@ func (s *Scheduler) Cycle() int {
 func (s *Scheduler) EntryStates() []*EntryState {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
 	out := make([]*EntryState, len(s.entries))
 	copy(out, s.entries)
 	return out
