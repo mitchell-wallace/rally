@@ -42,11 +42,11 @@
 
 ## 6. `--agent` flag and override roster
 
-- [ ] 6.1 Add `--agent` flag to `rally relay`; parse value as space-separated entries via the quota-syntax parser
-- [ ] 6.2 Allow role-name references as entries; inline the named route's entries; trailing quota advances role's internal cursor by N per visit
-- [ ] 6.3 Reject role-name references when `--agent` is unsupplied (i.e. inside `[routes]`)
-- [ ] 6.4 When both `--agent` and legacy `--mix` are present, `--agent` wins with a warning
-- [ ] 6.5 Unit tests: each combination of harness:model / shortcut / role-ref, with and without quotas; the canonical scenarios 5 and 6
+- [x] 6.1 Add `--agent` flag to `rally relay`; parse value as space-separated entries via the quota-syntax parser
+- [x] 6.2 Allow role-name references as entries; inline the named route's entries; trailing quota advances role's internal cursor by N per visit
+- [x] 6.3 Reject role-name references when `--agent` is unsupplied (i.e. inside `[routes]`)
+- [x] 6.4 When both `--agent` and legacy `--mix` are present, `--agent` wins with a warning
+- [x] 6.5 Unit tests: each combination of harness:model / shortcut / role-ref, with and without quotas; the canonical scenarios 5 and 6
 
 ## 7. `rally routes check` validator
 

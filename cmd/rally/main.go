@@ -17,8 +17,9 @@ import (
 	"github.com/mitchell-wallace/rally/internal/gitx"
 	"github.com/mitchell-wallace/rally/internal/laps"
 	"github.com/mitchell-wallace/rally/internal/progress"
-	"github.com/mitchell-wallace/rally/internal/release"
 	"github.com/mitchell-wallace/rally/internal/relay"
+	"github.com/mitchell-wallace/rally/internal/release"
+	"github.com/mitchell-wallace/rally/internal/routing"
 	"github.com/mitchell-wallace/rally/internal/store"
 	"github.com/spf13/cobra"
 )
@@ -61,22 +62,12 @@ func resolveWorkspaceDir() (string, error) {
 func runRelay(cmd *cobra.Command, args []string) error {
 	iterations, _ := cmd.Flags().GetInt("iterations")
 	agentSpecs, _ := cmd.Flags().GetStringArray("agent")
+	mixSpecs, _ := cmd.Flags().GetStringArray("mix")
 	resume, _ := cmd.Flags().GetBool("resume")
 	newBatch, _ := cmd.Flags().GetBool("new")
 
 	if resume && newBatch {
 		return fmt.Errorf("cannot use --resume and --new together")
-	}
-
-	var expandedAgents []string
-	for _, spec := range agentSpecs {
-		for _, commaPart := range strings.Split(spec, ",") {
-			fields := strings.Fields(strings.TrimSpace(commaPart))
-			if len(fields) == 0 {
-				return fmt.Errorf("empty value for --agent")
-			}
-			expandedAgents = append(expandedAgents, fields...)
-		}
 	}
 
 	workspaceDir, err := resolveWorkspaceDir()
@@ -94,11 +85,12 @@ func runRelay(cmd *cobra.Command, args []string) error {
 		iterations = cfg.Defaults.Iterations
 	}
 
-	if len(expandedAgents) == 0 && cfg.Defaults.Mix != "" {
-		for _, commaPart := range strings.Split(cfg.Defaults.Mix, ",") {
-			fields := strings.Fields(strings.TrimSpace(commaPart))
-			expandedAgents = append(expandedAgents, fields...)
-		}
+	selectedSpecs, usedOverride, warning, err := chooseRelayAgentSpecs(agentSpecs, mixSpecs, cfg.Defaults.Mix)
+	if err != nil {
+		return err
+	}
+	if warning != "" {
+		fmt.Fprintln(os.Stderr, warning)
 	}
 
 	dataDir := ""
@@ -153,7 +145,7 @@ func runRelay(cmd *cobra.Command, args []string) error {
 	runnerCfg := relay.Config{
 		WorkspaceDir:               workspaceDir,
 		DataDir:                    dataDir,
-		AgentMixSpecs:              expandedAgents,
+		AgentMixSpecs:              selectedSpecs,
 		TargetIterations:           iterations,
 		RunHooksOnAutoCommit:       cfg.RunHooksOnAutoCommit,
 		LapsEnabled:                lapsEnabled,
@@ -167,6 +159,12 @@ func runRelay(cmd *cobra.Command, args []string) error {
 			return agent.ResolvedAgent{}, err
 		}
 		return agent.ResolvedAgent{Harness: ra.Harness, Model: ra.Model}, nil
+	}
+
+	if usedOverride {
+		if _, err := routing.BuildOverrideRoute("override", selectedSpecs, cfg.Routes, routing.AgentResolver(runnerCfg.Resolver)); err != nil {
+			return err
+		}
 	}
 
 	instructionsPath := filepath.Join(rallyDir, "instructions.md")
@@ -206,11 +204,11 @@ func runRelay(cmd *cobra.Command, args []string) error {
 
 	// Handle mix resolution for resumed relays
 	if resumedRelay {
-		hasNewAgents := len(expandedAgents) > 0
+		hasNewAgents := len(selectedSpecs) > 0
 		if resume {
 			// Non-interactive --resume: overwrite mix if new agents provided
 			if hasNewAgents {
-				runnerCfg.AgentMixSpecs = expandedAgents
+				runnerCfg.AgentMixSpecs = selectedSpecs
 				runnerCfg.OverwriteMixOnResume = true
 			}
 			// If no new agents, keep stored mix (default behavior)
@@ -221,7 +219,7 @@ func runRelay(cmd *cobra.Command, args []string) error {
 				var answer string
 				fmt.Scanln(&answer)
 				if strings.ToLower(answer) == "overwrite" || strings.ToLower(answer) == "o" {
-					runnerCfg.AgentMixSpecs = expandedAgents
+					runnerCfg.AgentMixSpecs = selectedSpecs
 					runnerCfg.OverwriteMixOnResume = true
 				}
 				// If "keep", use stored mix (default behavior)
@@ -474,6 +472,7 @@ func init() {
 
 	relayCmd.Flags().Int("iterations", 1, "Number of iterations")
 	relayCmd.Flags().StringArray("agent", nil, "Agent mix (repeatable; comma- or space-separated, e.g. \"cc:2,cx:1\" or \"cc:2 cx:1\")")
+	relayCmd.Flags().StringArray("mix", nil, "Legacy synonym for --agent")
 	relayCmd.Flags().Bool("resume", false, "Resume the last unfinished batch explicitly")
 	relayCmd.Flags().Bool("new", false, "Start a new batch explicitly, discarding unfinished batch state")
 }
