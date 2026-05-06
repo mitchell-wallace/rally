@@ -82,9 +82,9 @@
 
 ## 11. Verification
 
-- [ ] 11.1 Each canonical scenario (1–7) passes integration test exactly per the proposal's documented outcome
-- [ ] 11.2 No-backend mode collapses to `default` route correctly; non-default routes loaded but never selected
-- [ ] 11.3 Case-insensitive role matching works on Linux ext4 and macOS APFS
-- [ ] 11.4 `rally routes check` exits zero on clean config, non-zero on errors, with did-you-mean output for unresolved shortcuts
-- [ ] 11.5 `--agent` overrides bead `assignee` for entire relay duration
-- [ ] 11.6 Role-instruction file injected when present, silent when absent; deterministic pick when multiple case variants exist
+- [x] 11.1 Each canonical scenario (1–7) passes integration test exactly per the proposal's documented outcome
+- [x] 11.2 No-backend mode collapses to `default` route correctly; non-default routes loaded but never selected
+- [x] 11.3 Case-insensitive role matching works on Linux ext4 and macOS APFS
+- [x] 11.4 `rally routes check` exits zero on clean config, non-zero on errors, with did-you-mean output for unresolved shortcuts
+- [x] 11.5 `--agent` overrides bead `assignee` for entire relay duration
+- [x] 11.6 Role-instruction file injected when present, silent when absent; deterministic pick when multiple case variants exist
