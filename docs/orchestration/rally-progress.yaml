@@ -1,5 +1,5 @@
 version: 1
-updated_at: "2026-05-06T07:51:29Z"
+updated_at: "2026-05-06T07:51:57Z"
 active_batch:
     agent_mix:
         - cx
@@ -411,6 +411,8 @@ recent_sessions:
       agent: codex
       status: completed
       started_at: "2026-05-06T07:46:55Z"
+      ended_at: "2026-05-06T07:51:57Z"
+      runtime_seconds: 301
       summary: Implemented phase 5 of role-aware routing by adding deterministic case-insensitive role-instruction loading from .rally/agents, wiring the role prompt slot into relay prompt assembly, and marking the phase 5 tasks complete.
       files_touched:
         - internal/prompt/roleloader/loader.go
