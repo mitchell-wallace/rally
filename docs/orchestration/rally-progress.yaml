@@ -1,5 +1,5 @@
 version: 1
-updated_at: "2026-05-06T11:57:30Z"
+updated_at: "2026-05-06T11:58:05Z"
 active_batch:
     agent_mix:
         - cx
@@ -496,6 +496,8 @@ recent_sessions:
       agent: codex
       status: completed
       started_at: "2026-05-06T11:42:27Z"
+      ended_at: "2026-05-06T11:58:05Z"
+      runtime_seconds: 938
       summary: Implemented phase 9 relay-runner integration for role-aware routing, including route selection, per-route schedulers, override/default resume handling, and integration coverage for freezes, quotas, role files, and no-backend fallback prompts.
       files_touched:
         - cmd/rally/main.go
