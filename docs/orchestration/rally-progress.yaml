@@ -1,5 +1,5 @@
 version: 1
-updated_at: "2026-05-06T11:42:06Z"
+updated_at: "2026-05-06T11:42:26Z"
 active_batch:
     agent_mix:
         - cx
@@ -476,6 +476,8 @@ recent_sessions:
       agent: codex
       status: completed
       started_at: "2026-05-06T11:35:08Z"
+      ended_at: "2026-05-06T11:42:26Z"
+      runtime_seconds: 438
       summary: Implemented phase 8 startup-time route validation for role-aware routing. `rally relay` now validates routes before iterations, hard-fails invalid route-table cases, prompts on partial route failures, and exits early when no valid default route exists and no bead queue is available. Added focused tests for quota errors, duplicate-by-case keys, role references in routes, prompt EOF handling, and missing-default queue behavior.
       files_touched:
         - cmd/rally/main.go
