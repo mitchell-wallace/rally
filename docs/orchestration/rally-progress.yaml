@@ -1,13 +1,5 @@
 version: 1
-updated_at: "2026-05-06T12:11:21Z"
-active_batch:
-    agent_mix:
-        - cx
-    batch_id: 10
-    completed_iterations: 5
-    ended_at: ""
-    started_at: "2026-05-06T11:35:08Z"
-    target_iterations: 5
+updated_at: "2026-05-06T12:11:46Z"
 history_window: 50
 recent_sessions:
     - session_id: 1
@@ -548,6 +540,8 @@ recent_sessions:
       agent: codex
       status: completed
       started_at: "2026-05-06T12:08:59Z"
+      ended_at: "2026-05-06T12:11:46Z"
+      runtime_seconds: 166
       summary: Verified the completed role-aware-routing change against its OpenSpec artifacts; no gaps found, and the focused routing suites plus full go test ./... all passed.
       commits:
         - c0481e7
