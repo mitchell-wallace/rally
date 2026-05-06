@@ -10,7 +10,8 @@ tracking iterations, or rebuilding progress files after every pass.
 ## What Rally Does
 
 - Runs one or more agent sessions against the current workspace.
-- Cycles deterministically through an agent mix such as `cc:1 cx:2 ge:1`.
+- Cycles deterministically through an agent mix such as `cc:1 cx:2 ge:1`,
+  or through role-aware routes selected from a bead's `assignee`.
 - Accepts agent mixes either by repeating the flag or by passing one quoted
   string: `--agent "cc:1 cx:2 op:1"`.
 - Stores transcripts and per-session metadata outside the repo by default.
@@ -84,13 +85,14 @@ rally relay --iterations 4 --agent "cc:1 cx:2 ge:1 op:1"
 ```sh
 rally relay
 rally init
+rally routes check
 rally update
 rally instructions edit
 rally instructions show
 rally version
 ```
 
-## Agent Mix Examples
+## Agent and Override Examples
 
 Repeat the flag:
 
@@ -110,11 +112,23 @@ Named models (defined in `[harness.<name>.models]`):
 rally relay --agent "cc:opus op:z"
 ```
 
-Mix bare aliases, weighted aliases, and named models in one string:
+Mix bare aliases, quota-bearing aliases, and named models in one string:
 
 ```sh
 rally relay --agent "cc:opus cx:2 op:z"
 ```
+
+Role references are valid in `--agent` only. They inline a configured
+`[routes]` entry into the override roster:
+
+```sh
+rally relay --agent "SENIOR"
+rally relay --agent "op:opencode-go/fancy-new-model DEFAULT:1"
+```
+
+In the second example, Rally runs the direct Opencode entry until failure,
+then consumes one entry from the `default` route before returning to the
+direct entry. Role references are rejected inside `[routes]` itself.
 
 If you do not provide `--agent`, Rally defaults to a mix of:
 
@@ -148,6 +162,21 @@ instructions_file = ".rally/mb_instructions.md"
 
 [fallback]
 instructions_file = ".rally/fallback_instructions.md"
+
+[harness.cc.models]
+opus = "claude-opus-4-7"
+sonnet = "claude-sonnet-4-6"
+
+[harness.op.models]
+z = "zai-coding-plan/glm-5.1"
+gk = "opencode-go/kimi-k2.6"
+
+[routes]
+default = ["cc:opus:1", "cx", "op:gk:2-4"]
+SENIOR = ["cx", "cc:opus"]
+JUNIOR = ["op:z:4", "op:gk:2", "ge"]
+UI = ["ge:2-5", "cc:sonnet"]
+VERIFY = ["cx", "cc:opus"]
 ```
 
 ### `[defaults]`
@@ -182,6 +211,45 @@ toggle.
 
 The fallback file has no effect in microbeads-backed mode.
 
+### `[routes]`
+
+`[routes]` enables role-aware routing. Route keys are matched
+case-insensitively against the active bead's `assignee` value, with
+`default` reserved for the no-role / no-match case. The current in-repo
+`assignee` documentation lives in [openspec/HANDOFF.md](openspec/HANDOFF.md)
+and [openspec/changes/laps-first-class/specs/laps-only-integration/spec.md](openspec/changes/laps-first-class/specs/laps-only-integration/spec.md).
+
+Each route entry is one of:
+
+- a bare harness alias such as `cx` or `ge`
+- a named model such as `cc:opus` or `op:z`
+- a raw `harness:model` string such as `op:opencode-go/kimi-k2.6`
+- any of the above with an optional trailing quota: `:N` or `:N-M`
+
+Quota rules:
+
+- no quota: keep using the entry until it fails
+- `:N`: rotate after exactly `N` consecutive runs
+- `:N-M`: prefer rotating after `N`, but allow up to `M` if every other entry
+  is exhausted or frozen
+
+Routing priority on each iteration is:
+
+1. `--agent` override route, if supplied
+2. bead `assignee` match
+3. `default`
+
+In no-backend mode there is no bead and no `assignee`, so Rally always uses
+`default`. Non-default routes still load, but they are never selected.
+
+### Role Instruction Files
+
+When a bead has an `assignee`, Rally looks for a matching file in
+`.rally/agents/{ASSIGNEE}.md` using a case-insensitive directory scan. If a
+file is found, its contents are inserted between Rally's base instructions and
+the bead body. Missing files are silent. Rally treats the file contents as
+opaque text; it does not parse front-matter or impose a template.
+
 ### `[harness.<name>]` — Named models and user-defined harnesses
 
 Each harness can declare named model shortcuts under `[harness.<name>.models]`.
@@ -199,6 +267,9 @@ gk = "opencode-go/kimi-k2.6"
 
 With the above, `--agent "cc:opus op:z"` resolves to Claude with
 `claude-opus-4-7` and Opencode with `zai-coding-plan/glm-5.1`.
+
+Model names must be non-numeric identifiers. A name like `4` is rejected so
+quota parsing stays unambiguous.
 
 Built-in harnesses (`cc`/`cx`/`ge`/`op` and their full names) can declare
 named models but **cannot** declare `command`, `model_flag`, `output_strategy`,
@@ -262,6 +333,33 @@ If both root-level and `[defaults]` values exist, `[defaults]` takes precedence
 and a deprecation note is logged. Config writes always emit the new shape
 (models under `[defaults]`).
 
+## Validating Routes
+
+Use `rally routes check` before a relay or in CI to validate `[routes]`,
+resolve named models, and catch quota syntax errors early.
+
+```sh
+rally routes check
+```
+
+The command exits non-zero on parse, resolution, or quota errors. It prints
+warnings for soft problems such as a missing `default` route, and info lines
+for declared non-default routes that no current bead `assignee` references.
+
+Example Make target:
+
+```make
+routes-check:
+	rally routes check
+```
+
+Example CI step:
+
+```sh
+rally routes check
+go test ./...
+```
+
 ### Other settings
 
 By default Rally uses `--no-verify` for its post-run autocommit checkpoint so
@@ -314,9 +412,10 @@ Rally also performs a background update check on normal startup unless
 
 Each iteration:
 
-1. Picks the next agent from the configured mix.
+1. Selects the active route (`--agent` override, bead `assignee`, or
+   `default`) and then picks the next agent from that route.
 2. Builds a prompt from your project instructions, inbox messages, and recent
-   try context.
+   try context, plus any matching `.rally/agents/{ASSIGNEE}.md` file.
 3. Runs that agent CLI in the current repo.
 4. Captures a transcript and session metadata.
 5. Appends filtered relay output to `~/.local/share/rally/relays/relay-N.log`
@@ -341,6 +440,24 @@ Rally v0.2.0 uses a new internal architecture:
   `instructions`, `update`, `version`.
 
 ## Release Notes
+
+### v0.6.0
+
+**Role-aware routing.** Rally adds a top-level `[routes]` table in
+`.rally/config.toml`, selected per iteration by `--agent` override, bead
+`assignee`, then `default`.
+
+- Route entries use positional `:` splitting with the last segment treated as a
+  quota only when it is numeric (`:N`) or numeric range (`:N-M`).
+- Numeric-only shortcut/model keys are rejected so route quotas stay
+  unambiguous.
+- `--agent` now accepts override rosters built from direct entries, named
+  models, and route-name references such as `DEFAULT:1`.
+- `rally routes check` validates `[routes]`, resolves shortcuts, and surfaces
+  unreachable non-default routes without failing on warnings alone.
+- Rally can load `.rally/agents/{ASSIGNEE}.md` case-insensitively and inject it
+  into the prompt. Rally only provides the loader contract here; authoring the
+  role file contents remains workspace-specific.
 
 ### v0.5.0
 

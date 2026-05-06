@@ -74,11 +74,11 @@
 
 ## 10. Documentation
 
-- [ ] 10.1 Update README's config section with `[routes]` and example role-aware setup
-- [ ] 10.2 Document `--agent` syntax with role references
-- [ ] 10.3 Document `rally routes check` as a CI/Makefile validator
-- [ ] 10.4 v0.6.0 release notes: routing model, quota syntax (positional `:`-split, last-segment-as-quota, numeric-only key prohibition), per-role instruction file contract (loader-only — file contents authored separately)
-- [ ] 10.5 Cross-link to microbeads SPEC `assignee` field documentation
+- [x] 10.1 Update README's config section with `[routes]` and example role-aware setup
+- [x] 10.2 Document `--agent` syntax with role references
+- [x] 10.3 Document `rally routes check` as a CI/Makefile validator
+- [x] 10.4 v0.6.0 release notes: routing model, quota syntax (positional `:`-split, last-segment-as-quota, numeric-only key prohibition), per-role instruction file contract (loader-only — file contents authored separately)
+- [x] 10.5 Cross-link to microbeads SPEC `assignee` field documentation
 
 ## 11. Verification
 
