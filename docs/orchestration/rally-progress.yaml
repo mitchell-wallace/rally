@@ -1,5 +1,13 @@
 version: 1
-updated_at: "2026-05-06T12:11:46Z"
+updated_at: "2026-05-06T12:49:27Z"
+active_batch:
+    agent_mix:
+        - op
+    batch_id: 12
+    completed_iterations: 1
+    ended_at: ""
+    started_at: "2026-05-06T12:22:35Z"
+    target_iterations: 3
 history_window: 50
 recent_sessions:
     - session_id: 1
@@ -546,3 +554,38 @@ recent_sessions:
       commits:
         - c0481e7
       transcript_path: /home/agent/.local/share/rally/sessions/session-35/terminal.log
+    - session_id: 36
+      batch_id: 11
+      iteration_index: 1
+      agent: opencode
+      status: running
+      started_at: "2026-05-06T12:21:48Z"
+      transcript_path: /home/agent/.local/share/rally/sessions/session-36/terminal.log
+    - session_id: 37
+      batch_id: 12
+      iteration_index: 1
+      agent: opencode
+      status: completed
+      started_at: "2026-05-06T12:22:35Z"
+      ended_at: "2026-05-06T12:49:27Z"
+      runtime_seconds: 1612
+      summary: Renamed all microbeads/Microbead/beads/mb references to laps/lap across Go source code, tests, README, AGENTS.md, scratchpad, and active openspec changes. Config section [microbeads] → [laps], struct MicrobeadsConfig → LapsConfig, binary mb → laps. All tests pass.
+      files_touched:
+        - AGENTS.md
+        - README.md
+        - cmd/rally/main.go
+        - internal/cli/routes_check.go
+        - internal/cli/routes_startup.go
+        - internal/cli/routes_startup_test.go
+        - internal/config/config_v2.go
+        - internal/config/config_v2_test.go
+        - internal/relay/runner.go
+        - internal/relay/runner_test.go
+        - scratchpad.md
+        - openspec/changes/improve-cli-run-experience/*
+        - openspec/changes/rally-config-and-harness-shortcuts/*
+        - openspec/changes/resilient-execution/*
+        - openspec/changes/role-aware-routing/*
+      commits:
+        - 1fa48a6 "Rename microbeads/mb/beads references to laps/lap throughout codebase and docs"
+      transcript_path: /home/agent/.local/share/rally/sessions/session-37/terminal.log
