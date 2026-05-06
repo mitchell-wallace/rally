@@ -1,6 +1,6 @@
 ## Why
 
-Rally's current bead-tracker support is a multi-backend (`beads`, `beads_rust`, microbeads) auto-detection mess that confuses both the codebase and the agent prompt. Laps (formerly known as microbeads) is the only tracker rally maintains active integration with, and its hook system is the cleanest integration surface available. Promoting laps to first-class — and removing every other backend reference — lets us tighten the prompt loop, formalise a `laps`-only agent contract, and clean up the human-facing progress log.
+Rally's current bead-tracker support is a multi-backend (`beads`, `beads_rust`) auto-detection mess that confuses both the codebase and the agent prompt. Laps is the only tracker rally maintains active integration with, and its hook system is the cleanest integration surface available. Promoting laps to first-class — and removing every other backend reference — lets us tighten the prompt loop, formalise a `laps`-only agent contract, and clean up the human-facing progress log.
 
 ## What Changes
 

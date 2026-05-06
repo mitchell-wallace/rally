@@ -1,6 +1,6 @@
 ## Context
 
-Rally currently supports `beads` (Go), `beads_rust`, and microbeads as task-tracker backends, with auto-detection picking whichever is installed. In practice this has produced churn: prompt templates that mention multiple bead variants confuse agents; the `Beads string` config field with values `"true"|"false"|"auto"` reads as a backend selector but actually toggles instruction injection; backends other than microbeads see no active integration work. Microbeads is also being rebranded to **laps** — same tool, same semantics, new name; the CLI binary is `laps` and an individual data unit is a "lap".
+Rally currently supports `beads` (Go), `beads_rust`, and `laps` as task-tracker backends, with auto-detection picking whichever is installed. In practice this has produced churn: prompt templates that mention multiple bead variants confuse agents; the `Beads string` config field with values `"true"|"false"|"auto"` reads as a backend selector but actually toggles instruction injection; backends other than laps see no active integration work. Laps (formerly microbeads) has been fully rebranded — the CLI binary is `laps` and an individual data unit is a "lap".
 
 Rally also ships a human-readable progress log at `docs/orchestration/rally-progress.yaml` that pre-dates the v0.2.0 JSONL store (`.rally/{tries,relays,messages,agent_status}.jsonl`). The two coexist and serve different audiences — the JSONL files are durable system state; the YAML is a curated agent/human-facing summary.
 
