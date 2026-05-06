@@ -1,10 +1,10 @@
 version: 1
-updated_at: "2026-05-06T08:40:38Z"
+updated_at: "2026-05-06T08:49:37Z"
 active_batch:
     agent_mix:
         - cx
     batch_id: 9
-    completed_iterations: 4
+    completed_iterations: 5
     ended_at: ""
     started_at: "2026-05-06T07:36:30Z"
     target_iterations: 5
@@ -451,3 +451,20 @@ recent_sessions:
         - Phase 7 can build on internal/routing override parsing for routes validation.
         - Phase 9 still needs to wire override rosters into the relay-runner selection path.
       transcript_path: /home/agent/.local/share/rally/sessions/session-29/terminal.log
+    - session_id: 30
+      batch_id: 9
+      iteration_index: 5
+      agent: codex
+      status: completed
+      started_at: "2026-05-06T08:40:38Z"
+      summary: Implemented phase 7 of role-aware-routing by adding `rally routes check`, wiring it into Cobra, validating route parsing/resolution/quota handling, and covering the validator with unit tests.
+      files_touched:
+        - cmd/rally/main.go
+        - internal/cli/routes_check.go
+        - internal/cli/routes_check_test.go
+        - openspec/changes/role-aware-routing/tasks.md
+      commits:
+        - 9cfc246
+      follow_ups:
+        - Phase 8 can reuse `internal/cli/routes_check.go` validation logic for relay startup gating and prompts.
+      transcript_path: /home/agent/.local/share/rally/sessions/session-30/terminal.log
