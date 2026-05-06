@@ -24,12 +24,12 @@
 
 ## 4. Routing layer
 
-- [ ] 4.1 Add `internal/routing/select.go` with `ActiveRoute(bead, override) Route` selecting per priority: `--agent` override > bead assignee match > default
-- [ ] 4.2 Case-insensitive matching of `assignee` against `[routes]` keys
-- [ ] 4.3 Per-iteration warning when a non-default role has no match and falls back to default
-- [ ] 4.4 Per-iteration error exit when no role match and no `default` exists
-- [ ] 4.5 In no-backend mode, route is always `default`
-- [ ] 4.6 Unit tests: each priority level, fallback to default with warning, exit on no-match-no-default, no-backend collapse
+- [x] 4.1 Add `internal/routing/select.go` with `ActiveRoute(bead, override) Route` selecting per priority: `--agent` override > bead assignee match > default
+- [x] 4.2 Case-insensitive matching of `assignee` against `[routes]` keys
+- [x] 4.3 Per-iteration warning when a non-default role has no match and falls back to default
+- [x] 4.4 Per-iteration error exit when no role match and no `default` exists
+- [x] 4.5 In no-backend mode, route is always `default`
+- [x] 4.6 Unit tests: each priority level, fallback to default with warning, exit on no-match-no-default, no-backend collapse
 
 ## 5. Role-instruction loader
 
