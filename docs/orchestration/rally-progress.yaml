@@ -1,5 +1,13 @@
 version: 1
-updated_at: "2026-05-06T08:49:57Z"
+updated_at: "2026-05-06T11:42:06Z"
+active_batch:
+    agent_mix:
+        - cx
+    batch_id: 10
+    completed_iterations: 1
+    ended_at: ""
+    started_at: "2026-05-06T11:35:08Z"
+    target_iterations: 5
 history_window: 50
 recent_sessions:
     - session_id: 1
@@ -462,3 +470,21 @@ recent_sessions:
       follow_ups:
         - Phase 8 can reuse `internal/cli/routes_check.go` validation logic for relay startup gating and prompts.
       transcript_path: /home/agent/.local/share/rally/sessions/session-30/terminal.log
+    - session_id: 31
+      batch_id: 10
+      iteration_index: 1
+      agent: codex
+      status: completed
+      started_at: "2026-05-06T11:35:08Z"
+      summary: Implemented phase 8 startup-time route validation for role-aware routing. `rally relay` now validates routes before iterations, hard-fails invalid route-table cases, prompts on partial route failures, and exits early when no valid default route exists and no bead queue is available. Added focused tests for quota errors, duplicate-by-case keys, role references in routes, prompt EOF handling, and missing-default queue behavior.
+      files_touched:
+        - cmd/rally/main.go
+        - internal/config/config_v2.go
+        - internal/cli/routes_startup.go
+        - internal/cli/routes_startup_test.go
+        - openspec/changes/role-aware-routing/tasks.md
+      commits:
+        - 7815292 Add relay startup route validation
+      follow_ups:
+        - 'Phase 9 remains next: relay-runner integration of route selection and scheduler state.'
+      transcript_path: /home/agent/.local/share/rally/sessions/session-31/terminal.log
