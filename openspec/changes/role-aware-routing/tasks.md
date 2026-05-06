@@ -50,11 +50,11 @@
 
 ## 7. `rally routes check` validator
 
-- [ ] 7.1 Add `internal/cli/routes_check.go` cobra subcommand
-- [ ] 7.2 Parse routes, resolve shortcuts, validate quotas, list unreachable routes
-- [ ] 7.3 Did-you-mean suggestions on unresolved shortcut keys (Levenshtein top 3)
-- [ ] 7.4 Exit zero on clean config, non-zero on parse/resolution/quota errors; warnings (unreachable routes, missing default) do not by themselves cause non-zero exit
-- [ ] 7.5 Unit tests: clean config, each error category, unreachable-route info output
+- [x] 7.1 Add `internal/cli/routes_check.go` cobra subcommand
+- [x] 7.2 Parse routes, resolve shortcuts, validate quotas, list unreachable routes
+- [x] 7.3 Did-you-mean suggestions on unresolved shortcut keys (Levenshtein top 3)
+- [x] 7.4 Exit zero on clean config, non-zero on parse/resolution/quota errors; warnings (unreachable routes, missing default) do not by themselves cause non-zero exit
+- [x] 7.5 Unit tests: clean config, each error category, unreachable-route info output
 
 ## 8. Startup-time validation
 

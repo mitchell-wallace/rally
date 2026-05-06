@@ -13,6 +13,7 @@ import (
 
 	"github.com/mitchell-wallace/rally/internal/agent"
 	"github.com/mitchell-wallace/rally/internal/app"
+	"github.com/mitchell-wallace/rally/internal/cli"
 	"github.com/mitchell-wallace/rally/internal/config"
 	"github.com/mitchell-wallace/rally/internal/gitx"
 	"github.com/mitchell-wallace/rally/internal/laps"
@@ -455,6 +456,7 @@ func init() {
 	rootCmd.AddCommand(relayCmd)
 	rootCmd.AddCommand(initCmd)
 	rootCmd.AddCommand(instructionsCmd)
+	rootCmd.AddCommand(cli.NewRoutesCmd())
 	instructionsCmd.AddCommand(instructionsEditCmd)
 	instructionsCmd.AddCommand(instructionsShowCmd)
 	rootCmd.AddCommand(versionCmd)
