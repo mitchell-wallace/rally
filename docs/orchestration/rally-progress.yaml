@@ -1,10 +1,10 @@
 version: 1
-updated_at: "2026-05-06T12:02:30Z"
+updated_at: "2026-05-06T12:08:58Z"
 active_batch:
     agent_mix:
         - cx
     batch_id: 10
-    completed_iterations: 3
+    completed_iterations: 4
     ended_at: ""
     started_at: "2026-05-06T11:35:08Z"
     target_iterations: 5
@@ -527,3 +527,18 @@ recent_sessions:
       follow_ups:
         - Phase 11 verification remains pending in openspec/changes/role-aware-routing/tasks.md.
       transcript_path: /home/agent/.local/share/rally/sessions/session-33/terminal.log
+    - session_id: 34
+      batch_id: 10
+      iteration_index: 4
+      agent: codex
+      status: completed
+      started_at: "2026-05-06T12:02:30Z"
+      ended_at: "2026-05-06T12:08:58Z"
+      runtime_seconds: 388
+      summary: Completed phase 11 verification for role-aware routing by adding route-runtime scenario coverage and marking the verification checklist done.
+      files_touched:
+        - internal/relay/route_runtime_test.go
+        - openspec/changes/role-aware-routing/tasks.md
+      commits:
+        - 3410b21954aff1419bbec908f9266dccdcded123
+      transcript_path: /home/agent/.local/share/rally/sessions/session-34/terminal.log
