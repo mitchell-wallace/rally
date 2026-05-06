@@ -1,10 +1,10 @@
 version: 1
-updated_at: "2026-05-06T12:49:27Z"
+updated_at: "2026-05-06T12:56:29Z"
 active_batch:
     agent_mix:
         - op
     batch_id: 12
-    completed_iterations: 1
+    completed_iterations: 2
     ended_at: ""
     started_at: "2026-05-06T12:22:35Z"
     target_iterations: 3
@@ -589,3 +589,24 @@ recent_sessions:
       commits:
         - 1fa48a6 "Rename microbeads/mb/beads references to laps/lap throughout codebase and docs"
       transcript_path: /home/agent/.local/share/rally/sessions/session-37/terminal.log
+    - session_id: 38
+      batch_id: 12
+      iteration_index: 2
+      agent: opencode
+      status: completed
+      started_at: "2026-05-06T12:49:27Z"
+      ended_at: "2026-05-06T12:56:29Z"
+      runtime_seconds: 421
+      summary: Renamed remaining bead/Bead references to lap/Lap across Go source code, README, and active openspec design docs. Removed deprecated .beads/issues.jsonl path handling and collectBeadsAssignees function from routes_check.go. All tests pass.
+      files_touched:
+        - internal/routing/select.go
+        - internal/routing/select_test.go
+        - internal/relay/route_runtime.go
+        - internal/cli/routes_check.go
+        - internal/cli/routes_check_test.go
+        - README.md
+        - openspec/changes/resilient-execution/design.md
+        - openspec/changes/role-aware-routing/design.md
+      commits:
+        - 6c25294 "Rename remaining bead/Bead references to lap/Lap in Go source, README, and design docs"
+      transcript_path: /home/agent/.local/share/rally/sessions/session-38/terminal.log
