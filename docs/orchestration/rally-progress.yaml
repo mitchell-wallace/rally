@@ -1,24 +1,15 @@
 version: 1
-updated_at: "2026-05-07T09:48:35Z"
+updated_at: "2026-05-07T09:57:20Z"
 active_batch:
     agent_mix:
         - cx
     batch_id: 18
-    completed_iterations: 1
+    completed_iterations: 2
     ended_at: ""
     started_at: "2026-05-07T09:38:14Z"
     target_iterations: 3
 history_window: 50
 recent_sessions:
-    - session_id: 4
-      batch_id: 3
-      iteration_index: 2
-      agent: opencode
-      status: completed
-      started_at: "2026-05-04T12:18:44Z"
-      ended_at: "2026-05-04T12:29:54Z"
-      runtime_seconds: 669
-      transcript_path: /home/agent/.local/share/rally/sessions/session-4/terminal.log
     - session_id: 5
       batch_id: 3
       iteration_index: 3
@@ -826,3 +817,21 @@ recent_sessions:
       follow_ups:
         - None.
       transcript_path: /home/agent/.local/share/rally/sessions/session-53/terminal.log
+    - session_id: 54
+      batch_id: 18
+      iteration_index: 2
+      agent: codex
+      status: done
+      started_at: "2026-05-07T09:48:35Z"
+      summary: 'Verified the resilient-execution change and fixed a scheduler/spec mismatch: retry-budget exhaustion no longer auto-clears through OnAgentRecovered, detector-driven freeze recovery still clears correctly, and paused hourly-retry expiry now re-arms exhausted entries through an explicit reset path.'
+      files_touched:
+        - internal/routing/scheduler.go
+        - internal/routing/scheduler_test.go
+        - internal/routing/override_test.go
+        - internal/relay/route_runtime.go
+        - internal/relay/route_runtime_test.go
+      commits:
+        - f87773b Fix scheduler recovery semantics
+      follow_ups:
+        - Archive or sync the resilient-execution OpenSpec change once the verified implementation is accepted.
+      transcript_path: /home/agent/.local/share/rally/sessions/session-54/terminal.log
