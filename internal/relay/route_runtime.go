@@ -19,14 +19,16 @@ type routeRuntime struct {
 	override   *routing.OverrideRoute
 	schedulers map[string]*routing.Scheduler
 	resolver   Resolver
+	lastAgent  map[string]agent.ResolvedAgent
 }
 
 type routeSelection struct {
-	Agent       agent.ResolvedAgent
-	Route       routing.Route
-	Entry       *routing.EntryState
-	Scheduler   *routing.Scheduler
-	HourlyRetry bool
+	Agent         agent.ResolvedAgent
+	PreviousAgent *agent.ResolvedAgent
+	Route         routing.Route
+	Entry         *routing.EntryState
+	Scheduler     *routing.Scheduler
+	HourlyRetry   bool
 }
 
 type routeSelectionError struct {
@@ -126,6 +128,7 @@ func newResolvedRouteRuntime(routeSpecs map[string][]string, resolver Resolver, 
 		override:   override,
 		schedulers: schedulers,
 		resolver:   resolver,
+		lastAgent:  make(map[string]agent.ResolvedAgent, len(schedulers)),
 	}, nil
 }
 
@@ -142,13 +145,14 @@ func (r *routeRuntime) next(task runTask, resilience *Resilience) (routeSelectio
 
 	r.syncRecoverySignals(scheduler, resilience)
 
-	entry, err := scheduler.Next()
+	scheduled, err := scheduler.Next()
 	if err != nil {
 		if strings.Contains(err.Error(), "all entries exhausted") {
 			return routeSelection{}, r.selectionWaitError(scheduler, resilience)
 		}
 		return routeSelection{}, err
 	}
+	entry := scheduled.Current
 
 	selectedEntry := entry.Entry
 	if r.override != nil && strings.EqualFold(route.Name, r.override.Name) {
@@ -166,12 +170,23 @@ func (r *routeRuntime) next(task runTask, resilience *Resilience) (routeSelectio
 	st, since := resilience.getState(picked.Harness)
 	hourlyRetry := st == StatePaused && !resilience.NowFunc().Before(since.Add(resilience.PauseDuration))
 
+	var previousAgent *agent.ResolvedAgent
+	routeKey := strings.ToLower(route.Name)
+	if scheduled.Prev != nil && scheduled.Prev.Position != entry.Position {
+		if last, ok := r.lastAgent[routeKey]; ok {
+			lastCopy := last
+			previousAgent = &lastCopy
+		}
+	}
+	r.lastAgent[routeKey] = picked
+
 	return routeSelection{
-		Agent:       picked,
-		Route:       route,
-		Entry:       entry,
-		Scheduler:   scheduler,
-		HourlyRetry: hourlyRetry,
+		Agent:         picked,
+		PreviousAgent: previousAgent,
+		Route:         route,
+		Entry:         entry,
+		Scheduler:     scheduler,
+		HourlyRetry:   hourlyRetry,
 	}, nil
 }
 

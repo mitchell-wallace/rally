@@ -23,10 +23,10 @@
 
 ## 4. Cheap-rotation path
 
-- [ ] 4.1 Update the v0.6.0 scheduler to expose `prev` and `current` on each `Next()` return value
-- [ ] 4.2 Relay-runner detects `prev.harness == current.harness` and calls `RotateModel(current.model)` on the existing adapter
-- [ ] 4.3 Adapters declaring `RotateSupported() = false` (or returning a non-nil error from `RotateModel`) trigger fall-back to teardown/respawn
-- [ ] 4.4 Unit tests: same-harness advance uses RotateModel, cross-harness advance tears down, RotateModel error falls back to teardown
+- [x] 4.1 Update the v0.6.0 scheduler to expose `prev` and `current` on each `Next()` return value
+- [x] 4.2 Relay-runner detects `prev.harness == current.harness` and calls `RotateModel(current.model)` on the existing adapter
+- [x] 4.3 Adapters declaring `RotateSupported() = false` (or returning a non-nil error from `RotateModel`) trigger fall-back to teardown/respawn
+- [x] 4.4 Unit tests: same-harness advance uses RotateModel, cross-harness advance tears down, RotateModel error falls back to teardown
 
 ## 5. Freeze detection
 

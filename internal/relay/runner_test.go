@@ -21,6 +21,9 @@ import (
 type funcExecutor struct {
 	fn              func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error)
 	resumeSupported bool
+	rotateSupported bool
+	rotateErr       error
+	rotateCalls     []string
 }
 
 func (f *funcExecutor) Execute(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
@@ -28,11 +31,15 @@ func (f *funcExecutor) Execute(ctx context.Context, opts agent.RunOptions) (*age
 }
 
 func (f *funcExecutor) ResumeSupported() bool        { return f.resumeSupported }
-func (f *funcExecutor) RotateSupported() bool        { return false }
+func (f *funcExecutor) RotateSupported() bool        { return f.rotateSupported }
 func (f *funcExecutor) LivenessProbeSupported() bool { return false }
 func (f *funcExecutor) CharsPerToken() float64       { return 0 }
-func (f *funcExecutor) RotateModel(string) error {
-	return fmt.Errorf("rotate not supported by func executor")
+func (f *funcExecutor) RotateModel(model string) error {
+	f.rotateCalls = append(f.rotateCalls, model)
+	if !f.rotateSupported {
+		return fmt.Errorf("rotate not supported by func executor")
+	}
+	return f.rotateErr
 }
 func (f *funcExecutor) ProbeLiveness(_ context.Context) (bool, error) {
 	return false, fmt.Errorf("liveness probe not supported by func executor")
@@ -286,6 +293,148 @@ func TestAgentCyclingDeterminism(t *testing.T) {
 		if agents[i] != w {
 			t.Fatalf("try %d agent = %q, want %q", i, agents[i], w)
 		}
+	}
+}
+
+func TestRunnerSameHarnessAdvanceUsesRotateModel(t *testing.T) {
+	workspaceDir := t.TempDir()
+	rallyDir := filepath.Join(workspaceDir, ".rally")
+	os.MkdirAll(rallyDir, 0o755)
+	initRepo(t, workspaceDir)
+
+	s := newTestStore(t, rallyDir)
+	var executedModels []string
+	exec := &funcExecutor{
+		rotateSupported: true,
+		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+			executedModels = append(executedModels, opts.Model)
+			f, _ := os.OpenFile(filepath.Join(workspaceDir, fmt.Sprintf("change-%d.txt", len(executedModels))), os.O_CREATE|os.O_WRONLY, 0o644)
+			f.WriteString(opts.Model)
+			f.Close()
+			return &agent.TryResult{Completed: true, Summary: "ok"}, nil
+		},
+	}
+
+	r := NewRunner(s, Config{
+		WorkspaceDir: workspaceDir,
+		DataDir:      t.TempDir(),
+		RouteSpecs: map[string][]string{
+			"default": {"op:model-a:1", "op:model-b:1"},
+		},
+		TargetIterations: 2,
+		Resolver:         testResolver,
+		TaskPrompt:       "rotate",
+	}, map[string]agent.Executor{"opencode": exec})
+
+	if err := r.Run(context.Background()); err != nil {
+		t.Fatalf("run failed: %v", err)
+	}
+
+	if got := exec.rotateCalls; len(got) != 1 || got[0] != "model-b" {
+		t.Fatalf("RotateModel calls = %v, want [model-b]", got)
+	}
+	if got, want := executedModels, []string{"model-a", "model-b"}; len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
+		t.Fatalf("executed models = %v, want %v", got, want)
+	}
+}
+
+func TestRunnerCrossHarnessAdvanceDoesNotRotate(t *testing.T) {
+	workspaceDir := t.TempDir()
+	rallyDir := filepath.Join(workspaceDir, ".rally")
+	os.MkdirAll(rallyDir, 0o755)
+	initRepo(t, workspaceDir)
+
+	s := newTestStore(t, rallyDir)
+	opExec := &funcExecutor{
+		rotateSupported: true,
+		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+			f, _ := os.OpenFile(filepath.Join(workspaceDir, "opencode.txt"), os.O_CREATE|os.O_WRONLY, 0o644)
+			f.WriteString("opencode")
+			f.Close()
+			return &agent.TryResult{Completed: true, Summary: "ok"}, nil
+		},
+	}
+	codexExec := &funcExecutor{
+		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+			f, _ := os.OpenFile(filepath.Join(workspaceDir, "codex.txt"), os.O_CREATE|os.O_WRONLY, 0o644)
+			f.WriteString("codex")
+			f.Close()
+			return &agent.TryResult{Completed: true, Summary: "ok"}, nil
+		},
+	}
+
+	r := NewRunner(s, Config{
+		WorkspaceDir: workspaceDir,
+		DataDir:      t.TempDir(),
+		RouteSpecs: map[string][]string{
+			"default": {"op:model-a:1", "cx:model-b:1"},
+		},
+		TargetIterations: 2,
+		Resolver:         testResolver,
+		TaskPrompt:       "cross harness",
+	}, map[string]agent.Executor{
+		"opencode": opExec,
+		"codex":    codexExec,
+	})
+
+	if err := r.Run(context.Background()); err != nil {
+		t.Fatalf("run failed: %v", err)
+	}
+
+	if len(opExec.rotateCalls) != 0 {
+		t.Fatalf("RotateModel calls = %v, want none for cross-harness advance", opExec.rotateCalls)
+	}
+}
+
+func TestRunnerRotateModelErrorFallsBackToExecution(t *testing.T) {
+	workspaceDir := t.TempDir()
+	rallyDir := filepath.Join(workspaceDir, ".rally")
+	os.MkdirAll(rallyDir, 0o755)
+	initRepo(t, workspaceDir)
+
+	s := newTestStore(t, rallyDir)
+	dataDir := t.TempDir()
+	var executedModels []string
+	exec := &funcExecutor{
+		rotateSupported: true,
+		rotateErr:       fmt.Errorf("rotate failed"),
+		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+			executedModels = append(executedModels, opts.Model)
+			f, _ := os.OpenFile(filepath.Join(workspaceDir, fmt.Sprintf("change-%d.txt", len(executedModels))), os.O_CREATE|os.O_WRONLY, 0o644)
+			f.WriteString(opts.Model)
+			f.Close()
+			return &agent.TryResult{Completed: true, Summary: "ok"}, nil
+		},
+	}
+
+	r := NewRunner(s, Config{
+		WorkspaceDir: workspaceDir,
+		DataDir:      dataDir,
+		RouteSpecs: map[string][]string{
+			"default": {"op:model-a:1", "op:model-b:1"},
+		},
+		TargetIterations: 2,
+		Resolver:         testResolver,
+		TaskPrompt:       "fallback",
+	}, map[string]agent.Executor{"opencode": exec})
+
+	if err := r.Run(context.Background()); err != nil {
+		t.Fatalf("run failed: %v", err)
+	}
+
+	if got := exec.rotateCalls; len(got) != 1 || got[0] != "model-b" {
+		t.Fatalf("RotateModel calls = %v, want [model-b]", got)
+	}
+	if got, want := executedModels, []string{"model-a", "model-b"}; len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
+		t.Fatalf("executed models = %v, want %v", got, want)
+	}
+
+	logData, err := os.ReadFile(filepath.Join(workspaceDir, ".rally", "relays", "relay-1.log"))
+	if err != nil {
+		t.Fatalf("read relay log: %v", err)
+	}
+	if !strings.Contains(string(logData), "rotate fallback for opencode: rotate failed") {
+		t.Fatalf("relay log = %q, want rotate fallback message", string(logData))
 	}
 }
 
@@ -1658,12 +1807,12 @@ func TestLapsInstructionsFileUsed(t *testing.T) {
 	defer func() { headPullLap = oldHeadPull }()
 
 	r := NewRunner(s, Config{
-		WorkspaceDir:               workspaceDir,
-		DataDir:                    t.TempDir(),
-		AgentMixSpecs:              []string{"cc:1"},
-		TargetIterations:           1,
-		LapsEnabled:                true,
-		Instructions:               "Default instructions.",
+		WorkspaceDir:         workspaceDir,
+		DataDir:              t.TempDir(),
+		AgentMixSpecs:        []string{"cc:1"},
+		TargetIterations:     1,
+		LapsEnabled:          true,
+		Instructions:         "Default instructions.",
 		LapsInstructionsFile: instructionsFile,
 	}, executors)
 
@@ -1702,12 +1851,12 @@ func TestLapsInstructionsFileFallsBackToDefault(t *testing.T) {
 	defer func() { headPullLap = oldHeadPull }()
 
 	r := NewRunner(s, Config{
-		WorkspaceDir:               workspaceDir,
-		DataDir:                    t.TempDir(),
-		AgentMixSpecs:              []string{"cc:1"},
-		TargetIterations:           1,
-		LapsEnabled:                true,
-		Instructions:               "Default instructions.",
+		WorkspaceDir:         workspaceDir,
+		DataDir:              t.TempDir(),
+		AgentMixSpecs:        []string{"cc:1"},
+		TargetIterations:     1,
+		LapsEnabled:          true,
+		Instructions:         "Default instructions.",
 		LapsInstructionsFile: filepath.Join(workspaceDir, "nonexistent.md"),
 	}, executors)
 
@@ -1743,14 +1892,14 @@ func TestLapsInstructionsNotUsedInNoBackendMode(t *testing.T) {
 	executors := map[string]agent.Executor{"claude": exec}
 
 	r := NewRunner(s, Config{
-		WorkspaceDir:           workspaceDir,
-		DataDir:                t.TempDir(),
-		AgentMixSpecs:          []string{"cc:1"},
-		TargetIterations:       1,
-		LapsEnabled:            false,
-		Instructions:           "Default instructions.",
-		TaskPrompt:             "Do some work.",
-		LapsInstructionsFile:   instructionsFile,
+		WorkspaceDir:         workspaceDir,
+		DataDir:              t.TempDir(),
+		AgentMixSpecs:        []string{"cc:1"},
+		TargetIterations:     1,
+		LapsEnabled:          false,
+		Instructions:         "Default instructions.",
+		TaskPrompt:           "Do some work.",
+		LapsInstructionsFile: instructionsFile,
 	}, executors)
 
 	if err := r.Run(context.Background()); err != nil {

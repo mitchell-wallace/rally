@@ -25,20 +25,20 @@ import (
 )
 
 type Config struct {
-	WorkspaceDir               string
-	DataDir                    string
-	AgentMixSpecs              []string
-	RouteSpecs                 map[string][]string
-	UseOverrideRoute           bool
-	TargetIterations           int
-	RunHooksOnAutoCommit       bool
-	LapsEnabled                bool
-	Instructions               string
-	TaskPrompt                 string
-	OverwriteMixOnResume       bool
-	Resolver                   Resolver
+	WorkspaceDir             string
+	DataDir                  string
+	AgentMixSpecs            []string
+	RouteSpecs               map[string][]string
+	UseOverrideRoute         bool
+	TargetIterations         int
+	RunHooksOnAutoCommit     bool
+	LapsEnabled              bool
+	Instructions             string
+	TaskPrompt               string
+	OverwriteMixOnResume     bool
+	Resolver                 Resolver
 	LapsInstructionsFile     string
-	FallbackInstructionsFile   string
+	FallbackInstructionsFile string
 }
 
 type Runner struct {
@@ -53,8 +53,8 @@ type Runner struct {
 
 	lapsInstructionsCache     string
 	lapsWarned                bool
-	fallbackInstructionsCache   string
-	fallbackWarned              bool
+	fallbackInstructionsCache string
+	fallbackWarned            bool
 }
 
 var headPullLap = func(ctx context.Context, workspaceDir string) (laps.Lap, error) {
@@ -237,6 +237,7 @@ func (r *Runner) Run(ctx context.Context) error {
 			fmt.Fprintln(os.Stderr, selection.Route.Warning)
 			fmt.Fprintln(log, selection.Route.Warning)
 		}
+		r.prepareExecutorForSelection(relay.ID, runIndex, selection, log)
 
 		// Consume run-scoped message at start of each run
 		// First check if there's an already-consumed message from a failed run
@@ -374,6 +375,27 @@ func (r *Runner) Run(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+func (r *Runner) prepareExecutorForSelection(relayID, runIndex int, selection routeSelection, log io.Writer) {
+	if selection.PreviousAgent == nil {
+		return
+	}
+	if selection.PreviousAgent.Harness != selection.Agent.Harness {
+		return
+	}
+
+	exec := r.executors[selection.Agent.Harness]
+	if exec == nil || !exec.RotateSupported() {
+		return
+	}
+
+	// Each Execute starts a fresh CLI process, so doing nothing here naturally
+	// preserves the existing teardown/respawn fallback path. Rotation is only an
+	// optimization when the adapter opts in and the swap succeeds.
+	if err := exec.RotateModel(selection.Agent.Model); err != nil {
+		fmt.Fprintf(log, "relay %d run %d rotate fallback for %s: %v\n", relayID, runIndex+1, selection.Agent.Harness, err)
+	}
 }
 
 func (r *Runner) runOne(ctx context.Context, relay *store.RelayRecord, runIndex int, picked agent.ResolvedAgent, task runTask, consumedMsg *store.MessageRecord, relayMsg *store.MessageRecord, isHourlyRetry bool, log io.Writer) (bool, bool, bool, error) {

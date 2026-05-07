@@ -13,13 +13,18 @@ func parseEntriesOrDie(t *testing.T, raw []string) []ParsedEntry {
 	return entries
 }
 
-func mustNext(t *testing.T, s *Scheduler) *EntryState {
+func mustNextSelection(t *testing.T, s *Scheduler) *Selection {
 	t.Helper()
-	st, err := s.Next()
+	selection, err := s.Next()
 	if err != nil {
 		t.Fatalf("Next() returned error: %v", err)
 	}
-	return st
+	return selection
+}
+
+func mustNext(t *testing.T, s *Scheduler) *EntryState {
+	t.Helper()
+	return mustNextSelection(t, s).Current
 }
 
 func TestScheduler_Scenario1_NoQuotas(t *testing.T) {
@@ -67,6 +72,36 @@ func TestScheduler_Scenario1_NoQuotas(t *testing.T) {
 	st6 := mustNext(t, s)
 	if st6.Entry.Spec != "claude:opus-4.7" {
 		t.Errorf("after wrap, pick = %q, want opus", st6.Entry.Spec)
+	}
+}
+
+func TestSchedulerNext_ExposesPrevAndCurrentOnAdvance(t *testing.T) {
+	entries := parseEntriesOrDie(t, []string{
+		"opencode:model-a:1",
+		"opencode:model-b:1",
+	})
+	s := NewScheduler(entries)
+
+	first := mustNextSelection(t, s)
+	if first.Prev != nil {
+		t.Fatalf("first selection prev = %+v, want nil", first.Prev)
+	}
+	if first.Current.Entry.Spec != "opencode:model-a" {
+		t.Fatalf("first current = %q, want opencode:model-a", first.Current.Entry.Spec)
+	}
+
+	second := mustNextSelection(t, s)
+	if second.Prev == nil {
+		t.Fatal("second selection prev = nil, want previous entry")
+	}
+	if second.Prev.Entry.Spec != "opencode:model-a" {
+		t.Fatalf("second prev = %q, want opencode:model-a", second.Prev.Entry.Spec)
+	}
+	if second.Current.Entry.Spec != "opencode:model-b" {
+		t.Fatalf("second current = %q, want opencode:model-b", second.Current.Entry.Spec)
+	}
+	if second.Prev.Position == second.Current.Position {
+		t.Fatalf("second selection positions = %d -> %d, want advance", second.Prev.Position, second.Current.Position)
 	}
 }
 

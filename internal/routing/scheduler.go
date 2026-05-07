@@ -14,6 +14,11 @@ type EntryState struct {
 	RangeQuotaUsed  int
 }
 
+type Selection struct {
+	Prev    *EntryState
+	Current *EntryState
+}
+
 type Scheduler struct {
 	mu      sync.Mutex
 	entries []*EntryState
@@ -36,7 +41,7 @@ func NewScheduler(entries []ParsedEntry) *Scheduler {
 	}
 }
 
-func (s *Scheduler) Next() (*EntryState, error) {
+func (s *Scheduler) Next() (*Selection, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -45,19 +50,34 @@ func (s *Scheduler) Next() (*EntryState, error) {
 	}
 
 	if s.pos == -1 {
-		return s.selectFromLocked(0)
+		current, err := s.selectFromLocked(0)
+		if err != nil {
+			return nil, err
+		}
+		return &Selection{Current: current}, nil
 	}
 
 	current := s.entries[s.pos]
+	prev := cloneEntryState(current)
 	if s.shouldStayOnCurrentLocked(current) {
-		return s.recordSelectionLocked(current), nil
+		return &Selection{
+			Prev:    prev,
+			Current: s.recordSelectionLocked(current),
+		}, nil
 	}
 
 	if current.Entry.QuotaRange() && current.ConsecutiveRuns >= current.Entry.QuotaMax && !s.hasAlternativeLocked(current.Position) {
 		return nil, fmt.Errorf("scheduler: all entries exhausted; waiting for recovery")
 	}
 
-	return s.advanceLocked()
+	next, err := s.advanceLocked()
+	if err != nil {
+		return nil, err
+	}
+	return &Selection{
+		Prev:    prev,
+		Current: next,
+	}, nil
 }
 
 func (s *Scheduler) shouldStayOnCurrentLocked(current *EntryState) bool {
@@ -234,4 +254,12 @@ func (s *Scheduler) EntryStates() []*EntryState {
 	out := make([]*EntryState, len(s.entries))
 	copy(out, s.entries)
 	return out
+}
+
+func cloneEntryState(entry *EntryState) *EntryState {
+	if entry == nil {
+		return nil
+	}
+	clone := *entry
+	return &clone
 }
