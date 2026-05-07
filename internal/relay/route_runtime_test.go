@@ -311,6 +311,25 @@ func TestRouteRuntime_CanonicalScenario7_RangeQuotaWaitsWhenAllOthersPaused(t *t
 	}
 }
 
+func TestRouteRuntime_ActiveExhaustedEntryStaysAdvanced(t *testing.T) {
+	rt, resilience := newResolvedRouteRuntimeOrDie(t, map[string][]string{
+		"default": {"op:glm:1", "cx:gpt-5:1"},
+	}, false)
+
+	first := mustNextRouteSelection(t, rt, resilience, "")
+	if got := agentRouteSpec(first.Agent); got != "opencode:glm" {
+		t.Fatalf("pick 1 = %q, want opencode:glm", got)
+	}
+
+	first.Entry.Exhausted = true
+	first.Entry.Frozen = false
+
+	second := mustNextRouteSelection(t, rt, resilience, "")
+	if got := agentRouteSpec(second.Agent); got != "codex:gpt-5" {
+		t.Fatalf("pick 2 = %q, want codex:gpt-5 after exhausting active entry", got)
+	}
+}
+
 func TestRouteRuntime_NoBackendAlwaysUsesDefaultRoute(t *testing.T) {
 	rt, resilience := newResolvedRouteRuntimeOrDie(t, map[string][]string{
 		"default": {"codex:gpt-5.5:1", "gemini:gemini-2.5-pro:1"},

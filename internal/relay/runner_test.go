@@ -3236,17 +3236,92 @@ func TestE2E_LivenessProbeClearsFreezeFlag(t *testing.T) {
 
 	s := newTestStore(t, rallyDir)
 	attempt := 0
+	probeCalls := 0
 	exec := &funcExecutor{
 		probeSupported: true,
 		probeFn: func(ctx context.Context) (bool, error) {
+			probeCalls++
 			return true, nil
 		},
 		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
 			attempt++
+			time.Sleep(50 * time.Millisecond)
+			f, _ := os.Create(filepath.Join(workspaceDir, "success.txt"))
+			f.WriteString("changed")
+			f.Close()
+			return &agent.TryResult{Completed: true, Summary: "success"}, nil
+		},
+	}
+
+	r := NewRunner(s, Config{
+		WorkspaceDir:     workspaceDir,
+		DataDir:          t.TempDir(),
+		AgentMixSpecs:    []string{"cx:1"},
+		TargetIterations: 1,
+		RetryBudget:      3,
+		LivenessProbe:    true,
+		FreezeThreshold:  50 * time.Millisecond,
+	}, map[string]agent.Executor{"codex": exec})
+
+	r.freezeControllerFactory = func(string) reliability.FreezeController {
+		probe := r.buildLivenessProbe(exec)
+		return &fakeFreezeController{
+			check: func(ctx context.Context) (bool, error) {
+				if probe == nil {
+					t.Fatal("expected liveness probe to be built for codex")
+				}
+				if probe.Check(ctx) {
+					return false, nil
+				}
+				return true, nil
+			},
+		}
+	}
+
+	oldInterval := freezeCheckInterval
+	freezeCheckInterval = 30 * time.Millisecond
+	defer func() { freezeCheckInterval = oldInterval }()
+
+	if err := r.Run(context.Background()); err != nil {
+		t.Fatalf("run failed: %v", err)
+	}
+
+	if attempt != 1 {
+		t.Fatalf("attempts = %d, want 1 after successful probe", attempt)
+	}
+	if probeCalls == 0 {
+		t.Fatal("expected liveness probe to run")
+	}
+	relays := s.AllRelays()
+	if len(relays) != 1 || relays[0].CompletedIterations != 1 {
+		t.Fatalf("expected 1 completed iteration, got %+v", relays)
+	}
+}
+
+func TestE2E_LivenessProbeFailureConfirmsFreeze(t *testing.T) {
+	workspaceDir := t.TempDir()
+	rallyDir := filepath.Join(workspaceDir, ".rally")
+	os.MkdirAll(rallyDir, 0o755)
+	initRepo(t, workspaceDir)
+
+	s := newTestStore(t, rallyDir)
+	freezeCh := make(chan struct{})
+	attempt := 0
+	probeCalls := 0
+	var resumeIDs []string
+	exec := &funcExecutor{
+		resumeSupported: true,
+		probeSupported:  true,
+		probeFn: func(ctx context.Context) (bool, error) {
+			probeCalls++
+			return false, nil
+		},
+		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+			attempt++
+			resumeIDs = append(resumeIDs, opts.ResumeSessionID)
 			if attempt == 1 {
-				// Block long enough for freeze detector to trigger ambiguous state
-				time.Sleep(150 * time.Millisecond)
-				return &agent.TryResult{Completed: false, Summary: "blocked"}, nil
+				<-freezeCh
+				return &agent.TryResult{Completed: false, Summary: "freeze", SessionID: "sess-probe"}, nil
 			}
 			f, _ := os.Create(filepath.Join(workspaceDir, "success.txt"))
 			f.WriteString("changed")
@@ -3258,49 +3333,64 @@ func TestE2E_LivenessProbeClearsFreezeFlag(t *testing.T) {
 	r := NewRunner(s, Config{
 		WorkspaceDir:     workspaceDir,
 		DataDir:          t.TempDir(),
-		AgentMixSpecs:    []string{"cc:1"},
+		AgentMixSpecs:    []string{"cx:1"},
 		TargetIterations: 1,
 		RetryBudget:      3,
 		LivenessProbe:    true,
-		FreezeThreshold:  50 * time.Millisecond,
-	}, map[string]agent.Executor{"claude": exec})
+	}, map[string]agent.Executor{"codex": exec})
+
+	triggered := false
+	r.freezeControllerFactory = func(string) reliability.FreezeController {
+		probe := r.buildLivenessProbe(exec)
+		return &fakeFreezeController{
+			check: func(ctx context.Context) (bool, error) {
+				if triggered {
+					return false, nil
+				}
+				if probe == nil {
+					t.Fatal("expected liveness probe to be built for codex")
+				}
+				if probe.Check(ctx) {
+					return false, nil
+				}
+				triggered = true
+				close(freezeCh)
+				return true, nil
+			},
+		}
+	}
 
 	oldInterval := freezeCheckInterval
-	freezeCheckInterval = 30 * time.Millisecond
+	freezeCheckInterval = time.Millisecond
 	defer func() { freezeCheckInterval = oldInterval }()
 
 	if err := r.Run(context.Background()); err != nil {
 		t.Fatalf("run failed: %v", err)
 	}
 
-	if attempt < 1 {
-		t.Fatal("expected at least 1 attempt")
+	if probeCalls == 0 {
+		t.Fatal("expected liveness probe to run")
 	}
-	relays := s.AllRelays()
-	if len(relays) != 1 || relays[0].CompletedIterations != 1 {
-		t.Fatalf("expected 1 completed iteration, got %+v", relays)
+	if got, want := resumeIDs, []string{"", "sess-probe"}; len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
+		t.Fatalf("ResumeSessionIDs = %v, want %v", got, want)
 	}
 }
 
 func TestE2E_ErrorPatternStrategies(t *testing.T) {
 	tests := []struct {
-		name            string
-		logContent      string
-		wantRotate      bool
-		wantNoOp        bool
-		wantWaitResume  bool
-		wantAttempts    int
-		wantCompleted   bool
+		name           string
+		agentSpec      string
+		harness        string
+		logContent     string
+		wantNoOp       bool
+		wantWaitResume bool
+		wantAttempts   int
+		wantCompleted  bool
 	}{
 		{
-			name:       "opencode API bad request rotates route",
-			logContent: "some output\nerror: API bad request from provider\n",
-			wantRotate: true,
-			wantAttempts: 1,
-			wantCompleted: false,
-		},
-		{
 			name:          "codex limit warning no-op",
+			agentSpec:     "cx:1",
+			harness:       "codex",
 			logContent:    "warning: limit warning reached\ncompletion generated\n",
 			wantNoOp:      true,
 			wantAttempts:  1,
@@ -3308,13 +3398,25 @@ func TestE2E_ErrorPatternStrategies(t *testing.T) {
 		},
 		{
 			name:           "claude rate limit wait resume",
+			agentSpec:      "cc:1",
+			harness:        "claude",
 			logContent:     "sending to claude...\nerror 429 Too Many Requests\nretry-after: 1\n",
 			wantWaitResume: true,
 			wantAttempts:   2,
 			wantCompleted:  true,
 		},
 		{
+			name:          "gemini exit status 1 resumes retry",
+			agentSpec:     "ge:1",
+			harness:       "gemini",
+			logContent:    "running gemini-cli...\nprovider error\nexit status 1\n",
+			wantAttempts:  2,
+			wantCompleted: true,
+		},
+		{
 			name:          "unknown failure fresh restart",
+			agentSpec:     "cc:1",
+			harness:       "claude",
 			logContent:    "some unexpected error\nsegfault\n",
 			wantAttempts:  2,
 			wantCompleted: true,
@@ -3346,25 +3448,20 @@ func TestE2E_ErrorPatternStrategies(t *testing.T) {
 					return &agent.TryResult{Completed: true, Summary: "success"}, nil
 				},
 			}
-			executors := map[string]agent.Executor{"claude": exec}
+			executors := map[string]agent.Executor{tt.harness: exec}
 
 			r := NewRunner(s, Config{
 				WorkspaceDir:     workspaceDir,
 				DataDir:          t.TempDir(),
-				AgentMixSpecs:    []string{"cc:1"},
+				AgentMixSpecs:    []string{tt.agentSpec},
 				TargetIterations: 1,
 				RetryBudget:      3,
+				Resolver:         testResolver,
 			}, executors)
 			r.sleepFunc = func(time.Duration) {}
 
 			err := r.Run(context.Background())
 
-			if tt.wantRotate {
-				if err == nil {
-					t.Fatal("expected error after rotate exhausted route")
-				}
-				return
-			}
 			if err != nil {
 				t.Fatalf("run failed: %v", err)
 			}
@@ -3377,6 +3474,63 @@ func TestE2E_ErrorPatternStrategies(t *testing.T) {
 				t.Fatalf("final try Completed = %v, want %v", tries[len(tries)-1].Completed, tt.wantCompleted)
 			}
 		})
+	}
+}
+
+func TestE2E_ErrorPatternRotateAdvancesRoute(t *testing.T) {
+	workspaceDir := t.TempDir()
+	rallyDir := filepath.Join(workspaceDir, ".rally")
+	os.MkdirAll(rallyDir, 0o755)
+	initRepo(t, workspaceDir)
+
+	s := newTestStore(t, rallyDir)
+	var executed []string
+	opencodeExec := &funcExecutor{
+		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+			executed = append(executed, "opencode:"+opts.Model)
+			if opts.LogPath != "" {
+				_ = os.WriteFile(opts.LogPath, []byte("some output\nerror: API bad request from provider\n"), 0o644)
+			}
+			return &agent.TryResult{Completed: false, Summary: "rotate"}, nil
+		},
+	}
+	codexExec := &funcExecutor{
+		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+			executed = append(executed, "codex:"+opts.Model)
+			f, _ := os.Create(filepath.Join(workspaceDir, "success.txt"))
+			f.WriteString("changed")
+			f.Close()
+			return &agent.TryResult{Completed: true, Summary: "success"}, nil
+		},
+	}
+
+	r := NewRunner(s, Config{
+		WorkspaceDir: workspaceDir,
+		DataDir:      t.TempDir(),
+		RouteSpecs: map[string][]string{
+			"default": {"op:glm:1", "cx:gpt-5:1"},
+		},
+		TargetIterations: 1,
+		Resolver:         testResolver,
+		TaskPrompt:       "rotate",
+	}, map[string]agent.Executor{
+		"opencode": opencodeExec,
+		"codex":    codexExec,
+	})
+
+	if err := r.Run(context.Background()); err != nil {
+		t.Fatalf("run failed: %v", err)
+	}
+
+	if got, want := executed, []string{"opencode:glm", "codex:gpt-5"}; len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
+		t.Fatalf("executed route = %v, want %v", got, want)
+	}
+	tries := s.AllTries()
+	if len(tries) != 2 {
+		t.Fatalf("tries = %d, want 2", len(tries))
+	}
+	if tries[0].AttemptNumber != 1 || tries[1].AttemptNumber != 1 {
+		t.Fatalf("attempt numbers = [%d %d], want [1 1] after route advance", tries[0].AttemptNumber, tries[1].AttemptNumber)
 	}
 }
 
@@ -3451,7 +3605,40 @@ func TestE2E_WindowsFreezeDisabledRetryBudgetExhaustion(t *testing.T) {
 	// Simulate Windows path: freeze controller disabled
 	r.freezeControllerFactory = func(string) reliability.FreezeController { return nil }
 
-	_ = r.Run(context.Background())
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	done := make(chan error, 1)
+	go func() {
+		done <- r.Run(ctx)
+	}()
+
+	deadline := time.After(2 * time.Second)
+	for {
+		tries := s.AllTries()
+		status := s.GetAgentStatus("claude")
+		foundPause := false
+		for _, e := range status {
+			if e.EventType == "paused" {
+				foundPause = true
+				break
+			}
+		}
+		if len(tries) == 2 && foundPause {
+			cancel()
+			break
+		}
+		select {
+		case <-deadline:
+			t.Fatal("timed out waiting for retry-budget exhaustion without freeze detection")
+		case <-time.After(10 * time.Millisecond):
+		}
+	}
+
+	err := <-done
+	if err == nil || err != context.Canceled {
+		t.Fatalf("Run() error = %v, want context.Canceled after stopping paused-agent wait", err)
+	}
 
 	tries := s.AllTries()
 	if len(tries) != 2 {

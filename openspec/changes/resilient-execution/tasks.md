@@ -80,10 +80,10 @@
 
 ## 11. Verification
 
-- [ ] 11.1 End-to-end: long opencode relay with GLM → Kimi advance — verify cheap rotation (no process teardown observed in logs)
-- [ ] 11.2 End-to-end: claude rate-limit error mid-relay — verify wait + resume strategy (cooldown observed, session resumed, no fresh restart)
-- [ ] 11.3 End-to-end: simulated freeze (process pause) — verify graceful-kill at threshold, retry via resume path, recovery indicator displayed
-- [ ] 11.4 Liveness probe E2E (with codex): verify probe success clears freeze flag; probe failure confirms freeze
-- [ ] 11.5 Each error pattern in the table produces its documented strategy in integration tests
-- [ ] 11.6 Confirm `.rally/run-state.json` lifecycle: preserved on resume, cleared on fresh-start, cleared at relay-runner start of each run
-- [ ] 11.7 Confirm Windows path: freeze detection disabled, retry-budget-exhaustion still works as the only failure-driven advance trigger
+- [x] 11.1 End-to-end: long opencode relay with GLM → Kimi advance — verify cheap rotation (no process teardown observed in logs)
+- [x] 11.2 End-to-end: claude rate-limit error mid-relay — verify wait + resume strategy (cooldown observed, session resumed, no fresh restart)
+- [x] 11.3 End-to-end: simulated freeze (process pause) — verify graceful-kill at threshold, retry via resume path, recovery indicator displayed
+- [x] 11.4 Liveness probe E2E (with codex): verify probe success clears freeze flag; probe failure confirms freeze
+- [x] 11.5 Each error pattern in the table produces its documented strategy in integration tests
+- [x] 11.6 Confirm `.rally/run-state.json` lifecycle: preserved on resume, cleared on fresh-start, cleared at relay-runner start of each run
+- [x] 11.7 Confirm Windows path: freeze detection disabled, retry-budget-exhaustion still works as the only failure-driven advance trigger

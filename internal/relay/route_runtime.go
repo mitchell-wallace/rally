@@ -211,7 +211,7 @@ func (r *routeRuntime) syncRecoverySignals(scheduler *routing.Scheduler, resilie
 		status, since := resilience.getState(resolved.Harness)
 		switch status {
 		case StateActive:
-			if state.Frozen || state.Exhausted {
+			if state.Frozen {
 				scheduler.OnAgentRecovered(state)
 			}
 		case StatePaused:
