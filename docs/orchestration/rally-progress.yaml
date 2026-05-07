@@ -1,25 +1,15 @@
 version: 1
-updated_at: "2026-05-07T09:37:35Z"
+updated_at: "2026-05-07T09:48:35Z"
+active_batch:
+    agent_mix:
+        - cx
+    batch_id: 18
+    completed_iterations: 1
+    ended_at: ""
+    started_at: "2026-05-07T09:38:14Z"
+    target_iterations: 3
 history_window: 50
 recent_sessions:
-    - session_id: 3
-      batch_id: 3
-      iteration_index: 1
-      agent: opencode
-      status: completed
-      started_at: "2026-05-04T11:41:22Z"
-      ended_at: "2026-05-04T12:18:44Z"
-      runtime_seconds: 2241
-      summary: Implement Phase 1 (Schema extension) for rally-config-and-harness-shortcuts change. Extended V2Config with [defaults], [microbeads], [fallback], and [harness.<name>] sections. Backwards-compatible loading of root-level model fields with deprecation notes. SaveV2 writes only new shape. 14 unit tests covering all Phase 1 requirements.
-      files_touched:
-        - internal/config/config_v2.go
-        - internal/config/config_v2_test.go
-        - openspec/changes/rally-config-and-harness-shortcuts/tasks.md
-      commits:
-        - e3360da
-      follow_ups:
-        - Phase 2 (Harness/model resolution) is next in tasks.md
-      transcript_path: /home/agent/.local/share/rally/sessions/session-3/terminal.log
     - session_id: 4
       batch_id: 3
       iteration_index: 2
@@ -817,3 +807,22 @@ recent_sessions:
       ended_at: "2026-05-07T09:37:35Z"
       runtime_seconds: 1973
       transcript_path: /home/agent/.local/share/rally/sessions/session-52/terminal.log
+    - session_id: 53
+      batch_id: 18
+      iteration_index: 1
+      agent: codex
+      status: completed
+      started_at: "2026-05-07T09:38:14Z"
+      ended_at: "2026-05-07T09:48:35Z"
+      runtime_seconds: 620
+      summary: Completed phase 11 of resilient-execution by fixing rotate-path recovery semantics, strengthening verification coverage for liveness probes, error-pattern strategies, run-state lifecycle, and Windows retry-budget handling, and marking the verification tasks complete.
+      files_touched:
+        - internal/relay/route_runtime.go
+        - internal/relay/route_runtime_test.go
+        - internal/relay/runner_test.go
+        - openspec/changes/resilient-execution/tasks.md
+      commits:
+        - 6f8c621 Complete resilient-execution verification phase
+      follow_ups:
+        - None.
+      transcript_path: /home/agent/.local/share/rally/sessions/session-53/terminal.log
