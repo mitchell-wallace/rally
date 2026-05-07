@@ -35,6 +35,7 @@ type Config struct {
 	FreezeThreshold          time.Duration
 	LivenessProbe            bool
 	CharsPerToken            map[string]float64
+	RetryBudget              int
 	RunHooksOnAutoCommit     bool
 	LapsEnabled              bool
 	Instructions             string
@@ -61,6 +62,7 @@ type Runner struct {
 	fallbackWarned            bool
 
 	freezeControllerFactory func(logPath string) reliability.FreezeController
+	sleepFunc               func(time.Duration)
 }
 
 var headPullLap = func(ctx context.Context, workspaceDir string) (laps.Lap, error) {
@@ -467,10 +469,14 @@ func (r *Runner) runOne(
 
 	exec := r.executors[picked.Harness]
 
-	maxAttempts := 3
+	maxAttempts := r.cfg.RetryBudget
+	if maxAttempts <= 0 {
+		maxAttempts = 5
+	}
 	if isHourlyRetry {
 		maxAttempts = 1
 	}
+attemptLoop:
 	for attempt := 1; attempt <= maxAttempts; attempt++ {
 		if ctx.Err() != nil {
 			return false, false, false, ctx.Err()
@@ -684,6 +690,31 @@ func (r *Runner) runOne(
 			}
 		}
 
+		// Error classification and strategy dispatch.
+		if failed {
+			logLines := readLastNLines(tryLogPath, 50)
+			decision := reliability.ClassifyError(logLines)
+			switch decision.Strategy {
+			case reliability.StrategyNoOp:
+				failed = false
+				success = true
+			case reliability.StrategyRotate:
+				r.skipFlag.Store(true)
+			case reliability.StrategyWaitResume:
+				if attempt < maxAttempts && decision.Cooldown > 0 {
+					if r.sleepFunc != nil {
+						r.sleepFunc(decision.Cooldown)
+					} else {
+						time.Sleep(decision.Cooldown)
+					}
+				}
+			case reliability.StrategyFreshRestart:
+				if attempt < maxAttempts {
+					sessionID = ""
+				}
+			}
+		}
+
 		tryRecord := store.TryRecord{
 			ID:            r.store.NextTryID(),
 			RunID:         runIndex + 1,
@@ -745,7 +776,11 @@ func (r *Runner) runOne(
 			}
 			success = true
 			lastResult = result
-			break
+			break attemptLoop
+		}
+
+		if r.skipFlag.Load() {
+			break attemptLoop
 		}
 
 		if result != nil {
@@ -941,6 +976,18 @@ func countNonEmptyLines(s string) int {
 		}
 	}
 	return count
+}
+
+func readLastNLines(path string, n int) []string {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil
+	}
+	lines := strings.Split(string(data), "\n")
+	if len(lines) > n {
+		lines = lines[len(lines)-n:]
+	}
+	return lines
 }
 
 func containsInt(slice []int, val int) bool {

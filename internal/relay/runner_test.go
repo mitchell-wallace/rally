@@ -2472,7 +2472,7 @@ func TestRunnerRouteIntegration_AssigneesQuotasFreezeAndRoleFiles(t *testing.T) 
 		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
 			if opts.Persona == "claude" && opts.RoleInstructions == "Senior route guidance." && failSeniorClaudeAttempts > 0 {
 				failSeniorClaudeAttempts--
-				return &agent.TryResult{Completed: false, Summary: "rate limit"}, nil
+				return &agent.TryResult{Completed: false, Summary: "simulated senior claude failure"}, nil
 			}
 
 			executions = append(executions, execution{
@@ -2516,6 +2516,7 @@ func TestRunnerRouteIntegration_AssigneesQuotasFreezeAndRoleFiles(t *testing.T) 
 			"JUNIOR":  []string{"cx:2"},
 		},
 		TargetIterations: 4,
+		RetryBudget:      3,
 		LapsEnabled:      true,
 		Instructions:     "Base instructions.",
 		Resolver:         testResolver,
@@ -3053,5 +3054,418 @@ mix = "cc"
 
 	if capturedModel != "defaults-opus" {
 		t.Errorf("expected model 'defaults-opus' reaching executor, got %q", capturedModel)
+	}
+}
+
+// --- Phase 11: Verification ---
+
+func TestE2E_CheapRotationOpencodeGLMToKimi(t *testing.T) {
+	workspaceDir := t.TempDir()
+	rallyDir := filepath.Join(workspaceDir, ".rally")
+	os.MkdirAll(rallyDir, 0o755)
+	initRepo(t, workspaceDir)
+
+	s := newTestStore(t, rallyDir)
+	var modelsExecuted []string
+	exec := &funcExecutor{
+		rotateSupported: true,
+		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+			modelsExecuted = append(modelsExecuted, opts.Model)
+			f, _ := os.Create(filepath.Join(workspaceDir, fmt.Sprintf("change-%s.txt", opts.Model)))
+			f.WriteString("changed")
+			f.Close()
+			return &agent.TryResult{Completed: true, Summary: "ok"}, nil
+		},
+	}
+
+	r := NewRunner(s, Config{
+		WorkspaceDir: workspaceDir,
+		DataDir:      t.TempDir(),
+		RouteSpecs: map[string][]string{
+			"default": {"op:glm:1", "op:kimi:1"},
+		},
+		TargetIterations: 2,
+		Resolver:         testResolver,
+		TaskPrompt:       "rotate",
+	}, map[string]agent.Executor{"opencode": exec})
+
+	if err := r.Run(context.Background()); err != nil {
+		t.Fatalf("run failed: %v", err)
+	}
+
+	if got := exec.rotateCalls; len(got) != 1 || got[0] != "kimi" {
+		t.Fatalf("RotateModel calls = %v, want [kimi]", got)
+	}
+	if got, want := modelsExecuted, []string{"glm", "kimi"}; len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
+		t.Fatalf("executed models = %v, want %v", got, want)
+	}
+}
+
+func TestE2E_ClaudeRateLimitWaitAndResume(t *testing.T) {
+	workspaceDir := t.TempDir()
+	rallyDir := filepath.Join(workspaceDir, ".rally")
+	os.MkdirAll(rallyDir, 0o755)
+	initRepo(t, workspaceDir)
+
+	s := newTestStore(t, rallyDir)
+	attempt := 0
+	var capturedSessionIDs []string
+	var sleptDurations []time.Duration
+	exec := &funcExecutor{
+		resumeSupported: true,
+		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+			attempt++
+			capturedSessionIDs = append(capturedSessionIDs, opts.ResumeSessionID)
+			if attempt == 1 {
+				if opts.LogPath != "" {
+					_ = os.WriteFile(opts.LogPath, []byte("sending to claude...\nerror 429 Too Many Requests\nretry-after: 1\n"), 0o644)
+				}
+				return &agent.TryResult{Completed: false, Summary: "rate limit hit", SessionID: "sess-rate"}, nil
+			}
+			f, _ := os.Create(filepath.Join(workspaceDir, "success.txt"))
+			f.WriteString("changed")
+			f.Close()
+			return &agent.TryResult{Completed: true, Summary: "success"}, nil
+		},
+	}
+	executors := map[string]agent.Executor{"claude": exec}
+
+	r := NewRunner(s, Config{
+		WorkspaceDir:     workspaceDir,
+		DataDir:          t.TempDir(),
+		AgentMixSpecs:    []string{"cc:1"},
+		TargetIterations: 1,
+		RetryBudget:      3,
+	}, executors)
+	r.sleepFunc = func(d time.Duration) { sleptDurations = append(sleptDurations, d) }
+
+	if err := r.Run(context.Background()); err != nil {
+		t.Fatalf("run failed: %v", err)
+	}
+
+	if len(capturedSessionIDs) != 2 {
+		t.Fatalf("expected 2 attempts, got %d", len(capturedSessionIDs))
+	}
+	if capturedSessionIDs[0] != "" {
+		t.Fatalf("attempt 1 ResumeSessionID = %q, want empty", capturedSessionIDs[0])
+	}
+	if capturedSessionIDs[1] != "sess-rate" {
+		t.Fatalf("attempt 2 ResumeSessionID = %q, want sess-rate", capturedSessionIDs[1])
+	}
+	if len(sleptDurations) != 1 || sleptDurations[0] != 1*time.Second {
+		t.Fatalf("slept durations = %v, want [1s]", sleptDurations)
+	}
+}
+
+func TestE2E_SimulatedFreezeGracefulKillResumeRecovery(t *testing.T) {
+	workspaceDir := t.TempDir()
+	rallyDir := filepath.Join(workspaceDir, ".rally")
+	os.MkdirAll(rallyDir, 0o755)
+	initRepo(t, workspaceDir)
+
+	s := newTestStore(t, rallyDir)
+	freezeCh := make(chan struct{})
+	attempt := 0
+	var resumeIDs []string
+	exec := &funcExecutor{
+		resumeSupported: true,
+		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+			attempt++
+			resumeIDs = append(resumeIDs, opts.ResumeSessionID)
+			if attempt == 1 {
+				<-freezeCh
+				return &agent.TryResult{Completed: false, Summary: "freeze", SessionID: "sess-freeze"}, nil
+			}
+			f, _ := os.Create(filepath.Join(workspaceDir, "success.txt"))
+			f.WriteString("changed")
+			f.Close()
+			return &agent.TryResult{Completed: true, Summary: "success"}, nil
+		},
+	}
+
+	r := NewRunner(s, Config{
+		WorkspaceDir:     workspaceDir,
+		DataDir:          t.TempDir(),
+		AgentMixSpecs:    []string{"cc:1"},
+		TargetIterations: 1,
+		RetryBudget:      3,
+	}, map[string]agent.Executor{"claude": exec})
+
+	controllerCount := 0
+	r.freezeControllerFactory = func(logPath string) reliability.FreezeController {
+		_ = logPath
+		controllerCount++
+		if controllerCount == 1 {
+			triggered := false
+			return &fakeFreezeController{
+				check: func(context.Context) (bool, error) {
+					if triggered {
+						return false, nil
+					}
+					triggered = true
+					close(freezeCh)
+					return true, nil
+				},
+			}
+		}
+		return &fakeFreezeController{}
+	}
+
+	oldInterval := freezeCheckInterval
+	freezeCheckInterval = time.Millisecond
+	defer func() { freezeCheckInterval = oldInterval }()
+
+	if err := r.Run(context.Background()); err != nil {
+		t.Fatalf("run failed: %v", err)
+	}
+
+	if got, want := resumeIDs, []string{"", "sess-freeze"}; len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
+		t.Fatalf("ResumeSessionIDs = %v, want %v", got, want)
+	}
+	relays := s.AllRelays()
+	if len(relays) != 1 || relays[0].CompletedIterations != 1 {
+		t.Fatalf("expected 1 completed iteration, got %+v", relays)
+	}
+}
+
+func TestE2E_LivenessProbeClearsFreezeFlag(t *testing.T) {
+	workspaceDir := t.TempDir()
+	rallyDir := filepath.Join(workspaceDir, ".rally")
+	os.MkdirAll(rallyDir, 0o755)
+	initRepo(t, workspaceDir)
+
+	s := newTestStore(t, rallyDir)
+	attempt := 0
+	exec := &funcExecutor{
+		probeSupported: true,
+		probeFn: func(ctx context.Context) (bool, error) {
+			return true, nil
+		},
+		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+			attempt++
+			if attempt == 1 {
+				// Block long enough for freeze detector to trigger ambiguous state
+				time.Sleep(150 * time.Millisecond)
+				return &agent.TryResult{Completed: false, Summary: "blocked"}, nil
+			}
+			f, _ := os.Create(filepath.Join(workspaceDir, "success.txt"))
+			f.WriteString("changed")
+			f.Close()
+			return &agent.TryResult{Completed: true, Summary: "success"}, nil
+		},
+	}
+
+	r := NewRunner(s, Config{
+		WorkspaceDir:     workspaceDir,
+		DataDir:          t.TempDir(),
+		AgentMixSpecs:    []string{"cc:1"},
+		TargetIterations: 1,
+		RetryBudget:      3,
+		LivenessProbe:    true,
+		FreezeThreshold:  50 * time.Millisecond,
+	}, map[string]agent.Executor{"claude": exec})
+
+	oldInterval := freezeCheckInterval
+	freezeCheckInterval = 30 * time.Millisecond
+	defer func() { freezeCheckInterval = oldInterval }()
+
+	if err := r.Run(context.Background()); err != nil {
+		t.Fatalf("run failed: %v", err)
+	}
+
+	if attempt < 1 {
+		t.Fatal("expected at least 1 attempt")
+	}
+	relays := s.AllRelays()
+	if len(relays) != 1 || relays[0].CompletedIterations != 1 {
+		t.Fatalf("expected 1 completed iteration, got %+v", relays)
+	}
+}
+
+func TestE2E_ErrorPatternStrategies(t *testing.T) {
+	tests := []struct {
+		name            string
+		logContent      string
+		wantRotate      bool
+		wantNoOp        bool
+		wantWaitResume  bool
+		wantAttempts    int
+		wantCompleted   bool
+	}{
+		{
+			name:       "opencode API bad request rotates route",
+			logContent: "some output\nerror: API bad request from provider\n",
+			wantRotate: true,
+			wantAttempts: 1,
+			wantCompleted: false,
+		},
+		{
+			name:          "codex limit warning no-op",
+			logContent:    "warning: limit warning reached\ncompletion generated\n",
+			wantNoOp:      true,
+			wantAttempts:  1,
+			wantCompleted: true,
+		},
+		{
+			name:           "claude rate limit wait resume",
+			logContent:     "sending to claude...\nerror 429 Too Many Requests\nretry-after: 1\n",
+			wantWaitResume: true,
+			wantAttempts:   2,
+			wantCompleted:  true,
+		},
+		{
+			name:          "unknown failure fresh restart",
+			logContent:    "some unexpected error\nsegfault\n",
+			wantAttempts:  2,
+			wantCompleted: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			workspaceDir := t.TempDir()
+			rallyDir := filepath.Join(workspaceDir, ".rally")
+			os.MkdirAll(rallyDir, 0o755)
+			initRepo(t, workspaceDir)
+
+			s := newTestStore(t, rallyDir)
+			attempt := 0
+			exec := &funcExecutor{
+				resumeSupported: true,
+				fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+					attempt++
+					if attempt == 1 && opts.LogPath != "" {
+						_ = os.WriteFile(opts.LogPath, []byte(tt.logContent), 0o644)
+					}
+					if attempt < tt.wantAttempts {
+						return &agent.TryResult{Completed: false, Summary: "fail", SessionID: "sess-1"}, nil
+					}
+					f, _ := os.Create(filepath.Join(workspaceDir, "success.txt"))
+					f.WriteString("changed")
+					f.Close()
+					return &agent.TryResult{Completed: true, Summary: "success"}, nil
+				},
+			}
+			executors := map[string]agent.Executor{"claude": exec}
+
+			r := NewRunner(s, Config{
+				WorkspaceDir:     workspaceDir,
+				DataDir:          t.TempDir(),
+				AgentMixSpecs:    []string{"cc:1"},
+				TargetIterations: 1,
+				RetryBudget:      3,
+			}, executors)
+			r.sleepFunc = func(time.Duration) {}
+
+			err := r.Run(context.Background())
+
+			if tt.wantRotate {
+				if err == nil {
+					t.Fatal("expected error after rotate exhausted route")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("run failed: %v", err)
+			}
+
+			tries := s.AllTries()
+			if len(tries) != tt.wantAttempts {
+				t.Fatalf("attempts = %d, want %d", len(tries), tt.wantAttempts)
+			}
+			if tries[len(tries)-1].Completed != tt.wantCompleted {
+				t.Fatalf("final try Completed = %v, want %v", tries[len(tries)-1].Completed, tt.wantCompleted)
+			}
+		})
+	}
+}
+
+func TestE2E_RunStateClearedAtRelayStart(t *testing.T) {
+	workspaceDir := t.TempDir()
+	rallyDir := filepath.Join(workspaceDir, ".rally")
+	os.MkdirAll(rallyDir, 0o755)
+	initRepo(t, workspaceDir)
+
+	if err := progress.SaveRunState(workspaceDir, &progress.RunState{RunID: "old-run", HandoffState: 1, RecordedLaps: []string{"lap-old"}}); err != nil {
+		t.Fatalf("SaveRunState error: %v", err)
+	}
+
+	s := newTestStore(t, rallyDir)
+	exec := &funcExecutor{
+		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+			f, _ := os.Create(filepath.Join(workspaceDir, "success.txt"))
+			f.WriteString("changed")
+			f.Close()
+			return &agent.TryResult{Completed: true}, nil
+		},
+	}
+	executors := map[string]agent.Executor{"claude": exec}
+
+	r := NewRunner(s, Config{
+		WorkspaceDir:     workspaceDir,
+		DataDir:          t.TempDir(),
+		AgentMixSpecs:    []string{"cc:1"},
+		TargetIterations: 1,
+	}, executors)
+
+	if err := r.Run(context.Background()); err != nil {
+		t.Fatalf("run failed: %v", err)
+	}
+
+	rs, err := progress.LoadRunState(workspaceDir)
+	if err != nil {
+		t.Fatalf("LoadRunState error: %v", err)
+	}
+	if rs.RunID != "" {
+		t.Fatalf("expected run-state cleared at relay start, got RunID=%q", rs.RunID)
+	}
+	if rs.HandoffState != 0 {
+		t.Fatalf("expected HandoffState=0 after relay start, got %d", rs.HandoffState)
+	}
+	if len(rs.RecordedLaps) != 0 {
+		t.Fatalf("expected RecordedLaps empty after relay start, got %v", rs.RecordedLaps)
+	}
+}
+
+func TestE2E_WindowsFreezeDisabledRetryBudgetExhaustion(t *testing.T) {
+	workspaceDir := t.TempDir()
+	rallyDir := filepath.Join(workspaceDir, ".rally")
+	os.MkdirAll(rallyDir, 0o755)
+	initRepo(t, workspaceDir)
+
+	s := newTestStore(t, rallyDir)
+	exec := &funcExecutor{
+		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+			return &agent.TryResult{Completed: false, Summary: "fail"}, nil
+		},
+	}
+	executors := map[string]agent.Executor{"claude": exec}
+
+	r := NewRunner(s, Config{
+		WorkspaceDir:     workspaceDir,
+		DataDir:          t.TempDir(),
+		AgentMixSpecs:    []string{"cc:1"},
+		TargetIterations: 1,
+		RetryBudget:      2,
+	}, executors)
+	// Simulate Windows path: freeze controller disabled
+	r.freezeControllerFactory = func(string) reliability.FreezeController { return nil }
+
+	_ = r.Run(context.Background())
+
+	tries := s.AllTries()
+	if len(tries) != 2 {
+		t.Fatalf("expected 2 tries (retry budget exhausted), got %d", len(tries))
+	}
+	status := s.GetAgentStatus("claude")
+	foundPause := false
+	for _, e := range status {
+		if e.EventType == "paused" {
+			foundPause = true
+			break
+		}
+	}
+	if !foundPause {
+		t.Fatal("expected agent paused after retry budget exhaustion")
 	}
 }

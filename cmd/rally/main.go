@@ -152,21 +152,22 @@ func runRelay(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	runnerCfg := relay.Config{
-		WorkspaceDir:             workspaceDir,
-		DataDir:                  dataDir,
-		AgentMixSpecs:            selectedSpecs,
-		RouteSpecs:               cfg.Routes,
-		UseOverrideRoute:         usedOverride,
-		TargetIterations:         iterations,
-		FreezeThreshold:          cfg.Reliability.FreezeThreshold(),
-		LivenessProbe:            cfg.Reliability.LivenessProbe,
-		CharsPerToken:            cfg.Reliability.CharsPerToken,
-		RunHooksOnAutoCommit:     cfg.RunHooksOnAutoCommit,
-		LapsEnabled:              lapsEnabled,
-		LapsInstructionsFile:     cfg.Laps.InstructionsFile,
-		FallbackInstructionsFile: cfg.Fallback.InstructionsFile,
-	}
+		runnerCfg := relay.Config{
+			WorkspaceDir:             workspaceDir,
+			DataDir:                  dataDir,
+			AgentMixSpecs:            selectedSpecs,
+			RouteSpecs:               cfg.Routes,
+			UseOverrideRoute:         usedOverride,
+			TargetIterations:         iterations,
+			FreezeThreshold:          cfg.Reliability.FreezeThreshold(),
+			LivenessProbe:            cfg.Reliability.LivenessProbe,
+			CharsPerToken:            cfg.Reliability.CharsPerToken,
+			RetryBudget:              cfg.Reliability.RetryBudget,
+			RunHooksOnAutoCommit:     cfg.RunHooksOnAutoCommit,
+			LapsEnabled:              lapsEnabled,
+			LapsInstructionsFile:     cfg.Laps.InstructionsFile,
+			FallbackInstructionsFile: cfg.Fallback.InstructionsFile,
+		}
 
 	runnerCfg.Resolver = func(spec string) (agent.ResolvedAgent, error) {
 		ra, err := cfg.ResolveAgent(spec)
