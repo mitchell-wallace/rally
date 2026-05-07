@@ -1,13 +1,5 @@
 version: 1
-updated_at: "2026-05-07T09:59:46Z"
-active_batch:
-    agent_mix:
-        - cx
-    batch_id: 18
-    completed_iterations: 3
-    ended_at: ""
-    started_at: "2026-05-07T09:38:14Z"
-    target_iterations: 3
+updated_at: "2026-05-07T10:00:09Z"
 history_window: 50
 recent_sessions:
     - session_id: 6
@@ -833,6 +825,8 @@ recent_sessions:
       agent: codex
       status: completed
       started_at: "2026-05-07T09:57:44Z"
+      ended_at: "2026-05-07T10:00:09Z"
+      runtime_seconds: 145
       summary: Verified openspec/changes/resilient-execution against its completed artifacts using the verify-change workflow; no code/spec drift found, focused resilient-execution package tests passed, and a full go test ./... run passed.
       follow_ups:
         - No code changes were required in this session; the earlier isolated internal/agent test failure was not reproducible when rerun alone.
