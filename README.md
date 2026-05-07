@@ -177,6 +177,17 @@ SENIOR = ["cx", "cc:opus"]
 JUNIOR = ["op:z:4", "op:gk:2", "ge"]
 UI = ["ge:2-5", "cc:sonnet"]
 VERIFY = ["cx", "cc:opus"]
+
+[reliability]
+freeze_threshold_secs = 180
+liveness_probe = false
+retry_budget = 5
+
+[reliability.chars_per_token]
+claude = 3.5
+codex = 4.0
+gemini = 4.0
+opencode = 4.0
 ```
 
 ### `[defaults]`
@@ -319,6 +330,49 @@ to surface (default 40). The only supported `output_strategy` is `"tail"`.
 `$MODEL` is **not** a recognised placeholder in `command`. If present, the
 config loader rejects it with a clear error directing you to `model_flag`.
 
+### `[reliability]`
+
+The `[reliability]` table controls retry, freeze-detection, and liveness-probe behaviour introduced in v0.7.0.
+
+| Field                    | Type   | Default | Purpose                                                              |
+|--------------------------|--------|---------|----------------------------------------------------------------------|
+| `freeze_threshold_secs`  | int    | `180`   | Seconds of log inactivity before a try is considered frozen          |
+| `liveness_probe`         | bool   | `false` | Enable experimental side-channel probe for ambiguous freeze signals  |
+| `retry_budget`           | int    | `5`     | Maximum retries per try before advancing to the next route entry     |
+
+`[reliability.chars_per_token]` is an optional map of per-harness divisors used by the token estimator. When absent, the harness adapter's built-in default is used.
+
+```toml
+[reliability]
+freeze_threshold_secs = 180
+liveness_probe = false
+retry_budget = 5
+
+[reliability.chars_per_token]
+claude = 3.5
+codex = 4.0
+```
+
+**Freeze detection** is conservative by design: a try is flagged frozen only when the log file has not been modified for `freeze_threshold_secs` **and** the agent has zero active TCP connections **and** its IO byte counters have not advanced. On Linux all three conditions must hold; on macOS the connection clause is treated as satisfied (no procfs equivalent); on Windows freeze detection is disabled entirely.
+
+When a freeze is confirmed, Rally graceful-kills the agent process group (SIGTERM → 5-second drain → SIGKILL), counts the try as retry-eligible, and re-attempts it through the resume-aware retry path if the harness supports session resume.
+
+**Liveness probe** is opt-in and skipped for harnesses whose adapter does not declare support. The probe sends a lightweight "respond with OK" side-channel prompt when the freeze signal is ambiguous (log mtime is advancing but IO has been idle for 60 s). A successful probe clears the freeze flag and lets the try continue; failure or timeout confirms the freeze.
+
+### Error Classification
+
+Rally classifies harness failures using a static pattern table in `internal/reliability/patterns.go`. This table is the single place to update when a harness CLI changes its error output or a new pattern is discovered.
+
+| Pattern                                  | Strategy            | Meaning                                      |
+|------------------------------------------|---------------------|----------------------------------------------|
+| opencode "API bad request" from provider | `rotate`            | Advance to the next route entry immediately  |
+| gemini-cli exit 1                        | `resume + retry`    | Resume the session and retry once            |
+| claude rate-limit interrupt              | `wait + resume`     | Wait for the cooldown, then resume and retry |
+| codex completion despite limit warning   | `no-op`             | Treat as a successful completion             |
+| unknown failure                          | `fresh restart`     | Start a new try from scratch                 |
+
+Patterns are matched deterministically against the last N lines of the try log. New patterns are added to the `ErrorPatterns` slice; missing patterns fall through to `fresh restart`, which is the safe default.
+
 ### `schema_version`
 
 The config file carries a top-level `schema_version` integer (currently `2`).
@@ -440,6 +494,18 @@ Rally v0.2.0 uses a new internal architecture:
   `instructions`, `update`, `version`.
 
 ## Release Notes
+
+### v0.7.0
+
+**Resilient execution.** Rally gains resume-aware retries, cheap in-place provider rotation, freeze detection, opt-in liveness probes, and harness-specific error classification.
+
+- **Resume-aware retries** — Harness adapters declare `ResumeSupported()`. When a try fails and a session ID was captured, the retry passes the harness-specific resume flag instead of restarting from scratch. Preserves `.rally/run-state.json` across resume retries; clears it on fresh-start retries.
+- **Cheap rotation** — When the scheduler advances to a next entry that uses the same harness with a different model, Rally calls `RotateModel` on the existing adapter instead of tearing down and respawning the process. Falls back to teardown when the adapter does not support rotation or returns an error.
+- **Freeze detection** — Uses v0.3.0 monitoring signals (log mtime, connection count, IO delta) to detect stalled tries. Default threshold is 180 seconds, tunable via `[reliability].freeze_threshold_secs`. Confirmed freezes are graceful-killed and retried via the resume path.
+- **Liveness probe** — Optional side-channel prompt for ambiguous freeze signals. Gated by `[reliability].liveness_probe = true` and per-adapter capability. Default off.
+- **Error classification** — Known harness error patterns are mapped to retry strategies (`rotate`, `resume + retry`, `wait + resume`, `no-op`, `fresh restart`) in `internal/reliability/patterns.go`. New patterns are added to that table.
+- **Retry budget bumped** — Default per-try retry budget raised from 3 to 5, configurable via `[reliability].retry_budget`.
+- **Platform notes** — Freeze detection uses log-mtime + connections + IO on Linux, log-mtime only on macOS, and is disabled on Windows.
 
 ### v0.6.0
 

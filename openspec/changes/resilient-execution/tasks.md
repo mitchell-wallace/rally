@@ -73,10 +73,10 @@
 
 ## 10. Documentation
 
-- [ ] 10.1 Update README with the new `[reliability]` config section and example values
-- [ ] 10.2 Document the error-pattern table as the single update point for new harness errors
-- [ ] 10.3 v0.7.0 release notes: resume-aware retries, cheap rotation, freeze detection, opt-in liveness probe, error classification, retry budget bumped to 5
-- [ ] 10.4 Document Windows freeze-detection limitation and the macOS log-mtime-only path
+- [x] 10.1 Update README with the new `[reliability]` config section and example values
+- [x] 10.2 Document the error-pattern table as the single update point for new harness errors
+- [x] 10.3 v0.7.0 release notes: resume-aware retries, cheap rotation, freeze detection, opt-in liveness probe, error classification, retry budget bumped to 5
+- [x] 10.4 Document Windows freeze-detection limitation and the macOS log-mtime-only path
 
 ## 11. Verification
 
