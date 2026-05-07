@@ -19,6 +19,17 @@ type opencodeJSONEvent struct {
 	Text string `json:"text"`
 }
 
+func (o *OpenCodeExecutor) ResumeSupported() bool                { return false }
+func (o *OpenCodeExecutor) RotateSupported() bool                { return false }
+func (o *OpenCodeExecutor) LivenessProbeSupported() bool         { return false }
+func (o *OpenCodeExecutor) CharsPerToken() float64               { return 0 }
+func (o *OpenCodeExecutor) RotateModel(string) error {
+	return fmt.Errorf("rotate not supported by opencode adapter")
+}
+func (o *OpenCodeExecutor) ProbeLiveness(_ context.Context) (bool, error) {
+	return false, fmt.Errorf("liveness probe not supported by opencode adapter")
+}
+
 func (o *OpenCodeExecutor) Execute(ctx context.Context, opts RunOptions) (*TryResult, error) {
 	prompt := BuildPrompt(opts)
 

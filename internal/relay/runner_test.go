@@ -26,6 +26,17 @@ func (f *funcExecutor) Execute(ctx context.Context, opts agent.RunOptions) (*age
 	return f.fn(ctx, opts)
 }
 
+func (f *funcExecutor) ResumeSupported() bool        { return false }
+func (f *funcExecutor) RotateSupported() bool        { return false }
+func (f *funcExecutor) LivenessProbeSupported() bool { return false }
+func (f *funcExecutor) CharsPerToken() float64       { return 0 }
+func (f *funcExecutor) RotateModel(string) error {
+	return fmt.Errorf("rotate not supported by func executor")
+}
+func (f *funcExecutor) ProbeLiveness(_ context.Context) (bool, error) {
+	return false, fmt.Errorf("liveness probe not supported by func executor")
+}
+
 func runGit(t *testing.T, dir string, args ...string) string {
 	t.Helper()
 	cmd := exec.Command("git", append([]string{"-C", dir}, args...)...)

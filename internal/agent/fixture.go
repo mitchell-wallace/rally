@@ -17,6 +17,17 @@ type FixtureExecutor struct {
 	Dir        string
 }
 
+func (f *FixtureExecutor) ResumeSupported() bool                { return false }
+func (f *FixtureExecutor) RotateSupported() bool                { return false }
+func (f *FixtureExecutor) LivenessProbeSupported() bool         { return false }
+func (f *FixtureExecutor) CharsPerToken() float64               { return 0 }
+func (f *FixtureExecutor) RotateModel(string) error {
+	return fmt.Errorf("rotate not supported by fixture adapter")
+}
+func (f *FixtureExecutor) ProbeLiveness(_ context.Context) (bool, error) {
+	return false, fmt.Errorf("liveness probe not supported by fixture adapter")
+}
+
 func (f *FixtureExecutor) Execute(ctx context.Context, opts RunOptions) (*TryResult, error) {
 	dir := f.Dir
 	if dir == "" && f.DiffPath != "" {

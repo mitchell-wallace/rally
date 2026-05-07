@@ -18,6 +18,17 @@ type GenericExecutor struct {
 	Model          string
 }
 
+func (g *GenericExecutor) ResumeSupported() bool                { return false }
+func (g *GenericExecutor) RotateSupported() bool                { return false }
+func (g *GenericExecutor) LivenessProbeSupported() bool         { return false }
+func (g *GenericExecutor) CharsPerToken() float64               { return 0 }
+func (g *GenericExecutor) RotateModel(string) error {
+	return fmt.Errorf("rotate not supported by generic adapter")
+}
+func (g *GenericExecutor) ProbeLiveness(_ context.Context) (bool, error) {
+	return false, fmt.Errorf("liveness probe not supported by generic adapter")
+}
+
 func (g *GenericExecutor) Execute(ctx context.Context, opts RunOptions) (*TryResult, error) {
 	if g.OutputStrategy != "" && g.OutputStrategy != "tail" {
 		return nil, fmt.Errorf("generic harness: unsupported output_strategy %q", g.OutputStrategy)

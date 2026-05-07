@@ -58,6 +58,17 @@ func (c *ClaudeExecutor) Execute(ctx context.Context, opts RunOptions) (*TryResu
 	return parseClaudeResult(out, resultRaw)
 }
 
+func (c *ClaudeExecutor) ResumeSupported() bool                { return false }
+func (c *ClaudeExecutor) RotateSupported() bool                { return false }
+func (c *ClaudeExecutor) LivenessProbeSupported() bool         { return false }
+func (c *ClaudeExecutor) CharsPerToken() float64               { return 0 }
+func (c *ClaudeExecutor) RotateModel(string) error {
+	return fmt.Errorf("rotate not supported by claude adapter")
+}
+func (c *ClaudeExecutor) ProbeLiveness(_ context.Context) (bool, error) {
+	return false, fmt.Errorf("liveness probe not supported by claude adapter")
+}
+
 func parseClaudeResult(out, resultRaw []byte) (*TryResult, error) {
 	if resultRaw == nil {
 		return &TryResult{Completed: false, Summary: string(out)}, nil

@@ -538,3 +538,53 @@ func TestRunLoggedCommandStreamsTryLog(t *testing.T) {
 		t.Fatalf("unexpected log contents: %q", string(logData))
 	}
 }
+
+func TestAdapterCapabilityDefaults(t *testing.T) {
+	adapters := map[string]Executor{
+		"claude":   &ClaudeExecutor{},
+		"codex":    &CodexExecutor{},
+		"opencode": &OpenCodeExecutor{},
+		"gemini":   &GeminiExecutor{},
+		"generic":  &GenericExecutor{},
+		"fixture":  &FixtureExecutor{},
+	}
+
+	for name, adapter := range adapters {
+		t.Run(name, func(t *testing.T) {
+			if adapter.ResumeSupported() {
+				t.Error("ResumeSupported() = true, want false")
+			}
+			if adapter.RotateSupported() {
+				t.Error("RotateSupported() = true, want false")
+			}
+			if adapter.LivenessProbeSupported() {
+				t.Error("LivenessProbeSupported() = true, want false")
+			}
+			if adapter.CharsPerToken() != 0 {
+				t.Errorf("CharsPerToken() = %v, want 0", adapter.CharsPerToken())
+			}
+			if err := adapter.RotateModel("new-model"); err == nil {
+				t.Error("RotateModel() = nil, want error")
+			}
+			ok, err := adapter.ProbeLiveness(context.Background())
+			if ok {
+				t.Error("ProbeLiveness() = true, want false")
+			}
+			if err == nil {
+				t.Error("ProbeLiveness() err = nil, want error")
+			}
+		})
+	}
+}
+
+func TestTryResultSessionIDField(t *testing.T) {
+	tr := &TryResult{Completed: true, Summary: "test", SessionID: "sess-123"}
+	if tr.SessionID != "sess-123" {
+		t.Errorf("SessionID = %q, want %q", tr.SessionID, "sess-123")
+	}
+
+	trZero := &TryResult{Completed: true}
+	if trZero.SessionID != "" {
+		t.Errorf("SessionID = %q, want empty string", trZero.SessionID)
+	}
+}

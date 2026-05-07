@@ -31,8 +31,15 @@ type TryResult struct {
 	RemainingWork    string
 	MessageAddressed *bool
 	FilesChanged     []string
+	SessionID        string
 }
 
 type Executor interface {
 	Execute(ctx context.Context, opts RunOptions) (*TryResult, error)
+	ResumeSupported() bool
+	RotateSupported() bool
+	LivenessProbeSupported() bool
+	CharsPerToken() float64
+	RotateModel(newModel string) error
+	ProbeLiveness(ctx context.Context) (bool, error)
 }

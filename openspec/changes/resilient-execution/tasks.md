@@ -1,10 +1,10 @@
 ## 1. Adapter capability methods
 
-- [ ] 1.1 Add `ResumeSupported() bool`, `RotateSupported() bool`, `LivenessProbeSupported() bool`, `CharsPerToken() float64` to the executor adapter interface
-- [ ] 1.2 Add `RotateModel(newModel string) error` and `ProbeLiveness(ctx) (bool, error)` to the executor adapter interface
-- [ ] 1.3 Default implementations on existing adapters return `false` / `0` / not-supported errors
-- [ ] 1.4 Add `SessionID string` field to `TryResult`
-- [ ] 1.5 Unit tests: each adapter returns expected defaults; interface compiles without changes to call sites that don't use the new methods
+- [x] 1.1 Add `ResumeSupported() bool`, `RotateSupported() bool`, `LivenessProbeSupported() bool`, `CharsPerToken() float64` to the executor adapter interface
+- [x] 1.2 Add `RotateModel(newModel string) error` and `ProbeLiveness(ctx) (bool, error)` to the executor adapter interface
+- [x] 1.3 Default implementations on existing adapters return `false` / `0` / not-supported errors
+- [x] 1.4 Add `SessionID string` field to `TryResult`
+- [x] 1.5 Unit tests: each adapter returns expected defaults; interface compiles without changes to call sites that don't use the new methods
 
 ## 2. Per-harness adapter wiring (incremental)
 
