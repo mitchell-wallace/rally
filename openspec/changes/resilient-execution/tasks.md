@@ -49,12 +49,12 @@
 
 ## 7. Error classification
 
-- [ ] 7.1 Add `internal/reliability/patterns.go` with the documented pattern→strategy table
-- [ ] 7.2 Match against the last N lines of the try log post-failure (deterministic)
-- [ ] 7.3 Strategy dispatch: `rotate`, `resume + retry`, `wait + resume`, `no-op`, `fresh restart`
-- [ ] 7.4 For `wait + resume`, extract cooldown duration from error message when available; else use a default
-- [ ] 7.5 Unknown failure falls through to fresh restart (safe default)
-- [ ] 7.6 Integration tests: fixture log content for each pattern triggers the correct strategy
+- [x] 7.1 Add `internal/reliability/patterns.go` with the documented pattern→strategy table
+- [x] 7.2 Match against the last N lines of the try log post-failure (deterministic)
+- [x] 7.3 Strategy dispatch: `rotate`, `resume + retry`, `wait + resume`, `no-op`, `fresh restart`
+- [x] 7.4 For `wait + resume`, extract cooldown duration from error message when available; else use a default
+- [x] 7.5 Unknown failure falls through to fresh restart (safe default)
+- [x] 7.6 Integration tests: fixture log content for each pattern triggers the correct strategy
 
 ## 8. Config schema (`[reliability]`)
 
