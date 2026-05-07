@@ -58,10 +58,10 @@
 
 ## 8. Config schema (`[reliability]`)
 
-- [ ] 8.1 Extend the v0.5.0 schema with `[reliability]` table: `freeze_threshold_secs` (int, default 180), `liveness_probe` (bool, default false), `retry_budget` (int, default 5)
-- [ ] 8.2 Add `[reliability].chars_per_token` map for per-harness divisor overrides (used by v0.3.0 token estimator)
-- [ ] 8.3 Defaults applied when fields absent
-- [ ] 8.4 Unit tests: each field default, each field overridable
+- [x] 8.1 Extend the v0.5.0 schema with `[reliability]` table: `freeze_threshold_secs` (int, default 180), `liveness_probe` (bool, default false), `retry_budget` (int, default 5)
+- [x] 8.2 Add `[reliability].chars_per_token` map for per-harness divisor overrides (used by v0.3.0 token estimator)
+- [x] 8.3 Defaults applied when fields absent
+- [x] 8.4 Unit tests: each field default, each field overridable
 
 ## 9. Live-monitor extensions
 

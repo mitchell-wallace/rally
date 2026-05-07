@@ -131,6 +131,66 @@ liveness_probe = true
 	}
 }
 
+func TestLoadV2_ReliabilityDefaults(t *testing.T) {
+	dir := t.TempDir()
+	writeConfig(t, dir, `schema_version = 2
+`)
+
+	cfg, err := LoadV2(dir)
+	if err != nil {
+		t.Fatalf("LoadV2 failed: %v", err)
+	}
+
+	if got, want := cfg.Reliability.FreezeThresholdSecs, 180; got != want {
+		t.Errorf("Default FreezeThresholdSecs = %d, want %d", got, want)
+	}
+	if got, want := cfg.Reliability.RetryBudget, 5; got != want {
+		t.Errorf("Default RetryBudget = %d, want %d", got, want)
+	}
+	if cfg.Reliability.LivenessProbe {
+		t.Errorf("Default LivenessProbe = true, want false")
+	}
+	if cfg.Reliability.CharsPerToken == nil {
+		t.Errorf("Default CharsPerToken should be an initialized map")
+	}
+}
+
+func TestLoadV2_ReliabilityOverrides(t *testing.T) {
+	dir := t.TempDir()
+	writeConfig(t, dir, `schema_version = 2
+
+[reliability]
+freeze_threshold_secs = 120
+liveness_probe = true
+retry_budget = 10
+
+[reliability.chars_per_token]
+claude = 3.5
+codex = 4.0
+`)
+
+	cfg, err := LoadV2(dir)
+	if err != nil {
+		t.Fatalf("LoadV2 failed: %v", err)
+	}
+
+	if got, want := cfg.Reliability.FreezeThresholdSecs, 120; got != want {
+		t.Errorf("FreezeThresholdSecs = %d, want %d", got, want)
+	}
+	if got, want := cfg.Reliability.RetryBudget, 10; got != want {
+		t.Errorf("RetryBudget = %d, want %d", got, want)
+	}
+	if !cfg.Reliability.LivenessProbe {
+		t.Errorf("LivenessProbe = false, want true")
+	}
+	if got, want := cfg.Reliability.CharsPerToken["claude"], 3.5; got != want {
+		t.Errorf("CharsPerToken['claude'] = %v, want %v", got, want)
+	}
+	if got, want := cfg.Reliability.CharsPerToken["codex"], 4.0; got != want {
+		t.Errorf("CharsPerToken['codex'] = %v, want %v", got, want)
+	}
+}
+
 func TestLoadV2_DefaultsOverridesRoot(t *testing.T) {
 	dir := t.TempDir()
 	writeConfig(t, dir, `claude_model = "root-value"
