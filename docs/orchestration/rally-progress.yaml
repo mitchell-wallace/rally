@@ -1,10 +1,10 @@
 version: 1
-updated_at: "2026-05-07T04:31:41Z"
+updated_at: "2026-05-07T04:43:37Z"
 active_batch:
     agent_mix:
         - cx
     batch_id: 15
-    completed_iterations: 1
+    completed_iterations: 2
     ended_at: ""
     started_at: "2026-05-07T04:25:11Z"
     target_iterations: 3
@@ -739,3 +739,29 @@ recent_sessions:
       follow_ups:
         - Phase 5 freeze detection is the next incomplete phase in openspec/changes/resilient-execution/tasks.md.
       transcript_path: /home/agent/.local/share/rally/sessions/session-46/terminal.log
+    - session_id: 47
+      batch_id: 15
+      iteration_index: 2
+      agent: codex
+      status: completed
+      started_at: "2026-05-07T04:31:41Z"
+      ended_at: "2026-05-07T04:43:37Z"
+      runtime_seconds: 716
+      summary: Implemented phase 5 freeze detection for resilient-execution with platform-aware detection, graceful process-group shutdown, scheduler freeze retry wiring, and tests.
+      files_touched:
+        - cmd/rally/main.go
+        - internal/config/config_v2.go
+        - internal/config/config_v2_test.go
+        - internal/monitor/monitor.go
+        - internal/relay/runner.go
+        - internal/relay/runner_test.go
+        - internal/reliability/freeze.go
+        - internal/reliability/freeze_test.go
+        - internal/reliability/freeze_unix.go
+        - internal/reliability/freeze_windows.go
+        - openspec/changes/resilient-execution/tasks.md
+      commits:
+        - 34979b3 Add freeze detection retry path
+      follow_ups:
+        - Phase 6 can build the liveness probe on top of the new freeze controller and reliability config surface.
+      transcript_path: /home/agent/.local/share/rally/sessions/session-47/terminal.log
