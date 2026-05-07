@@ -1,5 +1,5 @@
 version: 1
-updated_at: "2026-05-07T09:57:20Z"
+updated_at: "2026-05-07T09:57:44Z"
 active_batch:
     agent_mix:
         - cx
@@ -821,8 +821,10 @@ recent_sessions:
       batch_id: 18
       iteration_index: 2
       agent: codex
-      status: done
+      status: completed
       started_at: "2026-05-07T09:48:35Z"
+      ended_at: "2026-05-07T09:57:44Z"
+      runtime_seconds: 549
       summary: 'Verified the resilient-execution change and fixed a scheduler/spec mismatch: retry-budget exhaustion no longer auto-clears through OnAgentRecovered, detector-driven freeze recovery still clears correctly, and paused hourly-retry expiry now re-arms exhausted entries through an explicit reset path.'
       files_touched:
         - internal/routing/scheduler.go
