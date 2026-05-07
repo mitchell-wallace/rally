@@ -1,10 +1,10 @@
 version: 1
-updated_at: "2026-05-07T00:49:32Z"
+updated_at: "2026-05-07T00:59:05Z"
 active_batch:
     agent_mix:
         - op
     batch_id: 14
-    completed_iterations: 1
+    completed_iterations: 2
     ended_at: ""
     started_at: "2026-05-07T00:44:10Z"
     target_iterations: 3
@@ -678,3 +678,25 @@ recent_sessions:
       follow_ups:
         - 'Phase 2: Per-harness adapter wiring with harness-specific capability declarations'
       transcript_path: /home/agent/.local/share/rally/sessions/session-43/terminal.log
+    - session_id: 44
+      batch_id: 14
+      iteration_index: 2
+      agent: opencode
+      status: completed
+      started_at: "2026-05-07T00:49:32Z"
+      ended_at: "2026-05-07T00:59:05Z"
+      runtime_seconds: 573
+      summary: 'Implemented Phase 2 of resilient-execution: per-harness adapter wiring with resume support, rotation, liveness probe declarations, and session-id capture.'
+      files_touched:
+        - internal/agent/executor.go
+        - internal/agent/claude.go
+        - internal/agent/codex.go
+        - internal/agent/opencode.go
+        - internal/agent/gemini.go
+        - internal/agent/agent_test.go
+        - openspec/changes/resilient-execution/tasks.md
+      commits:
+        - "3973e46"
+      follow_ups:
+        - Phase 3 Resume-aware retry path is next
+      transcript_path: /home/agent/.local/share/rally/sessions/session-44/terminal.log
