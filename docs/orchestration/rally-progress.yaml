@@ -1,13 +1,5 @@
 version: 1
-updated_at: "2026-05-07T08:41:31Z"
-active_batch:
-    agent_mix:
-        - claude
-    batch_id: 16
-    completed_iterations: 1
-    ended_at: ""
-    started_at: "2026-05-07T08:33:44Z"
-    target_iterations: 2
+updated_at: "2026-05-07T08:43:43Z"
 history_window: 50
 recent_sessions:
     - session_id: 1
@@ -812,3 +804,12 @@ recent_sessions:
         - Phase 10 (Documentation) is next
         - Phase 11 (Verification/E2E) follows documentation
       transcript_path: /home/agent/.local/share/rally/sessions/session-49/terminal.log
+    - session_id: 50
+      batch_id: 16
+      iteration_index: 2
+      agent: claude
+      status: failed
+      started_at: "2026-05-07T08:41:31Z"
+      ended_at: "2026-05-07T08:43:43Z"
+      runtime_seconds: 131
+      transcript_path: /home/agent/.local/share/rally/sessions/session-50/terminal.log
