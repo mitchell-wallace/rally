@@ -12,6 +12,7 @@ type RunState struct {
 	RunID        string   `json:"run_id"`
 	HandoffState int      `json:"handoff_state"`
 	RecordedLaps []string `json:"recorded_laps"`
+	SessionID    string   `json:"session_id,omitempty"`
 }
 
 // RunStatePath returns the path to run-state.json for a workspace.

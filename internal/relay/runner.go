@@ -398,12 +398,15 @@ func (r *Runner) runOne(ctx context.Context, relay *store.RelayRecord, runIndex 
 
 	var previousSummary string
 	var lastResult *agent.TryResult
+	var sessionID string
 	success := false
 
 	roleInstructions, err := r.resolveRoleInstructions(task.Assignee)
 	if err != nil {
 		return false, false, false, err
 	}
+
+	exec := r.executors[picked.Harness]
 
 	maxAttempts := 3
 	if isHourlyRetry {
@@ -415,6 +418,19 @@ func (r *Runner) runOne(ctx context.Context, relay *store.RelayRecord, runIndex 
 		}
 		if r.stopFlag.Load() {
 			return false, false, true, nil
+		}
+
+		if attempt > 1 {
+			if exec != nil && exec.ResumeSupported() && sessionID != "" {
+				rs, rsErr := progress.LoadRunState(r.cfg.WorkspaceDir)
+				if rsErr == nil {
+					rs.SessionID = sessionID
+					_ = progress.SaveRunState(r.cfg.WorkspaceDir, rs)
+				}
+			} else {
+				sessionID = ""
+				_ = progress.SaveRunState(r.cfg.WorkspaceDir, &progress.RunState{RunID: runID, HandoffState: 0, RecordedLaps: []string{}})
+			}
 		}
 
 		opts := agent.RunOptions{
@@ -430,6 +446,7 @@ func (r *Runner) runOne(ctx context.Context, relay *store.RelayRecord, runIndex 
 			PreviousSummary:  previousSummary,
 			RecentTryContext: recentContext.String(),
 			LapsEnabled:      r.cfg.LapsEnabled,
+			ResumeSessionID:  sessionID,
 		}
 		prompt := agent.BuildPrompt(opts)
 
@@ -619,6 +636,9 @@ func (r *Runner) runOne(ctx context.Context, relay *store.RelayRecord, runIndex 
 			if result != nil {
 				previousSummary = result.Summary
 				lastResult = result
+				if result.SessionID != "" {
+					sessionID = result.SessionID
+				}
 			} else {
 				previousSummary = ""
 				lastResult = &agent.TryResult{Completed: false}
@@ -635,6 +655,9 @@ func (r *Runner) runOne(ctx context.Context, relay *store.RelayRecord, runIndex 
 		if result != nil {
 			previousSummary = result.Summary
 			lastResult = result
+			if result.SessionID != "" {
+				sessionID = result.SessionID
+			}
 		} else {
 			previousSummary = ""
 			lastResult = &agent.TryResult{Completed: false}

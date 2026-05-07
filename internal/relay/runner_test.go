@@ -19,14 +19,15 @@ import (
 )
 
 type funcExecutor struct {
-	fn func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error)
+	fn              func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error)
+	resumeSupported bool
 }
 
 func (f *funcExecutor) Execute(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
 	return f.fn(ctx, opts)
 }
 
-func (f *funcExecutor) ResumeSupported() bool        { return false }
+func (f *funcExecutor) ResumeSupported() bool        { return f.resumeSupported }
 func (f *funcExecutor) RotateSupported() bool        { return false }
 func (f *funcExecutor) LivenessProbeSupported() bool { return false }
 func (f *funcExecutor) CharsPerToken() float64       { return 0 }
@@ -364,6 +365,279 @@ func TestRetryWithinRun(t *testing.T) {
 	relays := s.AllRelays()
 	if len(relays) != 1 || relays[0].CompletedIterations != 1 {
 		t.Fatalf("expected 1 completed iteration, got %+v", relays)
+	}
+}
+
+func TestResumeRetryPassesSessionID(t *testing.T) {
+	workspaceDir := t.TempDir()
+	rallyDir := filepath.Join(workspaceDir, ".rally")
+	os.MkdirAll(rallyDir, 0o755)
+	initRepo(t, workspaceDir)
+
+	s := newTestStore(t, rallyDir)
+	attempt := 0
+	var capturedSessionIDs []string
+	exec := &funcExecutor{
+		resumeSupported: true,
+		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+			attempt++
+			capturedSessionIDs = append(capturedSessionIDs, opts.ResumeSessionID)
+			if attempt < 3 {
+				f, _ := os.Create(filepath.Join(workspaceDir, fmt.Sprintf("attempt-%d.txt", attempt)))
+				f.WriteString("changed")
+				f.Close()
+				return &agent.TryResult{Completed: false, Summary: "fail", SessionID: fmt.Sprintf("session-%d", attempt)}, nil
+			}
+			f, _ := os.Create(filepath.Join(workspaceDir, "success.txt"))
+			f.WriteString("changed")
+			f.Close()
+			return &agent.TryResult{Completed: true, Summary: "success"}, nil
+		},
+	}
+	executors := map[string]agent.Executor{"claude": exec}
+
+	r := NewRunner(s, Config{
+		WorkspaceDir:     workspaceDir,
+		DataDir:          t.TempDir(),
+		AgentMixSpecs:    []string{"cc:1"},
+		TargetIterations: 1,
+	}, executors)
+
+	if err := r.Run(context.Background()); err != nil {
+		t.Fatalf("run failed: %v", err)
+	}
+
+	if len(capturedSessionIDs) != 3 {
+		t.Fatalf("expected 3 attempts, got %d", len(capturedSessionIDs))
+	}
+	if capturedSessionIDs[0] != "" {
+		t.Fatalf("attempt 1 ResumeSessionID = %q, want empty", capturedSessionIDs[0])
+	}
+	if capturedSessionIDs[1] != "session-1" {
+		t.Fatalf("attempt 2 ResumeSessionID = %q, want session-1", capturedSessionIDs[1])
+	}
+	if capturedSessionIDs[2] != "session-2" {
+		t.Fatalf("attempt 3 ResumeSessionID = %q, want session-2", capturedSessionIDs[2])
+	}
+}
+
+func TestResumeRetryPreservesRunState(t *testing.T) {
+	workspaceDir := t.TempDir()
+	rallyDir := filepath.Join(workspaceDir, ".rally")
+	os.MkdirAll(rallyDir, 0o755)
+	initRepo(t, workspaceDir)
+
+	s := newTestStore(t, rallyDir)
+	attempt := 0
+	exec := &funcExecutor{
+		resumeSupported: true,
+		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+			attempt++
+			if attempt == 1 {
+				if err := progress.RecordLap(workspaceDir, "lap-1"); err != nil {
+					t.Errorf("RecordLap error: %v", err)
+				}
+				if err := progress.SetHandoff(workspaceDir); err != nil {
+					t.Errorf("SetHandoff error: %v", err)
+				}
+				return &agent.TryResult{Completed: false, Summary: "fail", SessionID: "sess-1"}, nil
+			}
+			f, _ := os.Create(filepath.Join(workspaceDir, "success.txt"))
+			f.WriteString("changed")
+			f.Close()
+			return &agent.TryResult{Completed: true, Summary: "success"}, nil
+		},
+	}
+	executors := map[string]agent.Executor{"claude": exec}
+
+	r := NewRunner(s, Config{
+		WorkspaceDir:     workspaceDir,
+		DataDir:          t.TempDir(),
+		AgentMixSpecs:    []string{"cc:1"},
+		TargetIterations: 1,
+		LapsEnabled:      true,
+	}, executors)
+
+	if err := r.Run(context.Background()); err != nil {
+		t.Fatalf("run failed: %v", err)
+	}
+
+	rs, err := progress.LoadRunState(workspaceDir)
+	if err != nil {
+		t.Fatalf("LoadRunState error: %v", err)
+	}
+	_ = rs
+
+	if attempt != 2 {
+		t.Fatalf("expected 2 attempts, got %d", attempt)
+	}
+}
+
+func TestFreshStartRetryClearsRunState(t *testing.T) {
+	workspaceDir := t.TempDir()
+	rallyDir := filepath.Join(workspaceDir, ".rally")
+	os.MkdirAll(rallyDir, 0o755)
+	initRepo(t, workspaceDir)
+
+	s := newTestStore(t, rallyDir)
+	attempt := 0
+	var capturedSessionIDs []string
+	exec := &funcExecutor{
+		resumeSupported: false,
+		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+			attempt++
+			capturedSessionIDs = append(capturedSessionIDs, opts.ResumeSessionID)
+			if attempt == 1 {
+				if err := progress.RecordLap(workspaceDir, "lap-1"); err != nil {
+					t.Errorf("RecordLap error: %v", err)
+				}
+				if err := progress.SetHandoff(workspaceDir); err != nil {
+					t.Errorf("SetHandoff error: %v", err)
+				}
+				return &agent.TryResult{Completed: false, Summary: "fail", SessionID: "sess-1"}, nil
+			}
+			f, _ := os.Create(filepath.Join(workspaceDir, "success.txt"))
+			f.WriteString("changed")
+			f.Close()
+			return &agent.TryResult{Completed: true, Summary: "success"}, nil
+		},
+	}
+	executors := map[string]agent.Executor{"claude": exec}
+
+	r := NewRunner(s, Config{
+		WorkspaceDir:     workspaceDir,
+		DataDir:          t.TempDir(),
+		AgentMixSpecs:    []string{"cc:1"},
+		TargetIterations: 1,
+		LapsEnabled:      true,
+	}, executors)
+
+	if err := r.Run(context.Background()); err != nil {
+		t.Fatalf("run failed: %v", err)
+	}
+
+	if len(capturedSessionIDs) != 2 {
+		t.Fatalf("expected 2 attempts, got %d", len(capturedSessionIDs))
+	}
+	if capturedSessionIDs[0] != "" {
+		t.Fatalf("attempt 1 ResumeSessionID = %q, want empty", capturedSessionIDs[0])
+	}
+	if capturedSessionIDs[1] != "" {
+		t.Fatalf("attempt 2 ResumeSessionID = %q, want empty (fresh-start)", capturedSessionIDs[1])
+	}
+}
+
+func TestResumeRetryMidHandoffPreservesFlag(t *testing.T) {
+	workspaceDir := t.TempDir()
+	rallyDir := filepath.Join(workspaceDir, ".rally")
+	os.MkdirAll(rallyDir, 0o755)
+	initRepo(t, workspaceDir)
+
+	s := newTestStore(t, rallyDir)
+	attempt := 0
+	var runStateAtAttempt2 *progress.RunState
+	exec := &funcExecutor{
+		resumeSupported: true,
+		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+			attempt++
+			if attempt == 1 {
+				if err := progress.SetHandoff(workspaceDir); err != nil {
+					t.Errorf("SetHandoff error: %v", err)
+				}
+				return &agent.TryResult{Completed: false, Summary: "crashed mid-handoff", SessionID: "sess-crash"}, nil
+			}
+			if attempt == 2 {
+				rs, err := progress.LoadRunState(workspaceDir)
+				if err != nil {
+					t.Errorf("LoadRunState error: %v", err)
+				}
+				runStateAtAttempt2 = rs
+			}
+			f, _ := os.Create(filepath.Join(workspaceDir, "success.txt"))
+			f.WriteString("changed")
+			f.Close()
+			return &agent.TryResult{Completed: true, Summary: "success"}, nil
+		},
+	}
+	executors := map[string]agent.Executor{"claude": exec}
+
+	r := NewRunner(s, Config{
+		WorkspaceDir:     workspaceDir,
+		DataDir:          t.TempDir(),
+		AgentMixSpecs:    []string{"cc:1"},
+		TargetIterations: 1,
+		LapsEnabled:      true,
+	}, executors)
+
+	if err := r.Run(context.Background()); err != nil {
+		t.Fatalf("run failed: %v", err)
+	}
+
+	if runStateAtAttempt2 == nil {
+		t.Fatal("expected run-state to be loaded during attempt 2")
+	}
+	if runStateAtAttempt2.HandoffState != 1 {
+		t.Fatalf("HandoffState = %d, want 1 (preserved on resume)", runStateAtAttempt2.HandoffState)
+	}
+	if runStateAtAttempt2.SessionID != "sess-crash" {
+		t.Fatalf("SessionID = %q, want sess-crash (preserved on resume)", runStateAtAttempt2.SessionID)
+	}
+}
+
+func TestFreshStartRetryMidHandoffClearsFlag(t *testing.T) {
+	workspaceDir := t.TempDir()
+	rallyDir := filepath.Join(workspaceDir, ".rally")
+	os.MkdirAll(rallyDir, 0o755)
+	initRepo(t, workspaceDir)
+
+	s := newTestStore(t, rallyDir)
+	attempt := 0
+	var runStateAtAttempt2 *progress.RunState
+	exec := &funcExecutor{
+		resumeSupported: false,
+		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+			attempt++
+			if attempt == 1 {
+				if err := progress.SetHandoff(workspaceDir); err != nil {
+					t.Errorf("SetHandoff error: %v", err)
+				}
+				return &agent.TryResult{Completed: false, Summary: "crashed mid-handoff", SessionID: "sess-crash"}, nil
+			}
+			if attempt == 2 {
+				rs, err := progress.LoadRunState(workspaceDir)
+				if err != nil {
+					t.Errorf("LoadRunState error: %v", err)
+				}
+				runStateAtAttempt2 = rs
+			}
+			f, _ := os.Create(filepath.Join(workspaceDir, "success.txt"))
+			f.WriteString("changed")
+			f.Close()
+			return &agent.TryResult{Completed: true, Summary: "success"}, nil
+		},
+	}
+	executors := map[string]agent.Executor{"claude": exec}
+
+	r := NewRunner(s, Config{
+		WorkspaceDir:     workspaceDir,
+		DataDir:          t.TempDir(),
+		AgentMixSpecs:    []string{"cc:1"},
+		TargetIterations: 1,
+		LapsEnabled:      true,
+	}, executors)
+
+	if err := r.Run(context.Background()); err != nil {
+		t.Fatalf("run failed: %v", err)
+	}
+
+	if runStateAtAttempt2 == nil {
+		t.Fatal("expected run-state to be loaded during attempt 2")
+	}
+	if runStateAtAttempt2.HandoffState != 0 {
+		t.Fatalf("HandoffState = %d, want 0 (cleared on fresh-start)", runStateAtAttempt2.HandoffState)
+	}
+	if runStateAtAttempt2.SessionID != "" {
+		t.Fatalf("SessionID = %q, want empty (cleared on fresh-start)", runStateAtAttempt2.SessionID)
 	}
 }
 

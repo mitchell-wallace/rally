@@ -16,10 +16,10 @@
 
 ## 3. Resume-aware retry path
 
-- [ ] 3.1 Update relay-runner's retry loop to capture `TryResult.SessionID` and stash it for the duration of the run
-- [ ] 3.2 On retry, if `ResumeSupported()` and a session-id exists, pass resume parameters to `Execute`
-- [ ] 3.3 Preserve `.rally/run-state.json` on resume retries; clear on fresh-start retries
-- [ ] 3.4 Unit tests: resume path preserves state, fresh-start path clears state, mid-handoff crash + resume preserves handoff flag, mid-handoff crash + fresh-start clears flag
+- [x] 3.1 Update relay-runner's retry loop to capture `TryResult.SessionID` and stash it for the duration of the run
+- [x] 3.2 On retry, if `ResumeSupported()` and a session-id exists, pass resume parameters to `Execute`
+- [x] 3.3 Preserve `.rally/run-state.json` on resume retries; clear on fresh-start retries
+- [x] 3.4 Unit tests: resume path preserves state, fresh-start path clears state, mid-handoff crash + resume preserves handoff flag, mid-handoff crash + fresh-start clears flag
 
 ## 4. Cheap-rotation path
 

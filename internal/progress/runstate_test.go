@@ -113,3 +113,35 @@ func TestSetHandoff(t *testing.T) {
 		t.Errorf("HandoffState = %d, want 1", rs.HandoffState)
 	}
 }
+
+func TestRunStateSessionID(t *testing.T) {
+	tmp := t.TempDir()
+	rs := &RunState{
+		RunID:     "run-1",
+		SessionID: "sess-abc",
+	}
+	if err := SaveRunState(tmp, rs); err != nil {
+		t.Fatalf("SaveRunState error: %v", err)
+	}
+
+	loaded, err := LoadRunState(tmp)
+	if err != nil {
+		t.Fatalf("LoadRunState error: %v", err)
+	}
+	if loaded.SessionID != "sess-abc" {
+		t.Errorf("SessionID = %q, want sess-abc", loaded.SessionID)
+	}
+
+	loaded.SessionID = "sess-updated"
+	if err := SaveRunState(tmp, loaded); err != nil {
+		t.Fatalf("SaveRunState error: %v", err)
+	}
+
+	loaded2, err := LoadRunState(tmp)
+	if err != nil {
+		t.Fatalf("LoadRunState error: %v", err)
+	}
+	if loaded2.SessionID != "sess-updated" {
+		t.Errorf("SessionID = %q, want sess-updated", loaded2.SessionID)
+	}
+}
