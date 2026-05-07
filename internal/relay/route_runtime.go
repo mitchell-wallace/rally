@@ -216,7 +216,7 @@ func (r *routeRuntime) syncRecoverySignals(scheduler *routing.Scheduler, resilie
 			}
 		case StatePaused:
 			if !resilience.NowFunc().Before(since.Add(resilience.PauseDuration)) && (state.Frozen || state.Exhausted) {
-				scheduler.OnAgentRecovered(state)
+				scheduler.ResetEntry(state)
 			} else if !state.Frozen || !state.Exhausted {
 				scheduler.OnAgentFailed(state, "paused")
 			}

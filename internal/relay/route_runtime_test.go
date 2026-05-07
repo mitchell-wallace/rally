@@ -330,6 +330,34 @@ func TestRouteRuntime_ActiveExhaustedEntryStaysAdvanced(t *testing.T) {
 	}
 }
 
+func TestRouteRuntime_PausedExpiryResetsExhaustedEntry(t *testing.T) {
+	rt, resilience := newResolvedRouteRuntimeOrDie(t, map[string][]string{
+		"default": {"claude:opus-4.7"},
+	}, false)
+
+	now := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
+	resilience.NowFunc = func() time.Time { return now }
+	resilience.PauseDuration = time.Hour
+
+	first := mustNextRouteSelection(t, rt, resilience, "")
+	first.Entry.Exhausted = true
+	first.Entry.Frozen = false
+
+	if err := resilience.PauseAgent("claude", 1); err != nil {
+		t.Fatalf("PauseAgent(claude) error = %v", err)
+	}
+
+	now = now.Add(2 * time.Hour)
+
+	second := mustNextRouteSelection(t, rt, resilience, "")
+	if got := agentRouteSpec(second.Agent); got != "claude:opus-4.7" {
+		t.Fatalf("pick 2 = %q, want claude:opus-4.7 after pause expiry reset", got)
+	}
+	if second.Entry.Exhausted {
+		t.Fatal("entry should be selectable again after pause expiry reset")
+	}
+}
+
 func TestRouteRuntime_NoBackendAlwaysUsesDefaultRoute(t *testing.T) {
 	rt, resilience := newResolvedRouteRuntimeOrDie(t, map[string][]string{
 		"default": {"codex:gpt-5.5:1", "gemini:gemini-2.5-pro:1"},

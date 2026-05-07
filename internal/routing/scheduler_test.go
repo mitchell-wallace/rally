@@ -208,7 +208,7 @@ func TestScheduler_CycleWrapResetsQuotaCountersButKeepsFrozenEntriesSkipped(t *t
 	s := NewScheduler(entries)
 
 	opus := mustNext(t, s)
-	s.OnAgentFailed(opus, "error")
+	s.OnAgentFailed(opus, "freeze")
 
 	gpt := mustNext(t, s)
 	if gpt.Entry.Spec != "codex:gpt-5.5" {
@@ -480,10 +480,13 @@ func TestScheduler_OnAgentRecovered(t *testing.T) {
 	s := NewScheduler(entries)
 
 	opus := mustNext(t, s)
-	s.OnAgentFailed(opus, "error")
+	s.OnAgentFailed(opus, "freeze")
 
 	if !opus.Exhausted {
 		t.Fatal("opus should be exhausted after failure")
+	}
+	if !opus.Frozen {
+		t.Fatal("opus should be frozen after detector-driven failure")
 	}
 
 	s.OnAgentRecovered(opus)
@@ -492,5 +495,31 @@ func TestScheduler_OnAgentRecovered(t *testing.T) {
 	}
 	if opus.Frozen {
 		t.Error("opus should not be frozen after recovery")
+	}
+}
+
+func TestScheduler_OnAgentRecovered_DoesNotClearRetryBudgetExhaustion(t *testing.T) {
+	entries := parseEntriesOrDie(t, []string{
+		"claude:opus-4.7:1",
+		"codex:gpt-5.5:1",
+	})
+	s := NewScheduler(entries)
+
+	opus := mustNext(t, s)
+	s.OnAgentFailed(opus, "retry-budget-exhausted")
+
+	if !opus.Exhausted {
+		t.Fatal("opus should be exhausted after retry-budget exhaustion")
+	}
+	if opus.Frozen {
+		t.Fatal("opus should not be marked frozen for retry-budget exhaustion")
+	}
+
+	s.OnAgentRecovered(opus)
+	if !opus.Exhausted {
+		t.Error("opus exhaustion should not be cleared by recovery")
+	}
+	if opus.Frozen {
+		t.Error("opus should remain unfrozen after recovery no-op")
 	}
 }

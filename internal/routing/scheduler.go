@@ -2,6 +2,7 @@ package routing
 
 import (
 	"fmt"
+	"strings"
 	"sync"
 )
 
@@ -109,6 +110,9 @@ func (s *Scheduler) advanceLocked() (*EntryState, error) {
 	if ok {
 		return s.selectAtLocked(next), nil
 	}
+	if s.allEntriesUnavailableLocked() {
+		return nil, fmt.Errorf("scheduler: all entries exhausted; waiting for recovery")
+	}
 
 	s.cycle++
 	s.resetCycleLocked()
@@ -152,6 +156,15 @@ func (s *Scheduler) hasAlternativeLocked(exclude int) bool {
 	return false
 }
 
+func (s *Scheduler) allEntriesUnavailableLocked() bool {
+	for _, entry := range s.entries {
+		if s.isSelectableLocked(entry) {
+			return false
+		}
+	}
+	return true
+}
+
 func (s *Scheduler) selectFromLocked(start int) (*EntryState, error) {
 	next, ok := s.findSelectableLocked(start)
 	if !ok {
@@ -193,19 +206,25 @@ func (s *Scheduler) OnAgentFailed(entry *EntryState, reason string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	_ = reason
 	entry.Exhausted = true
-	entry.Frozen = true
+	entry.Frozen = failureFreezesEntry(reason)
 }
 
 func (s *Scheduler) OnAgentRecovered(entry *EntryState) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	entry.Exhausted = false
-	entry.Frozen = false
-	entry.ConsecutiveRuns = 0
-	entry.RangeQuotaUsed = 0
+	if !entry.Frozen {
+		return
+	}
+	resetEntryState(entry)
+}
+
+func (s *Scheduler) ResetEntry(entry *EntryState) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	resetEntryState(entry)
 }
 
 func (s *Scheduler) AllExhausted() bool {
@@ -262,4 +281,21 @@ func cloneEntryState(entry *EntryState) *EntryState {
 	}
 	clone := *entry
 	return &clone
+}
+
+func failureFreezesEntry(reason string) bool {
+	reason = strings.ToLower(reason)
+	return strings.Contains(reason, "freeze") ||
+		strings.Contains(reason, "frozen") ||
+		strings.Contains(reason, "rate limit") ||
+		strings.Contains(reason, "rate-limit") ||
+		strings.Contains(reason, "pause") ||
+		strings.Contains(reason, "paused")
+}
+
+func resetEntryState(entry *EntryState) {
+	entry.Exhausted = false
+	entry.Frozen = false
+	entry.ConsecutiveRuns = 0
+	entry.RangeQuotaUsed = 0
 }
