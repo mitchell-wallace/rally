@@ -34,6 +34,7 @@ type Config struct {
 	TargetIterations         int
 	FreezeThreshold          time.Duration
 	LivenessProbe            bool
+	CharsPerToken            map[string]float64
 	RunHooksOnAutoCommit     bool
 	LapsEnabled              bool
 	Instructions             string
@@ -531,6 +532,16 @@ func (r *Runner) runOne(
 
 		mon := monitor.NewMonitor(r.cfg.WorkspaceDir, tryLogPath, 0)
 		freezeController := r.newFreezeController(tryLogPath, exec)
+
+		// Wire reliability indicators into the monitor.
+		freezeThreshold := r.cfg.FreezeThreshold
+		if freezeThreshold <= 0 {
+			freezeThreshold = reliability.DefaultFreezeThreshold
+		}
+		mon.SetFreezeThreshold(freezeThreshold)
+		cpt := r.resolveCharsPerToken(picked.Harness, exec)
+		mon.SetCharsPerToken(cpt)
+
 		initialStatus, _ := mon.Tick()
 		fmt.Println(initialStatus)
 		fmt.Println("[Ctrl+S skip]  [Ctrl+P pause]  [Ctrl+X stop]  [Ctrl+C quit]")
@@ -587,6 +598,7 @@ func (r *Runner) runOne(
 				}
 				freezeTriggered = true
 				freezeMarked = true
+				mon.SetFrozen(true)
 				if onFreeze != nil {
 					onFreeze()
 				}
@@ -727,6 +739,8 @@ func (r *Runner) runOne(
 		if !failed {
 			if freezeMarked && onFreezeRecovered != nil {
 				onFreezeRecovered()
+				mon.SetFrozen(false)
+				mon.SetRecovered()
 				freezeMarked = false
 			}
 			success = true
@@ -769,6 +783,18 @@ func (r *Runner) newFreezeController(logPath string, exec agent.Executor) reliab
 		threshold = reliability.DefaultFreezeThreshold
 	}
 	return reliability.NewFreezeControllerWithProbe(logPath, threshold, r.buildLivenessProbe(exec))
+}
+
+func (r *Runner) resolveCharsPerToken(harness string, exec agent.Executor) float64 {
+	if r.cfg.CharsPerToken != nil {
+		if v, ok := r.cfg.CharsPerToken[harness]; ok && v > 0 {
+			return v
+		}
+	}
+	if exec != nil {
+		return exec.CharsPerToken()
+	}
+	return 0
 }
 
 func (r *Runner) buildLivenessProbe(exec agent.Executor) *reliability.LivenessProbe {

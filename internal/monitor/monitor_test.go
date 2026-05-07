@@ -64,6 +64,203 @@ func TestRenderStatus(t *testing.T) {
 	}
 }
 
+func TestRenderStatusExtIndicators(t *testing.T) {
+	base := func(ind Indicators) string {
+		return RenderStatusExt(
+			2*time.Minute+30*time.Second, 5, 10*time.Second, nil, ind,
+		)
+	}
+
+	tests := []struct {
+		name         string
+		ind          Indicators
+		wantContains []string
+		wantAbsent   []string
+	}{
+		{
+			name:         "no indicators",
+			ind:          Indicators{},
+			wantContains: []string{"⏱ 2m 30s", "📁 5 files"},
+			wantAbsent:   []string{"❄", "⚠", "↻", "tok"},
+		},
+		{
+			name:         "frozen",
+			ind:          Indicators{Reliability: "❄ frozen"},
+			wantContains: []string{"❄ frozen"},
+		},
+		{
+			name:         "slowing",
+			ind:          Indicators{Reliability: "⚠ slowing"},
+			wantContains: []string{"⚠ slowing"},
+		},
+		{
+			name:         "recovered",
+			ind:          Indicators{Reliability: "↻ recovered"},
+			wantContains: []string{"↻ recovered"},
+		},
+		{
+			name:         "token estimate",
+			ind:          Indicators{TokenEstimate: "~12k tok"},
+			wantContains: []string{"~12k tok"},
+		},
+		{
+			name:         "frozen with token estimate",
+			ind:          Indicators{Reliability: "❄ frozen", TokenEstimate: "~3k tok"},
+			wantContains: []string{"❄ frozen", "~3k tok"},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := base(tc.ind)
+			for _, want := range tc.wantContains {
+				if !containsString(got, want) {
+					t.Errorf("expected %q to contain %q", got, want)
+				}
+			}
+			for _, absent := range tc.wantAbsent {
+				if containsString(got, absent) {
+					t.Errorf("expected %q NOT to contain %q", got, absent)
+				}
+			}
+		})
+	}
+}
+
+func TestEstimateTokens(t *testing.T) {
+	dir := t.TempDir()
+
+	t.Run("empty path", func(t *testing.T) {
+		if got := EstimateTokens("", 4.0); got != "" {
+			t.Errorf("expected empty, got %q", got)
+		}
+	})
+
+	t.Run("zero divisor", func(t *testing.T) {
+		f := filepath.Join(dir, "a.log")
+		os.WriteFile(f, []byte("hello world"), 0o644)
+		if got := EstimateTokens(f, 0); got != "" {
+			t.Errorf("expected empty, got %q", got)
+		}
+	})
+
+	t.Run("small file", func(t *testing.T) {
+		f := filepath.Join(dir, "small.log")
+		os.WriteFile(f, make([]byte, 500), 0o644) // 500 bytes / 4.0 = 125 tokens
+		got := EstimateTokens(f, 4.0)
+		if got != "~125 tok" {
+			t.Errorf("expected ~125 tok, got %q", got)
+		}
+	})
+
+	t.Run("large file", func(t *testing.T) {
+		f := filepath.Join(dir, "large.log")
+		os.WriteFile(f, make([]byte, 40000), 0o644) // 40000 / 4.0 = 10000 tokens = ~10k
+		got := EstimateTokens(f, 4.0)
+		if got != "~10k tok" {
+			t.Errorf("expected ~10k tok, got %q", got)
+		}
+	})
+
+	t.Run("missing file", func(t *testing.T) {
+		if got := EstimateTokens("/nonexistent/file.log", 4.0); got != "" {
+			t.Errorf("expected empty, got %q", got)
+		}
+	})
+}
+
+func TestMonitorSlowingIndicator(t *testing.T) {
+	dir := t.TempDir()
+	initGitRepo(t, dir)
+
+	// Create a log file with a stale mtime to simulate silence.
+	logPath := filepath.Join(dir, "try.log")
+	os.WriteFile(logPath, []byte("data"), 0o644)
+
+	// Set mtime 120s in the past (≥60% of 180s threshold = 108s)
+	past := time.Now().Add(-120 * time.Second)
+	os.Chtimes(logPath, past, past)
+
+	m := NewMonitor(dir, logPath, 0)
+	m.SetFreezeThreshold(180 * time.Second)
+
+	line, err := m.Tick()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !containsString(line, "⚠ slowing") {
+		t.Errorf("expected slowing indicator, got %q", line)
+	}
+}
+
+func TestMonitorFrozenIndicator(t *testing.T) {
+	dir := t.TempDir()
+	initGitRepo(t, dir)
+	logPath := filepath.Join(dir, "try.log")
+	os.WriteFile(logPath, []byte("data"), 0o644)
+
+	m := NewMonitor(dir, logPath, 0)
+	m.SetFrozen(true)
+
+	line, err := m.Tick()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !containsString(line, "❄ frozen") {
+		t.Errorf("expected frozen indicator, got %q", line)
+	}
+	// Frozen takes priority over slowing
+	if containsString(line, "⚠ slowing") {
+		t.Errorf("frozen should take priority over slowing, got %q", line)
+	}
+}
+
+func TestMonitorRecoveredIndicator(t *testing.T) {
+	dir := t.TempDir()
+	initGitRepo(t, dir)
+	logPath := filepath.Join(dir, "try.log")
+	os.WriteFile(logPath, []byte("data"), 0o644)
+
+	m := NewMonitor(dir, logPath, 0)
+	m.SetRecovered()
+
+	// First tick should show recovered
+	line, err := m.Tick()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !containsString(line, "↻ recovered") {
+		t.Errorf("expected recovered indicator on first tick, got %q", line)
+	}
+
+	// Second tick should clear recovered
+	line, err = m.Tick()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if containsString(line, "↻ recovered") {
+		t.Errorf("expected recovered indicator to clear after one tick, got %q", line)
+	}
+}
+
+func TestMonitorTokenEstimate(t *testing.T) {
+	dir := t.TempDir()
+	initGitRepo(t, dir)
+	logPath := filepath.Join(dir, "try.log")
+	os.WriteFile(logPath, make([]byte, 14000), 0o644) // 14000 / 3.5 = 4000 = ~4k
+
+	m := NewMonitor(dir, logPath, 0)
+	m.SetCharsPerToken(3.5)
+
+	line, err := m.Tick()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !containsString(line, "~4k tok") {
+		t.Errorf("expected token estimate ~4k tok, got %q", line)
+	}
+}
+
 func containsString(s, substr string) bool {
 	for i := 0; i <= len(s)-len(substr); i++ {
 		if s[i:i+len(substr)] == substr {

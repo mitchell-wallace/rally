@@ -161,6 +161,7 @@ func runRelay(cmd *cobra.Command, args []string) error {
 		TargetIterations:         iterations,
 		FreezeThreshold:          cfg.Reliability.FreezeThreshold(),
 		LivenessProbe:            cfg.Reliability.LivenessProbe,
+		CharsPerToken:            cfg.Reliability.CharsPerToken,
 		RunHooksOnAutoCommit:     cfg.RunHooksOnAutoCommit,
 		LapsEnabled:              lapsEnabled,
 		LapsInstructionsFile:     cfg.Laps.InstructionsFile,

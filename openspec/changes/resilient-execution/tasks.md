@@ -65,11 +65,11 @@
 
 ## 9. Live-monitor extensions
 
-- [ ] 9.1 Render `❄ frozen` (or similar) when freeze is flagged
-- [ ] 9.2 Render `⚠ slowing` when ≥ 60% of threshold has elapsed without log activity (pending-freeze)
-- [ ] 9.3 Render `↻ recovered` on the next tick after a freeze-driven resume succeeds; clear after one steady-state tick
-- [ ] 9.4 Token estimator uses `[reliability].chars_per_token` override when set, falls back to adapter default
-- [ ] 9.5 Snapshot tests for each indicator state
+- [x] 9.1 Render `❄ frozen` (or similar) when freeze is flagged
+- [x] 9.2 Render `⚠ slowing` when ≥ 60% of threshold has elapsed without log activity (pending-freeze)
+- [x] 9.3 Render `↻ recovered` on the next tick after a freeze-driven resume succeeds; clear after one steady-state tick
+- [x] 9.4 Token estimator uses `[reliability].chars_per_token` override when set, falls back to adapter default
+- [x] 9.5 Snapshot tests for each indicator state
 
 ## 10. Documentation
 

@@ -16,8 +16,21 @@ import (
 
 const TickInterval = 5 * time.Second
 
+// Indicators carries optional reliability and token-estimate fields for the
+// status line.  Zero value means "nothing to show".
+type Indicators struct {
+	Reliability   string // e.g. "❄ frozen", "⚠ slowing", "↻ recovered"
+	TokenEstimate string // e.g. "~12k tok"
+}
+
 // RenderStatus formats a status line.
 func RenderStatus(elapsed time.Duration, dirtyCount int, lastActivity time.Duration, warnings []string) string {
+	return RenderStatusExt(elapsed, dirtyCount, lastActivity, warnings, Indicators{})
+}
+
+// RenderStatusExt is like RenderStatus but appends reliability and token
+// indicators when set.
+func RenderStatusExt(elapsed time.Duration, dirtyCount int, lastActivity time.Duration, warnings []string, ind Indicators) string {
 	elapsedStr := formatDuration(elapsed)
 	activityStr := "—"
 	if lastActivity >= 0 {
@@ -33,6 +46,12 @@ func RenderStatus(elapsed time.Duration, dirtyCount int, lastActivity time.Durat
 	line := strings.Join(parts, "  │  ")
 	if len(warnings) > 0 {
 		line += "  │  " + strings.Join(warnings, " ")
+	}
+	if ind.Reliability != "" {
+		line += "  │  " + ind.Reliability
+	}
+	if ind.TokenEstimate != "" {
+		line += "  │  " + ind.TokenEstimate
 	}
 	return line
 }
@@ -272,6 +291,24 @@ func (n *NetworkMonitor) Check() []string {
 	return n.evaluate(time.Now(), conns, ioBytes)
 }
 
+// EstimateTokens returns a human-readable token estimate string from log file
+// size and a chars-per-token divisor.  Returns "" when the estimate is
+// unavailable.
+func EstimateTokens(logPath string, charsPerToken float64) string {
+	if logPath == "" || charsPerToken <= 0 {
+		return ""
+	}
+	info, err := os.Stat(logPath)
+	if err != nil || info.Size() == 0 {
+		return ""
+	}
+	tokens := float64(info.Size()) / charsPerToken
+	if tokens < 1000 {
+		return fmt.Sprintf("~%d tok", int(tokens))
+	}
+	return fmt.Sprintf("~%dk tok", int(tokens/1000))
+}
+
 // Monitor produces a live status line during try execution.
 type Monitor struct {
 	workspaceDir  string
@@ -280,6 +317,13 @@ type Monitor struct {
 	startTime     time.Time
 	netMon        *NetworkMonitor
 	cursorUpLines int
+
+	// Reliability state
+	freezeThreshold time.Duration // 0 = slowing detection disabled
+	frozen          bool
+	recovered       bool
+	recoveredTicks  int // counts steady ticks after recovery; clears indicator
+	charsPerToken   float64
 
 	ticker *time.Ticker
 	stopCh chan struct{}
@@ -347,7 +391,41 @@ func (m *Monitor) Tick() (string, error) {
 		warnings = m.netMon.Check()
 	}
 
-	return RenderStatus(elapsed, dirtyCount, lastActivity, warnings), nil
+	m.mu.Lock()
+	ind := m.computeIndicators(lastActivity)
+	m.mu.Unlock()
+
+	return RenderStatusExt(elapsed, dirtyCount, lastActivity, warnings, ind), nil
+}
+
+// computeIndicators returns the current reliability and token indicators.
+// Must be called with m.mu held.
+func (m *Monitor) computeIndicators(lastActivity time.Duration) Indicators {
+	var ind Indicators
+
+	// Reliability indicator priority: frozen > recovered > slowing
+	if m.frozen {
+		ind.Reliability = "❄ frozen"
+	} else if m.recovered {
+		m.recoveredTicks++
+		if m.recoveredTicks > 1 {
+			// Clear after one full steady-state tick
+			m.recovered = false
+			m.recoveredTicks = 0
+		} else {
+			ind.Reliability = "↻ recovered"
+		}
+	} else if m.freezeThreshold > 0 && lastActivity >= 0 {
+		slowingAt := time.Duration(float64(m.freezeThreshold) * 0.6)
+		if lastActivity >= slowingAt {
+			ind.Reliability = "⚠ slowing"
+		}
+	}
+
+	// Token estimate
+	ind.TokenEstimate = EstimateTokens(m.logPath, m.charsPerToken)
+
+	return ind
 }
 
 func (m *Monitor) run(out io.Writer, ticker *time.Ticker, stopCh chan struct{}) {
@@ -389,6 +467,36 @@ func (m *Monitor) UpdatePIDs() {
 func (m *Monitor) SetProcessGroupID(pgid int) {
 	m.mu.Lock()
 	m.pgid = pgid
+	m.mu.Unlock()
+}
+
+// SetFreezeThreshold enables the "slowing" indicator at ≥60% of threshold.
+func (m *Monitor) SetFreezeThreshold(d time.Duration) {
+	m.mu.Lock()
+	m.freezeThreshold = d
+	m.mu.Unlock()
+}
+
+// SetFrozen marks the active try as frozen.
+func (m *Monitor) SetFrozen(v bool) {
+	m.mu.Lock()
+	m.frozen = v
+	m.mu.Unlock()
+}
+
+// SetRecovered marks a freeze-driven resume as recovered.  The indicator is
+// shown for one steady-state tick, then cleared automatically.
+func (m *Monitor) SetRecovered() {
+	m.mu.Lock()
+	m.recovered = true
+	m.recoveredTicks = 0
+	m.mu.Unlock()
+}
+
+// SetCharsPerToken sets the divisor for the token estimator.
+func (m *Monitor) SetCharsPerToken(v float64) {
+	m.mu.Lock()
+	m.charsPerToken = v
 	m.mu.Unlock()
 }
 
