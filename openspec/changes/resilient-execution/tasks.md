@@ -40,12 +40,12 @@
 
 ## 6. Liveness probe
 
-- [ ] 6.1 Add `internal/reliability/probe.go` with the side-channel prompt logic
-- [ ] 6.2 Gated by `[reliability].liveness_probe = true` AND adapter `LivenessProbeSupported()`
-- [ ] 6.3 Bounded timeout per probe (e.g. 30s); failure or timeout confirms freeze
-- [ ] 6.4 Successful probe clears the freeze flag for that evaluation; try continues
-- [ ] 6.5 Probe heuristic for "ambiguous freeze" defined as a starting-point ("log mtime advancing but no IO progress for 60s"); tunable later
-- [ ] 6.6 Unit tests: probe disabled by config (never runs), probe enabled but adapter unsupported (silent skip), probe success/failure/timeout outcomes
+- [x] 6.1 Add `internal/reliability/probe.go` with the side-channel prompt logic
+- [x] 6.2 Gated by `[reliability].liveness_probe = true` AND adapter `LivenessProbeSupported()`
+- [x] 6.3 Bounded timeout per probe (e.g. 30s); failure or timeout confirms freeze
+- [x] 6.4 Successful probe clears the freeze flag for that evaluation; try continues
+- [x] 6.5 Probe heuristic for "ambiguous freeze" defined as a starting-point ("log mtime advancing but no IO progress for 60s"); tunable later
+- [x] 6.6 Unit tests: probe disabled by config (never runs), probe enabled but adapter unsupported (silent skip), probe success/failure/timeout outcomes
 
 ## 7. Error classification
 

@@ -33,6 +33,7 @@ type Config struct {
 	UseOverrideRoute         bool
 	TargetIterations         int
 	FreezeThreshold          time.Duration
+	LivenessProbe            bool
 	RunHooksOnAutoCommit     bool
 	LapsEnabled              bool
 	Instructions             string
@@ -529,7 +530,7 @@ func (r *Runner) runOne(
 		actionCh := kb.Start(kbCtx)
 
 		mon := monitor.NewMonitor(r.cfg.WorkspaceDir, tryLogPath, 0)
-		freezeController := r.newFreezeController(tryLogPath)
+		freezeController := r.newFreezeController(tryLogPath, exec)
 		initialStatus, _ := mon.Tick()
 		fmt.Println(initialStatus)
 		fmt.Println("[Ctrl+S skip]  [Ctrl+P pause]  [Ctrl+X stop]  [Ctrl+C quit]")
@@ -759,7 +760,7 @@ func (r *Runner) runOne(
 	return success, addressed, false, nil
 }
 
-func (r *Runner) newFreezeController(logPath string) reliability.FreezeController {
+func (r *Runner) newFreezeController(logPath string, exec agent.Executor) reliability.FreezeController {
 	if r.freezeControllerFactory != nil {
 		return r.freezeControllerFactory(logPath)
 	}
@@ -767,7 +768,14 @@ func (r *Runner) newFreezeController(logPath string) reliability.FreezeControlle
 	if threshold <= 0 {
 		threshold = reliability.DefaultFreezeThreshold
 	}
-	return reliability.NewFreezeController(logPath, threshold)
+	return reliability.NewFreezeControllerWithProbe(logPath, threshold, r.buildLivenessProbe(exec))
+}
+
+func (r *Runner) buildLivenessProbe(exec agent.Executor) *reliability.LivenessProbe {
+	if !r.cfg.LivenessProbe || exec == nil || !exec.LivenessProbeSupported() {
+		return nil
+	}
+	return reliability.NewLivenessProbe(reliability.DefaultProbeTimeout, exec.ProbeLiveness)
 }
 
 func (r *Runner) resolveRunTask(ctx context.Context) (runTask, error) {

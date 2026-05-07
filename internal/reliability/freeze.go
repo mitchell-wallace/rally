@@ -26,6 +26,11 @@ type SignalSnapshot struct {
 	IOBytes      uint64
 }
 
+type Assessment struct {
+	Frozen    bool
+	Ambiguous bool
+}
+
 type Detector struct {
 	threshold    time.Duration
 	platform     string
@@ -55,11 +60,15 @@ func NewDetectorForPlatform(platform string, threshold time.Duration) *Detector 
 }
 
 func (d *Detector) Evaluate(snapshot SignalSnapshot) bool {
+	return d.Assess(snapshot).Frozen
+}
+
+func (d *Detector) Assess(snapshot SignalSnapshot) Assessment {
 	switch d.platform {
 	case "windows":
-		return false
+		return Assessment{}
 	case "darwin":
-		return snapshot.LogSilentFor >= d.threshold
+		return Assessment{Frozen: snapshot.LogSilentFor >= d.threshold}
 	case "linux":
 		if snapshot.Now.IsZero() {
 			snapshot.Now = time.Now()
@@ -73,11 +82,16 @@ func (d *Detector) Evaluate(snapshot SignalSnapshot) bool {
 			d.lastIOBytes = snapshot.IOBytes
 			d.lastIOChange = snapshot.Now
 		}
-		return snapshot.LogSilentFor >= d.threshold &&
-			snapshot.Connections == 0 &&
-			snapshot.Now.Sub(d.lastIOChange) >= d.threshold
+		ioSilentFor := snapshot.Now.Sub(d.lastIOChange)
+		return Assessment{
+			Frozen: snapshot.LogSilentFor >= d.threshold &&
+				snapshot.Connections == 0 &&
+				ioSilentFor >= d.threshold,
+			Ambiguous: snapshot.LogSilentFor < DefaultAmbiguousProbeWindow &&
+				ioSilentFor >= DefaultAmbiguousProbeWindow,
+		}
 	default:
-		return false
+		return Assessment{}
 	}
 }
 
@@ -87,15 +101,21 @@ type FreezeController interface {
 }
 
 type freezeController struct {
-	logPath  string
-	pgid     int
-	detector *Detector
-	killer   processGroupKiller
-	now      func() time.Time
-	platform string
+	logPath      string
+	pgid         int
+	detector     *Detector
+	killer       processGroupKiller
+	now          func() time.Time
+	platform     string
+	probe        *LivenessProbe
+	takeSnapshot func() (SignalSnapshot, error)
 }
 
 func NewFreezeController(logPath string, threshold time.Duration) FreezeController {
+	return NewFreezeControllerWithProbe(logPath, threshold, nil)
+}
+
+func NewFreezeControllerWithProbe(logPath string, threshold time.Duration, probe *LivenessProbe) FreezeController {
 	return &freezeController{
 		logPath:  logPath,
 		detector: NewDetector(threshold),
@@ -109,6 +129,7 @@ func NewFreezeController(logPath string, threshold time.Duration) FreezeControll
 		},
 		now:      time.Now,
 		platform: runtime.GOOS,
+		probe:    probe,
 	}
 }
 
@@ -117,14 +138,29 @@ func (c *freezeController) SetProcessGroupID(pgid int) {
 }
 
 func (c *freezeController) Check(ctx context.Context) (bool, error) {
-	snapshot, err := c.snapshot()
+	snapshotFn := c.snapshot
+	if c.takeSnapshot != nil {
+		snapshotFn = c.takeSnapshot
+	}
+
+	snapshot, err := snapshotFn()
 	if err != nil {
 		if errors.Is(err, errProcessGroupUnavailable) {
 			return false, nil
 		}
 		return false, err
 	}
-	if !c.detector.Evaluate(snapshot) {
+
+	assessment := c.detector.Assess(snapshot)
+	probeConfirmedFreeze := false
+	if assessment.Ambiguous && c.probe != nil {
+		if c.probe.Check(ctx) {
+			return false, nil
+		}
+		probeConfirmedFreeze = true
+	}
+
+	if !assessment.Frozen && !probeConfirmedFreeze {
 		return false, nil
 	}
 	if err := c.killer.Kill(ctx, c.pgid); err != nil {

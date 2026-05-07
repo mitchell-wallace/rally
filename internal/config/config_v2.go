@@ -64,7 +64,8 @@ type FallbackConfig struct {
 }
 
 type ReliabilityConfig struct {
-	FreezeThresholdSecs int `toml:"freeze_threshold_secs,omitempty"`
+	FreezeThresholdSecs int  `toml:"freeze_threshold_secs,omitempty"`
+	LivenessProbe       bool `toml:"liveness_probe,omitempty"`
 }
 
 func (r ReliabilityConfig) FreezeThreshold() time.Duration {

@@ -24,6 +24,8 @@ type funcExecutor struct {
 	fn              func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error)
 	resumeSupported bool
 	rotateSupported bool
+	probeSupported  bool
+	probeFn         func(context.Context) (bool, error)
 	rotateErr       error
 	rotateCalls     []string
 }
@@ -34,7 +36,7 @@ func (f *funcExecutor) Execute(ctx context.Context, opts agent.RunOptions) (*age
 
 func (f *funcExecutor) ResumeSupported() bool        { return f.resumeSupported }
 func (f *funcExecutor) RotateSupported() bool        { return f.rotateSupported }
-func (f *funcExecutor) LivenessProbeSupported() bool { return false }
+func (f *funcExecutor) LivenessProbeSupported() bool { return f.probeSupported }
 func (f *funcExecutor) CharsPerToken() float64       { return 0 }
 func (f *funcExecutor) RotateModel(model string) error {
 	f.rotateCalls = append(f.rotateCalls, model)
@@ -43,7 +45,10 @@ func (f *funcExecutor) RotateModel(model string) error {
 	}
 	return f.rotateErr
 }
-func (f *funcExecutor) ProbeLiveness(_ context.Context) (bool, error) {
+func (f *funcExecutor) ProbeLiveness(ctx context.Context) (bool, error) {
+	if f.probeFn != nil {
+		return f.probeFn(ctx)
+	}
 	return false, fmt.Errorf("liveness probe not supported by func executor")
 }
 
@@ -687,6 +692,30 @@ func TestRunOneFreezeRetryResumesAndRecovers(t *testing.T) {
 	}
 	if !tries[1].Completed {
 		t.Fatal("second try should complete successfully")
+	}
+}
+
+func TestBuildLivenessProbeDisabledByConfig(t *testing.T) {
+	r := &Runner{cfg: Config{LivenessProbe: false}}
+	exec := &funcExecutor{probeSupported: true}
+	if probe := r.buildLivenessProbe(exec); probe != nil {
+		t.Fatal("expected liveness probe to be disabled by config")
+	}
+}
+
+func TestBuildLivenessProbeSkipsUnsupportedAdapter(t *testing.T) {
+	r := &Runner{cfg: Config{LivenessProbe: true}}
+	exec := &funcExecutor{probeSupported: false}
+	if probe := r.buildLivenessProbe(exec); probe != nil {
+		t.Fatal("expected unsupported adapter to skip liveness probe")
+	}
+}
+
+func TestBuildLivenessProbeEnabledForSupportedAdapter(t *testing.T) {
+	r := &Runner{cfg: Config{LivenessProbe: true}}
+	exec := &funcExecutor{probeSupported: true}
+	if probe := r.buildLivenessProbe(exec); probe == nil {
+		t.Fatal("expected supported adapter to build liveness probe")
 	}
 }
 

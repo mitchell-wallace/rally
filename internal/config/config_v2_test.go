@@ -113,6 +113,24 @@ freeze_threshold_secs = 90
 	}
 }
 
+func TestLoadV2_ReliabilityLivenessProbe(t *testing.T) {
+	dir := t.TempDir()
+	writeConfig(t, dir, `schema_version = 2
+
+[reliability]
+liveness_probe = true
+`)
+
+	cfg, err := LoadV2(dir)
+	if err != nil {
+		t.Fatalf("LoadV2 failed: %v", err)
+	}
+
+	if !cfg.Reliability.LivenessProbe {
+		t.Fatal("Reliability.LivenessProbe = false, want true")
+	}
+}
+
 func TestLoadV2_DefaultsOverridesRoot(t *testing.T) {
 	dir := t.TempDir()
 	writeConfig(t, dir, `claude_model = "root-value"

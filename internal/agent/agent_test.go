@@ -541,8 +541,8 @@ func TestRunLoggedCommandStreamsTryLog(t *testing.T) {
 
 func TestAdapterCapabilityDefaults(t *testing.T) {
 	adapters := map[string]Executor{
-		"generic":  &GenericExecutor{},
-		"fixture":  &FixtureExecutor{},
+		"generic": &GenericExecutor{},
+		"fixture": &FixtureExecutor{},
 	}
 
 	for name, adapter := range adapters {
@@ -639,6 +639,15 @@ func TestCodexAdapterCapabilities(t *testing.T) {
 	}
 	if err := c.RotateModel("new-model"); err == nil {
 		t.Error("RotateModel() should return error")
+	}
+}
+
+func TestCodexAdapter_SessionIDCapture(t *testing.T) {
+	out := []byte(`{"type":"thread.started","thread_id":"codex-session-123"}
+{"type":"turn.started"}
+{"type":"item.completed","item":{"id":"item_0","type":"agent_message","text":"OK"}}`)
+	if got := scanCodexSessionID(out); got != "codex-session-123" {
+		t.Fatalf("scanCodexSessionID() = %q, want %q", got, "codex-session-123")
 	}
 }
 
