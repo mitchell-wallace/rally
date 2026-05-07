@@ -153,16 +153,17 @@ func runRelay(cmd *cobra.Command, args []string) error {
 	}
 
 	runnerCfg := relay.Config{
-		WorkspaceDir:               workspaceDir,
-		DataDir:                    dataDir,
-		AgentMixSpecs:              selectedSpecs,
-		RouteSpecs:                 cfg.Routes,
-		UseOverrideRoute:           usedOverride,
-		TargetIterations:           iterations,
-		RunHooksOnAutoCommit:       cfg.RunHooksOnAutoCommit,
-		LapsEnabled:                lapsEnabled,
+		WorkspaceDir:             workspaceDir,
+		DataDir:                  dataDir,
+		AgentMixSpecs:            selectedSpecs,
+		RouteSpecs:               cfg.Routes,
+		UseOverrideRoute:         usedOverride,
+		TargetIterations:         iterations,
+		FreezeThreshold:          cfg.Reliability.FreezeThreshold(),
+		RunHooksOnAutoCommit:     cfg.RunHooksOnAutoCommit,
+		LapsEnabled:              lapsEnabled,
 		LapsInstructionsFile:     cfg.Laps.InstructionsFile,
-		FallbackInstructionsFile:   cfg.Fallback.InstructionsFile,
+		FallbackInstructionsFile: cfg.Fallback.InstructionsFile,
 	}
 
 	runnerCfg.Resolver = func(spec string) (agent.ResolvedAgent, error) {

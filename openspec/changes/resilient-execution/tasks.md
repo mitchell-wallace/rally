@@ -30,13 +30,13 @@
 
 ## 5. Freeze detection
 
-- [ ] 5.1 Add `internal/reliability/freeze.go` consuming the v0.3.0 monitoring signals
-- [ ] 5.2 Detector trips when log mtime stale ≥ threshold AND zero conns (Linux only) AND IO unchanged
-- [ ] 5.3 macOS path: log mtime alone (conn/IO clauses treated as satisfied)
-- [ ] 5.4 Windows path: detector disabled
-- [ ] 5.5 Graceful-kill: SIGTERM → 5s drain → SIGKILL on the agent process group
-- [ ] 5.6 Emit `OnAgentFailed(entry, "freeze")` to the scheduler; route through resume-aware retry
-- [ ] 5.7 Unit tests: each platform path; threshold tunability via config; graceful-kill timing
+- [x] 5.1 Add `internal/reliability/freeze.go` consuming the v0.3.0 monitoring signals
+- [x] 5.2 Detector trips when log mtime stale ≥ threshold AND zero conns (Linux only) AND IO unchanged
+- [x] 5.3 macOS path: log mtime alone (conn/IO clauses treated as satisfied)
+- [x] 5.4 Windows path: detector disabled
+- [x] 5.5 Graceful-kill: SIGTERM → 5s drain → SIGKILL on the agent process group
+- [x] 5.6 Emit `OnAgentFailed(entry, "freeze")` to the scheduler; route through resume-aware retry
+- [x] 5.7 Unit tests: each platform path; threshold tunability via config; graceful-kill timing
 
 ## 6. Liveness probe
 

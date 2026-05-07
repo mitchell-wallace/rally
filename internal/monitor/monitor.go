@@ -14,6 +14,8 @@ import (
 	"time"
 )
 
+const TickInterval = 5 * time.Second
+
 // RenderStatus formats a status line.
 func RenderStatus(elapsed time.Duration, dirtyCount int, lastActivity time.Duration, warnings []string) string {
 	elapsedStr := formatDuration(elapsed)
@@ -303,7 +305,7 @@ func (m *Monitor) Start(out io.Writer) {
 	}
 	m.startTime = time.Now()
 	m.netMon = NewNetworkMonitor(nil)
-	m.ticker = time.NewTicker(5 * time.Second)
+	m.ticker = time.NewTicker(TickInterval)
 	m.stopCh = make(chan struct{})
 	ticker := m.ticker
 	stopCh := m.stopCh

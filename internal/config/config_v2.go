@@ -9,6 +9,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"time"
 
 	toml "github.com/pelletier/go-toml/v2"
 
@@ -62,6 +63,17 @@ type FallbackConfig struct {
 	InstructionsFile string `toml:"instructions_file,omitempty"`
 }
 
+type ReliabilityConfig struct {
+	FreezeThresholdSecs int `toml:"freeze_threshold_secs,omitempty"`
+}
+
+func (r ReliabilityConfig) FreezeThreshold() time.Duration {
+	if r.FreezeThresholdSecs > 0 {
+		return time.Duration(r.FreezeThresholdSecs) * time.Second
+	}
+	return 0
+}
+
 type HarnessConfig struct {
 	Models         map[string]string `toml:"models,omitempty"`
 	Command        []string          `toml:"command,omitempty"`
@@ -81,11 +93,12 @@ type V2Config struct {
 	RunHooksOnAutoCommit bool
 	LapsInstructions     string
 
-	Defaults   DefaultsConfig
-	Laps     LapsConfig
-	Fallback FallbackConfig
-	Harnesses  map[string]*HarnessConfig
-	Routes     map[string][]string
+	Defaults    DefaultsConfig
+	Laps        LapsConfig
+	Fallback    FallbackConfig
+	Reliability ReliabilityConfig
+	Harnesses   map[string]*HarnessConfig
+	Routes      map[string][]string
 
 	DeprecationNotes []string
 	SchemaWarning    string
@@ -101,11 +114,12 @@ type rawConfig struct {
 	RunHooksOnAutoCommit bool   `toml:"run_hooks_on_autocommit"`
 	LapsInstructions     string `toml:"laps_instructions,omitempty"`
 
-	Defaults   DefaultsConfig            `toml:"defaults"`
-	Laps     LapsConfig                 `toml:"laps"`
-	Fallback   FallbackConfig            `toml:"fallback"`
-	Harnesses  map[string]*HarnessConfig `toml:"harness"`
-	Routes     map[string][]string       `toml:"routes"`
+	Defaults    DefaultsConfig            `toml:"defaults"`
+	Laps        LapsConfig                `toml:"laps"`
+	Fallback    FallbackConfig            `toml:"fallback"`
+	Reliability ReliabilityConfig         `toml:"reliability"`
+	Harnesses   map[string]*HarnessConfig `toml:"harness"`
+	Routes      map[string][]string       `toml:"routes"`
 }
 
 func V2Path(workspaceDir string) string {
@@ -133,8 +147,9 @@ func LoadV2(workspaceDir string) (V2Config, error) {
 		RunHooksOnAutoCommit: raw.RunHooksOnAutoCommit,
 		LapsInstructions:     raw.LapsInstructions,
 		Defaults:             raw.Defaults,
-		Laps:     raw.Laps,
+		Laps:                 raw.Laps,
 		Fallback:             raw.Fallback,
+		Reliability:          raw.Reliability,
 		Harnesses:            raw.Harnesses,
 		Routes:               raw.Routes,
 	}
@@ -459,10 +474,11 @@ func SaveV2(workspaceDir string, cfg V2Config) error {
 			GeminiModel:   effectiveModel(cfg.GeminiModel, cfg.Defaults.GeminiModel),
 			OpenCodeModel: effectiveModel(cfg.OpenCodeModel, cfg.Defaults.OpenCodeModel),
 		},
-		Laps:     cfg.Laps,
-		Fallback:   cfg.Fallback,
-		Harnesses:  cfg.Harnesses,
-		Routes:     cfg.Routes,
+		Laps:        cfg.Laps,
+		Fallback:    cfg.Fallback,
+		Reliability: cfg.Reliability,
+		Harnesses:   cfg.Harnesses,
+		Routes:      cfg.Routes,
 	}
 
 	data, err := toml.Marshal(raw)

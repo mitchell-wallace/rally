@@ -3,6 +3,7 @@ package relay
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -15,6 +16,7 @@ import (
 	"github.com/mitchell-wallace/rally/internal/config"
 	"github.com/mitchell-wallace/rally/internal/laps"
 	"github.com/mitchell-wallace/rally/internal/progress"
+	"github.com/mitchell-wallace/rally/internal/reliability"
 	"github.com/mitchell-wallace/rally/internal/store"
 )
 
@@ -43,6 +45,19 @@ func (f *funcExecutor) RotateModel(model string) error {
 }
 func (f *funcExecutor) ProbeLiveness(_ context.Context) (bool, error) {
 	return false, fmt.Errorf("liveness probe not supported by func executor")
+}
+
+type fakeFreezeController struct {
+	check func(context.Context) (bool, error)
+}
+
+func (f *fakeFreezeController) SetProcessGroupID(int) {}
+
+func (f *fakeFreezeController) Check(ctx context.Context) (bool, error) {
+	if f.check == nil {
+		return false, nil
+	}
+	return f.check(ctx)
 }
 
 func runGit(t *testing.T, dir string, args ...string) string {
@@ -567,6 +582,111 @@ func TestResumeRetryPassesSessionID(t *testing.T) {
 	}
 	if capturedSessionIDs[2] != "session-2" {
 		t.Fatalf("attempt 3 ResumeSessionID = %q, want session-2", capturedSessionIDs[2])
+	}
+}
+
+func TestRunOneFreezeRetryResumesAndRecovers(t *testing.T) {
+	workspaceDir := t.TempDir()
+	rallyDir := filepath.Join(workspaceDir, ".rally")
+	os.MkdirAll(rallyDir, 0o755)
+	initRepo(t, workspaceDir)
+
+	s := newTestStore(t, rallyDir)
+	freezeCh := make(chan struct{})
+	attempt := 0
+	var resumeIDs []string
+	exec := &funcExecutor{
+		resumeSupported: true,
+		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+			attempt++
+			resumeIDs = append(resumeIDs, opts.ResumeSessionID)
+			if attempt == 1 {
+				<-freezeCh
+				return &agent.TryResult{Completed: false, Summary: "freeze", SessionID: "sess-freeze"}, nil
+			}
+			f, _ := os.Create(filepath.Join(workspaceDir, "success.txt"))
+			f.WriteString("changed")
+			f.Close()
+			return &agent.TryResult{Completed: true, Summary: "success"}, nil
+		},
+	}
+
+	r := NewRunner(s, Config{
+		WorkspaceDir:     workspaceDir,
+		DataDir:          t.TempDir(),
+		AgentMixSpecs:    []string{"cc:1"},
+		TargetIterations: 1,
+	}, map[string]agent.Executor{"claude": exec})
+
+	controllerCount := 0
+	r.freezeControllerFactory = func(logPath string) reliability.FreezeController {
+		_ = logPath
+		controllerCount++
+		if controllerCount == 1 {
+			triggered := false
+			return &fakeFreezeController{
+				check: func(context.Context) (bool, error) {
+					if triggered {
+						return false, nil
+					}
+					triggered = true
+					close(freezeCh)
+					return true, nil
+				},
+			}
+		}
+		return &fakeFreezeController{}
+	}
+
+	oldInterval := freezeCheckInterval
+	freezeCheckInterval = time.Millisecond
+	defer func() { freezeCheckInterval = oldInterval }()
+
+	freezeCalls := 0
+	recoveredCalls := 0
+	success, addressed, interrupted, err := r.runOne(
+		context.Background(),
+		&store.RelayRecord{ID: 1, TargetIterations: 1},
+		0,
+		agent.ResolvedAgent{Harness: "claude"},
+		runTask{Name: "relay run", Prompt: "freeze test"},
+		nil,
+		nil,
+		false,
+		func() { freezeCalls++ },
+		func() { recoveredCalls++ },
+		io.Discard,
+	)
+	if err != nil {
+		t.Fatalf("runOne error = %v", err)
+	}
+	if !success {
+		t.Fatal("expected runOne success after freeze retry")
+	}
+	if addressed {
+		t.Fatal("message should not be marked addressed")
+	}
+	if interrupted {
+		t.Fatal("runOne should not report interruption")
+	}
+	if got, want := resumeIDs, []string{"", "sess-freeze"}; len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
+		t.Fatalf("ResumeSessionIDs = %v, want %v", got, want)
+	}
+	if freezeCalls != 1 {
+		t.Fatalf("freeze callback count = %d, want 1", freezeCalls)
+	}
+	if recoveredCalls != 1 {
+		t.Fatalf("freeze recovered callback count = %d, want 1", recoveredCalls)
+	}
+	tries := s.AllTries()
+	if len(tries) != 2 {
+		t.Fatalf("tries = %d, want 2", len(tries))
+	}
+	if tries[0].Completed {
+		t.Fatal("first try should be incomplete after freeze")
+	}
+	if !tries[1].Completed {
+		t.Fatal("second try should complete successfully")
 	}
 }
 

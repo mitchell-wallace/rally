@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func writeConfig(t *testing.T, dir, content string) {
@@ -88,6 +89,27 @@ mix = "cc cx"
 	}
 	if cfg.SchemaVersion != 2 {
 		t.Errorf("SchemaVersion = %d, want 2", cfg.SchemaVersion)
+	}
+}
+
+func TestLoadV2_ReliabilityFreezeThreshold(t *testing.T) {
+	dir := t.TempDir()
+	writeConfig(t, dir, `schema_version = 2
+
+[reliability]
+freeze_threshold_secs = 90
+`)
+
+	cfg, err := LoadV2(dir)
+	if err != nil {
+		t.Fatalf("LoadV2 failed: %v", err)
+	}
+
+	if got, want := cfg.Reliability.FreezeThresholdSecs, 90; got != want {
+		t.Fatalf("Reliability.FreezeThresholdSecs = %d, want %d", got, want)
+	}
+	if got, want := cfg.Reliability.FreezeThreshold(), 90*time.Second; got != want {
+		t.Fatalf("Reliability.FreezeThreshold() = %v, want %v", got, want)
 	}
 }
 

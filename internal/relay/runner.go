@@ -20,6 +20,7 @@ import (
 	"github.com/mitchell-wallace/rally/internal/monitor"
 	"github.com/mitchell-wallace/rally/internal/progress"
 	"github.com/mitchell-wallace/rally/internal/prompt/roleloader"
+	"github.com/mitchell-wallace/rally/internal/reliability"
 	"github.com/mitchell-wallace/rally/internal/store"
 	"github.com/mitchell-wallace/rally/internal/style"
 )
@@ -31,6 +32,7 @@ type Config struct {
 	RouteSpecs               map[string][]string
 	UseOverrideRoute         bool
 	TargetIterations         int
+	FreezeThreshold          time.Duration
 	RunHooksOnAutoCommit     bool
 	LapsEnabled              bool
 	Instructions             string
@@ -55,6 +57,8 @@ type Runner struct {
 	lapsWarned                bool
 	fallbackInstructionsCache string
 	fallbackWarned            bool
+
+	freezeControllerFactory func(logPath string) reliability.FreezeController
 }
 
 var headPullLap = func(ctx context.Context, workspaceDir string) (laps.Lap, error) {
@@ -68,6 +72,8 @@ func NewRunner(s *store.Store, cfg Config, executors map[string]agent.Executor) 
 		executors: executors,
 	}
 }
+
+var freezeCheckInterval = monitor.TickInterval
 
 const builtInDefaultFallback = "Continue the relay run. Review the current state of the codebase and continue making progress on the project."
 
@@ -262,7 +268,23 @@ func (r *Runner) Run(ctx context.Context) error {
 			}
 		}
 
-		success, addressed, interrupted, err := r.runOne(ctx, relay, runIndex, selection.Agent, task, consumedMsg, relayMsg, selection.HourlyRetry, log)
+		success, addressed, interrupted, err := r.runOne(
+			ctx,
+			relay,
+			runIndex,
+			selection.Agent,
+			task,
+			consumedMsg,
+			relayMsg,
+			selection.HourlyRetry,
+			func() {
+				selection.Scheduler.OnAgentFailed(selection.Entry, "freeze")
+			},
+			func() {
+				selection.Scheduler.OnAgentRecovered(selection.Entry)
+			},
+			log,
+		)
 		if err != nil {
 			fmt.Fprintf(log, "relay %d run %d error: %v\n", relay.ID, runIndex+1, err)
 			return err
@@ -398,7 +420,19 @@ func (r *Runner) prepareExecutorForSelection(relayID, runIndex int, selection ro
 	}
 }
 
-func (r *Runner) runOne(ctx context.Context, relay *store.RelayRecord, runIndex int, picked agent.ResolvedAgent, task runTask, consumedMsg *store.MessageRecord, relayMsg *store.MessageRecord, isHourlyRetry bool, log io.Writer) (bool, bool, bool, error) {
+func (r *Runner) runOne(
+	ctx context.Context,
+	relay *store.RelayRecord,
+	runIndex int,
+	picked agent.ResolvedAgent,
+	task runTask,
+	consumedMsg *store.MessageRecord,
+	relayMsg *store.MessageRecord,
+	isHourlyRetry bool,
+	onFreeze func(),
+	onFreezeRecovered func(),
+	log io.Writer,
+) (bool, bool, bool, error) {
 	// Initialize run-state for this run.
 	runID := fmt.Sprintf("relay-%d-run-%d", relay.ID, runIndex+1)
 	_ = progress.SaveRunState(r.cfg.WorkspaceDir, &progress.RunState{RunID: runID, HandoffState: 0, RecordedLaps: []string{}})
@@ -422,6 +456,7 @@ func (r *Runner) runOne(ctx context.Context, relay *store.RelayRecord, runIndex 
 	var lastResult *agent.TryResult
 	var sessionID string
 	success := false
+	freezeMarked := false
 
 	roleInstructions, err := r.resolveRoleInstructions(task.Assignee)
 	if err != nil {
@@ -494,6 +529,7 @@ func (r *Runner) runOne(ctx context.Context, relay *store.RelayRecord, runIndex 
 		actionCh := kb.Start(kbCtx)
 
 		mon := monitor.NewMonitor(r.cfg.WorkspaceDir, tryLogPath, 0)
+		freezeController := r.newFreezeController(tryLogPath)
 		initialStatus, _ := mon.Tick()
 		fmt.Println(initialStatus)
 		fmt.Println("[Ctrl+S skip]  [Ctrl+P pause]  [Ctrl+X stop]  [Ctrl+C quit]")
@@ -518,17 +554,12 @@ func (r *Runner) runOne(ctx context.Context, relay *store.RelayRecord, runIndex 
 			res, err := r.executeTry(attemptCtx, picked, opts)
 			tryCh <- tryResult{res, err}
 		}()
-		go func() {
-			select {
-			case pid := <-pidCh:
-				mon.SetProcessGroupID(pid)
-			case <-attemptCtx.Done():
-			}
-		}()
 
 		var result *agent.TryResult
 		var execErr error
 		actionTaken := false
+		freezeTriggered := false
+		freezeTicker := time.NewTicker(freezeCheckInterval)
 	actionLoop:
 		for {
 			select {
@@ -536,6 +567,29 @@ func (r *Runner) runOne(ctx context.Context, relay *store.RelayRecord, runIndex 
 				result = res.result
 				execErr = res.err
 				break actionLoop
+			case pid := <-pidCh:
+				mon.SetProcessGroupID(pid)
+				if freezeController != nil {
+					freezeController.SetProcessGroupID(pid)
+				}
+			case <-freezeTicker.C:
+				if freezeController == nil || freezeTriggered {
+					continue
+				}
+				frozen, err := freezeController.Check(attemptCtx)
+				if err != nil {
+					fmt.Fprintf(log, "relay %d run %d attempt %d freeze check warning: %v\n", relay.ID, runIndex+1, attempt, err)
+					continue
+				}
+				if !frozen {
+					continue
+				}
+				freezeTriggered = true
+				freezeMarked = true
+				if onFreeze != nil {
+					onFreeze()
+				}
+				fmt.Fprintf(log, "relay %d run %d attempt %d freeze detected for %s\n", relay.ID, runIndex+1, attempt, picked.Harness)
 			case action := <-actionCh:
 				switch action {
 				case keyboard.ActionSkip:
@@ -558,6 +612,7 @@ func (r *Runner) runOne(ctx context.Context, relay *store.RelayRecord, runIndex 
 				}
 			}
 		}
+		freezeTicker.Stop()
 
 		mon.Stop()
 		kbCancel()
@@ -669,6 +724,10 @@ func (r *Runner) runOne(ctx context.Context, relay *store.RelayRecord, runIndex 
 		}
 
 		if !failed {
+			if freezeMarked && onFreezeRecovered != nil {
+				onFreezeRecovered()
+				freezeMarked = false
+			}
 			success = true
 			lastResult = result
 			break
@@ -698,6 +757,17 @@ func (r *Runner) runOne(ctx context.Context, relay *store.RelayRecord, runIndex 
 		addressed = *lastResult.MessageAddressed
 	}
 	return success, addressed, false, nil
+}
+
+func (r *Runner) newFreezeController(logPath string) reliability.FreezeController {
+	if r.freezeControllerFactory != nil {
+		return r.freezeControllerFactory(logPath)
+	}
+	threshold := r.cfg.FreezeThreshold
+	if threshold <= 0 {
+		threshold = reliability.DefaultFreezeThreshold
+	}
+	return reliability.NewFreezeController(logPath, threshold)
 }
 
 func (r *Runner) resolveRunTask(ctx context.Context) (runTask, error) {
