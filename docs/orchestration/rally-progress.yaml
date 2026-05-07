@@ -1,10 +1,10 @@
 version: 1
-updated_at: "2026-05-07T00:14:16Z"
+updated_at: "2026-05-07T00:14:22Z"
 active_batch:
     agent_mix:
         - op
     batch_id: 13
-    completed_iterations: 1
+    completed_iterations: 2
     ended_at: ""
     started_at: "2026-05-07T00:14:09Z"
     target_iterations: 3
@@ -635,3 +635,12 @@ recent_sessions:
       ended_at: "2026-05-07T00:14:16Z"
       runtime_seconds: 6
       transcript_path: /home/agent/.local/share/rally/sessions/session-40/terminal.log
+    - session_id: 41
+      batch_id: 13
+      iteration_index: 2
+      agent: opencode
+      status: completed
+      started_at: "2026-05-07T00:14:16Z"
+      ended_at: "2026-05-07T00:14:22Z"
+      runtime_seconds: 6
+      transcript_path: /home/agent/.local/share/rally/sessions/session-41/terminal.log
