@@ -541,10 +541,6 @@ func TestRunLoggedCommandStreamsTryLog(t *testing.T) {
 
 func TestAdapterCapabilityDefaults(t *testing.T) {
 	adapters := map[string]Executor{
-		"claude":   &ClaudeExecutor{},
-		"codex":    &CodexExecutor{},
-		"opencode": &OpenCodeExecutor{},
-		"gemini":   &GeminiExecutor{},
 		"generic":  &GenericExecutor{},
 		"fixture":  &FixtureExecutor{},
 	}
@@ -574,6 +570,142 @@ func TestAdapterCapabilityDefaults(t *testing.T) {
 				t.Error("ProbeLiveness() err = nil, want error")
 			}
 		})
+	}
+}
+
+func TestClaudeAdapterCapabilities(t *testing.T) {
+	c := &ClaudeExecutor{}
+	if !c.ResumeSupported() {
+		t.Error("ResumeSupported() = false, want true")
+	}
+	if c.RotateSupported() {
+		t.Error("RotateSupported() = true, want false")
+	}
+	if c.LivenessProbeSupported() {
+		t.Error("LivenessProbeSupported() = true, want false")
+	}
+	if c.CharsPerToken() != 3.5 {
+		t.Errorf("CharsPerToken() = %v, want 3.5", c.CharsPerToken())
+	}
+	if err := c.RotateModel("new-model"); err == nil {
+		t.Error("RotateModel() should return error")
+	}
+}
+
+func TestClaudeAdapter_SessionIDCapture(t *testing.T) {
+	out := []byte(`{"type":"system","session_id":"sess-abc-123"}
+{"type":"result","result":{"completed":true,"summary":"ok"}}`)
+	resultRaw, sessionID := scanClaudeOutput(out)
+	if sessionID != "sess-abc-123" {
+		t.Errorf("sessionID = %q, want %q", sessionID, "sess-abc-123")
+	}
+	if resultRaw == nil {
+		t.Error("resultRaw = nil, expected non-nil")
+	}
+}
+
+func TestClaudeAdapter_SessionIDEmptyWhenAbsent(t *testing.T) {
+	out := []byte(`{"type":"result","result":{"completed":true,"summary":"ok"}}`)
+	_, sessionID := scanClaudeOutput(out)
+	if sessionID != "" {
+		t.Errorf("sessionID = %q, want empty", sessionID)
+	}
+}
+
+func TestClaudeAdapter_ScanClaudeOutputNoResult(t *testing.T) {
+	out := []byte(`{"type":"system","session_id":"sess-no-result"}`)
+	resultRaw, sessionID := scanClaudeOutput(out)
+	if sessionID != "sess-no-result" {
+		t.Errorf("sessionID = %q, want %q", sessionID, "sess-no-result")
+	}
+	if resultRaw != nil {
+		t.Error("resultRaw should be nil when no result event")
+	}
+}
+
+func TestCodexAdapterCapabilities(t *testing.T) {
+	c := &CodexExecutor{}
+	if !c.ResumeSupported() {
+		t.Error("ResumeSupported() = false, want true")
+	}
+	if c.RotateSupported() {
+		t.Error("RotateSupported() = true, want false")
+	}
+	if !c.LivenessProbeSupported() {
+		t.Error("LivenessProbeSupported() = false, want true")
+	}
+	if c.CharsPerToken() != 4.0 {
+		t.Errorf("CharsPerToken() = %v, want 4.0", c.CharsPerToken())
+	}
+	if err := c.RotateModel("new-model"); err == nil {
+		t.Error("RotateModel() should return error")
+	}
+}
+
+func TestOpenCodeAdapterCapabilities(t *testing.T) {
+	o := &OpenCodeExecutor{Model: "initial-model"}
+	if !o.ResumeSupported() {
+		t.Error("ResumeSupported() = false, want true")
+	}
+	if !o.RotateSupported() {
+		t.Error("RotateSupported() = false, want true")
+	}
+	if o.LivenessProbeSupported() {
+		t.Error("LivenessProbeSupported() = true, want false")
+	}
+	if o.CharsPerToken() != 4.0 {
+		t.Errorf("CharsPerToken() = %v, want 4.0", o.CharsPerToken())
+	}
+}
+
+func TestOpenCodeAdapter_RotateModel(t *testing.T) {
+	o := &OpenCodeExecutor{Model: "original-model"}
+	if err := o.RotateModel("new-model"); err != nil {
+		t.Fatalf("RotateModel() returned error: %v", err)
+	}
+	if o.Model != "new-model" {
+		t.Errorf("Model = %q, want %q", o.Model, "new-model")
+	}
+}
+
+func TestGeminiAdapterCapabilities(t *testing.T) {
+	g := &GeminiExecutor{}
+	if !g.ResumeSupported() {
+		t.Error("ResumeSupported() = false, want true")
+	}
+	if g.RotateSupported() {
+		t.Error("RotateSupported() = true, want false")
+	}
+	if g.LivenessProbeSupported() {
+		t.Error("LivenessProbeSupported() = true, want false")
+	}
+	if g.CharsPerToken() != 4.0 {
+		t.Errorf("CharsPerToken() = %v, want 4.0", g.CharsPerToken())
+	}
+	if err := g.RotateModel("new-model"); err == nil {
+		t.Error("RotateModel() should return error")
+	}
+}
+
+func TestGeminiAdapter_SessionIDCapture(t *testing.T) {
+	out := []byte(`{"response":"{\"completed\":true,\"summary\":\"hello\"}","session_id":"gem-sess-456","stats":{}}`)
+	tr, err := parseGeminiOutput(out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tr.SessionID != "gem-sess-456" {
+		t.Errorf("SessionID = %q, want %q", tr.SessionID, "gem-sess-456")
+	}
+}
+
+func TestGeminiAdapter_SessionIDOnMissingResponse(t *testing.T) {
+	out := []byte(`{"session_id":"gem-sess-789","stats":{}}`)
+	tr, err := parseGeminiOutput(out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tr.SessionID != "gem-sess-789" {
+		t.Errorf("SessionID = %q, want %q", tr.SessionID, "gem-sess-789")
 	}
 }
 

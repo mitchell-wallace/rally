@@ -14,8 +14,9 @@ type ClaudeExecutor struct {
 }
 
 type claudeJSONEvent struct {
-	Type   string          `json:"type"`
-	Result json.RawMessage `json:"result"`
+	Type      string          `json:"type"`
+	SessionID string          `json:"session_id,omitempty"`
+	Result    json.RawMessage `json:"result"`
 }
 
 func (c *ClaudeExecutor) Execute(ctx context.Context, opts RunOptions) (*TryResult, error) {
@@ -30,6 +31,9 @@ func (c *ClaudeExecutor) Execute(ctx context.Context, opts RunOptions) (*TryResu
 	if model != "" {
 		args = append(args, "--model", model)
 	}
+	if opts.ResumeSessionID != "" {
+		args = append(args, "--resume", opts.ResumeSessionID)
+	}
 
 	cmd := exec.CommandContext(ctx, "claude", args...)
 	SetProcessGroup(cmd)
@@ -38,7 +42,27 @@ func (c *ClaudeExecutor) Execute(ctx context.Context, opts RunOptions) (*TryResu
 		return nil, fmt.Errorf("claude exec failed: %w\noutput: %s", err, string(out))
 	}
 
-	var resultRaw []byte
+	resultRaw, sessionID := scanClaudeOutput(out)
+	tr, parseErr := parseClaudeResult(out, resultRaw)
+	if parseErr != nil {
+		return nil, parseErr
+	}
+	tr.SessionID = sessionID
+	return tr, nil
+}
+
+func (c *ClaudeExecutor) ResumeSupported() bool                { return true }
+func (c *ClaudeExecutor) RotateSupported() bool                { return false }
+func (c *ClaudeExecutor) LivenessProbeSupported() bool         { return false }
+func (c *ClaudeExecutor) CharsPerToken() float64               { return 3.5 }
+func (c *ClaudeExecutor) RotateModel(string) error {
+	return fmt.Errorf("rotate not supported by claude adapter")
+}
+func (c *ClaudeExecutor) ProbeLiveness(_ context.Context) (bool, error) {
+	return false, fmt.Errorf("liveness probe not supported by claude adapter")
+}
+
+func scanClaudeOutput(out []byte) (resultRaw []byte, sessionID string) {
 	scanner := bufio.NewScanner(strings.NewReader(string(out)))
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
@@ -49,24 +73,15 @@ func (c *ClaudeExecutor) Execute(ctx context.Context, opts RunOptions) (*TryResu
 		if err := json.Unmarshal([]byte(line), &ev); err != nil {
 			continue
 		}
+		if ev.SessionID != "" {
+			sessionID = ev.SessionID
+		}
 		if ev.Type == "result" {
 			resultRaw = ev.Result
 			break
 		}
 	}
-
-	return parseClaudeResult(out, resultRaw)
-}
-
-func (c *ClaudeExecutor) ResumeSupported() bool                { return false }
-func (c *ClaudeExecutor) RotateSupported() bool                { return false }
-func (c *ClaudeExecutor) LivenessProbeSupported() bool         { return false }
-func (c *ClaudeExecutor) CharsPerToken() float64               { return 0 }
-func (c *ClaudeExecutor) RotateModel(string) error {
-	return fmt.Errorf("rotate not supported by claude adapter")
-}
-func (c *ClaudeExecutor) ProbeLiveness(_ context.Context) (bool, error) {
-	return false, fmt.Errorf("liveness probe not supported by claude adapter")
+	return resultRaw, sessionID
 }
 
 func parseClaudeResult(out, resultRaw []byte) (*TryResult, error) {

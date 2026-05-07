@@ -22,6 +22,7 @@ type RunOptions struct {
 	LapsEnabled      bool
 	Prompt           string // explicit override
 	LogPath          string // path to write try transcript log
+	ResumeSessionID  string // session-id to resume from a previous try
 	OnStart          func(pid int)
 }
 

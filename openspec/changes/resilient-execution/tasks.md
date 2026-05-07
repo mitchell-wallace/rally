@@ -8,11 +8,11 @@
 
 ## 2. Per-harness adapter wiring (incremental)
 
-- [ ] 2.1 Claude adapter: declare `ResumeSupported() = true`, capture session-id from CLI output, pass `--resume <session-id>` flag on retry; declare `LivenessProbeSupported() = false` (interrupts on second prompt)
-- [ ] 2.2 Codex adapter: declare resume support per the harness's session model; declare `LivenessProbeSupported() = true` (tolerates parallel prompts)
-- [ ] 2.3 Opencode adapter: declare resume support; implement `RotateModel` for in-place model swap (the cheap-rotation target); declare probe support per current behaviour
-- [ ] 2.4 Gemini adapter: declare resume support per harness behaviour; probe declared as untested (start with `false`, revisit)
-- [ ] 2.5 Per-adapter unit tests with fixture sessions
+- [x] 2.1 Claude adapter: declare `ResumeSupported() = true`, capture session-id from CLI output, pass `--resume <session-id>` flag on retry; declare `LivenessProbeSupported() = false` (interrupts on second prompt)
+- [x] 2.2 Codex adapter: declare resume support per the harness's session model; declare `LivenessProbeSupported() = true` (tolerates parallel prompts)
+- [x] 2.3 Opencode adapter: declare resume support; implement `RotateModel` for in-place model swap (the cheap-rotation target); declare probe support per current behaviour
+- [x] 2.4 Gemini adapter: declare resume support per harness behaviour; probe declared as untested (start with `false`, revisit)
+- [x] 2.5 Per-adapter unit tests with fixture sessions
 
 ## 3. Resume-aware retry path
 

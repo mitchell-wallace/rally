@@ -35,10 +35,10 @@ func parseCodexResult(reportData []byte) (*TryResult, error) {
 	return &tr, nil
 }
 
-func (c *CodexExecutor) ResumeSupported() bool                { return false }
+func (c *CodexExecutor) ResumeSupported() bool                { return true }
 func (c *CodexExecutor) RotateSupported() bool                { return false }
-func (c *CodexExecutor) LivenessProbeSupported() bool         { return false }
-func (c *CodexExecutor) CharsPerToken() float64               { return 0 }
+func (c *CodexExecutor) LivenessProbeSupported() bool         { return true }
+func (c *CodexExecutor) CharsPerToken() float64               { return 4.0 }
 func (c *CodexExecutor) RotateModel(string) error {
 	return fmt.Errorf("rotate not supported by codex adapter")
 }

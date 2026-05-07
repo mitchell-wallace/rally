@@ -17,10 +17,10 @@ type geminiWrapper struct {
 	Stats     json.RawMessage `json:"stats"`
 }
 
-func (g *GeminiExecutor) ResumeSupported() bool                { return false }
+func (g *GeminiExecutor) ResumeSupported() bool                { return true }
 func (g *GeminiExecutor) RotateSupported() bool                { return false }
 func (g *GeminiExecutor) LivenessProbeSupported() bool         { return false }
-func (g *GeminiExecutor) CharsPerToken() float64               { return 0 }
+func (g *GeminiExecutor) CharsPerToken() float64               { return 4.0 }
 func (g *GeminiExecutor) RotateModel(string) error {
 	return fmt.Errorf("rotate not supported by gemini adapter")
 }
@@ -59,12 +59,13 @@ func parseGeminiOutput(out []byte) (*TryResult, error) {
 	}
 
 	if wrap.Response == "" {
-		return &TryResult{Completed: false, Summary: string(out)}, nil
+		return &TryResult{Completed: false, Summary: string(out), SessionID: wrap.SessionID}, nil
 	}
 
 	var tr TryResult
 	if err := json.Unmarshal([]byte(wrap.Response), &tr); err != nil {
-		return &TryResult{Completed: true, Summary: wrap.Response}, nil
+		return &TryResult{Completed: true, Summary: wrap.Response, SessionID: wrap.SessionID}, nil
 	}
+	tr.SessionID = wrap.SessionID
 	return &tr, nil
 }
