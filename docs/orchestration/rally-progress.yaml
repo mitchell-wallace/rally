@@ -1,5 +1,5 @@
 version: 1
-updated_at: "2026-05-07T04:31:15Z"
+updated_at: "2026-05-07T04:31:41Z"
 active_batch:
     agent_mix:
         - cx
@@ -724,6 +724,8 @@ recent_sessions:
       agent: codex
       status: completed
       started_at: "2026-05-07T04:25:11Z"
+      ended_at: "2026-05-07T04:31:41Z"
+      runtime_seconds: 389
       summary: Implemented phase 4 cheap-rotation plumbing for resilient-execution.
       files_touched:
         - internal/routing/scheduler.go
