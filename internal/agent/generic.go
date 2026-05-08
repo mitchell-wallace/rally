@@ -72,6 +72,9 @@ func (g *GenericExecutor) Execute(ctx context.Context, opts RunOptions) (*TryRes
 	baseCmd := args[0]
 	cmdArgs := args[1:]
 	cmd := exec.CommandContext(ctx, baseCmd, cmdArgs...)
+	if opts.WorkspaceDir != "" {
+		cmd.Dir = opts.WorkspaceDir
+	}
 	SetProcessGroup(cmd)
 
 	return g.runGenericCommand(cmd, prompt, hasPrompt, tailStream, outputLines, opts)

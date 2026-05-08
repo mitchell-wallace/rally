@@ -37,7 +37,6 @@ func (f *funcExecutor) Execute(ctx context.Context, opts agent.RunOptions) (*age
 func (f *funcExecutor) ResumeSupported() bool        { return f.resumeSupported }
 func (f *funcExecutor) RotateSupported() bool        { return f.rotateSupported }
 func (f *funcExecutor) LivenessProbeSupported() bool { return f.probeSupported }
-func (f *funcExecutor) CharsPerToken() float64       { return 0 }
 func (f *funcExecutor) RotateModel(model string) error {
 	f.rotateCalls = append(f.rotateCalls, model)
 	if !f.rotateSupported {

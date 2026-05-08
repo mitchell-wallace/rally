@@ -41,6 +41,9 @@ func (g *GeminiExecutor) Execute(ctx context.Context, opts RunOptions) (*TryResu
 	}
 
 	cmd := exec.CommandContext(ctx, "gemini", args...)
+	if opts.WorkspaceDir != "" {
+		cmd.Dir = opts.WorkspaceDir
+	}
 	cmd.Stderr = nil // discard noisy stderr
 	SetProcessGroup(cmd)
 	out, err := runLoggedCommand(cmd, opts.LogPath, false, opts.OnStart)

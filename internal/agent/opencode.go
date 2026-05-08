@@ -44,6 +44,9 @@ func (o *OpenCodeExecutor) Execute(ctx context.Context, opts RunOptions) (*TryRe
 	}
 
 	cmd := exec.CommandContext(ctx, "opencode", args...)
+	if opts.WorkspaceDir != "" {
+		cmd.Dir = opts.WorkspaceDir
+	}
 	cmd.Env = append(os.Environ(), `OPENCODE_PERMISSION={"*":"allow"}`)
 	SetProcessGroup(cmd)
 	out, err := runLoggedCommand(cmd, opts.LogPath, true, opts.OnStart)

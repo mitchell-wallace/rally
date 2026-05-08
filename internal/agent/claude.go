@@ -36,6 +36,9 @@ func (c *ClaudeExecutor) Execute(ctx context.Context, opts RunOptions) (*TryResu
 	}
 
 	cmd := exec.CommandContext(ctx, "claude", args...)
+	if opts.WorkspaceDir != "" {
+		cmd.Dir = opts.WorkspaceDir
+	}
 	SetProcessGroup(cmd)
 	out, err := runLoggedCommand(cmd, opts.LogPath, true, opts.OnStart)
 	if err != nil {

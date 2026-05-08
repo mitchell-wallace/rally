@@ -153,6 +153,9 @@ func (c *CodexExecutor) Execute(ctx context.Context, opts RunOptions) (*TryResul
 	args = append(args, "--output-schema", schemaPath, "-o", reportPath, prompt)
 
 	cmd := exec.CommandContext(ctx, "codex", args...)
+	if opts.WorkspaceDir != "" {
+		cmd.Dir = opts.WorkspaceDir
+	}
 	SetProcessGroup(cmd)
 	out, err := runCodexCommand(cmd, opts.LogPath, opts.OnStart, c.setActiveSessionID)
 	if err != nil {

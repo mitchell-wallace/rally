@@ -23,6 +23,7 @@ type RunOptions struct {
 	Prompt           string // explicit override
 	LogPath          string // path to write try transcript log
 	ResumeSessionID  string // session-id to resume from a previous try
+	WorkspaceDir     string // working directory for the agent process
 	OnStart          func(pid int)
 }
 

@@ -511,6 +511,7 @@ attemptLoop:
 			RecentTryContext: recentContext.String(),
 			LapsEnabled:      r.cfg.LapsEnabled,
 			ResumeSessionID:  sessionID,
+			WorkspaceDir:     r.cfg.WorkspaceDir,
 		}
 		prompt := agent.BuildPrompt(opts)
 
@@ -675,7 +676,7 @@ attemptLoop:
 		} else if result == nil || !result.Completed {
 			failed = true
 		} else {
-			hasChanges := commitHash != ""
+			hasChanges := commitHash != "" || (result != nil && len(result.FilesChanged) > 0)
 			if !hasChanges {
 				dirty, _ := gitx.IsWorkspaceDirty(r.cfg.WorkspaceDir)
 				hasChanges = dirty
