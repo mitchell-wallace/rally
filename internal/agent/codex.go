@@ -30,7 +30,7 @@ func writeCodexSchema() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	schema := `{"type":"object","properties":{"completed":{"type":"boolean"},"summary":{"type":"string"},"remaining_work":{"type":"string"},"message_addressed":{"type":"boolean"},"files_changed":{"type":"array","items":{"type":"string"}}}}`
+	schema := `{"type":"object","additionalProperties":false,"required":["completed","summary","remaining_work","message_addressed","files_changed"],"properties":{"completed":{"type":"boolean"},"summary":{"type":"string"},"remaining_work":{"type":"string"},"message_addressed":{"type":["boolean","null"]},"files_changed":{"type":["array","null"],"items":{"type":"string"}}}}`
 	if _, err := f.WriteString(schema); err != nil {
 		f.Close()
 		os.Remove(f.Name())
