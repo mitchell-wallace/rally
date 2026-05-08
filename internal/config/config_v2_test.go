@@ -150,9 +150,6 @@ func TestLoadV2_ReliabilityDefaults(t *testing.T) {
 	if cfg.Reliability.LivenessProbe {
 		t.Errorf("Default LivenessProbe = true, want false")
 	}
-	if cfg.Reliability.CharsPerToken == nil {
-		t.Errorf("Default CharsPerToken should be an initialized map")
-	}
 }
 
 func TestLoadV2_ReliabilityOverrides(t *testing.T) {
@@ -163,10 +160,6 @@ func TestLoadV2_ReliabilityOverrides(t *testing.T) {
 freeze_threshold_secs = 120
 liveness_probe = true
 retry_budget = 10
-
-[reliability.chars_per_token]
-claude = 3.5
-codex = 4.0
 `)
 
 	cfg, err := LoadV2(dir)
@@ -182,12 +175,6 @@ codex = 4.0
 	}
 	if !cfg.Reliability.LivenessProbe {
 		t.Errorf("LivenessProbe = false, want true")
-	}
-	if got, want := cfg.Reliability.CharsPerToken["claude"], 3.5; got != want {
-		t.Errorf("CharsPerToken['claude'] = %v, want %v", got, want)
-	}
-	if got, want := cfg.Reliability.CharsPerToken["codex"], 4.0; got != want {
-		t.Errorf("CharsPerToken['codex'] = %v, want %v", got, want)
 	}
 }
 

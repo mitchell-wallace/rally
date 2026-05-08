@@ -98,16 +98,6 @@ func TestRenderStatusExtIndicators(t *testing.T) {
 			ind:          Indicators{Reliability: "↻ recovered"},
 			wantContains: []string{"↻ recovered"},
 		},
-		{
-			name:         "token estimate",
-			ind:          Indicators{TokenEstimate: "~12k tok"},
-			wantContains: []string{"~12k tok"},
-		},
-		{
-			name:         "frozen with token estimate",
-			ind:          Indicators{Reliability: "❄ frozen", TokenEstimate: "~3k tok"},
-			wantContains: []string{"❄ frozen", "~3k tok"},
-		},
 	}
 
 	for _, tc := range tests {
@@ -125,48 +115,6 @@ func TestRenderStatusExtIndicators(t *testing.T) {
 			}
 		})
 	}
-}
-
-func TestEstimateTokens(t *testing.T) {
-	dir := t.TempDir()
-
-	t.Run("empty path", func(t *testing.T) {
-		if got := EstimateTokens("", 4.0); got != "" {
-			t.Errorf("expected empty, got %q", got)
-		}
-	})
-
-	t.Run("zero divisor", func(t *testing.T) {
-		f := filepath.Join(dir, "a.log")
-		os.WriteFile(f, []byte("hello world"), 0o644)
-		if got := EstimateTokens(f, 0); got != "" {
-			t.Errorf("expected empty, got %q", got)
-		}
-	})
-
-	t.Run("small file", func(t *testing.T) {
-		f := filepath.Join(dir, "small.log")
-		os.WriteFile(f, make([]byte, 500), 0o644) // 500 bytes / 4.0 = 125 tokens
-		got := EstimateTokens(f, 4.0)
-		if got != "~125 tok" {
-			t.Errorf("expected ~125 tok, got %q", got)
-		}
-	})
-
-	t.Run("large file", func(t *testing.T) {
-		f := filepath.Join(dir, "large.log")
-		os.WriteFile(f, make([]byte, 40000), 0o644) // 40000 / 4.0 = 10000 tokens = ~10k
-		got := EstimateTokens(f, 4.0)
-		if got != "~10k tok" {
-			t.Errorf("expected ~10k tok, got %q", got)
-		}
-	})
-
-	t.Run("missing file", func(t *testing.T) {
-		if got := EstimateTokens("/nonexistent/file.log", 4.0); got != "" {
-			t.Errorf("expected empty, got %q", got)
-		}
-	})
 }
 
 func TestMonitorSlowingIndicator(t *testing.T) {
@@ -240,24 +188,6 @@ func TestMonitorRecoveredIndicator(t *testing.T) {
 	}
 	if containsString(line, "↻ recovered") {
 		t.Errorf("expected recovered indicator to clear after one tick, got %q", line)
-	}
-}
-
-func TestMonitorTokenEstimate(t *testing.T) {
-	dir := t.TempDir()
-	initGitRepo(t, dir)
-	logPath := filepath.Join(dir, "try.log")
-	os.WriteFile(logPath, make([]byte, 14000), 0o644) // 14000 / 3.5 = 4000 = ~4k
-
-	m := NewMonitor(dir, logPath, 0)
-	m.SetCharsPerToken(3.5)
-
-	line, err := m.Tick()
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if !containsString(line, "~4k tok") {
-		t.Errorf("expected token estimate ~4k tok, got %q", line)
 	}
 }
 

@@ -21,7 +21,6 @@ type GenericExecutor struct {
 func (g *GenericExecutor) ResumeSupported() bool                { return false }
 func (g *GenericExecutor) RotateSupported() bool                { return false }
 func (g *GenericExecutor) LivenessProbeSupported() bool         { return false }
-func (g *GenericExecutor) CharsPerToken() float64               { return 0 }
 func (g *GenericExecutor) RotateModel(string) error {
 	return fmt.Errorf("rotate not supported by generic adapter")
 }

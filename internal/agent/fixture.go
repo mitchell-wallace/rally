@@ -20,7 +20,6 @@ type FixtureExecutor struct {
 func (f *FixtureExecutor) ResumeSupported() bool                { return false }
 func (f *FixtureExecutor) RotateSupported() bool                { return false }
 func (f *FixtureExecutor) LivenessProbeSupported() bool         { return false }
-func (f *FixtureExecutor) CharsPerToken() float64               { return 0 }
 func (f *FixtureExecutor) RotateModel(string) error {
 	return fmt.Errorf("rotate not supported by fixture adapter")
 }

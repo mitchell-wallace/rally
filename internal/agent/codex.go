@@ -81,7 +81,6 @@ func (c *CodexExecutor) currentSessionID() string {
 func (c *CodexExecutor) ResumeSupported() bool        { return true }
 func (c *CodexExecutor) RotateSupported() bool        { return false }
 func (c *CodexExecutor) LivenessProbeSupported() bool { return true }
-func (c *CodexExecutor) CharsPerToken() float64       { return 4.0 }
 func (c *CodexExecutor) RotateModel(string) error {
 	return fmt.Errorf("rotate not supported by codex adapter")
 }
@@ -147,7 +146,7 @@ func (c *CodexExecutor) Execute(ctx context.Context, opts RunOptions) (*TryResul
 		model = opts.Model
 	}
 
-	args := []string{"exec", "--dangerously-bypass-approvals-and-sandbox", "--full-auto", "--json"}
+	args := []string{"exec", "--dangerously-bypass-approvals-and-sandbox", "--json"}
 	if model != "" {
 		args = append(args, "--model", model)
 	}

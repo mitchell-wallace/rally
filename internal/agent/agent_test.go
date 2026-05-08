@@ -556,9 +556,6 @@ func TestAdapterCapabilityDefaults(t *testing.T) {
 			if adapter.LivenessProbeSupported() {
 				t.Error("LivenessProbeSupported() = true, want false")
 			}
-			if adapter.CharsPerToken() != 0 {
-				t.Errorf("CharsPerToken() = %v, want 0", adapter.CharsPerToken())
-			}
 			if err := adapter.RotateModel("new-model"); err == nil {
 				t.Error("RotateModel() = nil, want error")
 			}
@@ -583,9 +580,6 @@ func TestClaudeAdapterCapabilities(t *testing.T) {
 	}
 	if c.LivenessProbeSupported() {
 		t.Error("LivenessProbeSupported() = true, want false")
-	}
-	if c.CharsPerToken() != 3.5 {
-		t.Errorf("CharsPerToken() = %v, want 3.5", c.CharsPerToken())
 	}
 	if err := c.RotateModel("new-model"); err == nil {
 		t.Error("RotateModel() should return error")
@@ -634,9 +628,6 @@ func TestCodexAdapterCapabilities(t *testing.T) {
 	if !c.LivenessProbeSupported() {
 		t.Error("LivenessProbeSupported() = false, want true")
 	}
-	if c.CharsPerToken() != 4.0 {
-		t.Errorf("CharsPerToken() = %v, want 4.0", c.CharsPerToken())
-	}
 	if err := c.RotateModel("new-model"); err == nil {
 		t.Error("RotateModel() should return error")
 	}
@@ -662,9 +653,6 @@ func TestOpenCodeAdapterCapabilities(t *testing.T) {
 	if o.LivenessProbeSupported() {
 		t.Error("LivenessProbeSupported() = true, want false")
 	}
-	if o.CharsPerToken() != 4.0 {
-		t.Errorf("CharsPerToken() = %v, want 4.0", o.CharsPerToken())
-	}
 }
 
 func TestOpenCodeAdapter_RotateModel(t *testing.T) {
@@ -687,9 +675,6 @@ func TestGeminiAdapterCapabilities(t *testing.T) {
 	}
 	if g.LivenessProbeSupported() {
 		t.Error("LivenessProbeSupported() = true, want false")
-	}
-	if g.CharsPerToken() != 4.0 {
-		t.Errorf("CharsPerToken() = %v, want 4.0", g.CharsPerToken())
 	}
 	if err := g.RotateModel("new-model"); err == nil {
 		t.Error("RotateModel() should return error")

@@ -54,7 +54,6 @@ func (c *ClaudeExecutor) Execute(ctx context.Context, opts RunOptions) (*TryResu
 func (c *ClaudeExecutor) ResumeSupported() bool                { return true }
 func (c *ClaudeExecutor) RotateSupported() bool                { return false }
 func (c *ClaudeExecutor) LivenessProbeSupported() bool         { return false }
-func (c *ClaudeExecutor) CharsPerToken() float64               { return 3.5 }
 func (c *ClaudeExecutor) RotateModel(string) error {
 	return fmt.Errorf("rotate not supported by claude adapter")
 }

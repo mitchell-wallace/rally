@@ -34,7 +34,6 @@ type Config struct {
 	TargetIterations         int
 	FreezeThreshold          time.Duration
 	LivenessProbe            bool
-	CharsPerToken            map[string]float64
 	RetryBudget              int
 	RunHooksOnAutoCommit     bool
 	LapsEnabled              bool
@@ -520,7 +519,7 @@ attemptLoop:
 			return false, false, false, fmt.Errorf("write current_task.md: %w", err)
 		}
 
-		tryLogPath := filepath.Join(r.cfg.DataDir, "tries", fmt.Sprintf("try-%d.log", r.store.NextTryID()))
+		tryLogPath := filepath.Join(r.cfg.DataDir, "tries", repoKey(r.cfg.WorkspaceDir), fmt.Sprintf("try-%d.log", r.store.NextTryID()))
 		_ = os.MkdirAll(filepath.Dir(tryLogPath), 0o755)
 		opts.LogPath = tryLogPath
 
@@ -528,7 +527,7 @@ attemptLoop:
 		startedAt := time.Now().UTC()
 
 		totalRuns := relay.TargetIterations
-		header := style.RenderHeader(runIndex+1, totalRuns, picked.Harness, attempt, startedAt)
+		header := style.RenderHeader(runIndex, totalRuns, picked.Harness, attempt, startedAt)
 		fmt.Println(header)
 
 		kb := keyboard.NewKeyboard(os.Stdin, os.Stdout)
@@ -545,8 +544,6 @@ attemptLoop:
 			freezeThreshold = reliability.DefaultFreezeThreshold
 		}
 		mon.SetFreezeThreshold(freezeThreshold)
-		cpt := r.resolveCharsPerToken(picked.Harness, exec)
-		mon.SetCharsPerToken(cpt)
 
 		initialStatus, _ := mon.Tick()
 		fmt.Println(initialStatus)
@@ -818,18 +815,6 @@ func (r *Runner) newFreezeController(logPath string, exec agent.Executor) reliab
 		threshold = reliability.DefaultFreezeThreshold
 	}
 	return reliability.NewFreezeControllerWithProbe(logPath, threshold, r.buildLivenessProbe(exec))
-}
-
-func (r *Runner) resolveCharsPerToken(harness string, exec agent.Executor) float64 {
-	if r.cfg.CharsPerToken != nil {
-		if v, ok := r.cfg.CharsPerToken[harness]; ok && v > 0 {
-			return v
-		}
-	}
-	if exec != nil {
-		return exec.CharsPerToken()
-	}
-	return 0
 }
 
 func (r *Runner) buildLivenessProbe(exec agent.Executor) *reliability.LivenessProbe {

@@ -20,7 +20,6 @@ type geminiWrapper struct {
 func (g *GeminiExecutor) ResumeSupported() bool                { return true }
 func (g *GeminiExecutor) RotateSupported() bool                { return false }
 func (g *GeminiExecutor) LivenessProbeSupported() bool         { return false }
-func (g *GeminiExecutor) CharsPerToken() float64               { return 4.0 }
 func (g *GeminiExecutor) RotateModel(string) error {
 	return fmt.Errorf("rotate not supported by gemini adapter")
 }

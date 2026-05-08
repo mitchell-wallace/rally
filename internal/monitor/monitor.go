@@ -16,11 +16,10 @@ import (
 
 const TickInterval = 5 * time.Second
 
-// Indicators carries optional reliability and token-estimate fields for the
-// status line.  Zero value means "nothing to show".
+// Indicators carries optional reliability fields for the status line.
+// Zero value means "nothing to show".
 type Indicators struct {
-	Reliability   string // e.g. "❄ frozen", "⚠ slowing", "↻ recovered"
-	TokenEstimate string // e.g. "~12k tok"
+	Reliability string // e.g. "❄ frozen", "⚠ slowing", "↻ recovered"
 }
 
 // RenderStatus formats a status line.
@@ -49,9 +48,6 @@ func RenderStatusExt(elapsed time.Duration, dirtyCount int, lastActivity time.Du
 	}
 	if ind.Reliability != "" {
 		line += "  │  " + ind.Reliability
-	}
-	if ind.TokenEstimate != "" {
-		line += "  │  " + ind.TokenEstimate
 	}
 	return line
 }
@@ -291,24 +287,6 @@ func (n *NetworkMonitor) Check() []string {
 	return n.evaluate(time.Now(), conns, ioBytes)
 }
 
-// EstimateTokens returns a human-readable token estimate string from log file
-// size and a chars-per-token divisor.  Returns "" when the estimate is
-// unavailable.
-func EstimateTokens(logPath string, charsPerToken float64) string {
-	if logPath == "" || charsPerToken <= 0 {
-		return ""
-	}
-	info, err := os.Stat(logPath)
-	if err != nil || info.Size() == 0 {
-		return ""
-	}
-	tokens := float64(info.Size()) / charsPerToken
-	if tokens < 1000 {
-		return fmt.Sprintf("~%d tok", int(tokens))
-	}
-	return fmt.Sprintf("~%dk tok", int(tokens/1000))
-}
-
 // Monitor produces a live status line during try execution.
 type Monitor struct {
 	workspaceDir  string
@@ -323,7 +301,6 @@ type Monitor struct {
 	frozen          bool
 	recovered       bool
 	recoveredTicks  int // counts steady ticks after recovery; clears indicator
-	charsPerToken   float64
 
 	ticker *time.Ticker
 	stopCh chan struct{}
@@ -422,9 +399,6 @@ func (m *Monitor) computeIndicators(lastActivity time.Duration) Indicators {
 		}
 	}
 
-	// Token estimate
-	ind.TokenEstimate = EstimateTokens(m.logPath, m.charsPerToken)
-
 	return ind
 }
 
@@ -490,13 +464,6 @@ func (m *Monitor) SetRecovered() {
 	m.mu.Lock()
 	m.recovered = true
 	m.recoveredTicks = 0
-	m.mu.Unlock()
-}
-
-// SetCharsPerToken sets the divisor for the token estimator.
-func (m *Monitor) SetCharsPerToken(v float64) {
-	m.mu.Lock()
-	m.charsPerToken = v
 	m.mu.Unlock()
 }
 

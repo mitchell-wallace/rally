@@ -64,10 +64,9 @@ type FallbackConfig struct {
 }
 
 type ReliabilityConfig struct {
-	FreezeThresholdSecs int                `toml:"freeze_threshold_secs,omitempty"`
-	LivenessProbe       bool               `toml:"liveness_probe,omitempty"`
-	RetryBudget         int                `toml:"retry_budget,omitempty"`
-	CharsPerToken       map[string]float64 `toml:"chars_per_token,omitempty"`
+	FreezeThresholdSecs int  `toml:"freeze_threshold_secs,omitempty"`
+	LivenessProbe       bool `toml:"liveness_probe,omitempty"`
+	RetryBudget         int  `toml:"retry_budget,omitempty"`
 }
 
 func (r ReliabilityConfig) FreezeThreshold() time.Duration {
@@ -163,10 +162,6 @@ func LoadV2(workspaceDir string) (V2Config, error) {
 	if cfg.Reliability.RetryBudget == 0 {
 		cfg.Reliability.RetryBudget = 5
 	}
-	if cfg.Reliability.CharsPerToken == nil {
-		cfg.Reliability.CharsPerToken = make(map[string]float64)
-	}
-
 	if cfg.Harnesses == nil {
 		cfg.Harnesses = make(map[string]*HarnessConfig)
 	}

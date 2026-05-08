@@ -40,7 +40,6 @@ type Executor interface {
 	ResumeSupported() bool
 	RotateSupported() bool
 	LivenessProbeSupported() bool
-	CharsPerToken() float64
 	RotateModel(newModel string) error
 	ProbeLiveness(ctx context.Context) (bool, error)
 }
