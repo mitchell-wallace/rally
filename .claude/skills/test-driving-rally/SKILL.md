@@ -5,12 +5,32 @@ license: MIT
 compatibility: Requires rally built from source, plus at least one agent CLI (claude, codex, gemini, opencode).
 metadata:
   author: rally
-  version: "1.0"
+  version: "1.1"
 ---
 
 Run real end-to-end smoke tests of rally to verify features work correctly. This skill drives rally from the CLI in isolated `/tmp/` repos, observes actual behaviour, and reports findings.
 
 **Goal**: High-signal smoke tests, not exhaustive QA. Prioritise breadth across features over depth on any one feature. Report issues found but do not investigate or fix them — keep focus on surface-area coverage.
+
+## 0. Reuse pre-built real-backend tests first
+
+Before doing manual smoke tests, run the existing real-backend integration
+tests. They cover the core scenarios automatically:
+
+```bash
+RALLY_TEST_REAL_AGENTS=1 go test ./internal/relay/... -run TestRealBackend -v -timeout 300s
+```
+
+These tests skip automatically when `RALLY_TEST_REAL_AGENTS` is unset. They cover:
+- Basic claude relay with file creation
+- Laps queue integration
+- Log scoping per-repo (two repos → two subdirectories in data_dir)
+- Codex executor (checks for CLI arg conflicts)
+- Resilience retry budget exhaustion and agent pausing
+
+If they all pass, proceed to the manual smoke tests below for broader coverage. If any fail, investigate before continuing — the pre-built tests are cheaper to run and faster to interpret than manual ones.
+
+Add new tests to `internal/relay/runner_real_backend_test.go` whenever you find a new category of failure during manual testing.
 
 ---
 
@@ -207,13 +227,34 @@ rally instructions show   # shows "(no project instructions set)" or content
 
 ---
 
+### 2n. Rate-limit / stuck-agent scenario
+
+To test how rally handles a rate-limited or hung agent, use a provider known to be rate-limited (or just a slow model). Configure with a short freeze threshold:
+
+```toml
+[reliability]
+freeze_threshold_secs = 60
+retry_budget = 1
+```
+
+Run and observe:
+- `⚠ slowing` fires at 36s (60% of threshold)
+- On **Linux**: freeze requires no TCP connections — a rate-limited agent that still has an open API connection will NOT trigger `❄ frozen`, so the relay just hangs until external timeout. This is a known gap.
+- On **non-Linux** or if the connection drops: `❄ frozen` fires and the process is killed, a retry may run.
+
+Check `.rally/relays/relay-N.log` for "freeze detected" vs no freeze.
+
+---
+
 ## 3. Known environment-specific failures
 
 Not all agents may be authenticated or available. These are non-rally failures:
 
 - **Gemini**: Fails with exit code 41 if no API key is set. Rally correctly retries and pauses the agent.
 - **Codex**: May fail if CLI flags changed incompatibly. Check try record `summary` for the exact error.
-- **OpenCode**: Model availability varies by configured provider.
+- **OpenCode**: Model availability varies by configured provider. Rate-limited models (e.g., `zai-coding-plan/glm-5.1`) may hang silently producing no output — on Linux the freeze detector won't fire if TCP connections are active.
+
+**Linux freeze gap**: On Linux, the freeze detector requires no log activity AND no TCP connections AND no I/O. A rate-limited API call that's still connected satisfies none of the last two, so the process won't be killed automatically.
 
 When an agent CLI is broken/unauthed, verify that rally's retry and resilience handling works correctly (pause recorded, relay continues or ends gracefully) rather than treating it as a rally failure.
 
@@ -227,24 +268,26 @@ After testing, compile a concise report:
 ## Smoke Test Results — rally vX.Y.Z
 
 ### Passed
-- Basic claude relay: ✓
-- Monitor status line: ✓ (token estimate, slowing indicator)
-- Config validation: ✓ (invalid harness name, missing default route)
-- Routes: ✓
+- Basic claude relay: ✓ (file created, try record written, commit hash shown)
+- Monitor status line: ✓ (⚠ slowing indicator, no token estimate)
+- Config validation: ✓ (invalid harness name, missing default route, route-name-as-entry)
+- Routes: ✓ (routes check, default route relay)
 - Laps integration: ✓ (auto-detected, hooks installed, both tasks completed)
-- Custom harness: ✓ (mycode:kimi resolved, relay ran)
-- Resume prompt: ✓
-- --new flag: ✓ (old relay closed)
-- Weighted mix cc:2: ✓
+- Custom harness: ✓ (mycode:kimi resolved, relay ran, correct agent_mix)
+- Resume interactive prompt: ✓ (detected unfinished relay, keep/overwrite mix)
+- --new flag: ✓ (old relay closed, new relay started)
+- --resume flag: ✓ (non-interactive, found paused agent, waited)
+- Weighted mix cc:2: ✓ (2 claude iterations completed)
+- Log scoping: ✓ (tries in data_dir/tries/REPOKEY/ per-workspace)
+- [N/M] header: ✓ (shows iteration-within-relay / target, e.g. [1/3])
+- Rally progress command: ✓ (progress.yaml updated)
 
 ### Failed / Degraded
-- Codex: CLI argument conflict (--dangerously-bypass-approvals-and-sandbox + --full-auto now mutually exclusive)
-  Suggestion: Update CodexExecutor args in internal/agent/codex.go
 - Gemini: No auth configured (environment issue, not a rally bug)
+- OpenCode rate-limited models: hang silently; freeze detector on Linux doesn't kill due to active TCP connection
 
 ### Observations
-- relay log files in shared data_dir (~/.local/share/rally/) use per-repo relay IDs which can collide across repos — logs may interleave
-- [N/M] in relay header shows global run_id / target_iterations, not iteration-within-relay
+- `rally tail --try N` uses global try IDs from the shared data_dir; across multiple repos in the same session, try 1 from repo A and try 1 from repo B go to different subdirectories (fixed), but the `--try N` flag maps to local store IDs, not data-dir IDs
 ```
 
 ---
