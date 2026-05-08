@@ -113,17 +113,34 @@ func (k *Keyboard) readLoop(ctx context.Context, byteCh chan<- byte) {
 	defer k.wg.Done()
 	buf := make([]byte, 1)
 	for {
-		n, err := k.in.Read(buf)
-		if err != nil {
-			return
+		// Read in a goroutine so context cancellation can interrupt a blocking stdin.
+		type readResult struct {
+			b   byte
+			err error
 		}
-		if n == 0 {
-			continue
-		}
+		ch := make(chan readResult, 1)
+		go func() {
+			n, err := k.in.Read(buf)
+			if err != nil {
+				ch <- readResult{err: err}
+				return
+			}
+			if n > 0 {
+				ch <- readResult{b: buf[0]}
+			}
+		}()
 		select {
-		case byteCh <- buf[0]:
 		case <-ctx.Done():
 			return
+		case r := <-ch:
+			if r.err != nil {
+				return
+			}
+			select {
+			case byteCh <- r.b:
+			case <-ctx.Done():
+				return
+			}
 		}
 	}
 }
