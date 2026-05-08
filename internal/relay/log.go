@@ -1,19 +1,37 @@
 package relay
 
 import (
+	"crypto/sha256"
 	"errors"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
 )
 
+var nonAlphanumRe = regexp.MustCompile(`[^a-z0-9]+`)
+
+// repoKey returns a short, filesystem-safe identifier for a workspace directory.
+// Format: sanitizedBasename-XXXXXXXX where XXXXXXXX is 8 hex chars of SHA-256(path).
+// This scopes data-dir log files per repo so multiple checkouts don't collide.
+func repoKey(workspaceDir string) string {
+	base := strings.ToLower(filepath.Base(workspaceDir))
+	base = nonAlphanumRe.ReplaceAllString(base, "-")
+	base = strings.Trim(base, "-")
+	if base == "" {
+		base = "repo"
+	}
+	h := sha256.Sum256([]byte(workspaceDir))
+	return fmt.Sprintf("%s-%x", base, h[:4])
+}
+
 func openRelayLog(dataDir, workspaceDir string, relayID int) (io.WriteCloser, error) {
 	paths := []string{
-		relayLogPath(dataDir, relayID),
+		relayLogPath(dataDir, workspaceDir, relayID),
 		repoRelayLogPath(workspaceDir, relayID),
 	}
 	var files []*os.File
@@ -42,8 +60,8 @@ func openRelayLog(dataDir, workspaceDir string, relayID int) (io.WriteCloser, er
 	return &multiWriteCloser{files: files, writer: io.MultiWriter(writers...)}, nil
 }
 
-func relayLogPath(dataDir string, relayID int) string {
-	return filepath.Join(dataDir, "relays", fmt.Sprintf("relay-%d.log", relayID))
+func relayLogPath(dataDir, workspaceDir string, relayID int) string {
+	return filepath.Join(dataDir, "relays", repoKey(workspaceDir), fmt.Sprintf("relay-%d.log", relayID))
 }
 
 func repoRelayLogPath(workspaceDir string, relayID int) string {
