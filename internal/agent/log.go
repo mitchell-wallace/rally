@@ -71,8 +71,10 @@ func runLoggedCommand(cmd *exec.Cmd, logPath string, mergeStderr bool, onStart f
 		copyErr <- err
 	}()
 
-	waitErr := cmd.Wait()
+	// Drain stdout before Wait; Wait closes the pipe, which would cause a
+	// "file already closed" error if the goroutine is still reading.
 	streamErr := <-copyErr
+	waitErr := cmd.Wait()
 	if streamErr != nil {
 		return buf.Bytes(), streamErr
 	}
