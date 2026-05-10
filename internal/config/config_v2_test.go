@@ -141,7 +141,7 @@ func TestLoadV2_ReliabilityDefaults(t *testing.T) {
 		t.Fatalf("LoadV2 failed: %v", err)
 	}
 
-	if got, want := cfg.Reliability.FreezeThresholdSecs, 180; got != want {
+	if got, want := cfg.Reliability.FreezeThresholdSecs, 120; got != want {
 		t.Errorf("Default FreezeThresholdSecs = %d, want %d", got, want)
 	}
 	if got, want := cfg.Reliability.RetryBudget, 5; got != want {
