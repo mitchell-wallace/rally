@@ -156,6 +156,10 @@ func tailLines(s string, n int) string {
 	if n <= 0 {
 		return s
 	}
+	// Strip ANSI/VT escape sequences so TUI output from opencode (and similar
+	// agents that enter interactive mode after completing their task) doesn't
+	// corrupt the summary stored in the try record.
+	s = stripANSI(s)
 	s = strings.TrimRight(s, " \t\n\r")
 	if s == "" {
 		return ""
@@ -165,4 +169,50 @@ func tailLines(s string, n int) string {
 		lines = lines[len(lines)-n:]
 	}
 	return strings.Join(lines, "\n")
+}
+
+// stripANSI removes ANSI/VT100 escape sequences from s.
+// This handles both CSI sequences (ESC [) and OSC sequences (ESC ]) that
+// opencode emits when it enters interactive TUI mode after completing a task.
+func stripANSI(s string) string {
+	var out strings.Builder
+	i := 0
+	for i < len(s) {
+		if s[i] == '\x1b' && i+1 < len(s) {
+			i++
+			switch s[i] {
+			case '[': // CSI sequence: ESC [ ... <terminator>
+				i++
+				for i < len(s) && !isFinalByte(s[i]) {
+					i++
+				}
+				if i < len(s) {
+					i++ // consume final byte
+				}
+			case ']': // OSC sequence: ESC ] ... BEL or ST
+				i++
+				for i < len(s) {
+					if s[i] == '\x07' { // BEL
+						i++
+						break
+					}
+					if s[i] == '\x1b' && i+1 < len(s) && s[i+1] == '\\' { // ST
+						i += 2
+						break
+					}
+					i++
+				}
+			default:
+				i++ // skip single-char escape
+			}
+		} else {
+			out.WriteByte(s[i])
+			i++
+		}
+	}
+	return out.String()
+}
+
+func isFinalByte(b byte) bool {
+	return b >= 0x40 && b <= 0x7e
 }
