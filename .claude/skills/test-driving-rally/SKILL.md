@@ -273,9 +273,9 @@ Not all agents may be authenticated or available. These are non-rally failures:
 
 - **Gemini**: Fails with exit code 41 if no API key is set. Rally correctly retries and pauses the agent.
 - **Codex**: May fail if CLI flags changed incompatibly. Check try record `summary` for the exact error.
-- **OpenCode**: Model availability varies by configured provider. Use the built-in `op` alias — NOT a custom harness with `command = ["opencode"]` (TUI mode). Rate-limited models may hang silently; the `connectedFrozen` path (5-min syscall silence while connections are open) will eventually kill them.
+- **OpenCode**: Model availability varies by configured provider. Use the built-in `op` alias — NOT a custom harness with `command = ["opencode"]` (TUI mode). When rate-limited (`opencode-go` free tier), opencode maintains TCP connections silently for ~2 minutes then disconnects — `classicFrozen` fires ~130s after start regardless of threshold (as long as threshold < 130s). After freeze, rally marks the agent paused and retries later.
 
-**Linux freeze behavior**: Two paths — `classicFrozen` (log silent + no connections) fires quickly after task completion once the agent disconnects (~120s default threshold). `connectedFrozen` (log silent + connections open + no syscall I/O for 5 min) handles rate-limited agents. Neither path fires if the agent keeps writing log output (even just TUI redraws) — the ANSI filter writer in the generic harness prevents this by discarding pure-escape frames.
+**Linux freeze behavior**: Two paths — `classicFrozen` (log silent + no connections) fires once connections drop (either after task completion or after rate-limit timeout). `connectedFrozen` (log silent + connections open + no syscall I/O for 5 min) catches agents holding a connection open indefinitely (e.g., different rate-limit behavior). The `TestRealBackend_OpenCodeRelay` test takes ~3 minutes when opencode-go is rate-limited (2m10s for freeze + 50s for ctx expiry); this is expected and the test passes.
 
 When an agent CLI is broken/unauthed, verify that rally's retry and resilience handling works correctly (pause recorded, relay continues or ends gracefully) rather than treating it as a rally failure.
 
