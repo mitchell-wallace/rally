@@ -121,11 +121,20 @@ func (g *GenericExecutor) runGenericCommand(
 	stderrDone := make(chan struct{})
 	go func() {
 		defer close(stdoutDone)
-		dst := io.MultiWriter(&stdoutBuf)
+		// Write ANSI-stripped bytes to the log file so the freeze detector's
+		// log-silence check reflects real content activity, not TUI redraws.
+		// TUI escape sequences (opencode entering interactive mode after completing
+		// the task) would otherwise keep the log modification time current and
+		// prevent the freeze detector from ever seeing log silence.
+		var logDst io.Writer
 		if logFile != nil {
-			dst = io.MultiWriter(&stdoutBuf, logFile)
+			logDst = &ansiFilterWriter{w: logFile}
 		}
-		io.Copy(dst, stdoutPipe)
+		if logDst != nil {
+			io.Copy(io.MultiWriter(&stdoutBuf, logDst), stdoutPipe)
+		} else {
+			io.Copy(&stdoutBuf, stdoutPipe)
+		}
 	}()
 	go func() {
 		defer close(stderrDone)
@@ -215,4 +224,21 @@ func stripANSI(s string) string {
 
 func isFinalByte(b byte) bool {
 	return b >= 0x40 && b <= 0x7e
+}
+
+// ansiFilterWriter strips ANSI/VT escape sequences before writing to the
+// underlying writer. This lets the log file's modification time track real
+// content activity rather than TUI redraw cycles, which is critical for the
+// freeze detector's log-silence signal.
+type ansiFilterWriter struct {
+	w io.Writer
+}
+
+func (f *ansiFilterWriter) Write(p []byte) (int, error) {
+	stripped := stripANSI(string(p))
+	if strings.TrimSpace(stripped) == "" {
+		return len(p), nil // discard pure whitespace/escape frames
+	}
+	_, err := f.w.Write([]byte(stripped))
+	return len(p), err
 }
