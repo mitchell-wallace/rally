@@ -297,8 +297,15 @@ func TestRealBackend_CodexRelay(t *testing.T) {
 }
 
 // TestRealBackend_OpenCodeRelay runs a single opencode iteration using the
-// built-in OpenCodeExecutor (headless mode via "opencode run") and verifies
-// the try completes and produces no TUI ANSI escape sequences in the summary.
+// built-in OpenCodeExecutor (headless mode via "opencode run"). It verifies:
+//   - The executor ran at all (try record written)
+//   - No TUI ANSI escape sequences leaked into the try summary
+//   - When opencode is rate-limited or frozen, rally marks the agent paused
+//     (resilient execution) and the context cancellation exits cleanly
+//
+// Uses a short FreezeThreshold (60s) so the test terminates quickly when
+// opencode-go is rate-limited. The 3-minute context ensures ctx.Done() fires
+// well before the test framework's 5-minute panic threshold.
 func TestRealBackend_OpenCodeRelay(t *testing.T) {
 	requireRealAgents(t)
 	requireBinary(t, "opencode")
@@ -310,21 +317,21 @@ func TestRealBackend_OpenCodeRelay(t *testing.T) {
 		"opencode": &agent.OpenCodeExecutor{Model: "opencode-go/kimi-k2.6"},
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 	defer cancel()
 
 	r := NewRunner(s, Config{
-		WorkspaceDir:     workspaceDir,
-		DataDir:          dataDir,
-		AgentMixSpecs:    []string{"op"},
+		WorkspaceDir:    workspaceDir,
+		DataDir:         dataDir,
+		AgentMixSpecs:   []string{"op"},
 		TargetIterations: 1,
-		RetryBudget:      1,
-		TaskPrompt:       "Create a file called opencode-e2e.txt with the text 'opencode e2e pass'. Do not create any other files.",
+		RetryBudget:     1,
+		FreezeThreshold: 60 * time.Second,
+		TaskPrompt:      "Create a file called opencode-e2e.txt with the text 'opencode e2e pass'. Do not create any other files.",
 	}, executors)
 
-	// We don't assert Completed because opencode models vary in reliability.
-	// We care that: the executor ran at all, the log exists, and the summary
-	// doesn't contain raw ANSI sequences (which would indicate TUI mode leaked).
+	// Ignore run error: may return ctx.Err() when all agents are paused and the
+	// context expires waiting for pause recovery. That is correct resilience behaviour.
 	_ = r.Run(ctx)
 
 	tries := s.AllTries()
@@ -339,6 +346,23 @@ func TestRealBackend_OpenCodeRelay(t *testing.T) {
 			if _, err := os.Stat(try.LogPath); err != nil {
 				t.Errorf("log file does not exist at %q: %v", try.LogPath, err)
 			}
+		}
+	}
+
+	// If the run failed (e.g. rate-limited), the agent should be paused — not
+	// frozen indefinitely. This verifies resilient execution handles the case.
+	lastTry := tries[len(tries)-1]
+	if !lastTry.Completed {
+		statusEvents := s.GetAgentStatus("opencode")
+		paused := false
+		for _, ev := range statusEvents {
+			if ev.EventType == "paused" {
+				paused = true
+				break
+			}
+		}
+		if !paused {
+			t.Error("opencode run failed but no paused event recorded — resilient execution did not handle the failure")
 		}
 	}
 }
