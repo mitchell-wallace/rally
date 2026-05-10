@@ -7,51 +7,84 @@ import (
 	"time"
 )
 
-func TestDetectorLinuxRequiresAllSignals(t *testing.T) {
+func TestDetectorLinuxClassicFreeze(t *testing.T) {
 	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	d := NewDetectorForPlatform("linux", 3*time.Minute)
 
+	// Log silent + no connections exceeding threshold → freeze.
+	// IO activity does NOT prevent the classic freeze; background processes
+	// (GC, opencode TUI) produce sporadic disk writes that would otherwise
+	// cause the freeze to never fire.
 	if frozen := d.Evaluate(SignalSnapshot{
 		Now:          base,
-		LogSilentFor: 4 * time.Minute,
-		Connections:  0,
-		IOBytes:      10,
-	}); frozen {
-		t.Fatal("first observation should not freeze without an IO-silence window")
-	}
-
-	if frozen := d.Evaluate(SignalSnapshot{
-		Now:          base.Add(4 * time.Minute),
-		LogSilentFor: 4 * time.Minute,
-		Connections:  1,
-		IOBytes:      10,
-	}); frozen {
-		t.Fatal("nonzero connections should prevent freeze")
-	}
-
-	if frozen := d.Evaluate(SignalSnapshot{
-		Now:          base.Add(4 * time.Minute),
 		LogSilentFor: 4 * time.Minute,
 		Connections:  0,
 		IOBytes:      10,
 	}); !frozen {
-		t.Fatal("expected freeze once log silence, zero connections, and IO silence all exceed threshold")
+		t.Fatal("expected freeze: log silent >= threshold and no connections")
 	}
 
 	d = NewDetectorForPlatform("linux", 3*time.Minute)
-	_ = d.Evaluate(SignalSnapshot{
+	if frozen := d.Evaluate(SignalSnapshot{
 		Now:          base,
 		LogSilentFor: 4 * time.Minute,
+		Connections:  1,
+		IOBytes:      10,
+	}); frozen {
+		t.Fatal("nonzero connections should prevent classic freeze")
+	}
+
+	// Log silent below threshold → no freeze.
+	d = NewDetectorForPlatform("linux", 3*time.Minute)
+	if frozen := d.Evaluate(SignalSnapshot{
+		Now:          base,
+		LogSilentFor: 2 * time.Minute,
 		Connections:  0,
 		IOBytes:      10,
-	})
-	if frozen := d.Evaluate(SignalSnapshot{
-		Now:          base.Add(4 * time.Minute),
-		LogSilentFor: 4 * time.Minute,
-		Connections:  0,
-		IOBytes:      11,
 	}); frozen {
-		t.Fatal("fresh IO activity should prevent freeze")
+		t.Fatal("log silent below threshold should not freeze")
+	}
+}
+
+func TestDetectorLinuxConnectedNoTrafficFreeze(t *testing.T) {
+	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	threshold := 3 * time.Minute
+	d := NewDetectorForPlatform("linux", threshold)
+
+	// Connections open but no syscall I/O for NetworkSilentThreshold → freeze.
+	// Simulates a rate-limited agent that keeps a TCP connection alive without
+	// sending any data.
+	d.Evaluate(SignalSnapshot{
+		Now:          base,
+		LogSilentFor: threshold + time.Second,
+		Connections:  2,
+		SyscallBytes: 1000,
+	})
+	// SyscallBytes unchanged for NetworkSilentThreshold → connectedFrozen
+	if frozen := d.Evaluate(SignalSnapshot{
+		Now:          base.Add(NetworkSilentThreshold),
+		LogSilentFor: threshold + time.Second,
+		Connections:  2,
+		SyscallBytes: 1000, // no change
+	}); !frozen {
+		t.Fatal("expected freeze: connections open but no syscall I/O for NetworkSilentThreshold")
+	}
+
+	// Fresh syscall I/O resets the timer.
+	d2 := NewDetectorForPlatform("linux", threshold)
+	d2.Evaluate(SignalSnapshot{
+		Now:          base,
+		LogSilentFor: threshold + time.Second,
+		Connections:  2,
+		SyscallBytes: 1000,
+	})
+	if frozen := d2.Evaluate(SignalSnapshot{
+		Now:          base.Add(NetworkSilentThreshold),
+		LogSilentFor: threshold + time.Second,
+		Connections:  2,
+		SyscallBytes: 2000, // changed
+	}); frozen {
+		t.Fatal("fresh syscall I/O should prevent connected-frozen")
 	}
 }
 

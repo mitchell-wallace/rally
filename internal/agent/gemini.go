@@ -45,6 +45,9 @@ func (g *GeminiExecutor) Execute(ctx context.Context, opts RunOptions) (*TryResu
 		cmd.Dir = opts.WorkspaceDir
 	}
 	cmd.Stderr = nil // discard noisy stderr
+	// Required for headless/automation mode: without this, gemini CLI refuses
+	// to run in untrusted directories when stdin is not a terminal.
+	cmd.Env = append(cmd.Environ(), "GEMINI_CLI_TRUST_WORKSPACE=true")
 	SetProcessGroup(cmd)
 	out, err := runLoggedCommand(cmd, opts.LogPath, false, opts.OnStart)
 	if err != nil {

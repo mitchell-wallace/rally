@@ -807,15 +807,16 @@ attemptLoop:
 	return success, addressed, false, nil
 }
 
-func (r *Runner) newFreezeController(logPath string, exec agent.Executor) reliability.FreezeController {
+func (r *Runner) newFreezeController(tryLogPath string, exec agent.Executor) reliability.FreezeController {
 	if r.freezeControllerFactory != nil {
-		return r.freezeControllerFactory(logPath)
+		return r.freezeControllerFactory(tryLogPath)
 	}
 	threshold := r.cfg.FreezeThreshold
 	if threshold <= 0 {
 		threshold = reliability.DefaultFreezeThreshold
 	}
-	return reliability.NewFreezeControllerWithProbe(logPath, threshold, r.buildLivenessProbe(exec))
+	netStatsPath := strings.TrimSuffix(tryLogPath, ".log") + ".netstat.jsonl"
+	return reliability.NewFreezeControllerFull(tryLogPath, threshold, r.buildLivenessProbe(exec), netStatsPath)
 }
 
 func (r *Runner) buildLivenessProbe(exec agent.Executor) *reliability.LivenessProbe {

@@ -205,6 +205,7 @@ func socketInodesForPIDs(pids []int) (map[string]struct{}, error) {
 }
 
 // ReadIOBytes returns the cumulative read+write bytes for a list of PIDs.
+// These are storage (disk) I/O bytes only; see ReadSyscallBytes for network-inclusive counts.
 func ReadIOBytes(pids []int) (uint64, error) {
 	if runtime.GOOS != "linux" {
 		return 0, nil
@@ -229,6 +230,38 @@ func ReadIOBytes(pids []int) (uint64, error) {
 			}
 		}
 		total += rbytes + wbytes
+	}
+	return total, nil
+}
+
+// ReadSyscallBytes returns the cumulative rchar+wchar for a list of PIDs.
+// rchar and wchar count all bytes passed through read/write syscalls, including
+// network sockets. Use this to detect whether an agent with open TCP connections
+// is actually transferring data (vs. sitting idle at a rate limit).
+func ReadSyscallBytes(pids []int) (uint64, error) {
+	if runtime.GOOS != "linux" {
+		return 0, nil
+	}
+	var total uint64
+	for _, pid := range pids {
+		data, err := os.ReadFile(fmt.Sprintf("/proc/%d/io", pid))
+		if err != nil {
+			continue // PID may have exited
+		}
+		var rchar, wchar uint64
+		scanner := bufio.NewScanner(strings.NewReader(string(data)))
+		for scanner.Scan() {
+			line := scanner.Text()
+			if strings.HasPrefix(line, "rchar:") {
+				v, _ := strconv.ParseUint(strings.TrimSpace(strings.TrimPrefix(line, "rchar:")), 10, 64)
+				rchar = v
+			}
+			if strings.HasPrefix(line, "wchar:") {
+				v, _ := strconv.ParseUint(strings.TrimSpace(strings.TrimPrefix(line, "wchar:")), 10, 64)
+				wchar = v
+			}
+		}
+		total += rchar + wchar
 	}
 	return total, nil
 }
