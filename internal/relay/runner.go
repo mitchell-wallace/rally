@@ -687,6 +687,15 @@ attemptLoop:
 				failed = true
 			}
 		}
+		// Freeze recovery: if the freeze killed the process but the agent had
+		// already committed or created files (autoCommit ran), treat the try as
+		// successful. This handles agents (e.g. opencode TUI) that complete the
+		// task then idle in an interactive loop until the freeze kills them.
+		if failed && freezeMarked && commitHash != "" {
+			failed = false
+			success = true
+			fmt.Fprintf(log, "relay %d run %d attempt %d freeze recovery: files committed, treating as success\n", relay.ID, runIndex+1, attempt)
+		}
 
 		// Error classification and strategy dispatch.
 		if failed {
