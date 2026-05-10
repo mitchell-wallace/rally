@@ -37,6 +37,14 @@ Add new tests to `internal/relay/runner_real_backend_test.go` whenever you find 
 
 ## 1. Setup
 
+**Bump VERSION before testing patches.** Any session that commits patches must increment the patch number in `VERSION` (e.g. `0.7.0` → `0.7.1`) and commit it so CI builds an updated binary for distribution. Do this once per session, before building:
+
+```bash
+# increment patch version, e.g.:
+echo "0.7.1" > VERSION
+git add VERSION && git commit -m "bump version to 0.7.1"
+```
+
 **Build rally from source** (do not rely on PATH rally — it may be a stale version):
 
 ```bash
