@@ -26,6 +26,7 @@ These tests skip automatically when `RALLY_TEST_REAL_AGENTS` is unset. They cove
 - Laps queue integration
 - Log scoping per-repo (two repos → two subdirectories in data_dir)
 - Codex executor (checks for CLI arg conflicts)
+- OpenCode executor (checks headless mode — no TUI ANSI in summary)
 - Resilience retry budget exhaustion and agent pausing
 
 If they all pass, proceed to the manual smoke tests below for broader coverage. If any fail, investigate before continuing — the pre-built tests are cheaper to run and faster to interpret than manual ones.
@@ -144,19 +145,32 @@ rally relay --new --iterations 2 --agent cc
 
 ### 2f. Custom harness
 
-Define a harness in config:
+**Important:** for opencode specifically, prefer the built-in `op` alias with `opencode_model` in defaults rather than a custom harness. The built-in executor uses `opencode run <prompt> --format json` (headless mode) and handles JSON output parsing. A custom harness using `command = ["opencode"]` starts TUI mode — it will not exit cleanly and the freeze detector will see spurious output. Rally warns about this at startup.
+
+If you do need a custom harness for opencode, use headless mode explicitly:
 
 ```toml
 [harness.mycode]
-command = ["opencode"]
-model_flag = "-m"
+command = ["opencode", "run", "$PROMPT", "--format", "json"]
+model_flag = "--model"
 output_strategy = "tail"
 output_lines = 50
-tail_stream = "combined"
+tail_stream = "stdout"
 
 [harness.mycode.models]
 kimi = "opencode-go/kimi-k2.6"
 mini = "opencode-zen/minimax-m2.5-free"
+```
+
+For any other CLI that accepts input on stdin and exits:
+
+```toml
+[harness.myagent]
+command = ["myagent", "--no-interactive"]
+model_flag = "--model"
+output_strategy = "tail"
+output_lines = 40
+tail_stream = "combined"
 ```
 
 Run `rally relay --new --agent mycode:kimi "Create file custom-test.txt"`. Check relay record shows `agent_mix` containing `mycode`.
@@ -239,8 +253,15 @@ retry_budget = 1
 
 Run and observe:
 - `⚠ slowing` fires at 36s (60% of threshold)
-- On **Linux**: freeze requires no TCP connections — a rate-limited agent that still has an open API connection will NOT trigger `❄ frozen`, so the relay just hangs until external timeout. This is a known gap.
-- On **non-Linux** or if the connection drops: `❄ frozen` fires and the process is killed, a retry may run.
+- On **Linux**: two freeze paths exist:
+  - **Classic** (`classicFrozen`): log silent ≥ threshold AND connections == 0. Fires once the agent's TCP connections drop.
+  - **Connected-frozen** (`connectedFrozen`): log silent ≥ threshold AND connections > 0 AND no syscall I/O (`rchar+wchar`) for 5 minutes. Catches rate-limited agents keeping a connection alive but sending no data.
+- On **non-Linux**: only log silence is checked; `❄ frozen` fires at threshold.
+
+The per-try netstat log at `.rally/data/tries/REPO/try-N.netstat.jsonl` records `{ts, log_silent_s, connections, io_bytes, syscall_bytes}` each tick. Typical baselines:
+- Simple task (file creation): connections 2-6, syscall delta 2-5 MB total
+- npm install: connections 1-2 with massive syscall delta (400 MB–2 GB), sporadic "No I/O" warnings during download wait phases
+- Rate-limited idle: connections > 0, syscall bytes plateau (< 1 MB/min), log silent
 
 Check `.rally/relays/relay-N.log` for "freeze detected" vs no freeze.
 
@@ -252,9 +273,9 @@ Not all agents may be authenticated or available. These are non-rally failures:
 
 - **Gemini**: Fails with exit code 41 if no API key is set. Rally correctly retries and pauses the agent.
 - **Codex**: May fail if CLI flags changed incompatibly. Check try record `summary` for the exact error.
-- **OpenCode**: Model availability varies by configured provider. Rate-limited models (e.g., `zai-coding-plan/glm-5.1`) may hang silently producing no output — on Linux the freeze detector won't fire if TCP connections are active.
+- **OpenCode**: Model availability varies by configured provider. Use the built-in `op` alias — NOT a custom harness with `command = ["opencode"]` (TUI mode). Rate-limited models may hang silently; the `connectedFrozen` path (5-min syscall silence while connections are open) will eventually kill them.
 
-**Linux freeze gap**: On Linux, the freeze detector requires no log activity AND no TCP connections AND no I/O. A rate-limited API call that's still connected satisfies none of the last two, so the process won't be killed automatically.
+**Linux freeze behavior**: Two paths — `classicFrozen` (log silent + no connections) fires quickly after task completion once the agent disconnects (~120s default threshold). `connectedFrozen` (log silent + connections open + no syscall I/O for 5 min) handles rate-limited agents. Neither path fires if the agent keeps writing log output (even just TUI redraws) — the ANSI filter writer in the generic harness prevents this by discarding pure-escape frames.
 
 When an agent CLI is broken/unauthed, verify that rally's retry and resilience handling works correctly (pause recorded, relay continues or ends gracefully) rather than treating it as a rally failure.
 

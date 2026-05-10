@@ -1242,3 +1242,49 @@ func TestValidateRoutes_EmptyMapAllowed(t *testing.T) {
 		t.Errorf("empty routes map should be allowed: %v", err)
 	}
 }
+
+func TestLoadV2_OpencodeWithoutRunWarning(t *testing.T) {
+	dir := t.TempDir()
+	writeConfig(t, dir, `schema_version = 2
+
+[harness.mycode]
+command = ["opencode"]
+model_flag = "--model"
+`)
+
+	cfg, err := LoadV2(dir)
+	if err != nil {
+		t.Fatalf("LoadV2 failed: %v", err)
+	}
+
+	found := false
+	for _, note := range cfg.DeprecationNotes {
+		if strings.Contains(note, "mycode") && strings.Contains(note, "TUI") {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected TUI mode warning for harness 'mycode', got notes: %v", cfg.DeprecationNotes)
+	}
+}
+
+func TestLoadV2_OpencodeWithRunNoWarning(t *testing.T) {
+	dir := t.TempDir()
+	writeConfig(t, dir, `schema_version = 2
+
+[harness.mycode]
+command = ["opencode", "run", "$PROMPT", "--format", "json"]
+model_flag = "--model"
+`)
+
+	cfg, err := LoadV2(dir)
+	if err != nil {
+		t.Fatalf("LoadV2 failed: %v", err)
+	}
+
+	for _, note := range cfg.DeprecationNotes {
+		if strings.Contains(note, "TUI") {
+			t.Errorf("unexpected TUI mode warning for correct opencode config: %q", note)
+		}
+	}
+}

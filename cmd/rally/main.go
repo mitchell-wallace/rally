@@ -81,6 +81,9 @@ func runRelay(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("load config: %w", err)
 	}
+	for _, note := range cfg.DeprecationNotes {
+		fmt.Fprintln(os.Stderr, "warning:", note)
+	}
 
 	if !cmd.Flags().Changed("iterations") && cfg.Defaults.Iterations > 0 {
 		iterations = cfg.Defaults.Iterations

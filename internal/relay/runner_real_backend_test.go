@@ -296,6 +296,53 @@ func TestRealBackend_CodexRelay(t *testing.T) {
 	}
 }
 
+// TestRealBackend_OpenCodeRelay runs a single opencode iteration using the
+// built-in OpenCodeExecutor (headless mode via "opencode run") and verifies
+// the try completes and produces no TUI ANSI escape sequences in the summary.
+func TestRealBackend_OpenCodeRelay(t *testing.T) {
+	requireRealAgents(t)
+	requireBinary(t, "opencode")
+
+	workspaceDir, rallyDir, dataDir := setupRealWorkspace(t)
+
+	s := newTestStore(t, rallyDir)
+	executors := map[string]agent.Executor{
+		"opencode": &agent.OpenCodeExecutor{Model: "opencode-go/kimi-k2.6"},
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+
+	r := NewRunner(s, Config{
+		WorkspaceDir:     workspaceDir,
+		DataDir:          dataDir,
+		AgentMixSpecs:    []string{"op"},
+		TargetIterations: 1,
+		RetryBudget:      1,
+		TaskPrompt:       "Create a file called opencode-e2e.txt with the text 'opencode e2e pass'. Do not create any other files.",
+	}, executors)
+
+	// We don't assert Completed because opencode models vary in reliability.
+	// We care that: the executor ran at all, the log exists, and the summary
+	// doesn't contain raw ANSI sequences (which would indicate TUI mode leaked).
+	_ = r.Run(ctx)
+
+	tries := s.AllTries()
+	if len(tries) == 0 {
+		t.Fatal("no try records written — executor never ran")
+	}
+	for _, try := range tries {
+		if strings.Contains(try.Summary, "\x1b[") {
+			t.Errorf("try summary contains ANSI escape sequences — opencode may have started in TUI mode: %.200s", try.Summary)
+		}
+		if try.LogPath != "" {
+			if _, err := os.Stat(try.LogPath); err != nil {
+				t.Errorf("log file does not exist at %q: %v", try.LogPath, err)
+			}
+		}
+	}
+}
+
 // TestRealBackend_ResilienceRetryBudget verifies that after retries are
 // exhausted, agent_status.jsonl records a paused event.
 func TestRealBackend_ResilienceRetryBudget(t *testing.T) {

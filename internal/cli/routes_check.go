@@ -85,6 +85,10 @@ func CheckRoutes(workspaceDir string, cfg config.V2Config) (RouteCheckResult, er
 		})
 	}
 
+	for _, note := range cfg.DeprecationNotes {
+		result.Warnings = append(result.Warnings, "warning: "+note)
+	}
+
 	if len(cfg.Routes) > 0 && !hasDefaultRoute(cfg.Routes) {
 		result.Warnings = append(result.Warnings, "warning: no default route is configured; laps without a matching assignee will fail at run-time")
 	}

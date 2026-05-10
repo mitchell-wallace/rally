@@ -206,6 +206,7 @@ func LoadV2(workspaceDir string) (V2Config, error) {
 	if err := validateHarnesses(cfg.Harnesses); err != nil {
 		return V2Config{}, err
 	}
+	cfg.DeprecationNotes = append(cfg.DeprecationNotes, harnessConfigWarnings(cfg.Harnesses)...)
 
 	if cfg.Routes == nil {
 		cfg.Routes = make(map[string][]string)
@@ -232,6 +233,22 @@ func LoadV2(workspaceDir string) (V2Config, error) {
 	}
 
 	return cfg, nil
+}
+
+// harnessConfigWarnings returns non-fatal warnings about harness configuration
+// that indicate likely misconfigurations but are not hard errors.
+func harnessConfigWarnings(harnesses map[string]*HarnessConfig) []string {
+	var warnings []string
+	for name, h := range harnesses {
+		if len(h.Command) > 0 && h.Command[0] == "opencode" {
+			hasRun := len(h.Command) > 1 && h.Command[1] == "run"
+			if !hasRun {
+				warnings = append(warnings,
+					fmt.Sprintf("config: harness %q command is [\"opencode\"] without \"run\" subcommand — this starts opencode in TUI mode, which will not exit cleanly; use [\"opencode\", \"run\", \"$PROMPT\", \"--format\", \"json\"] or the built-in \"op\" alias instead", name))
+			}
+		}
+	}
+	return warnings
 }
 
 func validateHarnesses(harnesses map[string]*HarnessConfig) error {
