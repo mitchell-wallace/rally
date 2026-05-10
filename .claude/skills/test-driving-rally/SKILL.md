@@ -271,7 +271,7 @@ Check `.rally/relays/relay-N.log` for "freeze detected" vs no freeze.
 
 Not all agents may be authenticated or available. These are non-rally failures:
 
-- **Gemini**: Fails with exit code 41 if no API key is set. Rally correctly retries and pauses the agent.
+- **Gemini**: Fails with exit code 41 if no API key is set. Rally correctly retries and pauses the agent. **Gemini never writes to its log file** — "last activity" counts from t=0 for the entire run. This means `classicFrozen` fires purely by time. For simple tasks gemini completes and exits in ~3-4 min; for complex tasks (e.g. todo app), use `freeze_threshold_secs = 600` to avoid premature kill.
 - **Codex**: May fail if CLI flags changed incompatibly. Check try record `summary` for the exact error.
 - **OpenCode**: Model availability varies by configured provider. Use the built-in `op` alias — NOT a custom harness with `command = ["opencode"]` (TUI mode). When rate-limited (`opencode-go` free tier), opencode maintains TCP connections silently for ~2 minutes then disconnects — `classicFrozen` fires ~130s after start regardless of threshold (as long as threshold < 130s). After freeze, rally marks the agent paused and retries later.
 
