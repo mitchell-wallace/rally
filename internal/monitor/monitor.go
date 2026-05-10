@@ -268,37 +268,40 @@ func ReadSyscallBytes(pids []int) (uint64, error) {
 
 // NetworkMonitor tracks network state and produces warnings.
 type NetworkMonitor struct {
-	pids         []int
-	lastConnTime time.Time
-	lastIOTime   time.Time
-	lastIOBytes  uint64
+	pids              []int
+	lastConnTime      time.Time
+	lastSyscallTime   time.Time
+	lastSyscallBytes  uint64
 }
 
 // NewNetworkMonitor creates a NetworkMonitor for the given PIDs.
 func NewNetworkMonitor(pids []int) *NetworkMonitor {
 	now := time.Now()
 	return &NetworkMonitor{
-		pids:         pids,
-		lastConnTime: now,
-		lastIOTime:   now,
+		pids:            pids,
+		lastConnTime:    now,
+		lastSyscallTime: now,
 	}
 }
 
-func (n *NetworkMonitor) evaluate(now time.Time, conns int, ioBytes uint64) []string {
+func (n *NetworkMonitor) evaluate(now time.Time, conns int, syscallBytes uint64) []string {
 	if conns > 0 {
 		n.lastConnTime = now
 	}
-	if ioBytes > n.lastIOBytes {
-		n.lastIOTime = now
-		n.lastIOBytes = ioBytes
+	if syscallBytes > n.lastSyscallBytes {
+		n.lastSyscallTime = now
+		n.lastSyscallBytes = syscallBytes
 	}
 
 	var warnings []string
 	if conns == 0 && now.Sub(n.lastConnTime) >= 30*time.Second {
 		warnings = append(warnings, "No TCP… (30s)")
 	}
-	if conns > 0 && now.Sub(n.lastIOTime) >= 30*time.Second {
-		warnings = append(warnings, "No network I/O… (30s)")
+	// Warn when connections exist but no syscall I/O (rchar+wchar) in 30s.
+	// This detects rate-limited or idle agents that are connected but not
+	// sending/receiving data.
+	if conns > 0 && now.Sub(n.lastSyscallTime) >= 30*time.Second {
+		warnings = append(warnings, "No I/O… (30s)")
 	}
 
 	return warnings
@@ -313,11 +316,11 @@ func (n *NetworkMonitor) Check() []string {
 	if err != nil {
 		return nil
 	}
-	ioBytes, err := ReadIOBytes(n.pids)
+	syscallBytes, err := ReadSyscallBytes(n.pids)
 	if err != nil {
 		return nil
 	}
-	return n.evaluate(time.Now(), conns, ioBytes)
+	return n.evaluate(time.Now(), conns, syscallBytes)
 }
 
 // Monitor produces a live status line during try execution.

@@ -250,7 +250,7 @@ func TestNetworkMonitorCheck(t *testing.T) {
 	nm := NewNetworkMonitor([]int{1})
 	base := time.Now()
 	nm.lastConnTime = base
-	nm.lastIOTime = base
+	nm.lastSyscallTime = base
 
 	if warnings := nm.evaluate(base.Add(31*time.Second), 0, 0); len(warnings) != 1 || warnings[0] != "No TCP… (30s)" {
 		t.Fatalf("expected TCP warning, got %v", warnings)
@@ -258,9 +258,9 @@ func TestNetworkMonitorCheck(t *testing.T) {
 
 	nm = NewNetworkMonitor([]int{1})
 	nm.lastConnTime = base
-	nm.lastIOTime = base
-	nm.lastIOBytes = 10
-	if warnings := nm.evaluate(base.Add(31*time.Second), 2, 10); len(warnings) != 1 || warnings[0] != "No network I/O… (30s)" {
+	nm.lastSyscallTime = base
+	nm.lastSyscallBytes = 10
+	if warnings := nm.evaluate(base.Add(31*time.Second), 2, 10); len(warnings) != 1 || warnings[0] != "No I/O… (30s)" {
 		t.Fatalf("expected I/O warning, got %v", warnings)
 	}
 
