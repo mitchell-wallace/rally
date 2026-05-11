@@ -5,12 +5,38 @@ license: MIT
 compatibility: Requires rally built from source, plus at least one agent CLI (claude, codex, gemini, opencode).
 metadata:
   author: rally
-  version: "1.1"
+  version: "1.2"
 ---
 
 Run real end-to-end smoke tests of rally to verify features work correctly. This skill drives rally from the CLI in isolated `/tmp/` repos, observes actual behaviour, and reports findings.
 
-**Goal**: High-signal smoke tests, not exhaustive QA. Prioritise breadth across features over depth on any one feature. Report issues found but do not investigate or fix them — keep focus on surface-area coverage.
+**Goal**: High-signal smoke tests, not exhaustive QA. Prioritise breadth across features over depth on any one feature. When you find a defect that's small enough to fix in the same session, fix it; otherwise note it and move on.
+
+## Default workflow (unless the user explicitly overrides)
+
+When the user invokes this skill, follow this loop:
+
+1. **Update the skill first.** Apply any new guidance the user just gave (model slugs, env state, behaviours). Also refresh any status-shaped text that's gone stale (e.g. "gemini is unauthenticated" when it now works). Commit the skill update separately at the end if it's substantive.
+2. **Read prior session state.** Check `./tmp/session-handoff.md` and the real-backend tests for what's already covered. Pick behaviours that are *not* yet tested or that need re-verification.
+3. **Test drive.** Run the pre-built real-backend tests as a baseline, then do targeted manual smoke tests on the gaps.
+4. **Apply fixes** for any defects you find that are tractable in-session.
+5. **Verify the fixes** by re-running the relevant smoke test or adding a real-backend test.
+6. **Bump the patch version** in `VERSION` and commit the code patch (one commit per logical change is fine).
+7. **Wrap up** once confident or approaching ~300k context:
+   - Update the skill with any new findings (workflow gotchas, status corrections, new model behaviours).
+   - Write a new `./tmp/session-handoff.md` (overwrite the previous — it's a single rolling doc).
+   - Commit the docs update.
+
+**NEVER replace user-provided model slugs with older ones on a hunch.** If the user names a model, save it verbatim into this skill and use it. Older slugs (e.g. gemini-2.5, gpt-4o, opencode-zen variants) are not valid in this environment. If the new slug appears not to work, report the failure mode — don't silently fall back.
+
+## Recording progress — important
+
+Previous sessions have failed to update this skill correctly. To prevent recurrence:
+
+- **Section 1 has a "Current model slugs" subsection.** Treat it as the source of truth. When the user provides new slugs, edit that list *immediately*, before doing any testing. Do not embed model slugs only in scattered examples below — update the canonical list.
+- **Section 3 ("Known environment-specific failures")** must reflect current reality. If an agent that was previously broken now works (e.g. gemini after workspace-trust fix), *delete* the old failure note instead of stacking caveats on top of it. Stale "Gemini fails with exit 41 if no API key" lines mislead future sessions.
+- **The session handoff** at `./tmp/session-handoff.md` is a single rolling doc, not an append log. Overwrite it each session. Do not create dated copies in `/tmp/` outside the repo.
+- **Commit the skill update separately from code patches** so reviewers can see the skill diff in isolation.
 
 ## 0. Reuse pre-built real-backend tests first
 
@@ -59,7 +85,21 @@ rally version
 which claude codex gemini opencode 2>/dev/null
 ```
 
-Note which are present. Current valid model strings to use are in the comments at the top of `/workspace/rally.toml` and in the user's latest guidance. Check `AGENTS.md` for current model naming conventions.
+### Current model slugs (canonical list)
+
+Always use these slugs in tests. They are the only slugs known to be available in this environment as of the latest session. If a slug fails, report it — do not fall back to older names.
+
+| Harness | Slug | Notes |
+|---|---|---|
+| `cc` (claude) | `claude-haiku-4-5` | Cheapest/fastest; default for smoke tests. |
+| `cx` (codex) | `gpt-5.4-mini` | Verified working (see `TestRealBackend_CodexRelay`). |
+| `gm` (gemini) | `gemini-3.1-pro-preview` | Authenticated. `GEMINI_CLI_TRUST_WORKSPACE=true` is set by rally so headless mode works. |
+| `gm` (gemini) | `gemini-3-flash-preview` | Lighter/faster flash variant. |
+| `op` (opencode) | `opencode-go/kimi-k2.6` | Free tier; rate-limits after a few runs (~12h window). |
+| `op` (opencode) | `opencode/minimax-m2.5-free` | NOT `opencode-zen/...` — the zen prefix is wrong. |
+| `op` (opencode) | `zai-coding-plan/glm-5.1` | Verify if `glm-5.1` is still the correct suffix; the `zai-coding-plan` provider is what matters. |
+
+Check `/workspace/rally.toml` for the project-default slugs in use, and `AGENTS.md` for terminology. The slugs above override anything you see in older docs or memory.
 
 ---
 
@@ -167,8 +207,11 @@ tail_stream = "stdout"
 
 [harness.mycode.models]
 kimi = "opencode-go/kimi-k2.6"
-mini = "opencode-zen/minimax-m2.5-free"
+mini = "opencode/minimax-m2.5-free"  # NOT opencode-zen
+zai  = "zai-coding-plan/glm-5.1"
 ```
+
+The custom-harness path with `opencode run` has been verified in `TestRealBackend_CustomHarnessRelay` — it produces valid try records with no ANSI in summaries, and the relay record's `agent_mix` shows `mycode`. The TUI warning (section 3) is what protects against the bad config; don't disable it.
 
 For any other CLI that accepts input on stdin and exits:
 
@@ -275,13 +318,13 @@ Check `.rally/relays/relay-N.log` for "freeze detected" vs no freeze.
 
 ---
 
-## 3. Known environment-specific failures
+## 3. Known environment-specific quirks
 
-Not all agents may be authenticated or available. These are non-rally failures:
+These are agent-CLI behaviours that affect how tests appear. None are rally bugs.
 
-- **Gemini**: Fails with exit code 41 if no API key is set. Rally correctly retries and pauses the agent. **Gemini never writes to its log file** — "last activity" counts from t=0 for the entire run. This means `classicFrozen` fires purely by time. For simple tasks gemini completes and exits in ~3-4 min; for complex tasks (e.g. todo app), use `freeze_threshold_secs = 600` to avoid premature kill.
-- **Codex**: May fail if CLI flags changed incompatibly. Check try record `summary` for the exact error.
-- **OpenCode**: Model availability varies by configured provider. Use the built-in `op` alias — NOT a custom harness with `command = ["opencode"]` (TUI mode). When rate-limited (`opencode-go` free tier), opencode maintains TCP connections silently for ~2 minutes then disconnects — `classicFrozen` fires ~130s after start regardless of threshold (as long as threshold < 130s). After freeze, rally marks the agent paused and retries later.
+- **Gemini**: Authenticated and working in this environment. `GEMINI_CLI_TRUST_WORKSPACE=true` is set by rally (commit `ee86a21`) so headless mode no longer fails with exit 41/55. **Gemini never writes to its log file** — `last activity` counts from t=0 for the entire run, so on Linux `classicFrozen` fires purely by elapsed time. For simple tasks gemini exits cleanly in ~3-4 min; for complex tasks use `freeze_threshold_secs = 600`. The freeze-recovery-for-committed-work fix (`3f87af4`) lets rally treat a freeze-killed try as success when files were committed.
+- **Codex**: `--full-auto` / `--dangerously-bypass-approvals-and-sandbox` conflict resolved (commit history) — only the bypass flag is passed now. `TestRealBackend_CodexRelay` guards this.
+- **OpenCode**: Model availability varies by provider. Use the built-in `op` alias — NOT a custom harness with `command = ["opencode"]` (which starts TUI mode). Rally warns on this at startup. When rate-limited (`opencode-go` free tier in particular), opencode maintains TCP connections silently for ~2 minutes then disconnects; `classicFrozen` fires ~130s after start regardless of freeze threshold (provided threshold < 130s). After freeze, rally marks the agent paused and retries later. Free tier resets roughly every 12h.
 
 **Linux freeze behavior**: Two paths — `classicFrozen` (log silent + no connections) fires once connections drop (either after task completion or after rate-limit timeout). `connectedFrozen` (log silent + connections open + no syscall I/O for 5 min) catches agents holding a connection open indefinitely (e.g., different rate-limit behavior). The `TestRealBackend_OpenCodeRelay` test takes ~3 minutes when opencode-go is rate-limited (2m10s for freeze + 50s for ctx expiry); this is expected and the test passes.
 
@@ -312,8 +355,7 @@ After testing, compile a concise report:
 - Rally progress command: ✓ (progress.yaml updated)
 
 ### Failed / Degraded
-- Gemini: No auth configured (environment issue, not a rally bug)
-- OpenCode rate-limited models: hang silently; freeze detector on Linux doesn't kill due to active TCP connection
+- OpenCode rate-limited models: hang silently; `classicFrozen` fires ~130s after connections drop, agent paused (working as intended)
 
 ### Observations
 - `rally tail --try N` uses global try IDs from the shared data_dir; across multiple repos in the same session, try 1 from repo A and try 1 from repo B go to different subdirectories (fixed), but the `--try N` flag maps to local store IDs, not data-dir IDs
@@ -323,10 +365,17 @@ After testing, compile a concise report:
 
 ## 5. Keeping this skill current
 
-Update this skill after test-driving sessions where:
-- New features are added to rally (add them to section 2)
-- Agent CLI interfaces change (update known failure notes in section 3)
-- New harness configs or model strings become standard (update examples)
-- The skill's test patterns reveal consistent gotchas (add to observations)
+Update this skill *during* the session — not as an afterthought at the very end. Concretely:
+
+- **Step 1 of the default workflow** (section above) is to update the skill with any new user guidance *before testing*. Do this so the slug list, env-state notes, and workflow guidance are right when you reach for them later.
+- **Section 1's slug table is the canonical source.** Edit it any time the user names a model, and propagate the change down into example snippets if needed.
+- **Delete stale failure notes** in section 3 rather than layering caveats. If gemini works now, the "fails with exit 41" line is misleading — remove it.
+- **End-of-session pass**: before writing the handoff, re-skim sections 1, 3, and 5 once more. Anything that was true at the start of the session but isn't anymore? Fix it.
+
+What goes here vs. elsewhere:
+- *This skill*: how to test-drive, current env state, environment-specific quirks, slug list.
+- *AGENTS.md / README.md / source*: what rally does, terminology, release flow.
+- *Memory*: durable cross-session preferences and references (e.g. "user prefers fixing root cause over patching symptoms"). Not slug lists or test recipes — those belong here.
+- *./tmp/session-handoff.md*: a single rolling doc with what *this session* did and what's outstanding. Overwrite each session.
 
 Do **not** duplicate rally's own documentation here — the authoritative source is the source code, `AGENTS.md`, and `README.md`. This skill captures *how to test-drive*, not *what rally can do*.
