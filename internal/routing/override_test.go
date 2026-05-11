@@ -98,6 +98,34 @@ func TestBuildOverrideRoute_RoleReferenceWithRangeQuotaRejected(t *testing.T) {
 	}
 }
 
+// TestBuildOverrideRoute_BareAliasesRoundRobin guards the fix for the
+// `--agent "cc ge op"` regression: multi-entry overrides with no explicit
+// quotas should round-robin (matching legacy mix semantics), not stay on the
+// first entry. Each bare entry gets an implicit quota=1.
+func TestBuildOverrideRoute_BareAliasesRoundRobin(t *testing.T) {
+	override, err := BuildOverrideRoute("override", []string{"cc", "ge", "op"}, nil, overrideResolver)
+	if err != nil {
+		t.Fatalf("BuildOverrideRoute() error = %v", err)
+	}
+	if len(override.Entries) != 3 {
+		t.Fatalf("len(entries) = %d, want 3", len(override.Entries))
+	}
+	for i, e := range override.Entries {
+		if !e.HasQuota || e.QuotaMin != 1 || e.QuotaMax != 1 {
+			t.Fatalf("entry[%d] quota = (has=%v min=%d max=%d), want single quota 1", i, e.HasQuota, e.QuotaMin, e.QuotaMax)
+		}
+	}
+
+	s := NewScheduler(override.Entries)
+	want := []string{"claude", "gemini", "opencode", "claude"}
+	for i, w := range want {
+		st := mustNext(t, s)
+		if st.Entry.Spec != w {
+			t.Fatalf("pick %d = %q, want %q", i, st.Entry.Spec, w)
+		}
+	}
+}
+
 func TestBuildOverrideRoute_Scenario5_SingleDirectOverride(t *testing.T) {
 	override, err := BuildOverrideRoute("override", []string{"op:opencode-go/fancy-new-model"}, map[string][]string{
 		"default": {"claude:opus-4.7"},

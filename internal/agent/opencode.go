@@ -77,7 +77,7 @@ func (o *OpenCodeExecutor) Execute(ctx context.Context, opts RunOptions) (*TryRe
 }
 
 func parseOpenCodeOutput(out []byte, textParts []string) (*TryResult, error) {
-	combined := strings.Join(textParts, "")
+	combined := strings.TrimSpace(strings.Join(textParts, ""))
 	if combined == "" {
 		return &TryResult{Completed: false, Summary: string(out)}, nil
 	}

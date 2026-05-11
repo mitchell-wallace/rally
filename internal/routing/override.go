@@ -76,6 +76,16 @@ func BuildOverrideRoute(name string, rawEntries []string, routeSpecs map[string]
 		if err != nil {
 			return nil, fmt.Errorf("routing: override entry %q: %w", raw, err)
 		}
+		// Inject quota=1 for bare direct entries so multi-entry overrides like
+		// `--agent "cc ge op"` round-robin instead of sticking on the first one.
+		// This matches the legacyMixRouteEntries path (which stamps :N counts)
+		// and the user-visible expectation that `--agent "cc ge op" --iterations 3`
+		// runs each harness once.
+		if !parsed.HasQuota {
+			parsed.HasQuota = true
+			parsed.QuotaMin = 1
+			parsed.QuotaMax = 1
+		}
 		entries = append(entries, parsed)
 	}
 

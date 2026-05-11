@@ -12,6 +12,7 @@ package relay
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -490,6 +491,78 @@ func TestRealBackend_CustomHarnessRelay(t *testing.T) {
 		targetFile := filepath.Join(workspaceDir, "custom-harness-e2e.txt")
 		if _, err := os.Stat(targetFile); err != nil {
 			t.Errorf("expected custom-harness-e2e.txt to be created: %v", err)
+		}
+	}
+}
+
+// TestRealBackend_MultiHarnessRoundRobin guards the fix for the override-route
+// regression where `--agent "cc ge op"` with 3 iterations ran claude all three
+// times instead of round-robin'ing through the three harnesses. The
+// scheduler used to stay on the first entry forever because bare-alias
+// entries (no explicit quota) defaulted to "stay until failed". The override
+// path now injects quota=1 for bare entries so multi-entry mixes round-robin.
+//
+// Uses gemini-flash for speed and a unique file per iteration so we can
+// distinguish iterations. We don't care about file contents — only about
+// which harness ran each iteration (recorded in tries.jsonl agent_type).
+func TestRealBackend_MultiHarnessRoundRobin(t *testing.T) {
+	requireRealAgents(t)
+	requireBinary(t, "claude")
+	requireBinary(t, "gemini")
+	requireBinary(t, "opencode")
+
+	workspaceDir, rallyDir, dataDir := setupRealWorkspace(t)
+
+	s := newTestStore(t, rallyDir)
+	executors := map[string]agent.Executor{
+		"claude":   &agent.ClaudeExecutor{Model: "claude-haiku-4-5"},
+		"gemini":   &agent.GeminiExecutor{Model: "gemini-3-flash-preview"},
+		"opencode": &agent.OpenCodeExecutor{Model: "opencode-go/kimi-k2.6"},
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+
+	resolver := func(spec string) (agent.ResolvedAgent, error) {
+		aliases := map[string]string{"cc": "claude", "ge": "gemini", "op": "opencode"}
+		harness, ok := aliases[spec]
+		if !ok {
+			return agent.ResolvedAgent{}, fmt.Errorf("unknown alias %q", spec)
+		}
+		models := map[string]string{
+			"claude":   "claude-haiku-4-5",
+			"gemini":   "gemini-3-flash-preview",
+			"opencode": "opencode-go/kimi-k2.6",
+		}
+		return agent.ResolvedAgent{Harness: harness, Model: models[harness]}, nil
+	}
+
+	r := NewRunner(s, Config{
+		WorkspaceDir:     workspaceDir,
+		DataDir:          dataDir,
+		AgentMixSpecs:    []string{"cc", "ge", "op"},
+		UseOverrideRoute: true,
+		TargetIterations: 3,
+		RetryBudget:      1,
+		FreezeThreshold:  180 * time.Second,
+		TaskPrompt:       "Create a single empty file with a unique name like step-N.txt where N is unique per iteration. Do not create any other files.",
+		Resolver:         resolver,
+	}, executors)
+
+	if err := r.Run(ctx); err != nil {
+		t.Fatalf("relay run failed: %v", err)
+	}
+
+	tries := s.AllTries()
+	if len(tries) < 3 {
+		t.Fatalf("expected at least 3 tries, got %d", len(tries))
+	}
+
+	// The first 3 tries should be one of each harness (in order: cc, ge, op).
+	wantOrder := []string{"claude", "gemini", "opencode"}
+	for i, want := range wantOrder {
+		if tries[i].AgentType != want {
+			t.Errorf("try %d agent_type = %q, want %q (round-robin broken — override may have reverted to sticky)", i+1, tries[i].AgentType, want)
 		}
 	}
 }

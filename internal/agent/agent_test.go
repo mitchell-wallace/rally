@@ -378,6 +378,24 @@ func TestParseOpenCodeOutput_MalformedJSON(t *testing.T) {
 	}
 }
 
+// TestParseOpenCodeOutput_TrimsWhitespace guards against the minimax-m2.5-free
+// behaviour where the model emits multiple "\n\n\n" text steps before the
+// final answer. The streamed parts get joined verbatim, so the fallback
+// summary used to start with ~11 newlines. We trim them.
+func TestParseOpenCodeOutput_TrimsWhitespace(t *testing.T) {
+	parts := []string{"\n\n\n", "\n\n\n", "\n\nDone! file created."}
+	tr, err := parseOpenCodeOutput(nil, parts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !tr.Completed {
+		t.Error("expected completed fallback")
+	}
+	if tr.Summary != "Done! file created." {
+		t.Errorf("expected trimmed summary, got %q", tr.Summary)
+	}
+}
+
 // TestOpenCodeJSONEventExtraction verifies that text is read from part.text
 // (not the top-level text field, which is always absent in the opencode JSONL stream).
 func TestOpenCodeJSONEventExtraction(t *testing.T) {
