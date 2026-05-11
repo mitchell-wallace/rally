@@ -1,8 +1,10 @@
 package agent
 
 import (
+	"bufio"
 	"bytes"
 	"context"
+	"encoding/json"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -373,6 +375,44 @@ func TestParseOpenCodeOutput_MalformedJSON(t *testing.T) {
 	}
 	if tr.Summary != "garbled output" {
 		t.Errorf("expected raw text in summary, got %q", tr.Summary)
+	}
+}
+
+// TestOpenCodeJSONEventExtraction verifies that text is read from part.text
+// (not the top-level text field, which is always absent in the opencode JSONL stream).
+func TestOpenCodeJSONEventExtraction(t *testing.T) {
+	jsonl := `{"type":"step_start","part":{"type":"step-start"}}
+{"type":"text","part":{"type":"text","text":"{\"completed\":true,\"summary\":\"task done\"}"}}
+{"type":"step_finish","part":{"type":"step-finish","reason":"stop"}}`
+
+	var textParts []string
+	scanner := bufio.NewScanner(strings.NewReader(jsonl))
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" {
+			continue
+		}
+		var ev opencodeJSONEvent
+		if err := json.Unmarshal([]byte(line), &ev); err != nil {
+			continue
+		}
+		if ev.Type == "text" && ev.Part.Text != "" {
+			textParts = append(textParts, ev.Part.Text)
+		}
+	}
+
+	if len(textParts) != 1 {
+		t.Fatalf("expected 1 text part, got %d", len(textParts))
+	}
+	tr, err := parseOpenCodeOutput(nil, textParts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !tr.Completed {
+		t.Error("expected completed=true")
+	}
+	if tr.Summary != "task done" {
+		t.Errorf("expected summary 'task done', got %q", tr.Summary)
 	}
 }
 

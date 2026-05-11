@@ -16,7 +16,10 @@ type OpenCodeExecutor struct {
 
 type opencodeJSONEvent struct {
 	Type string `json:"type"`
-	Text string `json:"text"`
+	Part struct {
+		Type string `json:"type"`
+		Text string `json:"text"`
+	} `json:"part"`
 }
 
 func (o *OpenCodeExecutor) ResumeSupported() bool                { return true }
@@ -65,8 +68,8 @@ func (o *OpenCodeExecutor) Execute(ctx context.Context, opts RunOptions) (*TryRe
 		if err := json.Unmarshal([]byte(line), &ev); err != nil {
 			continue
 		}
-		if ev.Type == "text" {
-			textParts = append(textParts, ev.Text)
+		if ev.Type == "text" && ev.Part.Text != "" {
+			textParts = append(textParts, ev.Part.Text)
 		}
 	}
 
