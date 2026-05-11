@@ -54,6 +54,8 @@ These tests skip automatically when `RALLY_TEST_REAL_AGENTS` is unset. They cove
 - Codex executor (checks for CLI arg conflicts)
 - OpenCode executor (checks headless mode — no TUI ANSI in summary)
 - Resilience retry budget exhaustion and agent pausing
+- Custom harness via `opencode run` (no TUI, valid try record)
+- Multi-harness round-robin (`cc ge op` → one of each, in order)
 
 If they all pass, proceed to the manual smoke tests below for broader coverage. If any fail, investigate before continuing — the pre-built tests are cheaper to run and faster to interpret than manual ones.
 
@@ -93,11 +95,13 @@ Always use these slugs in tests. They are the only slugs known to be available i
 |---|---|---|
 | `cc` (claude) | `claude-haiku-4-5` | Cheapest/fastest; default for smoke tests. |
 | `cx` (codex) | `gpt-5.4-mini` | Verified working (see `TestRealBackend_CodexRelay`). |
-| `gm` (gemini) | `gemini-3.1-pro-preview` | Authenticated. `GEMINI_CLI_TRUST_WORKSPACE=true` is set by rally so headless mode works. |
-| `gm` (gemini) | `gemini-3-flash-preview` | Lighter/faster flash variant. |
-| `op` (opencode) | `opencode-go/kimi-k2.6` | Free tier; rate-limits after a few runs (~12h window). |
-| `op` (opencode) | `opencode/minimax-m2.5-free` | NOT `opencode-zen/...` — the zen prefix is wrong. |
-| `op` (opencode) | `zai-coding-plan/glm-5.1` | Verify if `glm-5.1` is still the correct suffix; the `zai-coding-plan` provider is what matters. |
+| `ge` (gemini) | `gemini-3.1-pro-preview` | Verified 2026-05-11: simple task in ~2min. Authenticated. `GEMINI_CLI_TRUST_WORKSPACE=true` is set by rally so headless mode works. |
+| `ge` (gemini) | `gemini-3-flash-preview` | Verified 2026-05-11: simple task in ~15s. Lighter/faster flash variant. |
+| `op` (opencode) | `opencode-go/kimi-k2.6` | Verified 2026-05-11: ~18s when not rate-limited. Free tier; rate-limits after a few runs (~12h window). |
+| `op` (opencode) | `opencode/minimax-m2.5-free` | Verified 2026-05-11: ~14s. NOT `opencode-zen/...` — the zen prefix is wrong. |
+| `op` (opencode) | `zai-coding-plan/glm-5.1` | Verified 2026-05-11: ~10s. The `zai-coding-plan` provider with `glm-5.1` suffix. |
+
+Alias note: gemini is `ge`, NOT `gm`. Rally rejects `gm` with `unknown agent alias`.
 
 Check `/workspace/rally.toml` for the project-default slugs in use, and `AGENTS.md` for terminology. The slugs above override anything you see in older docs or memory.
 
@@ -259,12 +263,17 @@ rally relay --new --iterations 2 --agent "cc:2" "Create mix-test.txt"
 
 ### 2j. Multi-harness relay (cc + other)
 
-If codex is working:
 ```bash
-rally relay --new --iterations 2 --agent "cc cx" "Create task.txt"
+rally relay --new --iterations 3 --agent "cc ge op" "Create a unique file per iteration."
 ```
 
-Watch header line alternate between `claude` and `codex`.
+Watch the header line cycle through `claude`, `gemini`, `opencode`. The
+`agent_type` field in `tries.jsonl` should also alternate. **Regression
+note (fixed in 0.7.4)**: prior versions stuck on the first harness because
+the override path didn't inject a default quota for bare aliases.
+`TestRealBackend_MultiHarnessRoundRobin` guards this. If you see all
+iterations using the same agent, the override quota default has likely
+regressed.
 
 ### 2k. Tail command
 
