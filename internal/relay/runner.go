@@ -654,7 +654,6 @@ attemptLoop:
 			}
 		}
 
-		footerSuccess := execErr == nil && result != nil && result.Completed
 		runtime := endedAt.Sub(startedAt)
 		filesChangedCount := r.filesChangedCount(result, headBefore, headAfter, commitHash)
 		shortHash := ""
@@ -663,13 +662,9 @@ attemptLoop:
 		} else if commitHash != "" {
 			shortHash = commitHash
 		}
-		footer := style.RenderFooter(footerSuccess, runtime, filesChangedCount, shortHash)
-		fmt.Println(footer)
 
-		if err := gitx.CommitRallyState(r.cfg.WorkspaceDir); err != nil {
-			fmt.Fprintf(log, "relay %d run %d attempt %d rally state commit warning: %v\n", relay.ID, runIndex+1, attempt, err)
-		}
-
+		// Compute failed before rendering the footer so the displayed result
+		// matches what gets recorded in the try record.
 		failed := false
 		if execErr != nil {
 			failed = true
@@ -682,8 +677,7 @@ attemptLoop:
 				hasChanges = dirty
 			}
 			noFileChanges := !hasChanges
-			tryRuntime := endedAt.Sub(startedAt)
-			if noFileChanges && tryRuntime < 3*time.Minute {
+			if noFileChanges && runtime < 3*time.Minute {
 				failed = true
 			}
 		}
@@ -722,12 +716,19 @@ attemptLoop:
 			}
 		}
 
+		footer := style.RenderFooter(!failed, runtime, filesChangedCount, shortHash)
+		fmt.Println(footer)
+
+		if err := gitx.CommitRallyState(r.cfg.WorkspaceDir); err != nil {
+			fmt.Fprintf(log, "relay %d run %d attempt %d rally state commit warning: %v\n", relay.ID, runIndex+1, attempt, err)
+		}
+
 		tryRecord := store.TryRecord{
 			ID:            r.store.NextTryID(),
 			RunID:         runIndex + 1,
 			RelayID:       relay.ID,
 			AgentType:     picked.Harness,
-			Completed:     !failed && execErr == nil && result != nil && result.Completed,
+			Completed:     !failed,
 			Summary:       "",
 			RemainingWork: "",
 			FilesChanged:  nil,
@@ -742,11 +743,8 @@ attemptLoop:
 			tryRecord.RemainingWork = result.RemainingWork
 			tryRecord.FilesChanged = result.FilesChanged
 		}
-		if execErr != nil {
-			tryRecord.Completed = false
-			if tryRecord.Summary == "" {
-				tryRecord.Summary = execErr.Error()
-			}
+		if execErr != nil && tryRecord.Summary == "" {
+			tryRecord.Summary = execErr.Error()
 		}
 		if err := r.store.AppendTry(tryRecord); err != nil {
 			return false, false, false, err

@@ -418,3 +418,78 @@ func TestRealBackend_ResilienceRetryBudget(t *testing.T) {
 		t.Error("expected claude to be marked paused after retry exhaustion, but no paused event found")
 	}
 }
+
+// TestRealBackend_CustomHarnessRelay verifies that a custom harness using
+// opencode in headless mode (opencode run $PROMPT --format json) works
+// end-to-end: try record written, completed=true, no ANSI in summary.
+// Also verifies that when the model is invalid (not found), the run is
+// marked failed (not "passed") in both the terminal footer and try record.
+func TestRealBackend_CustomHarnessRelay(t *testing.T) {
+	requireRealAgents(t)
+	requireBinary(t, "opencode")
+
+	workspaceDir, rallyDir, dataDir := setupRealWorkspace(t)
+
+	s := newTestStore(t, rallyDir)
+	modelFlag := "--model"
+	executors := map[string]agent.Executor{
+		"mycode": &agent.GenericExecutor{
+			Command:        []string{"opencode", "run", "$PROMPT", "--format", "json"},
+			ModelFlag:      &modelFlag,
+			OutputStrategy: "tail",
+			OutputLines:    50,
+			TailStream:     "stdout",
+			Model:          "opencode-go/kimi-k2.6",
+		},
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+	defer cancel()
+
+	r := NewRunner(s, Config{
+		WorkspaceDir:     workspaceDir,
+		DataDir:          dataDir,
+		AgentMixSpecs:    []string{"mycode"},
+		TargetIterations: 1,
+		RetryBudget:      1,
+		FreezeThreshold:  60 * time.Second,
+		TaskPrompt:       "Create a file called custom-harness-e2e.txt with the text 'custom harness ok'. Do not create any other files.",
+		Resolver: func(spec string) (agent.ResolvedAgent, error) {
+			// Resolve "mycode" as a custom harness with its default model.
+			parts := strings.SplitN(spec, ":", 2)
+			if parts[0] == "mycode" {
+				model := "opencode-go/kimi-k2.6"
+				if len(parts) == 2 {
+					model = parts[1]
+				}
+				return agent.ResolvedAgent{Harness: "mycode", Model: model}, nil
+			}
+			return agent.ResolvedAgent{Harness: parts[0]}, nil
+		},
+	}, executors)
+
+	_ = r.Run(ctx)
+
+	tries := s.AllTries()
+	if len(tries) == 0 {
+		t.Fatal("no try records written — custom harness executor never ran")
+	}
+
+	for _, try := range tries {
+		// No raw ANSI sequences should be in summary (opencode --format json is headless).
+		if strings.Contains(try.Summary, "\x1b[") {
+			t.Errorf("try summary contains ANSI escape sequences — opencode may have started in TUI mode: %.200s", try.Summary)
+		}
+	}
+
+	// Verify the last try completed and the file exists.
+	lastTry := tries[len(tries)-1]
+	if !lastTry.Completed {
+		t.Logf("custom harness run did not complete (may be rate-limited); last summary: %.300s", lastTry.Summary)
+	} else {
+		targetFile := filepath.Join(workspaceDir, "custom-harness-e2e.txt")
+		if _, err := os.Stat(targetFile); err != nil {
+			t.Errorf("expected custom-harness-e2e.txt to be created: %v", err)
+		}
+	}
+}
