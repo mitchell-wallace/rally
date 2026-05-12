@@ -23,9 +23,11 @@ exists on GitHub.
 
 ### How to cut a release
 
-1. Update the version in `VERSION` (e.g. `0.2.0`).
-2. Update `main.Version` default in `cmd/rally/main.go` if needed (it stays
-   `"dev"` — GoReleaser injects the real version via ldflags at build time).
+1. Update the version in `internal/buildinfo/VERSION` (e.g. `0.2.0`). The
+   file is committed under `internal/buildinfo/` so Go's `embed` can read it;
+   dev builds (`go build`) report `vX.Y.Z-dev` using this value.
+2. `main.Version` stays `"dev"` in source — GoReleaser injects the real
+   version via ldflags at build time, which takes precedence over the embed.
 3. Commit: `git commit -am "Prepare rally v0.2.0 release"`
 4. Tag: `git tag v0.2.0`
 5. Push both: `git push && git push --tags`
@@ -38,13 +40,13 @@ The CI workflow (`.github/workflows/release.yml`) will:
 ### Important notes
 
 - When someone says "bump version" in normal maintenance work, assume that
-  means incrementing the patch version in `VERSION` as part of the update
-  unless they explicitly ask for a minor or major bump.
+  means incrementing the patch version in `internal/buildinfo/VERSION` as part
+  of the update unless they explicitly ask for a minor or major bump.
 - **Don't re-push an existing tag** expecting CI to rebuild. If you need to redo
   a release, delete it first: `gh release delete v0.2.0 && git tag -d v0.2.0 &&
   git push origin :refs/tags/v0.2.0`, then re-tag and push.
 - GoReleaser reads the version from the git tag, not the `VERSION` file. Keep
-  them in sync to avoid confusion.
+  them in sync so dev builds report the right number.
 - The `install.sh` script is uploaded as a release asset (configured in
   `.goreleaser.yaml`).
 

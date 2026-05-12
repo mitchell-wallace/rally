@@ -19,12 +19,12 @@ jobs:
 
       - name: Check if VERSION changed, create tag, and dispatch release
         run: |
-          if git diff HEAD~1 --quiet -- VERSION; then
+          if git diff HEAD~1 --quiet -- internal/buildinfo/VERSION; then
             echo "VERSION file unchanged, skipping."
             exit 0
           fi
 
-          VERSION="v$(cat VERSION)"
+          VERSION="v$(cat internal/buildinfo/VERSION)"
           echo "VERSION changed to $VERSION"
 
           if git ls-remote --exit-code --tags origin "refs/tags/$VERSION" > /dev/null; then

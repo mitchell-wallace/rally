@@ -210,7 +210,7 @@ func runRelay(cmd *cobra.Command, args []string) error {
 			storedMix = relays[0].AgentMix
 			resumedRelay = true
 			fmt.Printf("Unfinished relay #%d is at iteration %d/%d (mix: %s). Resume or start new? [resume/new]: ",
-				relays[0].ID, relays[0].CompletedIterations, relays[0].TargetIterations, relays[0].AgentMix)
+				relays[0].ID, relays[0].CompletedIterations, relays[0].TargetIterations, relay.FormatMixLabel(relays[0].AgentMix))
 			var answer string
 			fmt.Scanln(&answer)
 			if strings.ToLower(answer) == "new" || strings.ToLower(answer) == "n" {
@@ -233,7 +233,7 @@ func runRelay(cmd *cobra.Command, args []string) error {
 		} else {
 			// Interactive resume: prompt if new agents provided
 			if hasNewAgents {
-				fmt.Printf("New --agent flags detected. Keep stored mix (%s) or overwrite with new mix? [keep/overwrite]: ", storedMix)
+				fmt.Printf("New --agent flags detected. Keep stored mix (%s) or overwrite with new mix? [keep/overwrite]: ", relay.FormatMixLabel(storedMix))
 				var answer string
 				fmt.Scanln(&answer)
 				if strings.ToLower(answer) == "overwrite" || strings.ToLower(answer) == "o" {

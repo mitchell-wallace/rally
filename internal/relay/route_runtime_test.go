@@ -358,6 +358,30 @@ func TestRouteRuntime_PausedExpiryResetsExhaustedEntry(t *testing.T) {
 	}
 }
 
+func TestFormatMixLabel(t *testing.T) {
+	tests := []struct {
+		name   string
+		stored string
+		want   string
+	}{
+		{"empty", "", "(empty)"},
+		{"routes marker", relaySelectionModeRoutes, "configured routes"},
+		{"override with specs", relaySelectionModeOverridePrefix + "cc ge op", "cc ge op"},
+		{"override with quotas", relaySelectionModeOverridePrefix + "cc:1 ge:1", "cc:1 ge:1"},
+		{"override bare", relaySelectionModeOverridePrefix, "(override)"},
+		{"override only whitespace", relaySelectionModeOverridePrefix + "  ", "(override)"},
+		{"legacy mix", "cc:1 cx:2", "cc:1 cx:2"},
+		{"trims whitespace", "  cc cx  ", "cc cx"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := FormatMixLabel(tt.stored); got != tt.want {
+				t.Errorf("FormatMixLabel(%q) = %q, want %q", tt.stored, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestRouteRuntime_NoBackendAlwaysUsesDefaultRoute(t *testing.T) {
 	rt, resilience := newResolvedRouteRuntimeOrDie(t, map[string][]string{
 		"default": {"codex:gpt-5.5:1", "gemini:gemini-2.5-pro:1"},

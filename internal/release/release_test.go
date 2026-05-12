@@ -118,3 +118,33 @@ func TestFetchLatestFromMissingTag(t *testing.T) {
 		t.Fatal("expected error for missing tag_name")
 	}
 }
+
+func TestDisplayVersion(t *testing.T) {
+	tests := []struct {
+		name  string
+		value string
+		want  string
+	}{
+		{"explicit tag with v prefix", "v0.7.4", "v0.7.4"},
+		{"explicit tag without v prefix", "0.7.4", "v0.7.4"},
+		{"whitespace trimmed", "  v1.2.3 ", "v1.2.3"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := DisplayVersion(tt.value); got != tt.want {
+				t.Errorf("DisplayVersion(%q) = %q, want %q", tt.value, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestDisplayVersionDevFallsBackToEmbedded(t *testing.T) {
+	// "dev" should resolve to the embedded VERSION with a -dev suffix.
+	got := DisplayVersion("dev")
+	if got == "dev" {
+		t.Fatalf("DisplayVersion(\"dev\") = %q, expected embedded fallback like \"vX.Y.Z-dev\"", got)
+	}
+	if got[:1] != "v" || got[len(got)-4:] != "-dev" {
+		t.Errorf("DisplayVersion(\"dev\") = %q, want format vX.Y.Z-dev", got)
+	}
+}

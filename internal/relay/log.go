@@ -16,8 +16,11 @@ import (
 var nonAlphanumRe = regexp.MustCompile(`[^a-z0-9]+`)
 
 // repoKey returns a short, filesystem-safe identifier for a workspace directory.
-// Format: sanitizedBasename-XXXXXXXX where XXXXXXXX is 8 hex chars of SHA-256(path).
-// This scopes data-dir log files per repo so multiple checkouts don't collide.
+// Format: <basenamePrefix>-<hashPrefix> where basenamePrefix is the first 8
+// chars of the sanitised lower-case folder name and hashPrefix is 4 hex chars
+// of SHA-256(absoluteWorkspacePath). The path is canonicalised before hashing
+// so the same checkout always lands in the same data-dir bucket, and two
+// distinct checkouts under a shared data dir never collide.
 func repoKey(workspaceDir string) string {
 	base := strings.ToLower(filepath.Base(workspaceDir))
 	base = nonAlphanumRe.ReplaceAllString(base, "-")
@@ -25,8 +28,16 @@ func repoKey(workspaceDir string) string {
 	if base == "" {
 		base = "repo"
 	}
-	h := sha256.Sum256([]byte(workspaceDir))
-	return fmt.Sprintf("%s-%x", base, h[:4])
+	if len(base) > 8 {
+		base = base[:8]
+	}
+
+	canonical := workspaceDir
+	if abs, err := filepath.Abs(workspaceDir); err == nil {
+		canonical = abs
+	}
+	h := sha256.Sum256([]byte(canonical))
+	return fmt.Sprintf("%s-%x", base, h[:2])
 }
 
 func openRelayLog(dataDir, workspaceDir string, relayID int) (io.WriteCloser, error) {

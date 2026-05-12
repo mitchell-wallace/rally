@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/mitchell-wallace/rally/internal/app"
+	"github.com/mitchell-wallace/rally/internal/buildinfo"
 )
 
 const latestReleaseURL = "https://api.github.com/repos/" + app.ReleaseOwner + "/" + app.ReleaseRepo + "/releases/latest"
@@ -155,6 +156,9 @@ func DisplayVersion(value string) string {
 	value = strings.TrimSpace(value)
 	switch {
 	case value == "", value == "dev":
+		if embedded := buildinfo.EmbeddedVersion(); embedded != "" {
+			return "v" + embedded + "-dev"
+		}
 		return "dev"
 	case strings.HasPrefix(value, "v"):
 		return value

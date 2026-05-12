@@ -181,6 +181,78 @@ func TestFollowFileGrowing(t *testing.T) {
 	}
 }
 
+// TestTailMultiRepoSharedDataDir verifies that two repos sharing one data dir
+// can each `rally tail --try N` against their own try logs. Try log files are
+// written under <dataDir>/tries/<repoKey>/try-N.log; each workspace's
+// .rally/tries.jsonl stores the absolute LogPath, so tail in each workspace
+// picks up only its own try regardless of try-id collisions.
+func TestTailMultiRepoSharedDataDir(t *testing.T) {
+	sharedDataDir := t.TempDir()
+
+	// Build two parallel workspaces.
+	mkRepo := func(name, body string) (string, store.TryRecord) {
+		repoDir := filepath.Join(t.TempDir(), name)
+		os.MkdirAll(repoDir, 0o755)
+		rallyDir := filepath.Join(repoDir, ".rally")
+		os.MkdirAll(rallyDir, 0o755)
+		initGitRepoForTail(t, repoDir)
+
+		s, err := store.NewStore(rallyDir)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// Mirror how relay.runner writes try logs: per-repo scoping under
+		// dataDir using repoKey-style paths (basename[:8] + 4 hex).
+		tryDir := filepath.Join(sharedDataDir, "tries", name)
+		os.MkdirAll(tryDir, 0o755)
+		logPath := filepath.Join(tryDir, "try-1.log")
+		os.WriteFile(logPath, []byte(body), 0o644)
+
+		rec := store.TryRecord{ID: 1, AgentType: "claude", LogPath: logPath}
+		if err := s.AppendTry(rec); err != nil {
+			t.Fatal(err)
+		}
+		return repoDir, rec
+	}
+
+	repoA, recA := mkRepo("alpha", "from alpha\n")
+	repoB, recB := mkRepo("beta", "from beta\n")
+
+	if recA.LogPath == recB.LogPath {
+		t.Fatalf("try log paths collided across repos: %s", recA.LogPath)
+	}
+
+	readVia := func(repoDir string, expected string) {
+		t.Helper()
+		s, err := store.NewStore(filepath.Join(repoDir, ".rally"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		tries := s.AllTries()
+		if len(tries) == 0 {
+			t.Fatalf("no tries in %s", repoDir)
+		}
+		target := tries[0]
+		f, err := os.Open(target.LogPath)
+		if err != nil {
+			t.Fatalf("open log: %v", err)
+		}
+		defer f.Close()
+
+		var buf bytes.Buffer
+		ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+		defer cancel()
+		_ = followFile(ctx, f, &buf)
+		if buf.String() != expected {
+			t.Errorf("repo %s tail = %q, want %q", repoDir, buf.String(), expected)
+		}
+	}
+
+	readVia(repoA, "from alpha\n")
+	readVia(repoB, "from beta\n")
+}
+
 func initGitRepoForTail(t *testing.T, dir string) {
 	t.Helper()
 	os.MkdirAll(dir, 0o755)
