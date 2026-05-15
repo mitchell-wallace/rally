@@ -1,0 +1,4 @@
+interface:
+  display_name: "Phone A Friend"
+  short_description: "Delegate bounded questions to other CLI agents"
+  default_prompt: "Use $phone-a-friend to ask another model for a bounded review, design critique, or debugging second opinion through Rally."
