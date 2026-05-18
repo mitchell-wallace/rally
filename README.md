@@ -140,6 +140,9 @@ project never write to the same file.
 
 Rally reads `.rally/config.toml` from the workspace. `rally init` writes a
 starter config with sensible defaults; you can edit it any time.
+`rally init-roles` extends that starter setup with role routes for
+`junior`, `senior`, `ui`, and `verify`, plus matching markdown files under
+`.rally/agents/`.
 
 ```toml
 schema_version = 2
@@ -468,6 +471,7 @@ workspace path so multiple checkouts under one data dir never collide.
 ```sh
 rally relay              # start or resume a relay
 rally init               # initialise .rally/ in the current repo
+rally init-roles         # add default role routes and .rally/agents/*.md
 rally tail [--try N]     # follow a try's log
 rally routes check       # validate [routes]
 rally instructions edit  # edit project instructions

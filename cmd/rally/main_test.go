@@ -155,3 +155,60 @@ claude_model = "my-custom-model"
 		t.Errorf("ClaudeModel = %q, want 'my-custom-model' (existing config should be preserved)", cfg.ClaudeModel)
 	}
 }
+
+func TestRunInitRoles_InstallsRoutesAndRoleInstructions(t *testing.T) {
+	tmp := t.TempDir()
+	t.Chdir(tmp)
+
+	if err := os.MkdirAll(filepath.Join(tmp, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	cmd := &cobra.Command{}
+	if err := runInitRoles(cmd, []string{}); err != nil {
+		t.Fatalf("runInitRoles failed: %v", err)
+	}
+
+	cfg, err := config.LoadV2(tmp)
+	if err != nil {
+		t.Fatalf("LoadV2 failed: %v", err)
+	}
+
+	if cfg.OpenCodeModel != "opencode-go/kimi-k2.6" {
+		t.Errorf("OpenCodeModel = %q, want opencode-go/kimi-k2.6", cfg.OpenCodeModel)
+	}
+	if cfg.ClaudeModel != "claude-opus-4-7" {
+		t.Errorf("ClaudeModel = %q, want claude-opus-4-7", cfg.ClaudeModel)
+	}
+	if cfg.GeminiModel != "gemini-3.1-pro-preview" {
+		t.Errorf("GeminiModel = %q, want gemini-3.1-pro-preview", cfg.GeminiModel)
+	}
+	if cfg.CodexModel != "gpt-5.5" {
+		t.Errorf("CodexModel = %q, want gpt-5.5", cfg.CodexModel)
+	}
+
+	wantRoutes := map[string]string{
+		"default": "opencode",
+		"junior":  "opencode",
+		"senior":  "claude",
+		"ui":      "gemini",
+		"verify":  "codex",
+	}
+	for role, want := range wantRoutes {
+		got := cfg.Routes[role]
+		if len(got) != 1 || got[0] != want {
+			t.Errorf("route %s = %#v, want [%s]", role, got, want)
+		}
+	}
+
+	for _, role := range []string{"junior", "senior", "ui", "verify"} {
+		path := filepath.Join(tmp, ".rally", "agents", role+".md")
+		data, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read %s instructions: %v", role, err)
+		}
+		if !strings.Contains(string(data), "# ") {
+			t.Errorf("%s instructions missing heading", role)
+		}
+	}
+}
