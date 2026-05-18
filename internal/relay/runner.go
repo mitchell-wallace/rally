@@ -89,6 +89,7 @@ type runTask struct {
 	Requirements  string
 	Prompt        string
 	Assignee      string
+	LapID         string
 	IsLapsBacked  bool
 	LapsRemaining int
 }
@@ -675,7 +676,8 @@ attemptLoop:
 		}
 
 		runtime := endedAt.Sub(startedAt)
-		filesChangedCount := r.filesChangedCount(result, headBefore, headAfter, commitHash)
+		filesChangedList := r.filesChangedList(result, headBefore, headAfter, commitHash)
+		filesChangedCount := len(filesChangedList)
 		shortHash := ""
 		commitTitle := ""
 		if len(commitHash) >= 7 {
@@ -689,6 +691,14 @@ attemptLoop:
 			shortHash = commitHash
 		}
 
+		runStateAfter, _ := progress.LoadRunState(r.cfg.WorkspaceDir)
+		recordedLaps := []string{}
+		handoffState := 0
+		if runStateAfter != nil {
+			recordedLaps = append(recordedLaps, runStateAfter.RecordedLaps...)
+			handoffState = runStateAfter.HandoffState
+		}
+
 		// Compute failed before rendering the footer so the displayed result
 		// matches what gets recorded in the try record.
 		failed := false
@@ -700,7 +710,7 @@ attemptLoop:
 			failed = true
 			failReason = "incomplete run"
 		} else {
-			hasChanges := commitHash != "" || (result != nil && len(result.FilesChanged) > 0)
+			hasChanges := commitHash != "" || filesChangedCount > 0
 			if !hasChanges {
 				dirty, _ := gitx.IsWorkspaceDirty(r.cfg.WorkspaceDir)
 				hasChanges = dirty
@@ -709,6 +719,21 @@ attemptLoop:
 			if noFileChanges && runtime < 3*time.Minute {
 				failed = true
 				failReason = "no changes made"
+			}
+		}
+
+		// Detect agents that emit "laps done" / "laps handoff" as text instead of
+		// invoking the shell command. Symptom: the lap hooks never updated
+		// RecordedLaps or HandoffState, yet the summary contains the literal marker.
+		markerAsText := ""
+		if task.IsLapsBacked && len(recordedLaps) == 0 && handoffState == 0 && result != nil {
+			markerAsText = detectLapsMarkerInText(result.Summary)
+			if markerAsText != "" {
+				if !failed {
+					failed = true
+					failReason = fmt.Sprintf("%s emitted as text, hook never ran", markerAsText)
+				}
+				fmt.Fprintf(log, "relay %d run %d attempt %d laps-marker-as-text: agent wrote %q in summary but did not invoke the shell command (no hook fired). Likely a model/harness output-vs-tool-call mismatch.\n", relay.ID, runIndex+1, attempt, markerAsText)
 			}
 		}
 		// Freeze recovery: if the freeze killed the process but the agent had
@@ -725,7 +750,7 @@ attemptLoop:
 		if failed {
 			logLines := readLastNLines(tryLogPath, 50)
 			decision := reliability.ClassifyError(logLines)
-			if decision.Reason != "unknown error" {
+			if decision.Reason != "unknown error" && markerAsText == "" {
 				failReason = decision.Reason
 			}
 			switch decision.Strategy {
@@ -772,21 +797,31 @@ attemptLoop:
 			Completed:     !failed,
 			Summary:       "",
 			RemainingWork: "",
-			FilesChanged:  nil,
+			FilesChanged:  filesChangedList,
 			CommitHash:    commitHash,
 			StartedAt:     startedAt.Format(time.RFC3339),
 			EndedAt:       endedAt.Format(time.RFC3339),
 			AttemptNumber: attempt,
 			LogPath:       tryLogPath,
+			FailReason:    failReason,
+			RuntimeMs:     runtime.Milliseconds(),
+			LapID:         task.LapID,
+			LapAssignee:   task.Assignee,
+			RecordedLaps:  recordedLaps,
 		}
 		if result != nil {
 			tryRecord.Summary = result.Summary
 			tryRecord.RemainingWork = result.RemainingWork
-			tryRecord.FilesChanged = result.FilesChanged
+			if len(result.FilesChanged) > 0 {
+				// Prefer the agent-reported list if it gave one.
+				tryRecord.FilesChanged = result.FilesChanged
+			}
 		}
 		if execErr != nil && tryRecord.Summary == "" {
 			tryRecord.Summary = execErr.Error()
 		}
+		fmt.Fprintf(log, "relay %d run %d attempt %d result: completed=%v fail_reason=%q runtime=%s files_changed=%d commit=%q lap_id=%q assignee=%q recorded_laps=%v handoff_state=%d\n",
+			relay.ID, runIndex+1, attempt, !failed, failReason, runtime, filesChangedCount, shortHash, task.LapID, task.Assignee, recordedLaps, handoffState)
 		if err := r.store.AppendTry(tryRecord); err != nil {
 			return false, false, false, err
 		}
@@ -898,6 +933,7 @@ func (r *Runner) resolveRunTask(ctx context.Context) (runTask, error) {
 	}
 
 	task.Name = lap.Title
+	task.LapID = lap.ID
 	task.IsLapsBacked = true
 	if qs, err := queueSize(ctx, r.cfg.WorkspaceDir); err == nil {
 		task.LapsRemaining = qs
@@ -987,9 +1023,16 @@ func (r *Runner) autoCommit(runIndex int, agentType string, attempt int) (string
 	return strings.TrimSpace(string(hashOut)), nil
 }
 
-func (r *Runner) filesChangedCount(result *agent.TryResult, headBefore, headAfter, commitHash string) int {
+// filesChangedList returns the list of paths that changed during the try.
+// Prefers any explicit list from the agent's TryResult; falls back to a git
+// diff against the recorded head before/after hashes (or the new commit
+// hash); finally falls back to `git status --porcelain` (excluding rally's
+// own state under `.rally/` and `.laps/`).
+func (r *Runner) filesChangedList(result *agent.TryResult, headBefore, headAfter, commitHash string) []string {
 	if result != nil && len(result.FilesChanged) > 0 {
-		return len(result.FilesChanged)
+		out := make([]string, len(result.FilesChanged))
+		copy(out, result.FilesChanged)
+		return out
 	}
 
 	repoRoot, ok, err := gitx.GitRepoRoot(r.cfg.WorkspaceDir)
@@ -1001,22 +1044,69 @@ func (r *Runner) filesChangedCount(result *agent.TryResult, headBefore, headAfte
 			out, err = gitx.GitOutput(repoRoot, "diff-tree", "--no-commit-id", "--name-only", "-r", commitHash)
 		}
 		if err == nil && len(out) > 0 {
-			return countNonEmptyLines(string(out))
+			return nonEmptyLines(string(out))
 		}
 	}
 
-	dirtyCount, _ := monitor.GitDirtyCount(r.cfg.WorkspaceDir)
-	return dirtyCount
+	// Last resort: list dirty files via `git status --porcelain`, excluding
+	// rally's own state files so a no-op try doesn't look like real progress.
+	if ok && err == nil {
+		statusOut, statusErr := gitx.GitOutput(repoRoot, "status", "--porcelain")
+		if statusErr == nil {
+			var dirty []string
+			for _, line := range strings.Split(string(statusOut), "\n") {
+				line = strings.TrimSpace(line)
+				if line == "" {
+					continue
+				}
+				// Porcelain format: "XY path". Skip the two status chars and the space.
+				path := line
+				if len(line) > 3 {
+					path = strings.TrimSpace(line[2:])
+				}
+				if strings.HasPrefix(path, ".rally/") || strings.HasPrefix(path, ".laps/") {
+					continue
+				}
+				dirty = append(dirty, path)
+			}
+			if len(dirty) > 0 {
+				return dirty
+			}
+		}
+	}
+	return nil
 }
 
-func countNonEmptyLines(s string) int {
-	count := 0
+func nonEmptyLines(s string) []string {
+	var out []string
 	for _, line := range strings.Split(s, "\n") {
-		if strings.TrimSpace(line) != "" {
-			count++
+		trimmed := strings.TrimSpace(line)
+		if trimmed != "" {
+			out = append(out, trimmed)
 		}
 	}
-	return count
+	return out
+}
+
+// detectLapsMarkerInText returns "laps done" / "laps handoff" when the agent's
+// summary contains it on its own line or as a leading marker — a strong signal
+// the model emitted the command as text instead of invoking the shell tool.
+func detectLapsMarkerInText(summary string) string {
+	if summary == "" {
+		return ""
+	}
+	lower := strings.ToLower(summary)
+	// Check leading line and any line that begins with the marker.
+	for _, raw := range strings.Split(lower, "\n") {
+		line := strings.TrimSpace(raw)
+		if line == "laps done" || strings.HasPrefix(line, "laps done\n") || strings.HasPrefix(line, "laps done ") {
+			return "laps done"
+		}
+		if line == "laps handoff" || strings.HasPrefix(line, "laps handoff\n") || strings.HasPrefix(line, "laps handoff ") {
+			return "laps handoff"
+		}
+	}
+	return ""
 }
 
 func readLastNLines(path string, n int) []string {

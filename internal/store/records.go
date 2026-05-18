@@ -15,6 +15,11 @@ type TryRecord struct {
 	EndedAt       string   `json:"ended_at"`
 	AttemptNumber int      `json:"attempt_number"`
 	LogPath       string   `json:"log_path,omitempty"`
+	FailReason    string   `json:"fail_reason,omitempty"`
+	RuntimeMs     int64    `json:"runtime_ms,omitempty"`
+	LapID         string   `json:"lap_id,omitempty"`
+	LapAssignee   string   `json:"lap_assignee,omitempty"`
+	RecordedLaps  []string `json:"recorded_laps,omitempty"`
 }
 
 // MessageRecord represents an inbox message that can be consumed by a run.

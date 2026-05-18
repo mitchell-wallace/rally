@@ -408,7 +408,7 @@ func TestRunnerRotateModelErrorFallsBackToExecution(t *testing.T) {
 	}
 }
 
-func TestFilesChangedCountUsesCommitDiff(t *testing.T) {
+func TestFilesChangedListUsesCommitDiff(t *testing.T) {
 	workspaceDir := t.TempDir()
 	initRepo(t, workspaceDir)
 
@@ -427,8 +427,61 @@ func TestFilesChangedCountUsesCommitDiff(t *testing.T) {
 	after := strings.TrimSpace(runGit(t, workspaceDir, "rev-parse", "HEAD"))
 
 	r := &Runner{cfg: Config{WorkspaceDir: workspaceDir}}
-	if got := r.filesChangedCount(nil, before, after, after); got != 2 {
-		t.Fatalf("expected 2 changed files from commit diff, got %d", got)
+	got := r.filesChangedList(nil, before, after, after)
+	if len(got) != 2 {
+		t.Fatalf("expected 2 changed files from commit diff, got %d (%v)", len(got), got)
+	}
+	wantSet := map[string]bool{"one.txt": true, "two.txt": true}
+	for _, p := range got {
+		if !wantSet[p] {
+			t.Fatalf("unexpected path %q in %v", p, got)
+		}
+	}
+}
+
+func TestFilesChangedListFallsBackToDirtyFiles(t *testing.T) {
+	workspaceDir := t.TempDir()
+	initRepo(t, workspaceDir)
+
+	os.WriteFile(filepath.Join(workspaceDir, "seed.txt"), []byte("seed\n"), 0o644)
+	runGit(t, workspaceDir, "add", ".")
+	runGit(t, workspaceDir, "commit", "-m", "init")
+
+	// Dirty the workspace without committing. Mix in a .rally/ file that
+	// should be filtered out of the result.
+	os.WriteFile(filepath.Join(workspaceDir, "user.txt"), []byte("user change\n"), 0o644)
+	if err := os.MkdirAll(filepath.Join(workspaceDir, ".rally"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	os.WriteFile(filepath.Join(workspaceDir, ".rally", "run-state.json"), []byte("{}"), 0o644)
+
+	r := &Runner{cfg: Config{WorkspaceDir: workspaceDir}}
+	got := r.filesChangedList(nil, "", "", "")
+	if len(got) != 1 || got[0] != "user.txt" {
+		t.Fatalf("expected only user.txt in fallback list, got %v", got)
+	}
+}
+
+func TestDetectLapsMarkerInText(t *testing.T) {
+	cases := []struct {
+		name    string
+		summary string
+		want    string
+	}{
+		{"empty", "", ""},
+		{"leading laps done", "laps done\n\n**What landed**\n- foo", "laps done"},
+		{"line laps handoff", "Some intro\nlaps handoff\nrest", "laps handoff"},
+		{"laps done as space-separated word in prose", "the agent says laps done at the end", ""},
+		{"trailing laps done", "All work complete.\n\nlaps done", "laps done"},
+		{"mixed case", "LAPS DONE\nfoo", "laps done"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := detectLapsMarkerInText(tc.summary)
+			if got != tc.want {
+				t.Errorf("detectLapsMarkerInText(%q) = %q, want %q", tc.summary, got, tc.want)
+			}
+		})
 	}
 }
 
