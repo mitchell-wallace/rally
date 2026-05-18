@@ -39,9 +39,9 @@ From the root of any git repo:
 
 ```sh
 rally init                  # one-time: writes .rally/config.toml + scaffolding
-rally relay                 # run a single iteration with the default mix
-rally relay --iterations 4  # run four iterations
-rally relay --iterations 4 --agent "cc:1 cx:2 ge:1 op:1"  # custom mix
+rally start                 # run a single iteration with the default mix
+rally start --iterations 4  # run four iterations
+rally start --iterations 4 --agent "cc:1 cx:2 ge:1 op:1"  # custom mix
 ```
 
 While a relay is running, watch the current try's transcript live in another
@@ -53,12 +53,12 @@ rally tail --try 3      # specific try by id
 ```
 
 If you Ctrl-C, Rally finishes the current try cleanly and exits. The next
-`rally relay` from the same workspace asks whether to resume the unfinished
+`rally start` from the same workspace asks whether to resume the unfinished
 relay or start fresh; `--resume` and `--new` skip the prompt.
 
 ## How a Rally loop works
 
-Each iteration of `rally relay` does this:
+Each iteration of `rally start` does this:
 
 1. **Pick a route.** `--agent` override wins, otherwise the lap's `assignee`
    matches a `[routes]` entry, otherwise `default`.
@@ -102,8 +102,8 @@ OPENCODE_PERMISSION='{"*":"allow"}'
 string:
 
 ```sh
-rally relay --agent cc:1 --agent cx:2 --agent ge:1
-rally relay --agent "cc:1 cx:2 ge:1"
+rally start --agent cc:1 --agent cx:2 --agent ge:1
+rally start --agent "cc:1 cx:2 ge:1"
 ```
 
 **Bare aliases in `--agent` round-robin one at a time.** `--agent "cc ge op"`
@@ -114,9 +114,9 @@ Mix bare aliases, quota-bearing aliases, named models, and even role
 references in one string:
 
 ```sh
-rally relay --agent "cc:opus cx:2 op:z"
-rally relay --agent "SENIOR"
-rally relay --agent "op:opencode-go/kimi-k2.6 DEFAULT:1"
+rally start --agent "cc:opus cx:2 op:z"
+rally start --agent "SENIOR"
+rally start --agent "op:opencode-go/kimi-k2.6 DEFAULT:1"
 ```
 
 Role references inline a configured `[routes]` entry into the override.
@@ -469,7 +469,7 @@ workspace path so multiple checkouts under one data dir never collide.
 ## Commands
 
 ```sh
-rally relay              # start or resume a relay
+rally start              # start or resume a relay
 rally init               # initialise .rally/ in the current repo
 rally init-roles         # add default role routes and .rally/agents/*.md
 rally tail [--try N]     # follow a try's log

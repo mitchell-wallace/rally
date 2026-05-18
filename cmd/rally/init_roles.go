@@ -10,9 +10,10 @@ import (
 )
 
 var initRolesCmd = &cobra.Command{
-	Use:   "init-roles",
-	Short: "Install default role routing and role instructions",
-	RunE:  runInitRoles,
+	Use:     "roles",
+	Aliases: []string{"init-roles"},
+	Short:   "Install default role routing and role instructions",
+	RunE:    runInitRoles,
 }
 
 type roleBootstrap struct {
@@ -166,5 +167,13 @@ func runInitRoles(cmd *cobra.Command, args []string) error {
 }
 
 func init() {
-	rootCmd.AddCommand(initRolesCmd)
+	initCmd.AddCommand(initRolesCmd)
+	// Keep `rally init-roles` working as a top-level alias so existing scripts
+	// don't break.
+	rootCmd.AddCommand(&cobra.Command{
+		Use:    "init-roles",
+		Short:  "Alias for `rally init roles`",
+		Hidden: true,
+		RunE:   runInitRoles,
+	})
 }

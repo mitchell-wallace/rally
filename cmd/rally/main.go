@@ -52,10 +52,11 @@ func init() {
 	rootCmd.SetVersionTemplate(app.BinaryName + " {{.Version}}\n")
 }
 
-var relayCmd = &cobra.Command{
-	Use:   "relay",
-	Short: "Start or resume agent relays",
-	RunE:  runRelay,
+var startCmd = &cobra.Command{
+	Use:     "start",
+	Aliases: []string{"relay"},
+	Short:   "Start or resume agent relays",
+	RunE:    runRelay,
 }
 
 func resolveWorkspaceDir() (string, error) {
@@ -393,6 +394,11 @@ directly to understand the project's history and current state.
 	}
 
 	fmt.Println("Rally workspace initialized.")
+	// Only nudge toward role setup if it hasn't already been bootstrapped.
+	agentsDir := filepath.Join(rallyDir, "agents")
+	if _, err := os.Stat(agentsDir); os.IsNotExist(err) {
+		fmt.Println("Tip: run `rally init roles` to set up role-based routing (recommended).")
+	}
 	return nil
 }
 
@@ -488,7 +494,7 @@ var updateCmd = &cobra.Command{
 }
 
 func init() {
-	rootCmd.AddCommand(relayCmd)
+	rootCmd.AddCommand(startCmd)
 	rootCmd.AddCommand(initCmd)
 	rootCmd.AddCommand(instructionsCmd)
 	rootCmd.AddCommand(cli.NewRoutesCmd())
@@ -507,11 +513,11 @@ func init() {
 		originalHelp(cmd, args)
 	})
 
-	relayCmd.Flags().IntP("iterations", "i", 0, "Number of iterations (default 50 unless laps-backed)")
-	relayCmd.Flags().StringArrayP("agent", "a", nil, "Agent mix (repeatable; comma- or space-separated, e.g. \"cc:2,cx:1\" or \"cc:2 cx:1\")")
-	relayCmd.Flags().StringArrayP("mix", "m", nil, "Legacy synonym for --agent")
-	relayCmd.Flags().Bool("resume", false, "Resume the last unfinished batch explicitly")
-	relayCmd.Flags().Bool("new", false, "Start a new batch explicitly, discarding unfinished batch state")
+	startCmd.Flags().IntP("iterations", "i", 0, "Number of iterations (default 50 unless laps-backed)")
+	startCmd.Flags().StringArrayP("agent", "a", nil, "Agent mix (repeatable; comma- or space-separated, e.g. \"cc:2,cx:1\" or \"cc:2 cx:1\")")
+	startCmd.Flags().StringArrayP("mix", "m", nil, "Legacy synonym for --agent")
+	startCmd.Flags().Bool("resume", false, "Resume the last unfinished batch explicitly")
+	startCmd.Flags().Bool("new", false, "Start a new batch explicitly, discarding unfinished batch state")
 }
 
 func startBackgroundUpdateCheck(argv []string, stderr io.Writer) func() {
