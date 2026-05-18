@@ -15,16 +15,25 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 2
+          fetch-depth: 0
 
       - name: Check if VERSION changed, create tag, and dispatch release
         run: |
-          if git diff HEAD~1 --quiet -- internal/buildinfo/VERSION; then
+          VERSION_FILE="internal/buildinfo/VERSION"
+          BEFORE="${{ github.event.before }}"
+          AFTER="${{ github.sha }}"
+
+          if [[ "$BEFORE" =~ ^0+$ ]] || ! git cat-file -e "${BEFORE}^{commit}" 2>/dev/null; then
+            if git diff-tree --no-commit-id --quiet -r "$AFTER" -- "$VERSION_FILE"; then
+              echo "VERSION file unchanged, skipping."
+              exit 0
+            fi
+          elif git diff --quiet "$BEFORE" "$AFTER" -- "$VERSION_FILE"; then
             echo "VERSION file unchanged, skipping."
             exit 0
           fi
 
-          VERSION="v$(cat internal/buildinfo/VERSION)"
+          VERSION="v$(cat "$VERSION_FILE")"
           echo "VERSION changed to $VERSION"
 
           if git ls-remote --exit-code --tags origin "refs/tags/$VERSION" > /dev/null; then
