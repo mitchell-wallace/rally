@@ -15,6 +15,35 @@ A **runner** is a harness + model combination (e.g. `claude` harness with
 `sonnet-4` model, or `opencode` harness with `gemini-2.5-pro` model). Distinct
 from a **role**, which is a semantic label for what the runner does.
 
+### Rally, laps, hooks, and role instructions
+
+- **Rally** orchestrates runs: it selects a runner for the current lap, builds
+  the prompt, injects project and role instructions, records progress, and
+  manages retries or route fallback.
+- **Laps** owns the work queue. A lap's `assignee` is a routing label such as
+  `junior`, `senior`, `ui`, or `verify`; Rally maps that role to a configured
+  runner via `.rally/config.toml`.
+- **Role instructions** in `.rally/agents/<role>.md` tell the already-assigned
+  runner how to perform that kind of work. They should not redefine routing or
+  encourage agents to create laps directly. New work is normally created
+  indirectly through the handoff flow.
+- **Laps hooks** in `.laps/hooks.json` bridge the agent-facing commands back
+  into Rally. The prompt tells agents to finish with `laps done` or
+  `laps handoff`; those hooks then reveal the `laps wrapup ...` command that
+  records progress or creates follow-up laps.
+
+The intended flow is:
+
+1. Rally reads the current lap from `.laps/` and routes it using the lap's
+   assignee.
+2. Rally injects `.rally/agents/<assignee>.md` as role guidance for the chosen
+   runner.
+3. The runner performs the assigned work.
+4. The runner calls `laps done` when complete, or `laps handoff` when blocked.
+5. The Rally-installed laps hook asks the runner to call `laps wrapup ...`,
+   which records progress and, for handoff, creates follow-up laps at the head
+   of the queue.
+
 ## Releasing
 
 Rally uses GoReleaser via GitHub Actions to publish releases. The workflow
@@ -49,4 +78,3 @@ The CI workflow (`.github/workflows/release.yml`) will:
   them in sync so dev builds report the right number.
 - The `install.sh` script is uploaded as a release asset (configured in
   `.goreleaser.yaml`).
-
