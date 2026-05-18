@@ -1,6 +1,10 @@
 /rally
 /.rally/*
-!/.rally/config
+!/.rally/.gitignore
+!/.rally/README.md
+!/.rally/config.toml
+!/.rally/agents/
+!/.rally/agents/*.md
 scratchpad.md
 
 # bv (beads viewer) local config and caches

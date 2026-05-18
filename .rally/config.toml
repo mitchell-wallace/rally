@@ -1,0 +1,28 @@
+schema_version = 2
+run_hooks_on_autocommit = false
+data_dir = ""
+
+[defaults]
+iterations = 5
+mix = "cc cx"
+claude_model = "claude-opus-4-7"
+codex_model = "gpt-5.5"
+gemini_model = "gemini-3.1-pro-preview"
+opencode_model = "opencode-go/kimi-k2.6"
+
+[laps]
+instructions_file = ".rally/laps_instructions.md"
+
+[fallback]
+instructions_file = ".rally/fallback_instructions.md"
+
+[reliability]
+freeze_threshold_secs = 120
+retry_budget = 5
+
+[routes]
+default = ["opencode"]
+junior = ["opencode"]
+senior = ["claude"]
+ui = ["gemini"]
+verify = ["codex"]

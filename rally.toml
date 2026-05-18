@@ -1,3 +1,0 @@
-gemini_model = "gemini-3.1-pro-preview"
-# opencode_model = "zai-coding-plan/glm-5.1"
-opencode_model = "opencode-go/kimi-k2.6"
