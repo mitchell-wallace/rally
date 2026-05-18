@@ -17,6 +17,15 @@ type claudeJSONEvent struct {
 	Type      string          `json:"type"`
 	SessionID string          `json:"session_id,omitempty"`
 	Result    json.RawMessage `json:"result"`
+	Message   *claudeMessage  `json:"message,omitempty"`
+}
+
+type claudeMessage struct {
+	Content []claudeContentBlock `json:"content"`
+}
+
+type claudeContentBlock struct {
+	Type string `json:"type"`
 }
 
 func (c *ClaudeExecutor) Execute(ctx context.Context, opts RunOptions) (*TryResult, error) {
@@ -45,12 +54,13 @@ func (c *ClaudeExecutor) Execute(ctx context.Context, opts RunOptions) (*TryResu
 		return nil, fmt.Errorf("claude exec failed: %w\noutput: %s", err, string(out))
 	}
 
-	resultRaw, sessionID := scanClaudeOutput(out)
+	resultRaw, sessionID, toolCalls := scanClaudeOutput(out)
 	tr, parseErr := parseClaudeResult(out, resultRaw)
 	if parseErr != nil {
 		return nil, parseErr
 	}
 	tr.SessionID = sessionID
+	tr.ToolCalls = toolCalls
 	return tr, nil
 }
 
@@ -64,8 +74,9 @@ func (c *ClaudeExecutor) ProbeLiveness(_ context.Context) (bool, error) {
 	return false, fmt.Errorf("liveness probe not supported by claude adapter")
 }
 
-func scanClaudeOutput(out []byte) (resultRaw []byte, sessionID string) {
+func scanClaudeOutput(out []byte) (resultRaw []byte, sessionID string, toolCalls int) {
 	scanner := bufio.NewScanner(strings.NewReader(string(out)))
+	scanner.Buffer(make([]byte, 0, 64*1024), 16*1024*1024)
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
 		if line == "" {
@@ -78,12 +89,19 @@ func scanClaudeOutput(out []byte) (resultRaw []byte, sessionID string) {
 		if ev.SessionID != "" {
 			sessionID = ev.SessionID
 		}
+		if ev.Type == "assistant" && ev.Message != nil {
+			for _, block := range ev.Message.Content {
+				if block.Type == "tool_use" {
+					toolCalls++
+				}
+			}
+		}
 		if ev.Type == "result" {
 			resultRaw = ev.Result
 			break
 		}
 	}
-	return resultRaw, sessionID
+	return resultRaw, sessionID, toolCalls
 }
 
 func parseClaudeResult(out, resultRaw []byte) (*TryResult, error) {

@@ -58,7 +58,9 @@ func (o *OpenCodeExecutor) Execute(ctx context.Context, opts RunOptions) (*TryRe
 	}
 
 	var textParts []string
+	toolCalls := 0
 	scanner := bufio.NewScanner(strings.NewReader(string(out)))
+	scanner.Buffer(make([]byte, 0, 64*1024), 16*1024*1024)
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
 		if line == "" {
@@ -71,9 +73,16 @@ func (o *OpenCodeExecutor) Execute(ctx context.Context, opts RunOptions) (*TryRe
 		if ev.Type == "text" && ev.Part.Text != "" {
 			textParts = append(textParts, ev.Part.Text)
 		}
+		if ev.Type == "tool_use" || ev.Part.Type == "tool" {
+			toolCalls++
+		}
 	}
 
-	return parseOpenCodeOutput(out, textParts)
+	tr, err := parseOpenCodeOutput(out, textParts)
+	if err == nil && tr != nil {
+		tr.ToolCalls = toolCalls
+	}
+	return tr, err
 }
 
 func parseOpenCodeOutput(out []byte, textParts []string) (*TryResult, error) {

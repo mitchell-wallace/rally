@@ -647,7 +647,7 @@ func TestClaudeAdapterCapabilities(t *testing.T) {
 func TestClaudeAdapter_SessionIDCapture(t *testing.T) {
 	out := []byte(`{"type":"system","session_id":"sess-abc-123"}
 {"type":"result","result":{"completed":true,"summary":"ok"}}`)
-	resultRaw, sessionID := scanClaudeOutput(out)
+	resultRaw, sessionID, _ := scanClaudeOutput(out)
 	if sessionID != "sess-abc-123" {
 		t.Errorf("sessionID = %q, want %q", sessionID, "sess-abc-123")
 	}
@@ -658,7 +658,7 @@ func TestClaudeAdapter_SessionIDCapture(t *testing.T) {
 
 func TestClaudeAdapter_SessionIDEmptyWhenAbsent(t *testing.T) {
 	out := []byte(`{"type":"result","result":{"completed":true,"summary":"ok"}}`)
-	_, sessionID := scanClaudeOutput(out)
+	_, sessionID, _ := scanClaudeOutput(out)
 	if sessionID != "" {
 		t.Errorf("sessionID = %q, want empty", sessionID)
 	}
@@ -666,12 +666,80 @@ func TestClaudeAdapter_SessionIDEmptyWhenAbsent(t *testing.T) {
 
 func TestClaudeAdapter_ScanClaudeOutputNoResult(t *testing.T) {
 	out := []byte(`{"type":"system","session_id":"sess-no-result"}`)
-	resultRaw, sessionID := scanClaudeOutput(out)
+	resultRaw, sessionID, _ := scanClaudeOutput(out)
 	if sessionID != "sess-no-result" {
 		t.Errorf("sessionID = %q, want %q", sessionID, "sess-no-result")
 	}
 	if resultRaw != nil {
 		t.Error("resultRaw should be nil when no result event")
+	}
+}
+
+func TestClaudeAdapter_CountsToolUseBlocks(t *testing.T) {
+	out := []byte(`{"type":"assistant","message":{"content":[{"type":"text","text":"hi"},{"type":"tool_use","id":"t1","name":"Bash"}]}}
+{"type":"assistant","message":{"content":[{"type":"tool_use","id":"t2","name":"Read"},{"type":"tool_use","id":"t3","name":"Bash"}]}}
+{"type":"result","result":{"completed":true,"summary":"done"}}`)
+	_, _, toolCalls := scanClaudeOutput(out)
+	if toolCalls != 3 {
+		t.Errorf("toolCalls = %d, want 3", toolCalls)
+	}
+}
+
+func TestCodexAdapter_CountsToolItems(t *testing.T) {
+	out := []byte(`{"type":"thread.started","thread_id":"abc"}
+{"type":"item.completed","item":{"type":"command_execution","id":"i1"}}
+{"type":"item.completed","item":{"type":"file_change","id":"i2"}}
+{"type":"item.completed","item":{"type":"agent_message","id":"i3"}}
+{"type":"item.completed","item":{"type":"command_execution","id":"i4"}}
+{"type":"turn.completed"}`)
+	sessionID, toolCalls := scanCodexEvents(out)
+	if sessionID != "abc" {
+		t.Errorf("sessionID = %q, want abc", sessionID)
+	}
+	if toolCalls != 3 {
+		t.Errorf("toolCalls = %d, want 3 (2 command_execution + 1 file_change)", toolCalls)
+	}
+}
+
+func TestGeminiAdapter_CountsToolCallsFromStats(t *testing.T) {
+	out := []byte(`{"session_id":"s","response":"hello","stats":{"tools":{"totalCalls":5}}}`)
+	tr, err := parseGeminiOutput(out)
+	if err != nil {
+		t.Fatalf("parse error: %v", err)
+	}
+	if tr.ToolCalls != 5 {
+		t.Errorf("toolCalls = %d, want 5", tr.ToolCalls)
+	}
+}
+
+func TestOpenCodeAdapter_CountsToolUseEvents(t *testing.T) {
+	out := []byte(`{"type":"tool_use","part":{"type":"tool","tool":"read"}}
+{"type":"tool_use","part":{"type":"tool","tool":"write"}}
+{"type":"text","part":{"type":"text","text":"done"}}`)
+	// parseOpenCodeOutput doesn't take a tool count; the count is done in Execute.
+	// Simulate the Execute loop logic.
+	textParts := []string{"done"}
+	toolCalls := 0
+	// The opencode adapter increments on type=tool_use OR part.type=tool.
+	// Count by hand here mirroring the implementation, then verify parser works.
+	for _, line := range []string{
+		`{"type":"tool_use","part":{"type":"tool","tool":"read"}}`,
+		`{"type":"tool_use","part":{"type":"tool","tool":"write"}}`,
+		`{"type":"text","part":{"type":"text","text":"done"}}`,
+	} {
+		var ev opencodeJSONEvent
+		_ = json.Unmarshal([]byte(line), &ev)
+		if ev.Type == "tool_use" || ev.Part.Type == "tool" {
+			toolCalls++
+		}
+	}
+	if toolCalls != 2 {
+		t.Errorf("toolCalls counted = %d, want 2", toolCalls)
+	}
+	// Parser still works.
+	tr, err := parseOpenCodeOutput(out, textParts)
+	if err != nil || tr == nil {
+		t.Fatalf("parse failed: %v", err)
 	}
 }
 

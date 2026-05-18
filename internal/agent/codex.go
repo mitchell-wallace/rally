@@ -23,6 +23,18 @@ type CodexExecutor struct {
 type codexJSONEvent struct {
 	Type     string `json:"type"`
 	ThreadID string `json:"thread_id,omitempty"`
+	Item     *struct {
+		Type string `json:"type"`
+	} `json:"item,omitempty"`
+}
+
+// codexToolItemTypes lists the item.type values that represent tool
+// invocations in codex's --json event stream.
+var codexToolItemTypes = map[string]bool{
+	"command_execution": true,
+	"file_change":       true,
+	"web_search":        true,
+	"mcp_tool_call":     true,
 }
 
 func writeCodexSchema() (string, error) {
@@ -49,7 +61,16 @@ func parseCodexResult(reportData []byte) (*TryResult, error) {
 }
 
 func scanCodexSessionID(out []byte) string {
+	sessionID, _ := scanCodexEvents(out)
+	return sessionID
+}
+
+// scanCodexEvents walks the codex --json event stream and returns the session
+// id (from the first `thread.started` event) and the count of tool invocations
+// (item.completed events where item.type is a known tool type).
+func scanCodexEvents(out []byte) (sessionID string, toolCalls int) {
 	scanner := bufio.NewScanner(strings.NewReader(string(out)))
+	scanner.Buffer(make([]byte, 0, 64*1024), 16*1024*1024)
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
 		if line == "" {
@@ -59,11 +80,14 @@ func scanCodexSessionID(out []byte) string {
 		if err := json.Unmarshal([]byte(line), &ev); err != nil {
 			continue
 		}
-		if ev.Type == "thread.started" && ev.ThreadID != "" {
-			return ev.ThreadID
+		if ev.Type == "thread.started" && ev.ThreadID != "" && sessionID == "" {
+			sessionID = ev.ThreadID
+		}
+		if ev.Type == "item.completed" && ev.Item != nil && codexToolItemTypes[ev.Item.Type] {
+			toolCalls++
 		}
 	}
-	return ""
+	return sessionID, toolCalls
 }
 
 func (c *CodexExecutor) setActiveSessionID(sessionID string) {
@@ -173,9 +197,11 @@ func (c *CodexExecutor) Execute(ctx context.Context, opts RunOptions) (*TryResul
 	if err != nil {
 		return nil, err
 	}
+	streamSessionID, toolCalls := scanCodexEvents(out)
 	if tr.SessionID == "" {
-		tr.SessionID = scanCodexSessionID(out)
+		tr.SessionID = streamSessionID
 	}
+	tr.ToolCalls = toolCalls
 	c.setActiveSessionID(tr.SessionID)
 	return tr, nil
 }

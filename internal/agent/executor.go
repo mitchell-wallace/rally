@@ -34,6 +34,10 @@ type TryResult struct {
 	MessageAddressed *bool
 	FilesChanged     []string
 	SessionID        string
+	// ToolCalls is the count of tool-use invocations observed in the harness
+	// transcript. Used to distinguish "agent did real work" from "agent only
+	// emitted text" — a strong signal for the laps-marker-as-text failure.
+	ToolCalls int
 }
 
 type Executor interface {

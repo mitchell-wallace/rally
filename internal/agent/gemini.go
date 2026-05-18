@@ -12,9 +12,15 @@ type GeminiExecutor struct {
 }
 
 type geminiWrapper struct {
-	Response  string          `json:"response"`
-	SessionID string          `json:"session_id"`
-	Stats     json.RawMessage `json:"stats"`
+	Response  string       `json:"response"`
+	SessionID string       `json:"session_id"`
+	Stats     *geminiStats `json:"stats,omitempty"`
+}
+
+type geminiStats struct {
+	Tools struct {
+		TotalCalls int `json:"totalCalls"`
+	} `json:"tools"`
 }
 
 func (g *GeminiExecutor) ResumeSupported() bool                { return true }
@@ -63,14 +69,22 @@ func parseGeminiOutput(out []byte) (*TryResult, error) {
 		return &TryResult{Completed: false, Summary: string(out)}, nil
 	}
 
+	toolCalls := 0
+	if wrap.Stats != nil {
+		toolCalls = wrap.Stats.Tools.TotalCalls
+	}
+
 	if wrap.Response == "" {
-		return &TryResult{Completed: false, Summary: string(out), SessionID: wrap.SessionID}, nil
+		return &TryResult{Completed: false, Summary: string(out), SessionID: wrap.SessionID, ToolCalls: toolCalls}, nil
 	}
 
 	var tr TryResult
 	if err := json.Unmarshal([]byte(wrap.Response), &tr); err != nil {
-		return &TryResult{Completed: true, Summary: wrap.Response, SessionID: wrap.SessionID}, nil
+		return &TryResult{Completed: true, Summary: wrap.Response, SessionID: wrap.SessionID, ToolCalls: toolCalls}, nil
 	}
 	tr.SessionID = wrap.SessionID
+	if tr.ToolCalls == 0 {
+		tr.ToolCalls = toolCalls
+	}
 	return &tr, nil
 }

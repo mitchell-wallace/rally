@@ -20,6 +20,7 @@ type TryRecord struct {
 	LapID         string   `json:"lap_id,omitempty"`
 	LapAssignee   string   `json:"lap_assignee,omitempty"`
 	RecordedLaps  []string `json:"recorded_laps,omitempty"`
+	ToolCalls     int      `json:"tool_calls,omitempty"`
 }
 
 // MessageRecord represents an inbox message that can be consumed by a run.
