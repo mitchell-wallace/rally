@@ -509,6 +509,7 @@ func init() {
 	rootCmd.AddCommand(initCmd)
 	rootCmd.AddCommand(instructionsCmd)
 	rootCmd.AddCommand(cli.NewRoutesCmd())
+	rootCmd.AddCommand(cli.NewHooksCmd())
 	instructionsCmd.AddCommand(instructionsEditCmd)
 	instructionsCmd.AddCommand(instructionsShowCmd)
 	rootCmd.AddCommand(versionCmd)
