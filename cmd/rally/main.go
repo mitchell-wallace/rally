@@ -274,19 +274,30 @@ func runRelay(cmd *cobra.Command, args []string) error {
 	signal.Notify(sigCh, os.Interrupt)
 	defer signal.Stop(sigCh)
 
+	// Ctrl+C is intentionally double-press only: a single press is treated as
+	// noise (accidental touches shouldn't kill a long-running relay), and a
+	// second press within doublePressWindow is the *one* action — stop the run
+	// gracefully and cancel the context. We don't expose a separate
+	// single-press action because the harness has Ctrl+S/Ctrl+P/Ctrl+X for
+	// finer-grained controls already.
+	const doublePressWindow = 3 * time.Second
 	go func() {
-		select {
-		case <-sigCh:
-			fmt.Fprintln(os.Stderr, "Stop requested. Completing current try... (press Ctrl-C again to force)")
-			r.RequestStop()
-		case <-ctx.Done():
-			return
-		}
-		select {
-		case <-sigCh:
-			cancel()
-		case <-ctx.Done():
-			return
+		var lastPress time.Time
+		for {
+			select {
+			case <-sigCh:
+				now := time.Now()
+				if !lastPress.IsZero() && now.Sub(lastPress) <= doublePressWindow {
+					fmt.Fprintln(os.Stderr, "Stop requested. Completing current try and exiting...")
+					r.RequestStop()
+					cancel()
+					return
+				}
+				lastPress = now
+				fmt.Fprintln(os.Stderr, "Press Ctrl+C again within 3s to stop the relay.")
+			case <-ctx.Done():
+				return
+			}
 		}
 	}()
 

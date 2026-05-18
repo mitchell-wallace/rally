@@ -568,9 +568,15 @@ attemptLoop:
 		mon.SetFreezeThreshold(freezeThreshold)
 
 		initialStatus, _ := mon.Tick()
-		fmt.Println(initialStatus)
+		// Skip empty/whitespace status to avoid an extra blank line below the
+		// header. The control hint line is always shown.
+		cursorUp := 1
+		if strings.TrimSpace(initialStatus) != "" {
+			fmt.Println(initialStatus)
+			cursorUp = 2
+		}
 		fmt.Println("[Ctrl+S skip]  [Ctrl+P pause]  [Ctrl+X stop]  [Ctrl+C quit]")
-		mon.SetCursorUpLines(2)
+		mon.SetCursorUpLines(cursorUp)
 		mon.Start(os.Stdout)
 
 		type tryResult struct {

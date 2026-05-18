@@ -2,11 +2,22 @@ package style
 
 import (
 	"fmt"
+	"io"
 	"strings"
 	"time"
 
 	"github.com/charmbracelet/lipgloss"
 )
+
+// PrintLine writes s to w followed by a newline, but only when s contains
+// non-whitespace. This avoids leaking blank lines into the console when a
+// caller has no real content (e.g. an empty status string from a renderer).
+func PrintLine(w io.Writer, s string) {
+	if strings.TrimSpace(s) == "" {
+		return
+	}
+	fmt.Fprintln(w, s)
+}
 
 // Color scheme styles.
 var (
@@ -21,6 +32,10 @@ const separatorWidth = 40
 
 func separator() string {
 	return lipgloss.NewStyle().Foreground(lipgloss.Color("240")).Render(strings.Repeat("═", separatorWidth))
+}
+
+func subSeparator() string {
+	return lipgloss.NewStyle().Foreground(lipgloss.Color("240")).Render(strings.Repeat("─", separatorWidth))
 }
 
 // HeaderOptions carries parameters for rendering a run header.
@@ -64,12 +79,14 @@ func RenderHeader(opts HeaderOptions) string {
 	}
 
 	var sb strings.Builder
+	// Leading newline separates this header from prior output for readability.
+	sb.WriteString("\n")
 	sb.WriteString(separator())
 	sb.WriteString("\n")
 	sb.WriteString("  ")
 	sb.WriteString(label)
 	sb.WriteString("\n")
-	sb.WriteString(separator())
+	sb.WriteString(subSeparator())
 	return sb.String()
 }
 
