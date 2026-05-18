@@ -85,8 +85,17 @@ func runRelay(cmd *cobra.Command, args []string) error {
 		fmt.Fprintln(os.Stderr, "warning:", note)
 	}
 
-	if !cmd.Flags().Changed("iterations") && cfg.Defaults.Iterations > 0 {
-		iterations = cfg.Defaults.Iterations
+	lapsEnabled := laps.Detect(workspaceDir)
+
+	if !cmd.Flags().Changed("iterations") {
+		if cfg.Defaults.Iterations > 0 {
+			iterations = cfg.Defaults.Iterations
+		} else if !lapsEnabled {
+			iterations = 50
+			fmt.Fprintln(os.Stderr, "warning: no iteration limit specified; defaulting to 50 iterations")
+		} else {
+			iterations = 10000 // laps-backed runs until queue empty
+		}
 	}
 
 	selectedSpecs, usedOverride, warning, err := chooseRelayAgentSpecs(agentSpecs, mixSpecs, cfg.Defaults.Mix)
@@ -97,7 +106,7 @@ func runRelay(cmd *cobra.Command, args []string) error {
 		fmt.Fprintln(os.Stderr, warning)
 	}
 
-	lapsEnabled := laps.Detect(workspaceDir)
+
 	validRoutes, err := cli.ValidateRelayStartupRoutes(context.Background(), workspaceDir, cfg, cli.RelayStartupRouteOptions{
 		In:          os.Stdin,
 		Out:         os.Stderr,
@@ -489,9 +498,9 @@ func init() {
 		originalHelp(cmd, args)
 	})
 
-	relayCmd.Flags().Int("iterations", 1, "Number of iterations")
-	relayCmd.Flags().StringArray("agent", nil, "Agent mix (repeatable; comma- or space-separated, e.g. \"cc:2,cx:1\" or \"cc:2 cx:1\")")
-	relayCmd.Flags().StringArray("mix", nil, "Legacy synonym for --agent")
+	relayCmd.Flags().IntP("iterations", "i", 0, "Number of iterations (default 50 unless laps-backed)")
+	relayCmd.Flags().StringArrayP("agent", "a", nil, "Agent mix (repeatable; comma- or space-separated, e.g. \"cc:2,cx:1\" or \"cc:2 cx:1\")")
+	relayCmd.Flags().StringArrayP("mix", "m", nil, "Legacy synonym for --agent")
 	relayCmd.Flags().Bool("resume", false, "Resume the last unfinished batch explicitly")
 	relayCmd.Flags().Bool("new", false, "Start a new batch explicitly, discarding unfinished batch state")
 }

@@ -45,6 +45,23 @@ func (a *Adapter) HeadPull(ctx context.Context) (Lap, error) {
 	return lap, nil
 }
 
+// QueueSize runs "laps list" and returns the number of active tasks in the queue.
+func (a *Adapter) QueueSize(ctx context.Context) (int, error) {
+	cmd := exec.CommandContext(ctx, "laps", "list")
+	cmd.Dir = a.WorkspaceDir
+	out, err := cmd.Output()
+	if err != nil {
+		return 0, err
+	}
+	count := 0
+	for _, line := range strings.Split(string(out), "\n") {
+		if strings.TrimSpace(line) != "" {
+			count++
+		}
+	}
+	return count, nil
+}
+
 // parseLapOutput parses the output of "laps get head".
 //
 // Expected formats:

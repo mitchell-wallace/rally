@@ -222,55 +222,6 @@ func TestLapsHeadTaskPassedToExecutor(t *testing.T) {
 	}
 }
 
-func TestLapsHeadTaskFallsBackToConfiguredPrompt(t *testing.T) {
-	workspaceDir := t.TempDir()
-	rallyDir := filepath.Join(workspaceDir, ".rally")
-	os.MkdirAll(rallyDir, 0o755)
-	initRepo(t, workspaceDir)
-
-	s := newTestStore(t, rallyDir)
-	var receivedTaskName string
-	var receivedTaskPrompt string
-	changeCounter := 0
-	exec := &funcExecutor{
-		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
-			receivedTaskName = opts.TaskName
-			receivedTaskPrompt = opts.TaskPrompt
-			changeCounter++
-			f, _ := os.OpenFile(filepath.Join(workspaceDir, "changes.txt"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
-			fmt.Fprintf(f, "change %d\n", changeCounter)
-			f.Close()
-			return &agent.TryResult{Completed: true}, nil
-		},
-	}
-	executors := map[string]agent.Executor{"claude": exec}
-
-	oldHeadPull := headPullLap
-	headPullLap = func(context.Context, string) (laps.Lap, error) {
-		return laps.NoLap, nil
-	}
-	defer func() { headPullLap = oldHeadPull }()
-
-	r := NewRunner(s, Config{
-		WorkspaceDir:     workspaceDir,
-		DataDir:          t.TempDir(),
-		AgentMixSpecs:    []string{"cc:1"},
-		TargetIterations: 1,
-		LapsEnabled:      true,
-		TaskPrompt:       "fallback prompt",
-	}, executors)
-
-	if err := r.Run(context.Background()); err != nil {
-		t.Fatalf("run failed: %v", err)
-	}
-
-	if receivedTaskName != "relay run" {
-		t.Errorf("expected fallback task name, got %q", receivedTaskName)
-	}
-	if receivedTaskPrompt != "fallback prompt" {
-		t.Errorf("expected fallback task prompt, got %q", receivedTaskPrompt)
-	}
-}
 func TestAgentCyclingDeterminism(t *testing.T) {
 	workspaceDir := t.TempDir()
 	rallyDir := filepath.Join(workspaceDir, ".rally")
@@ -719,6 +670,10 @@ func TestBuildLivenessProbeEnabledForSupportedAdapter(t *testing.T) {
 }
 
 func TestResumeRetryPreservesRunState(t *testing.T) {
+	oldHeadPull := headPullLap
+	headPullLap = func(context.Context, string) (laps.Lap, error) { return laps.Lap{Title: "test"}, nil }
+	defer func() { headPullLap = oldHeadPull }()
+
 	workspaceDir := t.TempDir()
 	rallyDir := filepath.Join(workspaceDir, ".rally")
 	os.MkdirAll(rallyDir, 0o755)
@@ -771,6 +726,10 @@ func TestResumeRetryPreservesRunState(t *testing.T) {
 }
 
 func TestFreshStartRetryClearsRunState(t *testing.T) {
+	oldHeadPull := headPullLap
+	headPullLap = func(context.Context, string) (laps.Lap, error) { return laps.Lap{Title: "test"}, nil }
+	defer func() { headPullLap = oldHeadPull }()
+
 	workspaceDir := t.TempDir()
 	rallyDir := filepath.Join(workspaceDir, ".rally")
 	os.MkdirAll(rallyDir, 0o755)
@@ -825,6 +784,10 @@ func TestFreshStartRetryClearsRunState(t *testing.T) {
 }
 
 func TestResumeRetryMidHandoffPreservesFlag(t *testing.T) {
+	oldHeadPull := headPullLap
+	headPullLap = func(context.Context, string) (laps.Lap, error) { return laps.Lap{Title: "test"}, nil }
+	defer func() { headPullLap = oldHeadPull }()
+
 	workspaceDir := t.TempDir()
 	rallyDir := filepath.Join(workspaceDir, ".rally")
 	os.MkdirAll(rallyDir, 0o755)
@@ -882,6 +845,10 @@ func TestResumeRetryMidHandoffPreservesFlag(t *testing.T) {
 }
 
 func TestFreshStartRetryMidHandoffClearsFlag(t *testing.T) {
+	oldHeadPull := headPullLap
+	headPullLap = func(context.Context, string) (laps.Lap, error) { return laps.Lap{Title: "test"}, nil }
+	defer func() { headPullLap = oldHeadPull }()
+
 	workspaceDir := t.TempDir()
 	rallyDir := filepath.Join(workspaceDir, ".rally")
 	os.MkdirAll(rallyDir, 0o755)
@@ -1609,6 +1576,10 @@ func TestAllAgentsFrozenEndsRelay(t *testing.T) {
 }
 
 func TestStubEntryOnIncompleteRun(t *testing.T) {
+	oldHeadPull := headPullLap
+	headPullLap = func(context.Context, string) (laps.Lap, error) { return laps.Lap{Title: "test"}, nil }
+	defer func() { headPullLap = oldHeadPull }()
+
 	workspaceDir := t.TempDir()
 	rallyDir := filepath.Join(workspaceDir, ".rally")
 	os.MkdirAll(rallyDir, 0o755)
@@ -2322,6 +2293,10 @@ func TestFallbackInstructionsIgnoredWhenCLIPromptProvided(t *testing.T) {
 }
 
 func TestFallbackInstructionsIgnoredInLapsMode(t *testing.T) {
+	oldHeadPull := headPullLap
+	headPullLap = func(context.Context, string) (laps.Lap, error) { return laps.Lap{Title: "configured prompt"}, nil }
+	defer func() { headPullLap = oldHeadPull }()
+
 	workspaceDir := t.TempDir()
 	rallyDir := filepath.Join(workspaceDir, ".rally")
 	os.MkdirAll(rallyDir, 0o755)
@@ -2343,11 +2318,7 @@ func TestFallbackInstructionsIgnoredInLapsMode(t *testing.T) {
 	}
 	executors := map[string]agent.Executor{"claude": exec}
 
-	oldHeadPull := headPullLap
-	headPullLap = func(context.Context, string) (laps.Lap, error) {
-		return laps.NoLap, nil
-	}
-	defer func() { headPullLap = oldHeadPull }()
+
 
 	r := NewRunner(s, Config{
 		WorkspaceDir:             workspaceDir,

@@ -20,6 +20,7 @@ const (
 type StrategyDecision struct {
 	Strategy RetryStrategy
 	Cooldown time.Duration
+	Reason   string
 }
 
 type Pattern struct {
@@ -78,12 +79,12 @@ func containsSubstring(lines []string, sub string) bool {
 func ClassifyError(logLines []string) StrategyDecision {
 	for _, pattern := range ErrorPatterns {
 		if pattern.Match(logLines) {
-			decision := StrategyDecision{Strategy: pattern.Strategy}
+			decision := StrategyDecision{Strategy: pattern.Strategy, Reason: pattern.Name}
 			if pattern.Extract != nil {
 				decision.Cooldown = pattern.Extract(logLines)
 			}
 			return decision
 		}
 	}
-	return StrategyDecision{Strategy: StrategyFreshRestart}
+	return StrategyDecision{Strategy: StrategyFreshRestart, Reason: "unknown error"}
 }

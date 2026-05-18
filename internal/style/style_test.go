@@ -15,7 +15,13 @@ func init() {
 
 func TestRenderHeader(t *testing.T) {
 	start := time.Date(2024, 6, 15, 15, 4, 0, 0, time.Local)
-	got := RenderHeader(2, 10, "claude", 1, start)
+	got := RenderHeader(HeaderOptions{
+		RunIndex:  2,
+		TotalRuns: 10,
+		AgentName: "claude",
+		Attempt:   1,
+		StartTime: start,
+	})
 
 	if !strings.Contains(got, "[3/10]") {
 		t.Errorf("expected [3/10] in header, got: %s", got)
@@ -37,7 +43,13 @@ func TestRenderHeader(t *testing.T) {
 
 func TestRenderHeaderAttemptTwo(t *testing.T) {
 	start := time.Date(2024, 6, 15, 10, 30, 0, 0, time.Local)
-	got := RenderHeader(0, 5, "gemini", 2, start)
+	got := RenderHeader(HeaderOptions{
+		RunIndex:  0,
+		TotalRuns: 5,
+		AgentName: "gemini",
+		Attempt:   2,
+		StartTime: start,
+	})
 
 	if !strings.Contains(got, "[1/5]") {
 		t.Errorf("expected [1/5] in header, got: %s", got)
@@ -48,7 +60,12 @@ func TestRenderHeaderAttemptTwo(t *testing.T) {
 }
 
 func TestRenderFooterPassed(t *testing.T) {
-	got := RenderFooter(true, 2*time.Minute+34*time.Second, 3, "abc1234")
+	got := RenderFooter(FooterOptions{
+		Passed:       true,
+		Duration:     2*time.Minute + 34*time.Second,
+		FilesChanged: 3,
+		CommitHash:   "abc1234",
+	})
 
 	if !strings.Contains(got, "passed") {
 		t.Errorf("expected 'passed' in footer, got: %s", got)
@@ -69,7 +86,11 @@ func TestRenderFooterPassed(t *testing.T) {
 }
 
 func TestRenderFooterFailed(t *testing.T) {
-	got := RenderFooter(false, 1*time.Minute+12*time.Second, 0, "")
+	got := RenderFooter(FooterOptions{
+		Passed:       false,
+		Duration:     1*time.Minute + 12*time.Second,
+		FilesChanged: 0,
+	})
 
 	if !strings.Contains(got, "failed") {
 		t.Errorf("expected 'failed' in footer, got: %s", got)
@@ -86,7 +107,12 @@ func TestRenderFooterFailed(t *testing.T) {
 }
 
 func TestRenderFooterSingularFile(t *testing.T) {
-	got := RenderFooter(true, 45*time.Second, 1, "deadbeef")
+	got := RenderFooter(FooterOptions{
+		Passed:       true,
+		Duration:     45 * time.Second,
+		FilesChanged: 1,
+		CommitHash:   "deadbeef",
+	})
 
 	if !strings.Contains(got, "1 file") {
 		t.Errorf("expected '1 file' (singular) in footer, got: %s", got)
@@ -94,7 +120,11 @@ func TestRenderFooterSingularFile(t *testing.T) {
 }
 
 func TestRenderFooterZeroDuration(t *testing.T) {
-	got := RenderFooter(true, 0, 0, "")
+	got := RenderFooter(FooterOptions{
+		Passed:       true,
+		Duration:     0,
+		FilesChanged: 0,
+	})
 
 	if !strings.Contains(got, "0s") {
 		t.Errorf("expected '0s' in footer for zero duration, got: %s", got)

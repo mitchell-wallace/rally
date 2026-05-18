@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
+	osexec "os/exec"
 	"path/filepath"
 	"strings"
 	"sync/atomic"
@@ -68,6 +68,10 @@ var headPullLap = func(ctx context.Context, workspaceDir string) (laps.Lap, erro
 	return (&laps.Adapter{WorkspaceDir: workspaceDir}).HeadPull(ctx)
 }
 
+var queueSize = func(ctx context.Context, workspaceDir string) (int, error) {
+	return (&laps.Adapter{WorkspaceDir: workspaceDir}).QueueSize(ctx)
+}
+
 func NewRunner(s *store.Store, cfg Config, executors map[string]agent.Executor) *Runner {
 	return &Runner{
 		store:     s,
@@ -81,10 +85,12 @@ var freezeCheckInterval = monitor.TickInterval
 const builtInDefaultFallback = "Continue the relay run. Review the current state of the codebase and continue making progress on the project."
 
 type runTask struct {
-	Name         string
-	Requirements string
-	Prompt       string
-	Assignee     string
+	Name          string
+	Requirements  string
+	Prompt        string
+	Assignee      string
+	IsLapsBacked  bool
+	LapsRemaining int
 }
 
 func (r *Runner) resolveInstructions() string {
@@ -220,6 +226,11 @@ func (r *Runner) Run(ctx context.Context) error {
 
 		task, err := r.resolveRunTask(ctx)
 		if err != nil {
+			if errors.Is(err, errQueueEmpty) {
+				fmt.Fprintf(log, "relay %d completed: laps queue empty\n", relay.ID)
+				_ = CompleteRelay(r.store, relay.ID)
+				break
+			}
 			return err
 		}
 
@@ -233,6 +244,7 @@ func (r *Runner) Run(ctx context.Context) error {
 					return fmt.Errorf("relay failed: all agents frozen")
 				}
 				fmt.Fprintf(log, "relay %d all agents paused, waiting %v\n", relay.ID, routeErr.Wait)
+				fmt.Println(style.DimStyle.Render(fmt.Sprintf("agents frozen, waiting %v...", routeErr.Wait)))
 				select {
 				case <-time.After(routeErr.Wait):
 					continue
@@ -527,8 +539,16 @@ attemptLoop:
 		headBefore, _ := r.headHash()
 		startedAt := time.Now().UTC()
 
-		totalRuns := relay.TargetIterations
-		header := style.RenderHeader(runIndex, totalRuns, picked.Harness, attempt, startedAt)
+		header := style.RenderHeader(style.HeaderOptions{
+			RunIndex:      runIndex,
+			TotalRuns:     relay.TargetIterations,
+			AgentName:     picked.Harness,
+			Attempt:       attempt,
+			StartTime:     startedAt,
+			IsLapsBacked:  task.IsLapsBacked,
+			LapTitle:      task.Name,
+			LapsRemaining: task.LapsRemaining,
+		})
 		fmt.Println(header)
 
 		kb := keyboard.NewKeyboard(os.Stdin, os.Stdout)
@@ -657,8 +677,14 @@ attemptLoop:
 		runtime := endedAt.Sub(startedAt)
 		filesChangedCount := r.filesChangedCount(result, headBefore, headAfter, commitHash)
 		shortHash := ""
+		commitTitle := ""
 		if len(commitHash) >= 7 {
 			shortHash = commitHash[:7]
+			cmd := osexec.Command("git", "log", "-1", "--pretty=%s", commitHash)
+			cmd.Dir = r.cfg.WorkspaceDir
+			if out, err := cmd.Output(); err == nil {
+				commitTitle = strings.TrimSpace(string(out))
+			}
 		} else if commitHash != "" {
 			shortHash = commitHash
 		}
@@ -666,10 +692,13 @@ attemptLoop:
 		// Compute failed before rendering the footer so the displayed result
 		// matches what gets recorded in the try record.
 		failed := false
+		failReason := ""
 		if execErr != nil {
 			failed = true
+			failReason = "harness error"
 		} else if result == nil || !result.Completed {
 			failed = true
+			failReason = "incomplete run"
 		} else {
 			hasChanges := commitHash != "" || (result != nil && len(result.FilesChanged) > 0)
 			if !hasChanges {
@@ -679,6 +708,7 @@ attemptLoop:
 			noFileChanges := !hasChanges
 			if noFileChanges && runtime < 3*time.Minute {
 				failed = true
+				failReason = "no changes made"
 			}
 		}
 		// Freeze recovery: if the freeze killed the process but the agent had
@@ -695,6 +725,9 @@ attemptLoop:
 		if failed {
 			logLines := readLastNLines(tryLogPath, 50)
 			decision := reliability.ClassifyError(logLines)
+			if decision.Reason != "unknown error" {
+				failReason = decision.Reason
+			}
 			switch decision.Strategy {
 			case reliability.StrategyNoOp:
 				failed = false
@@ -703,6 +736,7 @@ attemptLoop:
 				r.skipFlag.Store(true)
 			case reliability.StrategyWaitResume:
 				if attempt < maxAttempts && decision.Cooldown > 0 {
+					fmt.Println(style.DimStyle.Render(fmt.Sprintf("waiting %v for rate limit...", decision.Cooldown)))
 					if r.sleepFunc != nil {
 						r.sleepFunc(decision.Cooldown)
 					} else {
@@ -716,7 +750,14 @@ attemptLoop:
 			}
 		}
 
-		footer := style.RenderFooter(!failed, runtime, filesChangedCount, shortHash)
+		footer := style.RenderFooter(style.FooterOptions{
+			Passed:       !failed,
+			Duration:     runtime,
+			FilesChanged: filesChangedCount,
+			CommitHash:   shortHash,
+			CommitTitle:  commitTitle,
+			FailReason:   failReason,
+		})
 		fmt.Println(footer)
 
 		if err := gitx.CommitRallyState(r.cfg.WorkspaceDir); err != nil {
@@ -833,6 +874,8 @@ func (r *Runner) buildLivenessProbe(exec agent.Executor) *reliability.LivenessPr
 	return reliability.NewLivenessProbe(reliability.DefaultProbeTimeout, exec.ProbeLiveness)
 }
 
+var errQueueEmpty = errors.New("laps queue empty")
+
 func (r *Runner) resolveRunTask(ctx context.Context) (runTask, error) {
 	task := runTask{
 		Name:   "relay run",
@@ -851,10 +894,14 @@ func (r *Runner) resolveRunTask(ctx context.Context) (runTask, error) {
 		return runTask{}, fmt.Errorf("pull head lap: %w", err)
 	}
 	if lap == laps.NoLap {
-		return task, nil
+		return runTask{}, errQueueEmpty
 	}
 
 	task.Name = lap.Title
+	task.IsLapsBacked = true
+	if qs, err := queueSize(ctx, r.cfg.WorkspaceDir); err == nil {
+		task.LapsRemaining = qs
+	}
 	if strings.TrimSpace(lap.Description) != "" {
 		task.Prompt = lap.Description
 	} else {
@@ -919,7 +966,7 @@ func (r *Runner) autoCommit(runIndex int, agentType string, attempt int) (string
 	if err == nil {
 		return "", nil
 	}
-	var exitErr *exec.ExitError
+	var exitErr *osexec.ExitError
 	if !errors.As(err, &exitErr) || exitErr.ExitCode() != 1 {
 		return "", err
 	}

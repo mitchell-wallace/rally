@@ -23,13 +23,44 @@ func separator() string {
 	return lipgloss.NewStyle().Foreground(lipgloss.Color("240")).Render(strings.Repeat("═", separatorWidth))
 }
 
+// HeaderOptions carries parameters for rendering a run header.
+type HeaderOptions struct {
+	RunIndex      int
+	TotalRuns     int
+	AgentName     string
+	Attempt       int
+	StartTime     time.Time
+	IsLapsBacked  bool
+	LapTitle      string
+	LapsRemaining int
+}
+
 // RenderHeader renders a try header with separator lines, agent name, run index,
 // attempt number, and start time.
-func RenderHeader(runIndex, totalRuns int, agentName string, attempt int, startTime time.Time) string {
-	timeStr := startTime.Local().Format("15:04")
-	label := fmt.Sprintf("[%d/%d] %s — started %s", runIndex+1, totalRuns, agentName, timeStr)
-	if attempt > 1 {
-		label = fmt.Sprintf("[%d/%d] %s (attempt %d) — started %s", runIndex+1, totalRuns, agentName, attempt, timeStr)
+func RenderHeader(opts HeaderOptions) string {
+	timeStr := opts.StartTime.Local().Format("15:04")
+	var label string
+	
+	if opts.IsLapsBacked {
+		remStr := ""
+		if opts.LapsRemaining > 0 {
+			remStr = fmt.Sprintf(" (%d remaining)", opts.LapsRemaining)
+		}
+		attemptStr := ""
+		if opts.Attempt > 1 {
+			attemptStr = fmt.Sprintf(" (attempt %d)", opts.Attempt)
+		}
+		title := opts.LapTitle
+		if title == "" {
+			title = "Untitled task"
+		}
+		label = fmt.Sprintf("%s%s — %s%s — started %s", opts.AgentName, attemptStr, title, remStr, timeStr)
+	} else {
+		if opts.Attempt > 1 {
+			label = fmt.Sprintf("[%d/%d] %s (attempt %d) — started %s", opts.RunIndex+1, opts.TotalRuns, opts.AgentName, opts.Attempt, timeStr)
+		} else {
+			label = fmt.Sprintf("[%d/%d] %s — started %s", opts.RunIndex+1, opts.TotalRuns, opts.AgentName, timeStr)
+		}
 	}
 
 	var sb strings.Builder
@@ -42,13 +73,23 @@ func RenderHeader(runIndex, totalRuns int, agentName string, attempt int, startT
 	return sb.String()
 }
 
+// FooterOptions carries parameters for rendering a run footer.
+type FooterOptions struct {
+	Passed       bool
+	Duration     time.Duration
+	FilesChanged int
+	CommitHash   string
+	CommitTitle  string
+	FailReason   string
+}
+
 // RenderFooter renders a try footer with outcome, runtime, files changed count,
 // and commit hash.
-func RenderFooter(passed bool, duration time.Duration, filesChanged int, commitHash string) string {
+func RenderFooter(opts FooterOptions) string {
 	var outcomeIcon, outcomeText string
 	var outcomeStyle lipgloss.Style
 
-	if passed {
+	if opts.Passed {
 		outcomeIcon = "✓"
 		outcomeText = "passed"
 		outcomeStyle = SuccessStyle
@@ -59,16 +100,27 @@ func RenderFooter(passed bool, duration time.Duration, filesChanged int, commitH
 	}
 
 	outcome := outcomeStyle.Render(fmt.Sprintf("%s %s", outcomeIcon, outcomeText))
-	durStr := DimStyle.Render(formatDuration(duration))
-	filesStr := DimStyle.Render(fmt.Sprintf("%d file%s", filesChanged, plural(filesChanged)))
+	durStr := DimStyle.Render(formatDuration(opts.Duration))
+	filesStr := DimStyle.Render(fmt.Sprintf("%d file%s", opts.FilesChanged, plural(opts.FilesChanged)))
 
-	commit := commitHash
-	if commit == "" {
-		commit = "—"
+	var extraStr string
+	if opts.Passed {
+		commit := opts.CommitHash
+		if commit == "" {
+			commit = "—"
+		} else if opts.CommitTitle != "" {
+			commit = fmt.Sprintf("%s (%s)", commit, opts.CommitTitle)
+		}
+		extraStr = DimStyle.Render(commit)
+	} else {
+		reason := opts.FailReason
+		if reason == "" {
+			reason = "—"
+		}
+		extraStr = DimStyle.Render(reason)
 	}
-	commitStr := DimStyle.Render(commit)
 
-	return fmt.Sprintf("%s  │  %s  │  %s  │  %s", outcome, durStr, filesStr, commitStr)
+	return fmt.Sprintf("%s  │  %s  │  %s  │  %s", outcome, durStr, filesStr, extraStr)
 }
 
 // RenderSummary renders a relay summary with total runs, pass/fail counts, and
