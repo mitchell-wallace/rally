@@ -1,4 +1,10 @@
 /rally
+/.laps/*
+!/.laps/.gitignore
+!/.laps/hooks.json
+!/.laps/hooks/
+!/.laps/hooks/rally/
+!/.laps/hooks/rally/*.sh
 /.rally/*
 !/.rally/.gitignore
 !/.rally/README.md
