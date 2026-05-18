@@ -43,6 +43,15 @@ var rootCmd = &cobra.Command{
 	Long:  `Rally is a CLI agent orchestrator for managing multi-agent relay sessions.`,
 }
 
+func init() {
+	// Register the --version flag with a -v short alias before Cobra would
+	// auto-register a long-only one (Cobra reuses an existing "version" flag if
+	// it finds one already declared).
+	rootCmd.Flags().BoolP("version", "v", false, "Print version and exit")
+	rootCmd.Version = release.DisplayVersion(Version)
+	rootCmd.SetVersionTemplate(app.BinaryName + " {{.Version}}\n")
+}
+
 var relayCmd = &cobra.Command{
 	Use:   "relay",
 	Short: "Start or resume agent relays",
@@ -509,7 +518,7 @@ func startBackgroundUpdateCheck(argv []string, stderr io.Writer) func() {
 	if os.Getenv(app.EnvNoUpdateCheck) == "1" {
 		return func() {}
 	}
-	if len(argv) > 0 && (argv[0] == "update" || argv[0] == "version" || argv[0] == "--version") {
+	if len(argv) > 0 && (argv[0] == "update" || argv[0] == "version" || argv[0] == "--version" || argv[0] == "-v") {
 		return func() {}
 	}
 

@@ -179,6 +179,18 @@ func TestInstallHooksUpdatesModifiedScript(t *testing.T) {
 
 func TestDoneHookScript(t *testing.T) {
 	tmp := t.TempDir()
+	origWD, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	scriptAbs, err := filepath.Abs("laps-done-hook.sh")
+	if err != nil {
+		t.Fatalf("abs: %v", err)
+	}
+	if err := os.Chdir(tmp); err != nil {
+		t.Fatalf("chdir: %v", err)
+	}
+	defer os.Chdir(origWD)
 	mockDir := filepath.Join(tmp, "mockbin")
 	if err := os.MkdirAll(mockDir, 0o755); err != nil {
 		t.Fatalf("mkdir: %v", err)
@@ -195,8 +207,7 @@ func TestDoneHookScript(t *testing.T) {
 	t.Setenv("PATH", mockDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 	t.Setenv("MOCK_LOG", logFile)
 
-	scriptPath := "laps-done-hook.sh"
-	out, err := exec.Command("/bin/sh", scriptPath, "lap-123").CombinedOutput()
+	out, err := exec.Command("/bin/sh", scriptAbs, "lap-123").CombinedOutput()
 	if err != nil {
 		t.Fatalf("hook script failed: %v\n%s", err, out)
 	}
@@ -219,6 +230,18 @@ func TestDoneHookScript(t *testing.T) {
 
 func TestHandoffHookScript(t *testing.T) {
 	tmp := t.TempDir()
+	origWD, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	scriptAbs, err := filepath.Abs("laps-handoff-hook.sh")
+	if err != nil {
+		t.Fatalf("abs: %v", err)
+	}
+	if err := os.Chdir(tmp); err != nil {
+		t.Fatalf("chdir: %v", err)
+	}
+	defer os.Chdir(origWD)
 	mockDir := filepath.Join(tmp, "mockbin")
 	if err := os.MkdirAll(mockDir, 0o755); err != nil {
 		t.Fatalf("mkdir: %v", err)
@@ -234,8 +257,7 @@ func TestHandoffHookScript(t *testing.T) {
 	t.Setenv("PATH", mockDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 	t.Setenv("MOCK_LOG", logFile)
 
-	scriptPath := "laps-handoff-hook.sh"
-	out, err := exec.Command("/bin/sh", scriptPath).CombinedOutput()
+	out, err := exec.Command("/bin/sh", scriptAbs).CombinedOutput()
 	if err != nil {
 		t.Fatalf("hook script failed: %v\n%s", err, out)
 	}
