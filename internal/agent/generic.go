@@ -18,9 +18,9 @@ type GenericExecutor struct {
 	Model          string
 }
 
-func (g *GenericExecutor) ResumeSupported() bool                { return false }
-func (g *GenericExecutor) RotateSupported() bool                { return false }
-func (g *GenericExecutor) LivenessProbeSupported() bool         { return false }
+func (g *GenericExecutor) ResumeSupported() bool        { return false }
+func (g *GenericExecutor) RotateSupported() bool        { return false }
+func (g *GenericExecutor) LivenessProbeSupported() bool { return false }
 func (g *GenericExecutor) RotateModel(string) error {
 	return fmt.Errorf("rotate not supported by generic adapter")
 }
@@ -97,14 +97,12 @@ func (g *GenericExecutor) runGenericCommand(
 	}
 
 	var stdoutBuf, stderrBuf bytes.Buffer
-	stdoutPipe, err := cmd.StdoutPipe()
-	if err != nil {
-		return nil, fmt.Errorf("generic harness: stdout pipe: %w", err)
+	var stdoutDst io.Writer = &stdoutBuf
+	if logFile != nil {
+		stdoutDst = io.MultiWriter(&stdoutBuf, &ansiFilterWriter{w: logFile})
 	}
-	stderrPipe, err := cmd.StderrPipe()
-	if err != nil {
-		return nil, fmt.Errorf("generic harness: stderr pipe: %w", err)
-	}
+	cmd.Stdout = stdoutDst
+	cmd.Stderr = &stderrBuf
 
 	if !promptInArgs {
 		cmd.Stdin = strings.NewReader(prompt)
@@ -117,33 +115,7 @@ func (g *GenericExecutor) runGenericCommand(
 		opts.OnStart(cmd.Process.Pid)
 	}
 
-	stdoutDone := make(chan struct{})
-	stderrDone := make(chan struct{})
-	go func() {
-		defer close(stdoutDone)
-		// Write ANSI-stripped bytes to the log file so the freeze detector's
-		// log-silence check reflects real content activity, not TUI redraws.
-		// TUI escape sequences (opencode entering interactive mode after completing
-		// the task) would otherwise keep the log modification time current and
-		// prevent the freeze detector from ever seeing log silence.
-		var logDst io.Writer
-		if logFile != nil {
-			logDst = &ansiFilterWriter{w: logFile}
-		}
-		if logDst != nil {
-			io.Copy(io.MultiWriter(&stdoutBuf, logDst), stdoutPipe)
-		} else {
-			io.Copy(&stdoutBuf, stdoutPipe)
-		}
-	}()
-	go func() {
-		defer close(stderrDone)
-		io.Copy(&stderrBuf, stderrPipe)
-	}()
-
 	waitErr := cmd.Wait()
-	<-stdoutDone
-	<-stderrDone
 
 	var selected []byte
 	switch tailStream {
