@@ -60,20 +60,19 @@ type HeaderOptions struct {
 	StartTime     time.Time
 	IsLapsBacked  bool
 	LapTitle      string
-	LapsRemaining int
+	LapsStarted   int
+	LapsTotal     int
+	Model         string
 }
 
 // RenderHeader renders a try header with separator lines, agent name, run index,
-// attempt number, and start time.
+// attempt number, and start time. When LapsTotal > 0 a `laps: X/Y` line is
+// appended; when Model is set a `model: <model>` line is appended.
 func RenderHeader(opts HeaderOptions) string {
 	timeStr := opts.StartTime.Local().Format("15:04")
 	var label string
-	
+
 	if opts.IsLapsBacked {
-		remStr := ""
-		if opts.LapsRemaining > 0 {
-			remStr = fmt.Sprintf(" (%d remaining)", opts.LapsRemaining)
-		}
 		attemptStr := ""
 		if opts.Attempt > 1 {
 			attemptStr = fmt.Sprintf(" (attempt %d)", opts.Attempt)
@@ -82,7 +81,7 @@ func RenderHeader(opts HeaderOptions) string {
 		if title == "" {
 			title = "Untitled task"
 		}
-		label = fmt.Sprintf("%s%s — %s%s — started %s", opts.AgentName, attemptStr, title, remStr, timeStr)
+		label = fmt.Sprintf("%s%s — %s — started %s", opts.AgentName, attemptStr, title, timeStr)
 	} else {
 		if opts.Attempt > 1 {
 			label = fmt.Sprintf("[%d/%d] %s (attempt %d) — started %s", opts.RunIndex+1, opts.TotalRuns, opts.AgentName, opts.Attempt, timeStr)
@@ -100,6 +99,15 @@ func RenderHeader(opts HeaderOptions) string {
 	sb.WriteString(label)
 	sb.WriteString("\n")
 	sb.WriteString(subSeparator())
+
+	if opts.LapsTotal > 0 {
+		sb.WriteString("\n  ")
+		sb.WriteString(DimStyle.Render(fmt.Sprintf("laps: %d/%d", opts.LapsStarted, opts.LapsTotal)))
+	}
+	if strings.TrimSpace(opts.Model) != "" {
+		sb.WriteString("\n  ")
+		sb.WriteString(DimStyle.Render(fmt.Sprintf("model: %s", opts.Model)))
+	}
 	return sb.String()
 }
 

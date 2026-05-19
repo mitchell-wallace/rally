@@ -21,6 +21,7 @@ func TestRenderHeader(t *testing.T) {
 		AgentName: "claude",
 		Attempt:   1,
 		StartTime: start,
+		Model:     "sonnet-4",
 	})
 
 	if !strings.Contains(got, "[3/10]") {
@@ -35,9 +36,39 @@ func TestRenderHeader(t *testing.T) {
 	if !strings.Contains(got, strings.Repeat("═", separatorWidth)) {
 		t.Errorf("expected separator line in header, got: %s", got)
 	}
+	if !strings.Contains(got, "model: sonnet-4") {
+		t.Errorf("expected 'model: sonnet-4' in header, got: %s", got)
+	}
 	// Verify ANSI color codes are present (separator uses dim color)
 	if !strings.Contains(got, "\x1b[") {
 		t.Logf("no ANSI codes found in header (possible TTY detection); output: %q", got)
+	}
+}
+
+func TestRenderHeaderLapsBacked(t *testing.T) {
+	start := time.Date(2024, 6, 15, 15, 4, 0, 0, time.Local)
+	got := RenderHeader(HeaderOptions{
+		AgentName:    "gemini",
+		Attempt:      1,
+		StartTime:    start,
+		IsLapsBacked: true,
+		LapTitle:     "Apply neobrutalist UI polish",
+		LapsStarted:  1,
+		LapsTotal:    3,
+		Model:        "gemini-2.5-pro",
+	})
+
+	if strings.Contains(got, "remaining") {
+		t.Errorf("legacy '(N remaining)' suffix should be gone, got: %s", got)
+	}
+	if !strings.Contains(got, "laps: 1/3") {
+		t.Errorf("expected 'laps: 1/3' line in header, got: %s", got)
+	}
+	if !strings.Contains(got, "model: gemini-2.5-pro") {
+		t.Errorf("expected 'model: gemini-2.5-pro' line in header, got: %s", got)
+	}
+	if !strings.Contains(got, "Apply neobrutalist UI polish") {
+		t.Errorf("expected lap title in header, got: %s", got)
 	}
 }
 

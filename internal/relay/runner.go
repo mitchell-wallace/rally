@@ -656,15 +656,24 @@ attemptLoop:
 		headBefore, _ := r.headHash()
 		startedAt := time.Now().UTC()
 
+		var lapsStarted, lapsTotal int
+		if task.IsLapsBacked {
+			// task.LapsRemaining is the current queue size including the head
+			// (HeadPull reads but does not dequeue), so total = completed + queue.
+			lapsStarted = runIndex + 1
+			lapsTotal = runIndex + task.LapsRemaining
+		}
 		header := style.RenderHeader(style.HeaderOptions{
-			RunIndex:      runIndex,
-			TotalRuns:     relay.TargetIterations,
-			AgentName:     picked.Harness,
-			Attempt:       attempt,
-			StartTime:     startedAt,
-			IsLapsBacked:  task.IsLapsBacked,
-			LapTitle:      task.Name,
-			LapsRemaining: task.LapsRemaining,
+			RunIndex:     runIndex,
+			TotalRuns:    relay.TargetIterations,
+			AgentName:    picked.Harness,
+			Attempt:      attempt,
+			StartTime:    startedAt,
+			IsLapsBacked: task.IsLapsBacked,
+			LapTitle:     task.Name,
+			LapsStarted:  lapsStarted,
+			LapsTotal:    lapsTotal,
+			Model:        picked.Model,
 		})
 		fmt.Println(header)
 

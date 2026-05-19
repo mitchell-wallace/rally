@@ -24,7 +24,7 @@ func TestRenderStatus(t *testing.T) {
 			dirtyCount:   11,
 			lastActivity: 4 * time.Second,
 			warnings:     nil,
-			wantContains: []string{"⏱ 5m 34s", "📁 11 files", "last activity: 4s"},
+			wantContains: []string{"⏱ 5m 34s", "📁 11 files", "last activity: < 1m ago"},
 		},
 		{
 			name:         "no last activity",
@@ -33,6 +33,14 @@ func TestRenderStatus(t *testing.T) {
 			lastActivity: -1,
 			warnings:     nil,
 			wantContains: []string{"⏱ 1m 00s", "📁 0 files", "last activity: —"},
+		},
+		{
+			name:         "last activity over a minute",
+			elapsed:      3 * time.Minute,
+			dirtyCount:   2,
+			lastActivity: 90 * time.Second,
+			warnings:     nil,
+			wantContains: []string{"last activity: 1m ago"},
 		},
 		{
 			name:         "with warnings",
