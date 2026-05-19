@@ -16,6 +16,7 @@ import (
 	"github.com/mitchell-wallace/rally/internal/cli"
 	"github.com/mitchell-wallace/rally/internal/config"
 	"github.com/mitchell-wallace/rally/internal/gitx"
+	"github.com/mitchell-wallace/rally/internal/prompt"
 	"github.com/mitchell-wallace/rally/internal/laps"
 	"github.com/mitchell-wallace/rally/internal/progress"
 	"github.com/mitchell-wallace/rally/internal/relay"
@@ -228,11 +229,20 @@ func runRelay(cmd *cobra.Command, args []string) error {
 		if len(relays) > 0 && relays[0].EndedAt == "" {
 			storedMix = relays[0].AgentMix
 			resumedRelay = true
-			fmt.Printf("Unfinished relay #%d is at iteration %d/%d (mix: %s). Resume or start new? [resume/new]: ",
-				relays[0].ID, relays[0].CompletedIterations, relays[0].TargetIterations, relay.FormatMixLabel(relays[0].AgentMix))
-			var answer string
-			fmt.Scanln(&answer)
-			if strings.ToLower(answer) == "new" || strings.ToLower(answer) == "n" {
+			choice, err := prompt.Select(
+				os.Stdin, os.Stderr,
+				fmt.Sprintf("Unfinished relay #%d at iteration %d/%d (mix: %s)", relays[0].ID, relays[0].CompletedIterations, relays[0].TargetIterations, relay.FormatMixLabel(relays[0].AgentMix)),
+				"Resume the existing relay or discard it and start a new one?",
+				[]prompt.Option{
+					{Label: "Resume", Value: "resume"},
+					{Label: "Start new", Value: "new"},
+				},
+				"resume",
+			)
+			if err != nil {
+				return err
+			}
+			if choice == "new" {
 				_ = relay.CompleteRelay(s, relays[0].ID)
 				resumedRelay = false
 			}
@@ -248,20 +258,24 @@ func runRelay(cmd *cobra.Command, args []string) error {
 				runnerCfg.AgentMixSpecs = selectedSpecs
 				runnerCfg.OverwriteMixOnResume = true
 			}
-			// If no new agents, keep stored mix (default behavior)
-		} else {
-			// Interactive resume: prompt if new agents provided
-			if hasNewAgents {
-				fmt.Printf("New --agent flags detected. Keep stored mix (%s) or overwrite with new mix? [keep/overwrite]: ", relay.FormatMixLabel(storedMix))
-				var answer string
-				fmt.Scanln(&answer)
-				if strings.ToLower(answer) == "overwrite" || strings.ToLower(answer) == "o" {
-					runnerCfg.AgentMixSpecs = selectedSpecs
-					runnerCfg.OverwriteMixOnResume = true
-				}
-				// If "keep", use stored mix (default behavior)
+		} else if hasNewAgents {
+			choice, err := prompt.Select(
+				os.Stdin, os.Stderr,
+				"New --agent flags detected",
+				fmt.Sprintf("Keep stored mix (%s) or overwrite with the new mix?", relay.FormatMixLabel(storedMix)),
+				[]prompt.Option{
+					{Label: "Keep stored", Value: "keep"},
+					{Label: "Overwrite", Value: "overwrite"},
+				},
+				"keep",
+			)
+			if err != nil {
+				return err
 			}
-			// If no new agents, keep stored mix (default behavior)
+			if choice == "overwrite" {
+				runnerCfg.AgentMixSpecs = selectedSpecs
+				runnerCfg.OverwriteMixOnResume = true
+			}
 		}
 	}
 

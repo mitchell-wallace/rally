@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"bufio"
 	"context"
 	"fmt"
 	"io"
@@ -9,10 +8,13 @@ import (
 
 	"github.com/mitchell-wallace/rally/internal/config"
 	"github.com/mitchell-wallace/rally/internal/laps"
+	"github.com/mitchell-wallace/rally/internal/prompt"
 	"github.com/mitchell-wallace/rally/internal/routing"
 )
 
-const continueRoutesPrompt = "Continue anyway? Invalid roles will fall back to DEFAULT (y/N): "
+// continueRoutesPrompt is the substring tests assert against; it must appear
+// in both the TTY (huh) and plain-text fallback renderings of the confirm.
+const continueRoutesPrompt = "Continue anyway?"
 
 var headPullForStartupValidation = func(ctx context.Context, workspaceDir string) (laps.Lap, error) {
 	return (&laps.Adapter{WorkspaceDir: workspaceDir}).HeadPull(ctx)
@@ -134,23 +136,18 @@ func relayQueueEmpty(ctx context.Context, workspaceDir string, lapsEnabled bool)
 }
 
 func promptContinueRoutes(in io.Reader, out io.Writer) bool {
-	if in == nil {
-		in = strings.NewReader("")
-	}
 	if out == nil {
 		out = io.Discard
 	}
-
-	fmt.Fprint(out, continueRoutesPrompt)
-
-	reader := bufio.NewReader(in)
-	line, err := reader.ReadString('\n')
-	if err != nil && err != io.EOF {
+	ok, err := prompt.Confirm(in, out,
+		"Continue anyway?",
+		"Invalid roles will fall back to DEFAULT.",
+		false,
+	)
+	if err != nil {
 		return false
 	}
-
-	answer := strings.TrimSpace(line)
-	return strings.EqualFold(answer, "y") || strings.EqualFold(answer, "yes")
+	return ok
 }
 
 func writeWarnings(out io.Writer, warnings []string) {

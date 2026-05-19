@@ -1,38 +1,42 @@
 package cli
 
 import (
-	"bufio"
 	"fmt"
-	"io"
+	"os"
 	"sort"
 	"strconv"
 	"strings"
 
-	"github.com/mitchell-wallace/rally/internal/config"
+	"github.com/charmbracelet/huh"
 	"github.com/spf13/cobra"
+	"golang.org/x/term"
+
+	"github.com/mitchell-wallace/rally/internal/config"
 )
 
 // NewConfigCmd returns the `rally config` command group.
 func NewConfigCmd() *cobra.Command {
-	cmd := &cobra.Command{
+	return &cobra.Command{
 		Use:   "config",
 		Short: "Configure rally interactively",
 		Long: `Interactively edit .rally/config.toml.
 
-Walks through default models, default mix and iterations, role routing
-fallbacks, reliability tuning, and custom harness aliases. Existing
-values are shown in brackets; press Enter to keep them.`,
+Walks through defaults (mix, iterations), default models per harness,
+paths (data dir, instructions files), role routing fallbacks, reliability
+tuning, and any custom harness aliases. Existing values are pre-filled in
+each form; leave them as-is to keep, or edit in place.`,
 		RunE: runConfig,
 	}
-	return cmd
 }
 
-func runConfig(cmd *cobra.Command, args []string) error {
+func runConfig(cmd *cobra.Command, _ []string) error {
+	if !term.IsTerminal(int(os.Stdin.Fd())) {
+		return fmt.Errorf("rally config is interactive and requires a terminal; edit .rally/config.toml directly for non-interactive use")
+	}
 	workspaceDir, err := resolveWorkspaceDir()
 	if err != nil {
 		return err
 	}
-
 	cfg, err := loadConfig(workspaceDir)
 	if err != nil {
 		return fmt.Errorf("load config: %w", err)
@@ -44,279 +48,306 @@ func runConfig(cmd *cobra.Command, args []string) error {
 		cfg.Routes = make(map[string][]string)
 	}
 
-	in := bufio.NewReader(cmd.InOrStdin())
-	out := cmd.OutOrStdout()
+	// Build editable copies for huh fields; mutate cfg only after the form
+	// completes so an aborted form leaves the on-disk config untouched.
+	mix := cfg.Defaults.Mix
+	iterations := strconv.Itoa(cfg.Defaults.Iterations)
+	claudeModel := cfg.ClaudeModel
+	codexModel := cfg.CodexModel
+	geminiModel := cfg.GeminiModel
+	openCodeModel := cfg.OpenCodeModel
 
-	fmt.Fprintln(out, "rally config — press Enter to keep the current value, type a new one to change it.")
-	fmt.Fprintln(out)
+	dataDir := cfg.DataDir
+	lapsInstructions := cfg.Laps.InstructionsFile
+	fallbackInstructions := cfg.Fallback.InstructionsFile
+	runHooksOnAutoCommit := cfg.RunHooksOnAutoCommit
 
-	if err := promptDefaults(in, out, &cfg); err != nil {
-		return err
+	freezeStr := strconv.Itoa(cfg.Reliability.FreezeThresholdSecs)
+	retryStr := strconv.Itoa(cfg.Reliability.RetryBudget)
+	livenessProbe := cfg.Reliability.LivenessProbe
+
+	// Parallel slices so each huh field can bind directly to &routeValues[i]
+	// and we can read the user's edits back after the form runs.
+	roleNames := []string{"default", "junior", "senior", "ui", "verify"}
+	roleSet := map[string]bool{}
+	for _, r := range roleNames {
+		roleSet[r] = true
 	}
-	if err := promptModels(in, out, &cfg); err != nil {
-		return err
+	for name := range cfg.Routes {
+		if !roleSet[name] {
+			roleNames = append(roleNames, name)
+			roleSet[name] = true
+		}
 	}
-	if err := promptRoutes(in, out, &cfg); err != nil {
-		return err
+	sort.Strings(roleNames[5:])
+	routeValues := make([]string, len(roleNames))
+	for i, r := range roleNames {
+		routeValues[i] = strings.Join(cfg.Routes[r], ", ")
 	}
-	if err := promptReliability(in, out, &cfg); err != nil {
-		return err
+
+	editHarnesses := false
+	editCustomRoles := false
+	saveChanges := true
+
+	defaultsGroup := huh.NewGroup(
+		huh.NewNote().Title("rally config").Description("Press Tab to move between fields. Submit each form to advance."),
+		huh.NewInput().Title("Default agent mix").Description("Used when --agent isn't passed. e.g. \"cc cx\" or \"cc:2,cx:1\".").Value(&mix),
+		huh.NewInput().Title("Default iterations").Description("0 lets rally pick a sensible default (50 free-form, queue-bounded with laps).").Value(&iterations).Validate(validateOptionalInt),
+	)
+
+	modelsGroup := huh.NewGroup(
+		huh.NewNote().Title("Default models").Description("Leave blank to inherit the harness's own default."),
+		huh.NewInput().Title("claude_model").Value(&claudeModel),
+		huh.NewInput().Title("codex_model").Value(&codexModel),
+		huh.NewInput().Title("gemini_model").Value(&geminiModel),
+		huh.NewInput().Title("opencode_model").Value(&openCodeModel),
+	)
+
+	pathsGroup := huh.NewGroup(
+		huh.NewNote().Title("Paths & toggles").Description("Optional paths and behaviour flags."),
+		huh.NewInput().Title("data_dir").Description("Where rally writes try logs and relay records. Blank = ~/.local/share/rally.").Value(&dataDir),
+		huh.NewInput().Title("laps.instructions_file").Description("Extra instructions injected when a lap is assigned.").Value(&lapsInstructions),
+		huh.NewInput().Title("fallback.instructions_file").Description("Instructions used when no laps queue exists.").Value(&fallbackInstructions),
+		huh.NewConfirm().Title("run_hooks_on_autocommit").Description("Run git hooks (e.g. pre-commit) on rally's automatic commits.").Affirmative("Yes").Negative("No").Value(&runHooksOnAutoCommit),
+	)
+
+	routeFields := []huh.Field{
+		huh.NewNote().Title("Role routing").Description("Each role maps to an ordered list of harnesses/aliases. Comma-separate entries. Clear a value to remove the role."),
 	}
-	if err := promptHarnessAliases(in, out, &cfg); err != nil {
+	for i, role := range roleNames {
+		routeFields = append(routeFields, huh.NewInput().Title(role).Value(&routeValues[i]))
+	}
+	routeFields = append(routeFields, huh.NewConfirm().Title("Add a custom role afterwards?").Affirmative("Yes").Negative("No").Value(&editCustomRoles))
+	routesGroup := huh.NewGroup(routeFields...)
+
+	reliabilityGroup := huh.NewGroup(
+		huh.NewNote().Title("Reliability").Description("Freeze detection and retry behaviour."),
+		huh.NewInput().Title("freeze_threshold_secs").Description("Log silence (seconds) before treating an agent as frozen.").Value(&freezeStr).Validate(validateOptionalInt),
+		huh.NewInput().Title("retry_budget").Description("Per-run retry budget before a try is marked failed.").Value(&retryStr).Validate(validateOptionalInt),
+		huh.NewConfirm().Title("liveness_probe").Description("Send a periodic check to detect connection drops.").Affirmative("On").Negative("Off").Value(&livenessProbe),
+	)
+
+	harnessGroup := huh.NewGroup(
+		huh.NewConfirm().Title("Edit custom harness aliases?").Description("Add or edit [harness.<name>] entries — short labels, custom commands, model maps.").Affirmative("Yes").Negative("No").Value(&editHarnesses),
+	)
+
+	saveGroup := huh.NewGroup(
+		huh.NewConfirm().Title("Save changes to .rally/config.toml?").Affirmative("Save").Negative("Discard").Value(&saveChanges),
+	)
+
+	form := huh.NewForm(defaultsGroup, modelsGroup, pathsGroup, routesGroup, reliabilityGroup, harnessGroup, saveGroup).
+		WithShowHelp(false).
+		WithInput(cmd.InOrStdin()).
+		WithOutput(cmd.OutOrStderr())
+	if err := form.Run(); err != nil {
 		return err
 	}
 
-	fmt.Fprintln(out)
-	confirm, err := readLine(in, out, "Save changes to .rally/config.toml?", "y")
-	if err != nil {
-		return err
-	}
-	if !isYes(confirm) {
-		fmt.Fprintln(out, "Aborted; nothing written.")
+	if !saveChanges {
+		fmt.Fprintln(cmd.OutOrStdout(), "Aborted; nothing written.")
 		return nil
+	}
+
+	// Apply edits back onto cfg now that the user has confirmed.
+	cfg.Defaults.Mix = strings.TrimSpace(mix)
+	if n, ok := parseIntDefault(iterations, cfg.Defaults.Iterations); ok {
+		cfg.Defaults.Iterations = n
+	}
+	cfg.ClaudeModel = strings.TrimSpace(claudeModel)
+	cfg.CodexModel = strings.TrimSpace(codexModel)
+	cfg.GeminiModel = strings.TrimSpace(geminiModel)
+	cfg.OpenCodeModel = strings.TrimSpace(openCodeModel)
+	cfg.Defaults.ClaudeModel = cfg.ClaudeModel
+	cfg.Defaults.CodexModel = cfg.CodexModel
+	cfg.Defaults.GeminiModel = cfg.GeminiModel
+	cfg.Defaults.OpenCodeModel = cfg.OpenCodeModel
+
+	cfg.DataDir = strings.TrimSpace(dataDir)
+	cfg.Laps.InstructionsFile = strings.TrimSpace(lapsInstructions)
+	cfg.Fallback.InstructionsFile = strings.TrimSpace(fallbackInstructions)
+	cfg.RunHooksOnAutoCommit = runHooksOnAutoCommit
+
+	if n, ok := parseIntDefault(freezeStr, cfg.Reliability.FreezeThresholdSecs); ok {
+		cfg.Reliability.FreezeThresholdSecs = n
+	}
+	if n, ok := parseIntDefault(retryStr, cfg.Reliability.RetryBudget); ok {
+		cfg.Reliability.RetryBudget = n
+	}
+	cfg.Reliability.LivenessProbe = livenessProbe
+
+	for i, role := range roleNames {
+		v := strings.TrimSpace(routeValues[i])
+		if v == "" {
+			delete(cfg.Routes, role)
+			continue
+		}
+		cfg.Routes[role] = splitCSV(v)
+	}
+
+	if editCustomRoles {
+		if err := promptCustomRoles(cmd, cfg.Routes); err != nil {
+			return err
+		}
+	}
+	if editHarnesses {
+		if err := promptHarnesses(cmd, cfg); err != nil {
+			return err
+		}
 	}
 
 	if err := config.SaveV2(workspaceDir, cfg); err != nil {
 		return fmt.Errorf("save config: %w", err)
 	}
-	fmt.Fprintln(out, "Wrote .rally/config.toml.")
+	fmt.Fprintln(cmd.OutOrStdout(), "Wrote .rally/config.toml.")
 	return nil
 }
 
-func promptDefaults(in *bufio.Reader, out io.Writer, cfg *config.V2Config) error {
-	section(out, "Defaults")
-
-	mix, err := readLine(in, out, "Default agent mix", cfg.Defaults.Mix)
-	if err != nil {
-		return err
-	}
-	cfg.Defaults.Mix = mix
-
-	itersStr, err := readLine(in, out, "Default iterations (0 = let rally decide)", strconv.Itoa(cfg.Defaults.Iterations))
-	if err != nil {
-		return err
-	}
-	if itersStr != "" {
-		n, err := strconv.Atoi(itersStr)
-		if err != nil {
-			return fmt.Errorf("iterations must be a number: %w", err)
-		}
-		cfg.Defaults.Iterations = n
-	}
-	return nil
-}
-
-func promptModels(in *bufio.Reader, out io.Writer, cfg *config.V2Config) error {
-	section(out, "Default models per harness")
-	fields := []struct {
-		label   string
-		current *string
-	}{
-		{"claude_model", &cfg.ClaudeModel},
-		{"codex_model", &cfg.CodexModel},
-		{"gemini_model", &cfg.GeminiModel},
-		{"opencode_model", &cfg.OpenCodeModel},
-	}
-	for _, f := range fields {
-		val, err := readLine(in, out, f.label, *f.current)
-		if err != nil {
-			return err
-		}
-		*f.current = val
-	}
-	// Mirror onto Defaults so SaveV2 emits canonical values.
-	cfg.Defaults.ClaudeModel = cfg.ClaudeModel
-	cfg.Defaults.CodexModel = cfg.CodexModel
-	cfg.Defaults.GeminiModel = cfg.GeminiModel
-	cfg.Defaults.OpenCodeModel = cfg.OpenCodeModel
-	return nil
-}
-
-func promptRoutes(in *bufio.Reader, out io.Writer, cfg *config.V2Config) error {
-	section(out, "Role routing (fallbacks)")
-	fmt.Fprintln(out, "Each role maps to an ordered list of harnesses/aliases. The first available")
-	fmt.Fprintln(out, "harness in the list handles a lap with that assignee. Comma-separate entries.")
-	fmt.Fprintln(out, "Common roles: default, junior, senior, ui, verify.")
-	fmt.Fprintln(out)
-
-	roles := []string{"default", "junior", "senior", "ui", "verify"}
-	seen := map[string]bool{}
-	for _, r := range roles {
-		seen[r] = true
-	}
-	// Include any already-configured custom roles after the defaults.
-	var custom []string
-	for k := range cfg.Routes {
-		if !seen[k] {
-			custom = append(custom, k)
-		}
-	}
-	sort.Strings(custom)
-	roles = append(roles, custom...)
-
-	for _, role := range roles {
-		current := strings.Join(cfg.Routes[role], ", ")
-		val, err := readLine(in, out, role, current)
-		if err != nil {
-			return err
-		}
-		if val == "" {
-			// User cleared it; remove the role.
-			delete(cfg.Routes, role)
-			continue
-		}
-		entries := splitAndTrim(val, ',')
-		cfg.Routes[role] = entries
-	}
-
-	// Allow adding a brand-new role.
+// promptCustomRoles loops until the user stops adding new role entries.
+func promptCustomRoles(cmd *cobra.Command, routes map[string][]string) error {
 	for {
-		name, err := readLine(in, out, "Add another role (blank to finish)", "")
-		if err != nil {
+		var name, list string
+		var addAnother bool
+		form := huh.NewForm(
+			huh.NewGroup(
+				huh.NewInput().Title("New role name").Description("e.g. planner, reviewer. Blank to stop.").Value(&name),
+				huh.NewInput().Title("Route").Description("Ordered harnesses/aliases, comma-separated.").Value(&list),
+				huh.NewConfirm().Title("Add another after this one?").Affirmative("Yes").Negative("No").Value(&addAnother),
+			),
+		).WithShowHelp(false).WithInput(cmd.InOrStdin()).WithOutput(cmd.OutOrStderr())
+		if err := form.Run(); err != nil {
 			return err
 		}
+		name = strings.TrimSpace(name)
 		if name == "" {
-			break
-		}
-		val, err := readLine(in, out, fmt.Sprintf("Route for %s", name), "")
-		if err != nil {
-			return err
-		}
-		if val == "" {
-			continue
-		}
-		cfg.Routes[name] = splitAndTrim(val, ',')
-	}
-	return nil
-}
-
-func promptReliability(in *bufio.Reader, out io.Writer, cfg *config.V2Config) error {
-	section(out, "Reliability")
-
-	freeze, err := readLine(in, out, "freeze_threshold_secs (0 = use built-in default)", strconv.Itoa(cfg.Reliability.FreezeThresholdSecs))
-	if err != nil {
-		return err
-	}
-	if freeze != "" {
-		n, err := strconv.Atoi(freeze)
-		if err != nil {
-			return fmt.Errorf("freeze_threshold_secs must be a number: %w", err)
-		}
-		cfg.Reliability.FreezeThresholdSecs = n
-	}
-
-	retry, err := readLine(in, out, "retry_budget", strconv.Itoa(cfg.Reliability.RetryBudget))
-	if err != nil {
-		return err
-	}
-	if retry != "" {
-		n, err := strconv.Atoi(retry)
-		if err != nil {
-			return fmt.Errorf("retry_budget must be a number: %w", err)
-		}
-		cfg.Reliability.RetryBudget = n
-	}
-
-	probeDefault := "n"
-	if cfg.Reliability.LivenessProbe {
-		probeDefault = "y"
-	}
-	probe, err := readLine(in, out, "liveness_probe (y/n)", probeDefault)
-	if err != nil {
-		return err
-	}
-	cfg.Reliability.LivenessProbe = isYes(probe)
-	return nil
-}
-
-func promptHarnessAliases(in *bufio.Reader, out io.Writer, cfg *config.V2Config) error {
-	section(out, "Custom harness/model aliases")
-	fmt.Fprintln(out, "Define short aliases for harness-and-model combos under [harness.<name>.models].")
-	fmt.Fprintln(out, "Example: harness=op, alias=z, model=opencode-go/kimi-k2.6 lets you write `op:z`.")
-	fmt.Fprintln(out)
-
-	skip, err := readLine(in, out, "Edit harness aliases?", "n")
-	if err != nil {
-		return err
-	}
-	if !isYes(skip) {
-		return nil
-	}
-
-	for {
-		hname, err := readLine(in, out, "Harness name (blank to finish)", "")
-		if err != nil {
-			return err
-		}
-		if hname == "" {
 			return nil
 		}
-		hc := cfg.Harnesses[hname]
+		entries := splitCSV(list)
+		if len(entries) > 0 {
+			routes[name] = entries
+		}
+		if !addAnother {
+			return nil
+		}
+	}
+}
+
+// promptHarnesses lets the user add/edit [harness.<name>] entries, including
+// the full custom-harness fields (command, model_flag, output_*) and the
+// per-harness model alias map.
+func promptHarnesses(cmd *cobra.Command, cfg config.V2Config) error {
+	for {
+		// Step 1: pick the harness name (or stop).
+		var name string
+		nameForm := huh.NewForm(
+			huh.NewGroup(
+				huh.NewInput().Title("Harness name").Description("Built-in: claude/codex/gemini/opencode. Or invent a new one. Blank to stop.").Value(&name),
+			),
+		).WithShowHelp(false).WithInput(cmd.InOrStdin()).WithOutput(cmd.OutOrStderr())
+		if err := nameForm.Run(); err != nil {
+			return err
+		}
+		name = strings.TrimSpace(name)
+		if name == "" {
+			return nil
+		}
+		hc := cfg.Harnesses[name]
 		if hc == nil {
 			hc = &config.HarnessConfig{Models: map[string]string{}}
 		}
 		if hc.Models == nil {
 			hc.Models = map[string]string{}
 		}
+
+		// Step 2: command + output settings (only meaningful for non-built-in).
+		commandStr := strings.Join(hc.Command, " ")
+		modelFlag := ""
+		if hc.ModelFlag != nil {
+			modelFlag = *hc.ModelFlag
+		}
+		outputStrategy := hc.OutputStrategy
+		outputLines := strconv.Itoa(hc.OutputLines)
+		tailStream := hc.TailStream
+
+		if err := huh.NewForm(
+			huh.NewGroup(
+				huh.NewNote().Title(name).Description("Leave blank to skip; only set when you need a fully custom harness CLI."),
+				huh.NewInput().Title("command").Description(`Space-separated; "$PROMPT" expands to the task. e.g. opencode run "$PROMPT" --format json`).Value(&commandStr),
+				huh.NewInput().Title("model_flag").Description("Flag passed before the resolved model, e.g. --model.").Value(&modelFlag),
+				huh.NewSelect[string]().Title("output_strategy").Description("How rally summarises agent output.").Options(
+					huh.NewOption("(keep)", outputStrategy),
+					huh.NewOption("tail", "tail"),
+					huh.NewOption("stream", "stream"),
+					huh.NewOption("none", "none"),
+				).Value(&outputStrategy),
+				huh.NewInput().Title("output_lines").Description("Lines to keep when output_strategy=tail.").Value(&outputLines).Validate(validateOptionalInt),
+				huh.NewSelect[string]().Title("tail_stream").Description("Which stream to tail.").Options(
+					huh.NewOption("(keep)", tailStream),
+					huh.NewOption("stdout", "stdout"),
+					huh.NewOption("stderr", "stderr"),
+					huh.NewOption("combined", "combined"),
+				).Value(&tailStream),
+			),
+		).WithShowHelp(false).WithInput(cmd.InOrStdin()).WithOutput(cmd.OutOrStderr()).Run(); err != nil {
+			return err
+		}
+
+		if commandStr = strings.TrimSpace(commandStr); commandStr != "" {
+			hc.Command = strings.Fields(commandStr)
+		}
+		if modelFlag = strings.TrimSpace(modelFlag); modelFlag != "" {
+			f := modelFlag
+			hc.ModelFlag = &f
+		}
+		hc.OutputStrategy = strings.TrimSpace(outputStrategy)
+		if n, err := strconv.Atoi(strings.TrimSpace(outputLines)); err == nil {
+			hc.OutputLines = n
+		}
+		hc.TailStream = strings.TrimSpace(tailStream)
+
+		// Step 3: model alias loop.
 		for {
-			alias, err := readLine(in, out, fmt.Sprintf("  Alias for %s (blank to stop adding aliases)", hname), "")
-			if err != nil {
+			var alias, model string
+			var another bool
+			aliasForm := huh.NewForm(
+				huh.NewGroup(
+					huh.NewInput().Title(fmt.Sprintf("Alias under %s", name)).Description("Short label you'll write as harness:alias. Blank to stop.").Value(&alias),
+					huh.NewInput().Title("Model").Description("Full provider/model slug to map to this alias.").Value(&model),
+					huh.NewConfirm().Title("Another alias for this harness?").Affirmative("Yes").Negative("No").Value(&another),
+				),
+			).WithShowHelp(false).WithInput(cmd.InOrStdin()).WithOutput(cmd.OutOrStderr())
+			if err := aliasForm.Run(); err != nil {
 				return err
 			}
+			alias = strings.TrimSpace(alias)
 			if alias == "" {
 				break
 			}
-			model, err := readLine(in, out, fmt.Sprintf("  Model for %s:%s", hname, alias), hc.Models[alias])
-			if err != nil {
-				return err
-			}
-			if model == "" {
+			if model = strings.TrimSpace(model); model == "" {
 				delete(hc.Models, alias)
-				continue
+			} else {
+				hc.Models[alias] = model
 			}
-			hc.Models[alias] = model
+			if !another {
+				break
+			}
 		}
-		cfg.Harnesses[hname] = hc
-	}
-}
 
-func section(out io.Writer, title string) {
-	fmt.Fprintln(out)
-	fmt.Fprintf(out, "── %s ──\n", title)
-}
+		cfg.Harnesses[name] = hc
 
-func readLine(in *bufio.Reader, out io.Writer, label, current string) (string, error) {
-	if current != "" {
-		fmt.Fprintf(out, "%s [%s]: ", label, current)
-	} else {
-		fmt.Fprintf(out, "%s: ", label)
-	}
-	line, err := in.ReadString('\n')
-	if err != nil {
-		if err == io.EOF && line == "" {
-			return current, nil
+		var addAnotherHarness bool
+		if err := huh.NewForm(
+			huh.NewGroup(huh.NewConfirm().Title("Configure another harness?").Affirmative("Yes").Negative("No").Value(&addAnotherHarness)),
+		).WithShowHelp(false).WithInput(cmd.InOrStdin()).WithOutput(cmd.OutOrStderr()).Run(); err != nil {
+			return err
 		}
-		if err != io.EOF {
-			return "", err
+		if !addAnotherHarness {
+			return nil
 		}
 	}
-	line = strings.TrimRight(line, "\r\n")
-	if line == "" {
-		return current, nil
-	}
-	return line, nil
 }
 
-func isYes(s string) bool {
-	switch strings.ToLower(strings.TrimSpace(s)) {
-	case "y", "yes", "true", "1":
-		return true
-	}
-	return false
-}
-
-func splitAndTrim(s string, sep rune) []string {
-	parts := strings.FieldsFunc(s, func(r rune) bool { return r == sep })
+func splitCSV(s string) []string {
+	parts := strings.FieldsFunc(s, func(r rune) bool { return r == ',' })
 	out := make([]string, 0, len(parts))
 	for _, p := range parts {
 		p = strings.TrimSpace(p)
@@ -325,4 +356,27 @@ func splitAndTrim(s string, sep rune) []string {
 		}
 	}
 	return out
+}
+
+func parseIntDefault(s string, def int) (int, bool) {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return def, false
+	}
+	n, err := strconv.Atoi(s)
+	if err != nil {
+		return def, false
+	}
+	return n, true
+}
+
+func validateOptionalInt(s string) error {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return nil
+	}
+	if _, err := strconv.Atoi(s); err != nil {
+		return fmt.Errorf("must be a number")
+	}
+	return nil
 }
