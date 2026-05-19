@@ -118,6 +118,54 @@ func testResolver(spec string) (agent.ResolvedAgent, error) {
 	return agent.ResolvedAgent{Harness: harness}, nil
 }
 
+func TestFormatRemainingRoundsToSeconds(t *testing.T) {
+	cases := []struct {
+		in   time.Duration
+		want string
+	}{
+		{500 * time.Millisecond, "1s"},
+		{1*time.Second + 400*time.Millisecond, "1s"},
+		{1*time.Second + 600*time.Millisecond, "2s"},
+		{30 * time.Second, "30s"},
+		{90 * time.Second, "1m 30s"},
+		{2*time.Hour + 5*time.Minute + 7*time.Second, "2h 5m 7s"},
+		{-time.Second, "0s"},
+	}
+	for _, tc := range cases {
+		if got := formatRemaining(tc.in); got != tc.want {
+			t.Errorf("formatRemaining(%v) = %q, want %q", tc.in, got, tc.want)
+		}
+	}
+}
+
+func TestWaitWithCountdownCancellable(t *testing.T) {
+	devnull, err := os.OpenFile(os.DevNull, os.O_WRONLY, 0)
+	if err != nil {
+		t.Fatalf("open devnull: %v", err)
+	}
+	origStdout := os.Stdout
+	os.Stdout = devnull
+	defer func() {
+		os.Stdout = origStdout
+		_ = devnull.Close()
+	}()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	go func() {
+		time.Sleep(50 * time.Millisecond)
+		cancel()
+	}()
+	start := time.Now()
+	err = waitWithCountdown(ctx, 10*time.Second, "test %s")
+	elapsed := time.Since(start)
+	if err == nil {
+		t.Fatal("expected context error, got nil")
+	}
+	if elapsed > 2*time.Second {
+		t.Fatalf("waitWithCountdown did not return promptly on cancel, took %v", elapsed)
+	}
+}
+
 func TestInstructionsPassedToExecutor(t *testing.T) {
 	workspaceDir := t.TempDir()
 	rallyDir := filepath.Join(workspaceDir, ".rally")

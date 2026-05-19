@@ -84,6 +84,61 @@ var freezeCheckInterval = monitor.TickInterval
 
 const builtInDefaultFallback = "Continue the relay run. Review the current state of the codebase and continue making progress on the project."
 
+// waitWithCountdown blocks for `total`, redrawing a one-line countdown on
+// stdout once per second. The remaining time is rendered to whole seconds.
+// `msgFmt` must contain exactly one `%s` placeholder for the duration. Returns
+// ctx.Err() if the context is cancelled mid-wait.
+func waitWithCountdown(ctx context.Context, total time.Duration, msgFmt string) error {
+	if total <= 0 {
+		return nil
+	}
+	deadline := time.Now().Add(total)
+	ticker := time.NewTicker(time.Second)
+	defer ticker.Stop()
+	render := func(remaining time.Duration) {
+		if remaining < 0 {
+			remaining = 0
+		}
+		remaining = remaining.Round(time.Second)
+		line := style.DimStyle.Render(fmt.Sprintf(msgFmt, formatRemaining(remaining)))
+		fmt.Fprintf(os.Stdout, "\r\x1b[2K%s", line)
+	}
+	render(total)
+	for {
+		select {
+		case <-ctx.Done():
+			fmt.Fprint(os.Stdout, "\r\x1b[2K")
+			return ctx.Err()
+		case now := <-ticker.C:
+			remaining := time.Until(deadline)
+			if remaining <= 0 || !now.Before(deadline) {
+				fmt.Fprint(os.Stdout, "\r\x1b[2K")
+				return nil
+			}
+			render(remaining)
+		}
+	}
+}
+
+// formatRemaining renders d as `Hh Mm Ss`, `Mm Ss`, or `Ss`, dropping
+// zero-valued higher units so the countdown stays compact.
+func formatRemaining(d time.Duration) string {
+	if d < 0 {
+		d = 0
+	}
+	total := int(d.Round(time.Second).Seconds())
+	h := total / 3600
+	m := (total % 3600) / 60
+	s := total % 60
+	if h > 0 {
+		return fmt.Sprintf("%dh %dm %ds", h, m, s)
+	}
+	if m > 0 {
+		return fmt.Sprintf("%dm %ds", m, s)
+	}
+	return fmt.Sprintf("%ds", s)
+}
+
 type runTask struct {
 	Name          string
 	Requirements  string
@@ -245,13 +300,10 @@ func (r *Runner) Run(ctx context.Context) error {
 					return fmt.Errorf("relay failed: all agents frozen")
 				}
 				fmt.Fprintf(log, "relay %d all agents paused, waiting %v\n", relay.ID, routeErr.Wait)
-				fmt.Println(style.DimStyle.Render(fmt.Sprintf("agents frozen, waiting %v...", routeErr.Wait)))
-				select {
-				case <-time.After(routeErr.Wait):
-					continue
-				case <-ctx.Done():
-					return ctx.Err()
+				if err := waitWithCountdown(ctx, routeErr.Wait, "agents frozen, waiting %s..."); err != nil {
+					return err
 				}
+				continue
 			}
 			return err
 		}
