@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -826,6 +827,54 @@ func TestGeminiAdapter_SessionIDOnMissingResponse(t *testing.T) {
 	}
 	if tr.SessionID != "gem-sess-789" {
 		t.Errorf("SessionID = %q, want %q", tr.SessionID, "gem-sess-789")
+	}
+}
+
+func TestClassifyGeminiExit(t *testing.T) {
+	cases := []struct {
+		name     string
+		exitCode int
+		want     string
+	}{
+		{"auth", 41, "authentication"},
+		{"input", 42, "invalid CLI input"},
+		{"sandbox", 44, "sandbox"},
+		{"config", 52, "config error"},
+		{"turn limit", 53, "turn limit"},
+		{"tool exec", 54, "tool execution"},
+		{"untrusted", 55, "workspace not trusted"},
+		{"cancel", 130, "cancelled"},
+		{"unknown", 99, ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Build a synthetic *exec.ExitError by running `sh -c exit <code>`.
+			cmd := exec.Command("sh", "-c", fmt.Sprintf("exit %d", tc.exitCode))
+			err := cmd.Run()
+			got := classifyGeminiExit(err, "")
+			if tc.want == "" {
+				if got != "" {
+					t.Errorf("classifyGeminiExit(%d) = %q, want empty", tc.exitCode, got)
+				}
+				return
+			}
+			if !strings.Contains(got, tc.want) {
+				t.Errorf("classifyGeminiExit(%d) = %q, want substring %q", tc.exitCode, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestTailString(t *testing.T) {
+	if got := tailString("hello", 100); got != "hello" {
+		t.Errorf("tailString short = %q, want hello", got)
+	}
+	if got := tailString("  hello  ", 100); got != "hello" {
+		t.Errorf("tailString trimmed = %q, want hello", got)
+	}
+	got := tailString("abcdefghij", 4)
+	if got != "…ghij" {
+		t.Errorf("tailString long = %q, want …ghij", got)
 	}
 }
 

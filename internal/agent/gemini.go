@@ -1,10 +1,14 @@
 package agent
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"os"
 	"os/exec"
+	"strings"
 )
 
 type GeminiExecutor struct {
@@ -50,17 +54,77 @@ func (g *GeminiExecutor) Execute(ctx context.Context, opts RunOptions) (*TryResu
 	if opts.WorkspaceDir != "" {
 		cmd.Dir = opts.WorkspaceDir
 	}
-	cmd.Stderr = nil // discard noisy stderr
+	var stderrBuf bytes.Buffer
+	cmd.Stderr = &stderrBuf
 	// Required for headless/automation mode: without this, gemini CLI refuses
 	// to run in untrusted directories when stdin is not a terminal.
 	cmd.Env = append(cmd.Environ(), "GEMINI_CLI_TRUST_WORKSPACE=true")
 	SetProcessGroup(cmd)
 	out, err := runLoggedCommand(cmd, opts.LogPath, false, opts.OnStart)
+	stderrTail := tailString(stderrBuf.String(), 4096)
+	if stderrTail != "" {
+		_ = appendStderrToLog(opts.LogPath, stderrTail)
+	}
 	if err != nil {
-		return nil, fmt.Errorf("gemini exec failed: %w\noutput: %s", err, string(out))
+		reason := classifyGeminiExit(err, stderrTail)
+		if stderrTail != "" {
+			return nil, fmt.Errorf("gemini exec failed: %w%s\nstderr: %s\noutput: %s", err, reason, stderrTail, string(out))
+		}
+		return nil, fmt.Errorf("gemini exec failed: %w%s\noutput: %s", err, reason, string(out))
 	}
 
 	return parseGeminiOutput(out)
+}
+
+// classifyGeminiExit maps gemini-cli exit codes (defined in gemini-cli's
+// FatalError subclasses) to a short human-readable reason. Returns an empty
+// string for unknown errors.
+func classifyGeminiExit(err error, stderrTail string) string {
+	var exitErr *exec.ExitError
+	if !errors.As(err, &exitErr) {
+		return ""
+	}
+	switch exitErr.ExitCode() {
+	case 41:
+		return " (authentication required — gemini-cli sees no valid credentials; run `gemini` interactively to log in or set GEMINI_API_KEY)"
+	case 42:
+		return " (invalid CLI input)"
+	case 44:
+		return " (sandbox error)"
+	case 52:
+		return " (config error)"
+	case 53:
+		return " (turn limit exceeded)"
+	case 54:
+		return " (tool execution error)"
+	case 55:
+		return " (workspace not trusted — GEMINI_CLI_TRUST_WORKSPACE=true is set but gemini still refused; try `gemini --skip-trust` or `gemini folders trust`)"
+	case 130:
+		return " (cancelled)"
+	}
+	return ""
+}
+
+// tailString returns the last n bytes of s, prefixed with "…" if truncated.
+func tailString(s string, n int) string {
+	s = strings.TrimSpace(s)
+	if len(s) <= n {
+		return s
+	}
+	return "…" + s[len(s)-n:]
+}
+
+func appendStderrToLog(path, stderr string) error {
+	if path == "" || stderr == "" {
+		return nil
+	}
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	_, err = fmt.Fprintf(f, "\n--- gemini stderr ---\n%s\n", stderr)
+	return err
 }
 
 func parseGeminiOutput(out []byte) (*TryResult, error) {
