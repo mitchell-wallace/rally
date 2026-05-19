@@ -311,6 +311,43 @@ func TestRouteRuntime_CanonicalScenario7_RangeQuotaWaitsWhenAllOthersPaused(t *t
 	}
 }
 
+func TestRouteRuntime_ForceUnpauseAll(t *testing.T) {
+	rt, resilience := newResolvedRouteRuntimeOrDie(t, map[string][]string{
+		"default": {"claude:opus-4.7:1", "codex:gpt-5.5:1", "opencode:opencode-go/kimi-k2.6:1"},
+	}, false)
+
+	if err := resilience.PauseAgent("claude", 1); err != nil {
+		t.Fatalf("PauseAgent(claude): %v", err)
+	}
+	if err := resilience.PauseAgent("codex", 1); err != nil {
+		t.Fatalf("PauseAgent(codex): %v", err)
+	}
+
+	unpaused, err := rt.forceUnpauseAll(resilience, 1)
+	if err != nil {
+		t.Fatalf("forceUnpauseAll: %v", err)
+	}
+	if unpaused != 2 {
+		t.Errorf("unpaused count = %d, want 2", unpaused)
+	}
+
+	for _, h := range []string{"claude", "codex", "opencode"} {
+		st, _ := resilience.getState(h)
+		if st != StateActive {
+			t.Errorf("state(%s) = %s, want active", h, st)
+		}
+	}
+
+	// Idempotent: a second call finds nothing to unpause.
+	again, err := rt.forceUnpauseAll(resilience, 1)
+	if err != nil {
+		t.Fatalf("second forceUnpauseAll: %v", err)
+	}
+	if again != 0 {
+		t.Errorf("second unpaused count = %d, want 0", again)
+	}
+}
+
 func TestRouteRuntime_ActiveExhaustedEntryStaysAdvanced(t *testing.T) {
 	rt, resilience := newResolvedRouteRuntimeOrDie(t, map[string][]string{
 		"default": {"op:glm:1", "cx:gpt-5:1"},

@@ -84,36 +84,88 @@ var freezeCheckInterval = monitor.TickInterval
 
 const builtInDefaultFallback = "Continue the relay run. Review the current state of the codebase and continue making progress on the project."
 
-// waitWithCountdown blocks for `total`, redrawing a one-line countdown on
-// stdout once per second. The remaining time is rendered to whole seconds.
-// `msgFmt` must contain exactly one `%s` placeholder for the duration. Returns
-// ctx.Err() if the context is cancelled mid-wait.
-func waitWithCountdown(ctx context.Context, total time.Duration, msgFmt string) error {
+// waitOutcome enumerates how a waitWithCountdown call ended.
+type waitOutcome int
+
+const (
+	waitElapsed   waitOutcome = iota // timer ran out normally
+	waitSkipped                      // user pressed Ctrl+S (skip) to bail out early
+	waitStopped                      // user pressed Ctrl+X / Ctrl+C to abort the relay
+	waitCancelled                    // ctx was cancelled (returns ctx.Err alongside)
+)
+
+// waitWithCountdown blocks for `total`, redrawing a one-line countdown +
+// shortcut hint on stdout once per second. See [waitLoop] for the core logic;
+// this wrapper handles the keyboard, terminal raw mode, and stdout rendering.
+func waitWithCountdown(ctx context.Context, total time.Duration, msgFmt string) (waitOutcome, error) {
 	if total <= 0 {
-		return nil
+		return waitElapsed, nil
 	}
+
+	kb := keyboard.NewKeyboard(os.Stdin, os.Stdout)
+	_ = kb.SetRawMode()
+	defer func() { _ = kb.Stop() }()
+	kbCtx, kbCancel := context.WithCancel(ctx)
+	defer kbCancel()
+	actionCh := kb.Start(kbCtx)
+
+	outcome := waitLoop(ctx, total, msgFmt, actionCh, os.Stdout, time.Second)
+	if outcome == waitCancelled {
+		return outcome, ctx.Err()
+	}
+	return outcome, nil
+}
+
+// waitLoop is the I/O-free core of [waitWithCountdown]: it ticks at
+// `tickInterval`, renders the countdown + shortcut hint to `out`, and returns
+// when the timer elapses, ctx is cancelled, or an action arrives on actionCh.
+// Split out from waitWithCountdown for testability.
+func waitLoop(ctx context.Context, total time.Duration, msgFmt string, actionCh <-chan keyboard.Action, out io.Writer, tickInterval time.Duration) waitOutcome {
 	deadline := time.Now().Add(total)
-	ticker := time.NewTicker(time.Second)
+	ticker := time.NewTicker(tickInterval)
 	defer ticker.Stop()
+
 	render := func(remaining time.Duration) {
 		if remaining < 0 {
 			remaining = 0
 		}
 		remaining = remaining.Round(time.Second)
 		line := style.DimStyle.Render(fmt.Sprintf(msgFmt, formatRemaining(remaining)))
-		fmt.Fprintf(os.Stdout, "\r\x1b[2K%s", line)
+		hint := style.ShortcutHint()
+		// \r\x1b[J clears from cursor to end of screen so a shorter countdown
+		// can't leave stale characters; the trailing \x1b[1A\r parks the
+		// cursor back at the start of the countdown line ready for the next
+		// tick. We always print the same two lines so the layout is stable.
+		fmt.Fprintf(out, "\r\x1b[J%s\n%s\x1b[1A\r", line, hint)
 	}
+	clear := func() {
+		// Erase both lines and leave the cursor at the top one so subsequent
+		// stdout writes land on a fresh line.
+		fmt.Fprint(out, "\r\x1b[J")
+	}
+
 	render(total)
 	for {
 		select {
 		case <-ctx.Done():
-			fmt.Fprint(os.Stdout, "\r\x1b[2K")
-			return ctx.Err()
+			clear()
+			return waitCancelled
+		case action := <-actionCh:
+			switch action {
+			case keyboard.ActionSkip:
+				clear()
+				return waitSkipped
+			case keyboard.ActionStop, keyboard.ActionQuit:
+				clear()
+				return waitStopped
+			}
+			// Ignore pause and any other actions during a wait — there is no
+			// active try to pause.
 		case now := <-ticker.C:
 			remaining := time.Until(deadline)
 			if remaining <= 0 || !now.Before(deadline) {
-				fmt.Fprint(os.Stdout, "\r\x1b[2K")
-				return nil
+				clear()
+				return waitElapsed
 			}
 			render(remaining)
 		}
@@ -300,8 +352,20 @@ func (r *Runner) Run(ctx context.Context) error {
 					return fmt.Errorf("relay failed: all agents frozen")
 				}
 				fmt.Fprintf(log, "relay %d all agents paused, waiting %v\n", relay.ID, routeErr.Wait)
-				if err := waitWithCountdown(ctx, routeErr.Wait, "agents frozen, waiting %s..."); err != nil {
-					return err
+				outcome, waitErr := waitWithCountdown(ctx, routeErr.Wait, "agents frozen, waiting %s...")
+				if waitErr != nil {
+					return waitErr
+				}
+				switch outcome {
+				case waitSkipped:
+					unpaused, err := routeRuntime.forceUnpauseAll(resilience, relay.ID)
+					if err != nil {
+						return err
+					}
+					fmt.Fprintf(log, "relay %d skip pressed during wait; force-unpaused %d agent(s)\n", relay.ID, unpaused)
+				case waitStopped:
+					fmt.Fprintf(log, "relay %d stop requested during wait\n", relay.ID)
+					r.stopFlag.Store(true)
 				}
 				continue
 			}

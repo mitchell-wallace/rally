@@ -1,6 +1,7 @@
 package relay
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -14,6 +15,7 @@ import (
 
 	"github.com/mitchell-wallace/rally/internal/agent"
 	"github.com/mitchell-wallace/rally/internal/config"
+	"github.com/mitchell-wallace/rally/internal/keyboard"
 	"github.com/mitchell-wallace/rally/internal/laps"
 	"github.com/mitchell-wallace/rally/internal/progress"
 	"github.com/mitchell-wallace/rally/internal/reliability"
@@ -156,13 +158,84 @@ func TestWaitWithCountdownCancellable(t *testing.T) {
 		cancel()
 	}()
 	start := time.Now()
-	err = waitWithCountdown(ctx, 10*time.Second, "test %s")
+	outcome, err := waitWithCountdown(ctx, 10*time.Second, "test %s")
 	elapsed := time.Since(start)
 	if err == nil {
 		t.Fatal("expected context error, got nil")
 	}
+	if outcome != waitCancelled {
+		t.Errorf("outcome = %v, want waitCancelled", outcome)
+	}
 	if elapsed > 2*time.Second {
 		t.Fatalf("waitWithCountdown did not return promptly on cancel, took %v", elapsed)
+	}
+}
+
+func TestWaitLoopSkipOnAction(t *testing.T) {
+	actionCh := make(chan keyboard.Action, 1)
+	actionCh <- keyboard.ActionSkip
+	start := time.Now()
+	outcome := waitLoop(context.Background(), 10*time.Second, "test %s", actionCh, io.Discard, 50*time.Millisecond)
+	elapsed := time.Since(start)
+	if outcome != waitSkipped {
+		t.Errorf("outcome = %v, want waitSkipped", outcome)
+	}
+	if elapsed > 500*time.Millisecond {
+		t.Errorf("skip should be near-instant, took %v", elapsed)
+	}
+}
+
+func TestWaitLoopStopOnQuit(t *testing.T) {
+	actionCh := make(chan keyboard.Action, 1)
+	actionCh <- keyboard.ActionQuit
+	outcome := waitLoop(context.Background(), 10*time.Second, "test %s", actionCh, io.Discard, 50*time.Millisecond)
+	if outcome != waitStopped {
+		t.Errorf("outcome = %v, want waitStopped", outcome)
+	}
+}
+
+func TestWaitLoopElapses(t *testing.T) {
+	actionCh := make(chan keyboard.Action)
+	start := time.Now()
+	outcome := waitLoop(context.Background(), 200*time.Millisecond, "test %s", actionCh, io.Discard, 30*time.Millisecond)
+	elapsed := time.Since(start)
+	if outcome != waitElapsed {
+		t.Errorf("outcome = %v, want waitElapsed", outcome)
+	}
+	if elapsed < 150*time.Millisecond {
+		t.Errorf("elapsed too early at %v", elapsed)
+	}
+}
+
+func TestWaitLoopRendersHintAndCountdown(t *testing.T) {
+	actionCh := make(chan keyboard.Action, 1)
+	actionCh <- keyboard.ActionSkip
+	var buf bytes.Buffer
+	_ = waitLoop(context.Background(), 5*time.Second, "agents frozen, waiting %s...", actionCh, &buf, 50*time.Millisecond)
+	got := buf.String()
+	if !strings.Contains(got, "agents frozen, waiting 5s...") {
+		t.Errorf("output missing countdown line: %q", got)
+	}
+	if !strings.Contains(got, "Ctrl+S skip") {
+		t.Errorf("output missing shortcut hint: %q", got)
+	}
+}
+
+func TestWaitWithCountdownElapses(t *testing.T) {
+	devnull, _ := os.OpenFile(os.DevNull, os.O_WRONLY, 0)
+	origStdout := os.Stdout
+	os.Stdout = devnull
+	defer func() {
+		os.Stdout = origStdout
+		_ = devnull.Close()
+	}()
+
+	outcome, err := waitWithCountdown(context.Background(), 1500*time.Millisecond, "test %s")
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if outcome != waitElapsed {
+		t.Errorf("outcome = %v, want waitElapsed", outcome)
 	}
 }
 

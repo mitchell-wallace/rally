@@ -292,6 +292,35 @@ func (r *routeRuntime) selectionWaitError(scheduler *routing.Scheduler, resilien
 	}
 }
 
+// forceUnpauseAll moves every paused harness across the runtime's schedulers
+// back to active state. Used when the user hits skip during a frozen-wait to
+// retry immediately rather than serving out the pause window.
+func (r *routeRuntime) forceUnpauseAll(resilience *Resilience, relayID int) (int, error) {
+	seen := map[string]struct{}{}
+	unpaused := 0
+	for _, scheduler := range r.schedulers {
+		for _, state := range scheduler.EntryStates() {
+			resolved, err := resolveAgentSpec(state.Entry.Spec, nil)
+			if err != nil {
+				continue
+			}
+			if _, ok := seen[resolved.Harness]; ok {
+				continue
+			}
+			seen[resolved.Harness] = struct{}{}
+			status, _ := resilience.getState(resolved.Harness)
+			if status != StatePaused {
+				continue
+			}
+			if err := resilience.UnpauseAgent(resolved.Harness, relayID); err != nil {
+				return unpaused, err
+			}
+			unpaused++
+		}
+	}
+	return unpaused, nil
+}
+
 func legacyMixRouteEntries(specs []string, resolver Resolver) ([]string, string, error) {
 	mix, err := ParseAgentMix(specs, resolver)
 	if err != nil {
