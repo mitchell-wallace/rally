@@ -19,6 +19,19 @@ func PrintLine(w io.Writer, s string) {
 	fmt.Fprintln(w, s)
 }
 
+// shortcutHintStyle is a medium grey applied to the keyboard hint line that
+// sits under the try header. It's a touch lighter than the dim separators so
+// the hints stay readable while clearly being chrome, not content.
+var shortcutHintStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("245"))
+
+// ShortcutHint renders the single-line keyboard legend that sits below the
+// try header. The line is rendered without leading whitespace so it hugs the
+// left margin, and uses a medium grey so it reads as chrome rather than
+// content.
+func ShortcutHint() string {
+	return shortcutHintStyle.Render("Ctrl+S skip · Ctrl+P pause · Ctrl+X stop · Ctrl+C quit")
+}
+
 // Color scheme styles.
 var (
 	SuccessStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("10"))

@@ -22,7 +22,7 @@ func (p *pipeInput) send(b byte) {
 	p.w.Write([]byte{b})
 }
 
-func TestSinglePressShowsConfirmation(t *testing.T) {
+func TestSinglePressIsSilent(t *testing.T) {
 	pr, pi := newPipeInput()
 	defer pi.w.Close()
 	out := &bytes.Buffer{}
@@ -39,12 +39,15 @@ func TestSinglePressShowsConfirmation(t *testing.T) {
 	pi.send(ctrlC)
 	time.Sleep(20 * time.Millisecond)
 
-	msg := kb.LastConfirmationMessage()
-	if msg != "Press Ctrl+C again to exit\n" {
-		t.Fatalf("expected confirmation message, got %q", msg)
+	// First press must not emit an action and must not write to out.
+	select {
+	case a := <-ch:
+		t.Fatalf("unexpected action emitted on single press: %v", a)
+	default:
 	}
-
-	_ = ch
+	if out.Len() != 0 {
+		t.Fatalf("expected silent first press, got output %q", out.String())
+	}
 }
 
 func TestDoublePressEmitsAction(t *testing.T) {
@@ -134,14 +137,13 @@ func TestDifferentShortcutsDontInterfere(t *testing.T) {
 
 func TestAllShortcuts(t *testing.T) {
 	tests := []struct {
-		key    byte
-		want   Action
-		msg    string
+		key  byte
+		want Action
 	}{
-		{ctrlC, ActionQuit, "Press Ctrl+C again to exit\n"},
-		{ctrlS, ActionSkip, "Press Ctrl+S again to skip\n"},
-		{ctrlP, ActionPause, "Press Ctrl+P again to pause\n"},
-		{ctrlX, ActionStop, "Press Ctrl+X again to stop\n"},
+		{ctrlC, ActionQuit},
+		{ctrlS, ActionSkip},
+		{ctrlP, ActionPause},
+		{ctrlX, ActionStop},
 	}
 
 	for _, tc := range tests {

@@ -575,7 +575,7 @@ attemptLoop:
 			fmt.Println(initialStatus)
 			cursorUp = 2
 		}
-		fmt.Println("[Ctrl+S skip]  [Ctrl+P pause]  [Ctrl+X stop]  [Ctrl+C quit]")
+		fmt.Println(style.ShortcutHint())
 		mon.SetCursorUpLines(cursorUp)
 		mon.Start(os.Stdout)
 

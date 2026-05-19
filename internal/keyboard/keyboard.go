@@ -3,7 +3,6 @@ package keyboard
 import (
 	"bytes"
 	"context"
-	"fmt"
 	"io"
 	"sync"
 	"time"
@@ -38,12 +37,11 @@ type Keyboard struct {
 	confirmWindow time.Duration
 	closeOnStop   bool
 
-	mu       sync.Mutex
-	cancel   context.CancelFunc
-	wg       sync.WaitGroup
-	pending  Action
-	firstAt  time.Time
-	lastOut  string
+	mu      sync.Mutex
+	cancel  context.CancelFunc
+	wg      sync.WaitGroup
+	pending Action
+	firstAt time.Time
 }
 
 // NewKeyboard creates a new Keyboard that reads from in and writes confirmation messages to out.
@@ -157,6 +155,10 @@ func (k *Keyboard) processLoop(ctx context.Context, byteCh <-chan byte, ch chan<
 				continue
 			}
 
+			// Double-press is silent: the first press only arms the action,
+			// the second press within confirmWindow fires it. No on-screen
+			// "press X again" hint — the shortcut legend printed once at the
+			// top of each try already documents the keys.
 			k.mu.Lock()
 			now := time.Now()
 			if k.pending == action && now.Sub(k.firstAt) <= k.confirmWindow {
@@ -170,10 +172,7 @@ func (k *Keyboard) processLoop(ctx context.Context, byteCh <-chan byte, ch chan<
 			} else {
 				k.pending = action
 				k.firstAt = now
-				msg := confirmationMessage(action)
-				k.lastOut = msg
 				k.mu.Unlock()
-				fmt.Fprint(k.out, msg)
 			}
 		}
 	}
@@ -194,21 +193,6 @@ func actionForByte(b byte) Action {
 	}
 }
 
-func confirmationMessage(a Action) string {
-	switch a {
-	case ActionQuit:
-		return "Press Ctrl+C again to exit\n"
-	case ActionSkip:
-		return "Press Ctrl+S again to skip\n"
-	case ActionPause:
-		return "Press Ctrl+P again to pause\n"
-	case ActionStop:
-		return "Press Ctrl+X again to stop\n"
-	default:
-		return ""
-	}
-}
-
 // stdinFd attempts to extract a file descriptor from an io.Reader.
 // Falls back to 0 (stdin) when the reader is not an *os.File.
 func stdinFd(r io.Reader) int {
@@ -219,13 +203,6 @@ func stdinFd(r io.Reader) int {
 		return int(f.Fd())
 	}
 	return 0
-}
-
-// LastConfirmationMessage returns the most recent confirmation message (for tests).
-func (k *Keyboard) LastConfirmationMessage() string {
-	k.mu.Lock()
-	defer k.mu.Unlock()
-	return k.lastOut
 }
 
 // SetConfirmWindow sets the double-press confirmation window (for tests).
