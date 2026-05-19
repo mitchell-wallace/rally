@@ -52,16 +52,21 @@ exists on GitHub.
 
 ### How to cut a release
 
+Tags are created automatically by `.github/workflows/auto-tag.yml` when
+`internal/buildinfo/VERSION` changes on `main`. **Do not create or push
+`vX.Y.Z` tags by hand** — push a VERSION bump and let CI tag for you.
+
 1. Update the version in `internal/buildinfo/VERSION` (e.g. `0.2.0`). The
    file is committed under `internal/buildinfo/` so Go's `embed` can read it;
    dev builds (`go build`) report `vX.Y.Z-dev` using this value.
 2. `main.Version` stays `"dev"` in source — GoReleaser injects the real
    version via ldflags at build time, which takes precedence over the embed.
-3. Commit: `git commit -am "Prepare rally v0.2.0 release"`
-4. Tag: `git tag v0.2.0`
-5. Push both: `git push && git push --tags`
+3. Commit and push to `main`. Conventionally the commit message is
+   `chore: bump version to X.Y.Z`.
+4. `auto-tag` will create `vX.Y.Z`, push it to origin, and dispatch the
+   release workflow (`.github/workflows/release.yml`).
 
-The CI workflow (`.github/workflows/release.yml`) will:
+The CI release workflow will:
 - Check whether a GitHub release for this tag already exists.
 - If it does, the job succeeds immediately (no-op).
 - If it doesn't, run GoReleaser to build binaries and create the release.
@@ -73,8 +78,10 @@ The CI workflow (`.github/workflows/release.yml`) will:
   of the update unless they explicitly ask for a minor or major bump.
 - **Don't re-push an existing tag** expecting CI to rebuild. If you need to redo
   a release, delete it first: `gh release delete v0.2.0 && git tag -d v0.2.0 &&
-  git push origin :refs/tags/v0.2.0`, then re-tag and push.
-- GoReleaser reads the version from the git tag, not the `VERSION` file. Keep
-  them in sync so dev builds report the right number.
+  git push origin :refs/tags/v0.2.0`, then bump VERSION again to re-trigger
+  auto-tag (or push a new patch).
+- GoReleaser reads the version from the git tag, not the `VERSION` file. The
+  `auto-tag` workflow tags from the VERSION file, so the two stay in sync as
+  long as you only edit VERSION (never tag by hand).
 - The `install.sh` script is uploaded as a release asset (configured in
   `.goreleaser.yaml`).
