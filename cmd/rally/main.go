@@ -405,9 +405,12 @@ directly to understand the project's history and current state.
 	}
 
 	fmt.Println("Rally workspace initialized.")
-	// Only nudge toward role setup if it hasn't already been bootstrapped.
+	// Only nudge toward role setup if it hasn't already been bootstrapped, and
+	// skip the tip when the caller is `rally init roles` (which calls runInit
+	// directly and would otherwise show a redundant tip before the role
+	// bootstrap runs).
 	agentsDir := filepath.Join(rallyDir, "agents")
-	if _, err := os.Stat(agentsDir); os.IsNotExist(err) {
+	if _, err := os.Stat(agentsDir); os.IsNotExist(err) && cmd.Name() != "roles" {
 		fmt.Println("Tip: run `rally init roles` to set up role-based routing (recommended).")
 	}
 	return nil
@@ -510,6 +513,7 @@ func init() {
 	rootCmd.AddCommand(instructionsCmd)
 	rootCmd.AddCommand(cli.NewRoutesCmd())
 	rootCmd.AddCommand(cli.NewHooksCmd())
+	rootCmd.AddCommand(cli.NewConfigCmd())
 	instructionsCmd.AddCommand(instructionsEditCmd)
 	instructionsCmd.AddCommand(instructionsShowCmd)
 	rootCmd.AddCommand(versionCmd)
