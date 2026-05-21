@@ -1,4 +1,0 @@
-interface:
-  display_name: "Prepare Laps"
-  short_description: "Turn plans into Rally-ready Laps queues"
-  default_prompt: "Use $prepare-laps to convert this OpenSpec change or implementation plan into role-aware laps for Rally."
