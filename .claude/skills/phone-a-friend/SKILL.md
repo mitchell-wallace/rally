@@ -11,7 +11,26 @@ metadata:
 
 Use another agent as a real collaborator through CLI delegation. The friend should receive a bounded ask, enough context to be useful, and explicit rules about whether it may edit files.
 
-Requires the `rally` CLI for the preferred workflow. Direct fallback requires the relevant agent CLI.
+Two delegation channels:
+
+- **Rally** (`rally relay ...`) — preferred when available. Records tries, handles failure patterns, keeps model syntax consistent, and feeds back into role routes.
+- **Direct headless CLI** (`claude -p ...`, `codex exec ...`, `gemini --prompt ...`, `opencode run ...`) — first-class fallback. Use when Rally is unavailable, when you want a single isolated one-shot, or when the user names the CLI directly.
+
+See [rally-cli.md](references/rally-cli.md) for full CLI shapes and prompt templates.
+
+## Sandbox & Permission-Skipping Policy
+
+Headless CLIs typically require permission-skip flags (`--dangerously-skip-permissions`, `--dangerously-bypass-approvals-and-sandbox`, `--yolo`, `OPENCODE_PERMISSION='{"*":"allow"}'`) to run unattended. These flags are dangerous in untrusted environments — they let the friend run arbitrary commands without prompting.
+
+Decide based on the current working directory:
+
+- **Sandbox (skipping allowed):** cwd looks like `/workspace`, `/sandbox`, `/tmp/...`, a container/devcontainer mount, an ephemeral CI checkout, or another disposable root. Permission-skip flags are fine — the blast radius is the sandbox itself.
+- **Host machine (skipping NOT allowed without explicit user opt-in):** cwd is inside the user's home directory, especially `~/Documents/...`, `~/Code/...`, `~/projects/...`, or any other long-lived working directory. Do not pass permission-skip flags. Either:
+  1. Route through Rally (it manages its own isolation/recording), or
+  2. Run the friend in read-only mode (no edit flags, no `--yolo`, etc.) and have it produce a plan/diff/critique for you to apply, or
+  3. Ask the user before passing a skip flag, and quote the exact command you want to run.
+
+If the environment is ambiguous (e.g. a mounted host directory inside a container), treat it as host until proven otherwise.
 
 ## When To Use
 
@@ -42,19 +61,27 @@ Do not delegate just to feel busy. Keep the local agent responsible for integrat
    - Read `.rally/config.toml` and run `rally routes check` when using repo routes or named models.
    - Use `ge`, not `gm`, for Gemini. Do not replace user-provided model slugs with older guesses.
 
-4. **Run through Rally**
-   - Prefer:
+4. **Dispatch the call**
+   - **Through Rally (preferred):**
      ```bash
      rally relay --new --iterations 1 --agent "<agent-or-route>" "<prompt>"
      ```
-   - Examples:
+     Examples:
      ```bash
      rally relay --new --iterations 1 --agent "ge:gemini-3.1-pro-preview" "<read-only UI critique prompt>"
      rally relay --new --iterations 1 --agent "cx:gpt-5.4-mini" "<focused code review prompt>"
      rally relay --new --iterations 1 --agent "SENIOR" "<architecture review prompt>"
      ```
-   - Use `rally tail` in another terminal if you need the live transcript.
-   - Read [rally-cli.md](references/rally-cli.md) for agent syntax, direct CLI fallback, and prompt templates.
+     Use `rally tail` in another terminal if you need the live transcript.
+   - **Direct headless CLI (when Rally is unavailable or unnecessary):** apply the sandbox policy above before adding any permission-skip flag. Prefer `opencode` over `claude -p` as the default — Anthropic will soon bill `claude -p` usage at a higher rate to steer non-interactive traffic away from the interactive CLI, so opencode is the cheaper default friend.
+     ```bash
+     # In a sandbox (e.g. cwd /workspace): permission-skip env var is OK.
+     OPENCODE_PERMISSION='{"*":"allow"}' opencode run "$PROMPT" --format json --model "<model>"
+
+     # On the host machine (e.g. cwd ~/Documents/...): drop the env var; read-only friend.
+     opencode run "$PROMPT" --format json --model "<model>"
+     ```
+   - Read [rally-cli.md](references/rally-cli.md) for the full per-CLI shapes, agent syntax, and prompt templates.
 
 5. **Integrate**
    - Treat the friend as evidence, not authority.

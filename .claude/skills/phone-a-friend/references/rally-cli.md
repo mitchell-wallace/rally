@@ -91,9 +91,21 @@ Acceptance:
 If you discover a blocker outside scope, stop and report it instead of broadening the diff.
 ```
 
-## Direct CLI Fallback
+## Direct Headless CLI
 
-Prefer Rally because it records tries, handles known failure patterns, and keeps model syntax consistent. If Rally is unavailable or you need an isolated read-only one-shot, these are the shapes Rally's built-in adapters use:
+Prefer Rally because it records tries, handles known failure patterns, and keeps model syntax consistent. Use direct CLI when Rally is unavailable, the user names a CLI explicitly, or you need an isolated one-shot.
+
+### Sandbox vs Host (must read before adding skip flags)
+
+Permission-skip flags (`--dangerously-skip-permissions`, `--dangerously-bypass-approvals-and-sandbox`, `--yolo`, `OPENCODE_PERMISSION='{"*":"allow"}'`) let the friend run arbitrary tool calls without prompting. Allowed only in a sandbox.
+
+- **Sandbox — skip flags OK.** cwd matches `/workspace`, `/workspace/...`, `/sandbox`, `/tmp/...`, or another disposable container/CI root.
+- **Host — skip flags NOT OK.** cwd is inside the user's home directory, especially `~/Documents/...`. Run the friend in read-only mode (drop the skip flag), route through Rally, or ask the user before adding the flag and quote the exact command.
+- **Ambiguous mounts** (e.g. a host directory bind-mounted into a container): treat as host.
+
+A quick `pwd` check before the call is enough. If `pwd` starts with `/home/<user>/` or `/Users/<user>/`, it's host.
+
+### Sandboxed (skip flags applied — same shapes Rally's adapters use)
 
 ```bash
 claude -p "$PROMPT" --dangerously-skip-permissions --output-format stream-json --verbose --model "<model>"
@@ -101,5 +113,16 @@ codex exec --dangerously-bypass-approvals-and-sandbox --json --model "<model>" "
 GEMINI_CLI_TRUST_WORKSPACE=true gemini --prompt "$PROMPT" --yolo --output-format json --model "<model>"
 OPENCODE_PERMISSION='{"*":"allow"}' opencode run "$PROMPT" --format json --model "<model>"
 ```
+
+### Host (read-only — skip flags removed)
+
+```bash
+claude -p "$PROMPT" --output-format stream-json --verbose --model "<model>"
+codex exec --json --model "<model>" "$PROMPT"
+gemini --prompt "$PROMPT" --output-format json --model "<model>"
+opencode run "$PROMPT" --format json --model "<model>"
+```
+
+In host mode, instruct the friend in the prompt itself to produce a plan, diff, or critique rather than apply changes — the absence of skip flags will surface a permission prompt on any write attempt, which is the desired safety net.
 
 Direct CLI output formats differ by tool. Save enough transcript or summary to justify decisions you bring back.
