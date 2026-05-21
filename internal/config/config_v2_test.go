@@ -63,6 +63,7 @@ func TestLoadV2_DefaultsSectionModelFields(t *testing.T) {
 [defaults]
 claude_model = "opus"
 codex_model = "codex-v2"
+antigravity_model = "Gemini 3.5 Flash (High)"
 iterations = 10
 mix = "cc cx"
 `)
@@ -77,6 +78,9 @@ mix = "cc cx"
 	}
 	if cfg.CodexModel != "codex-v2" {
 		t.Errorf("CodexModel = %q, want %q", cfg.CodexModel, "codex-v2")
+	}
+	if cfg.AntigravityModel != "Gemini 3.5 Flash (High)" {
+		t.Errorf("AntigravityModel = %q, want %q", cfg.AntigravityModel, "Gemini 3.5 Flash (High)")
 	}
 	if cfg.Defaults.Iterations != 10 {
 		t.Errorf("Defaults.Iterations = %d, want 10", cfg.Defaults.Iterations)
@@ -786,6 +790,44 @@ func TestResolveAgent_NamedModel(t *testing.T) {
 	}
 	if resolved.Model != "zai-coding-plan/glm-5.1" {
 		t.Errorf("Model = %q, want 'zai-coding-plan/glm-5.1'", resolved.Model)
+	}
+}
+
+func TestResolveAgent_AntigravityAliases(t *testing.T) {
+	cfg := V2Config{AntigravityModel: "Gemini 3.5 Flash (High)", Harnesses: map[string]*HarnessConfig{}}
+	for _, alias := range []string{"ag", "agy", "antigravity"} {
+		t.Run(alias, func(t *testing.T) {
+			resolved, err := cfg.ResolveAgent(alias)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if resolved.Harness != "antigravity" {
+				t.Errorf("Harness = %q, want 'antigravity'", resolved.Harness)
+			}
+			if resolved.Model != "Gemini 3.5 Flash (High)" {
+				t.Errorf("Model = %q, want configured Antigravity model", resolved.Model)
+			}
+		})
+	}
+}
+
+func TestResolveAgent_AntigravityNamedModel(t *testing.T) {
+	cfg := V2Config{
+		Harnesses: map[string]*HarnessConfig{
+			"ag": {Models: map[string]string{
+				"flash": "Gemini 3.5 Flash (High)",
+			}},
+		},
+	}
+	resolved, err := cfg.ResolveAgent("ag:flash")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if resolved.Harness != "antigravity" {
+		t.Errorf("Harness = %q, want 'antigravity'", resolved.Harness)
+	}
+	if resolved.Model != "Gemini 3.5 Flash (High)" {
+		t.Errorf("Model = %q, want 'Gemini 3.5 Flash (High)'", resolved.Model)
 	}
 }
 

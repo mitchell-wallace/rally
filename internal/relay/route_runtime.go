@@ -368,6 +368,7 @@ func resolveAgentSpec(spec string, resolver Resolver) (agent.ResolvedAgent, erro
 
 	parts := strings.SplitN(spec, ":", 2)
 	aliases := map[string]string{
+		"ag": "antigravity", "agy": "antigravity", "antigravity": "antigravity",
 		"cc": "claude", "claude": "claude",
 		"cx": "codex", "codex": "codex",
 		"ge": "gemini", "gemini": "gemini",

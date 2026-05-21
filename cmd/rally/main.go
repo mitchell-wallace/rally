@@ -16,9 +16,9 @@ import (
 	"github.com/mitchell-wallace/rally/internal/cli"
 	"github.com/mitchell-wallace/rally/internal/config"
 	"github.com/mitchell-wallace/rally/internal/gitx"
-	"github.com/mitchell-wallace/rally/internal/prompt"
 	"github.com/mitchell-wallace/rally/internal/laps"
 	"github.com/mitchell-wallace/rally/internal/progress"
+	"github.com/mitchell-wallace/rally/internal/prompt"
 	"github.com/mitchell-wallace/rally/internal/relay"
 	"github.com/mitchell-wallace/rally/internal/release"
 	"github.com/mitchell-wallace/rally/internal/routing"
@@ -117,7 +117,6 @@ func runRelay(cmd *cobra.Command, args []string) error {
 		fmt.Fprintln(os.Stderr, warning)
 	}
 
-
 	validRoutes, err := cli.ValidateRelayStartupRoutes(context.Background(), workspaceDir, cfg, cli.RelayStartupRouteOptions{
 		In:          os.Stdin,
 		Out:         os.Stderr,
@@ -146,10 +145,11 @@ func runRelay(cmd *cobra.Command, args []string) error {
 	}
 
 	executors := map[string]agent.Executor{
-		"claude":   &agent.ClaudeExecutor{Model: cfg.ClaudeModel},
-		"codex":    &agent.CodexExecutor{Model: cfg.CodexModel},
-		"gemini":   &agent.GeminiExecutor{Model: cfg.GeminiModel},
-		"opencode": &agent.OpenCodeExecutor{Model: cfg.OpenCodeModel},
+		"antigravity": &agent.AntigravityExecutor{Model: cfg.AntigravityModel},
+		"claude":      &agent.ClaudeExecutor{Model: cfg.ClaudeModel},
+		"codex":       &agent.CodexExecutor{Model: cfg.CodexModel},
+		"gemini":      &agent.GeminiExecutor{Model: cfg.GeminiModel},
+		"opencode":    &agent.OpenCodeExecutor{Model: cfg.OpenCodeModel},
 	}
 
 	for name, hc := range cfg.Harnesses {
@@ -175,21 +175,21 @@ func runRelay(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-		runnerCfg := relay.Config{
-			WorkspaceDir:             workspaceDir,
-			DataDir:                  dataDir,
-			AgentMixSpecs:            selectedSpecs,
-			RouteSpecs:               cfg.Routes,
-			UseOverrideRoute:         usedOverride,
-			TargetIterations:         iterations,
-			FreezeThreshold:          cfg.Reliability.FreezeThreshold(),
-			LivenessProbe:            cfg.Reliability.LivenessProbe,
-			RetryBudget:              cfg.Reliability.RetryBudget,
-			RunHooksOnAutoCommit:     cfg.RunHooksOnAutoCommit,
-			LapsEnabled:              lapsEnabled,
-			LapsInstructionsFile:     cfg.Laps.InstructionsFile,
-			FallbackInstructionsFile: cfg.Fallback.InstructionsFile,
-		}
+	runnerCfg := relay.Config{
+		WorkspaceDir:             workspaceDir,
+		DataDir:                  dataDir,
+		AgentMixSpecs:            selectedSpecs,
+		RouteSpecs:               cfg.Routes,
+		UseOverrideRoute:         usedOverride,
+		TargetIterations:         iterations,
+		FreezeThreshold:          cfg.Reliability.FreezeThreshold(),
+		LivenessProbe:            cfg.Reliability.LivenessProbe,
+		RetryBudget:              cfg.Reliability.RetryBudget,
+		RunHooksOnAutoCommit:     cfg.RunHooksOnAutoCommit,
+		LapsEnabled:              lapsEnabled,
+		LapsInstructionsFile:     cfg.Laps.InstructionsFile,
+		FallbackInstructionsFile: cfg.Fallback.InstructionsFile,
+	}
 
 	runnerCfg.Resolver = func(spec string) (agent.ResolvedAgent, error) {
 		ra, err := cfg.ResolveAgent(spec)
@@ -379,6 +379,7 @@ claude_model = ""
 codex_model = ""
 gemini_model = ""
 opencode_model = ""
+antigravity_model = ""
 `
 		if err := os.WriteFile(configPath, []byte(content), 0o644); err != nil {
 			return err

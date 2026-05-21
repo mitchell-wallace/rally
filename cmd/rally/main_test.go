@@ -42,6 +42,7 @@ claude_model = "sonnet"
 codex_model = ""
 gemini_model = ""
 opencode_model = ""
+antigravity_model = ""
 `
 	if err := os.WriteFile(configPath, []byte(configContent), 0o644); err != nil {
 		t.Fatal(err)
@@ -72,7 +73,7 @@ opencode_model = ""
 		t.Errorf("expected sonnet model, got %q", cfg.ClaudeModel)
 	}
 
-	expectedFields := []string{"schema_version", "laps_instructions", "run_hooks_on_autocommit", "data_dir", "[defaults]", "iterations", "mix", "claude_model", "codex_model", "gemini_model", "opencode_model"}
+	expectedFields := []string{"schema_version", "laps_instructions", "run_hooks_on_autocommit", "data_dir", "[defaults]", "iterations", "mix", "claude_model", "codex_model", "gemini_model", "opencode_model", "antigravity_model"}
 	for _, f := range expectedFields {
 		if !strings.Contains(configContent, f) {
 			t.Errorf("init template missing field %q", f)
@@ -115,6 +116,9 @@ func TestRunInit_WritesNewShapeConfig(t *testing.T) {
 	}
 	if !strings.Contains(content, "claude_model") {
 		t.Error("init config missing claude_model in [defaults]")
+	}
+	if !strings.Contains(content, "antigravity_model") {
+		t.Error("init config missing antigravity_model in [defaults]")
 	}
 
 	cfg, err := config.LoadV2(tmp)
@@ -185,6 +189,9 @@ func TestRunInitRoles_InstallsRoutesAndRoleInstructions(t *testing.T) {
 	}
 	if cfg.CodexModel != "gpt-5.5" {
 		t.Errorf("CodexModel = %q, want gpt-5.5", cfg.CodexModel)
+	}
+	if cfg.AntigravityModel != "Gemini 3.5 Flash (High)" {
+		t.Errorf("AntigravityModel = %q, want Gemini 3.5 Flash (High)", cfg.AntigravityModel)
 	}
 
 	wantRoutes := map[string]string{

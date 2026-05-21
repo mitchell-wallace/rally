@@ -25,34 +25,41 @@ var modelNamePattern = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_-]*$`)
 var numericOnlyPattern = regexp.MustCompile(`^\d+$`)
 
 var builtInAliases = map[string]string{
-	"cc":       "claude",
-	"claude":   "claude",
-	"cx":       "codex",
-	"codex":    "codex",
-	"ge":       "gemini",
-	"gemini":   "gemini",
-	"op":       "opencode",
-	"opencode": "opencode",
+	"ag":          "antigravity",
+	"agy":         "antigravity",
+	"antigravity": "antigravity",
+	"cc":          "claude",
+	"claude":      "claude",
+	"cx":          "codex",
+	"codex":       "codex",
+	"ge":          "gemini",
+	"gemini":      "gemini",
+	"op":          "opencode",
+	"opencode":    "opencode",
 }
 
 var builtInCanonical = map[string]bool{
-	"cc":       true,
-	"cx":       true,
-	"ge":       true,
-	"op":       true,
-	"claude":   true,
-	"codex":    true,
-	"gemini":   true,
-	"opencode": true,
+	"ag":          true,
+	"agy":         true,
+	"antigravity": true,
+	"cc":          true,
+	"cx":          true,
+	"ge":          true,
+	"op":          true,
+	"claude":      true,
+	"codex":       true,
+	"gemini":      true,
+	"opencode":    true,
 }
 
 type DefaultsConfig struct {
-	Iterations    int    `toml:"iterations,omitempty"`
-	Mix           string `toml:"mix,omitempty"`
-	ClaudeModel   string `toml:"claude_model,omitempty"`
-	CodexModel    string `toml:"codex_model,omitempty"`
-	GeminiModel   string `toml:"gemini_model,omitempty"`
-	OpenCodeModel string `toml:"opencode_model,omitempty"`
+	Iterations       int    `toml:"iterations,omitempty"`
+	Mix              string `toml:"mix,omitempty"`
+	ClaudeModel      string `toml:"claude_model,omitempty"`
+	CodexModel       string `toml:"codex_model,omitempty"`
+	GeminiModel      string `toml:"gemini_model,omitempty"`
+	OpenCodeModel    string `toml:"opencode_model,omitempty"`
+	AntigravityModel string `toml:"antigravity_model,omitempty"`
 }
 
 type LapsConfig struct {
@@ -90,6 +97,7 @@ type V2Config struct {
 	CodexModel           string
 	GeminiModel          string
 	OpenCodeModel        string
+	AntigravityModel     string
 	SchemaVersion        int
 	DataDir              string
 	RunHooksOnAutoCommit bool
@@ -111,6 +119,7 @@ type rawConfig struct {
 	CodexModel           string `toml:"codex_model,omitempty"`
 	GeminiModel          string `toml:"gemini_model,omitempty"`
 	OpenCodeModel        string `toml:"opencode_model,omitempty"`
+	AntigravityModel     string `toml:"antigravity_model,omitempty"`
 	SchemaVersion        int    `toml:"schema_version,omitempty"`
 	DataDir              string `toml:"data_dir,omitempty"`
 	RunHooksOnAutoCommit bool   `toml:"run_hooks_on_autocommit"`
@@ -193,6 +202,7 @@ func LoadV2(workspaceDir string) (V2Config, error) {
 		{"codex_model", raw.CodexModel, raw.Defaults.CodexModel, func(v string) { cfg.CodexModel = v }},
 		{"gemini_model", raw.GeminiModel, raw.Defaults.GeminiModel, func(v string) { cfg.GeminiModel = v }},
 		{"opencode_model", raw.OpenCodeModel, raw.Defaults.OpenCodeModel, func(v string) { cfg.OpenCodeModel = v }},
+		{"antigravity_model", raw.AntigravityModel, raw.Defaults.AntigravityModel, func(v string) { cfg.AntigravityModel = v }},
 	}
 	for _, f := range fields {
 		val, deprecated := resolveModel(f.rootVal, f.defaults)
@@ -348,6 +358,8 @@ func (c V2Config) defaultModelForHarness(harness string) string {
 		return c.GeminiModel
 	case "opencode":
 		return c.OpenCodeModel
+	case "antigravity":
+		return c.AntigravityModel
 	default:
 		return ""
 	}
@@ -498,12 +510,13 @@ func SaveV2(workspaceDir string, cfg V2Config) error {
 		RunHooksOnAutoCommit: cfg.RunHooksOnAutoCommit,
 		LapsInstructions:     cfg.LapsInstructions,
 		Defaults: DefaultsConfig{
-			Iterations:    cfg.Defaults.Iterations,
-			Mix:           cfg.Defaults.Mix,
-			ClaudeModel:   effectiveModel(cfg.ClaudeModel, cfg.Defaults.ClaudeModel),
-			CodexModel:    effectiveModel(cfg.CodexModel, cfg.Defaults.CodexModel),
-			GeminiModel:   effectiveModel(cfg.GeminiModel, cfg.Defaults.GeminiModel),
-			OpenCodeModel: effectiveModel(cfg.OpenCodeModel, cfg.Defaults.OpenCodeModel),
+			Iterations:       cfg.Defaults.Iterations,
+			Mix:              cfg.Defaults.Mix,
+			ClaudeModel:      effectiveModel(cfg.ClaudeModel, cfg.Defaults.ClaudeModel),
+			CodexModel:       effectiveModel(cfg.CodexModel, cfg.Defaults.CodexModel),
+			GeminiModel:      effectiveModel(cfg.GeminiModel, cfg.Defaults.GeminiModel),
+			OpenCodeModel:    effectiveModel(cfg.OpenCodeModel, cfg.Defaults.OpenCodeModel),
+			AntigravityModel: effectiveModel(cfg.AntigravityModel, cfg.Defaults.AntigravityModel),
 		},
 		Laps:        cfg.Laps,
 		Fallback:    cfg.Fallback,

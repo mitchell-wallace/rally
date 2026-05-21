@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/mitchell-wallace/rally/internal/agent"
 	"github.com/mitchell-wallace/rally/internal/config"
 	"github.com/spf13/cobra"
 )
@@ -111,6 +112,10 @@ func runInitRoles(cmd *cobra.Command, args []string) error {
 	}
 	if cfg.Defaults.CodexModel == "" && cfg.CodexModel == "" {
 		cfg.Defaults.CodexModel = "gpt-5.5"
+		changedConfig = true
+	}
+	if cfg.Defaults.AntigravityModel == "" && cfg.AntigravityModel == "" {
+		cfg.Defaults.AntigravityModel = agent.DefaultAntigravityModel
 		changedConfig = true
 	}
 

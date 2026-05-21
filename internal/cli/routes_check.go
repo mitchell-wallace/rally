@@ -194,7 +194,7 @@ func aliasCandidates(cfg config.V2Config) []string {
 	seen := map[string]bool{}
 	candidates := []string{}
 
-	for _, name := range []string{"cc", "claude", "cx", "codex", "ge", "gemini", "op", "opencode"} {
+	for _, name := range []string{"ag", "agy", "antigravity", "cc", "claude", "cx", "codex", "ge", "gemini", "op", "opencode"} {
 		if seen[name] {
 			continue
 		}

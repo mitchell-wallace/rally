@@ -322,13 +322,13 @@ func TestRealBackend_OpenCodeRelay(t *testing.T) {
 	defer cancel()
 
 	r := NewRunner(s, Config{
-		WorkspaceDir:    workspaceDir,
-		DataDir:         dataDir,
-		AgentMixSpecs:   []string{"op"},
+		WorkspaceDir:     workspaceDir,
+		DataDir:          dataDir,
+		AgentMixSpecs:    []string{"op"},
 		TargetIterations: 1,
-		RetryBudget:     1,
-		FreezeThreshold: 60 * time.Second,
-		TaskPrompt:      "Create a file called opencode-e2e.txt with the text 'opencode e2e pass'. Do not create any other files.",
+		RetryBudget:      1,
+		FreezeThreshold:  60 * time.Second,
+		TaskPrompt:       "Create a file called opencode-e2e.txt with the text 'opencode e2e pass'. Do not create any other files.",
 	}, executors)
 
 	// Ignore run error: may return ctx.Err() when all agents are paused and the
@@ -365,6 +365,67 @@ func TestRealBackend_OpenCodeRelay(t *testing.T) {
 		if !paused {
 			t.Error("opencode run failed but no paused event recorded — resilient execution did not handle the failure")
 		}
+	}
+}
+
+// TestRealBackend_AntigravityRelay runs a single Antigravity CLI iteration via
+// `agy --print` and verifies the built-in adapter can drive real file changes.
+func TestRealBackend_AntigravityRelay(t *testing.T) {
+	requireRealAgents(t)
+	requireBinary(t, "agy")
+
+	workspaceDir, rallyDir, dataDir := setupRealWorkspace(t)
+
+	s := newTestStore(t, rallyDir)
+	executors := map[string]agent.Executor{
+		"antigravity": &agent.AntigravityExecutor{Model: agent.DefaultAntigravityModel},
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+	defer cancel()
+
+	targetFile := filepath.Join(workspaceDir, "antigravity-e2e.txt")
+	r := NewRunner(s, Config{
+		WorkspaceDir:     workspaceDir,
+		DataDir:          dataDir,
+		AgentMixSpecs:    []string{"ag"},
+		TargetIterations: 1,
+		RetryBudget:      1,
+		TaskPrompt:       "Create a file called antigravity-e2e.txt with the text 'antigravity e2e pass'. Do not create any other files.",
+	}, executors)
+
+	if err := r.Run(ctx); err != nil {
+		t.Fatalf("relay run failed: %v", err)
+	}
+
+	data, err := os.ReadFile(targetFile)
+	if err != nil {
+		t.Fatalf("target file not created: %v", err)
+	}
+	if !strings.Contains(string(data), "antigravity e2e pass") {
+		t.Errorf("target file content %q does not contain expected text", string(data))
+	}
+
+	tries := s.AllTries()
+	if len(tries) == 0 {
+		t.Fatal("no try records written to store")
+	}
+	lastTry := tries[len(tries)-1]
+	if !lastTry.Completed {
+		t.Errorf("last try completed = false, summary: %s", lastTry.Summary)
+	}
+	if lastTry.AgentType != "antigravity" {
+		t.Errorf("agent_type = %q, want antigravity", lastTry.AgentType)
+	}
+	if lastTry.LogPath == "" {
+		t.Fatal("expected try log path")
+	}
+	logData, err := os.ReadFile(lastTry.LogPath)
+	if err != nil {
+		t.Fatalf("read try log: %v", err)
+	}
+	if !strings.Contains(string(logData), "Print mode: conversation=") {
+		t.Error("expected Antigravity conversation ID in appended agy log")
 	}
 }
 

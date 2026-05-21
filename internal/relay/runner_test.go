@@ -101,6 +101,7 @@ func newTestStore(t *testing.T, dir string) *store.Store {
 
 func testResolver(spec string) (agent.ResolvedAgent, error) {
 	aliases := map[string]string{
+		"ag": "antigravity", "agy": "antigravity", "antigravity": "antigravity",
 		"cc": "claude", "claude": "claude",
 		"cx": "codex", "codex": "codex",
 		"ge": "gemini", "gemini": "gemini",
@@ -2491,8 +2492,6 @@ func TestFallbackInstructionsIgnoredInLapsMode(t *testing.T) {
 		},
 	}
 	executors := map[string]agent.Executor{"claude": exec}
-
-
 
 	r := NewRunner(s, Config{
 		WorkspaceDir:             workspaceDir,

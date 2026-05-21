@@ -30,8 +30,8 @@ with `RALLY_NO_UPDATE_CHECK=1`.
 ## Prerequisites
 
 - A git repository (Rally always operates inside one).
-- At least one of `claude`, `codex`, `gemini`, or `opencode` installed and
-  already authenticated in your shell.
+- At least one of `agy`, `claude`, `codex`, `gemini`, or `opencode`
+  installed and already authenticated in your shell.
 
 ## Quick start
 
@@ -41,7 +41,7 @@ From the root of any git repo:
 rally init                  # one-time: writes .rally/config.toml + scaffolding
 rally start                 # run a single iteration with the default mix
 rally start --iterations 4  # run four iterations
-rally start --iterations 4 --agent "cc:1 cx:2 ge:1 op:1"  # custom mix
+rally start --iterations 4 --agent "ag:1 cc:1 cx:2 ge:1 op:1"  # custom mix
 ```
 
 While a relay is running, watch the current try's transcript live in another
@@ -83,18 +83,25 @@ the `[reliability]` section for tunables.
 
 ### Built-in agents and aliases
 
-| Alias | Full name  | Binary    |
-|-------|------------|-----------|
-| `cc`  | `claude`   | `claude`  |
-| `cx`  | `codex`    | `codex`   |
-| `ge`  | `gemini`   | `gemini`  |
-| `op`  | `opencode` | `opencode`|
+| Alias      | Full name     | Binary    |
+|------------|---------------|-----------|
+| `ag`/`agy` | `antigravity` | `agy`     |
+| `cc`       | `claude`      | `claude`  |
+| `cx`       | `codex`       | `codex`   |
+| `ge`       | `gemini`      | `gemini`  |
+| `op`       | `opencode`    | `opencode`|
 
 For Opencode runs Rally automatically sets:
 
 ```sh
 OPENCODE_PERMISSION='{"*":"allow"}'
 ```
+
+For Antigravity runs Rally uses `agy --print` with
+`--dangerously-skip-permissions`. `agy` 1.0.0 does not expose a model flag, so
+when `antigravity_model` resolves to a value Rally temporarily writes that
+model label to `~/.gemini/antigravity-cli/settings.json` for the run and then
+restores the prior setting.
 
 ### Choosing agents with `--agent`
 
@@ -157,6 +164,7 @@ claude_model = "claude-opus-4.7"
 codex_model = "gpt-5.4"
 gemini_model = "gemini-3.1-pro-preview"
 opencode_model = "zai-coding-plan/glm-5.1"
+antigravity_model = "Gemini 3.5 Flash (High)"
 
 [laps]
 instructions_file = ".rally/laps_instructions.md"
@@ -172,8 +180,11 @@ sonnet = "claude-sonnet-4-6"
 z  = "zai-coding-plan/glm-5.1"
 gk = "opencode-go/kimi-k2.6"
 
+[harness.ag.models]
+flash = "Gemini 3.5 Flash (High)"
+
 [routes]
-default = ["cc:opus:1", "cx:1", "op:gk:2-4"]
+default = ["ag:flash:1", "cc:opus:1", "cx:1", "op:gk:2-4"]
 SENIOR  = ["cx:1", "cc:opus:1"]
 JUNIOR  = ["op:z:4", "op:gk:2", "ge:1"]
 
@@ -185,14 +196,15 @@ retry_budget          = 5
 
 ### `[defaults]`
 
-| Field            | Type   | Purpose                                              |
-|------------------|--------|------------------------------------------------------|
-| `iterations`     | int    | Default iterations when `--iterations` is absent     |
-| `mix`            | string | Default agent mix when `--agent` is absent           |
-| `claude_model`   | string | Model for the `cc`/`claude` alias                    |
-| `codex_model`    | string | Model for the `cx`/`codex` alias                     |
-| `gemini_model`   | string | Model for the `ge`/`gemini` alias                    |
-| `opencode_model` | string | Model for the `op`/`opencode` alias                  |
+| Field                | Type   | Purpose                                              |
+|----------------------|--------|------------------------------------------------------|
+| `iterations`         | int    | Default iterations when `--iterations` is absent     |
+| `mix`                | string | Default agent mix when `--agent` is absent           |
+| `antigravity_model`  | string | Model label for the `ag`/`agy`/`antigravity` alias   |
+| `claude_model`       | string | Model for the `cc`/`claude` alias                    |
+| `codex_model`        | string | Model for the `cx`/`codex` alias                     |
+| `gemini_model`       | string | Model for the `ge`/`gemini` alias                    |
+| `opencode_model`     | string | Model for the `op`/`opencode` alias                  |
 
 A bare alias like `cc` in a mix resolves through `[defaults].claude_model`
 first, then falls back to the harness's hard-coded internal default.
@@ -280,15 +292,19 @@ sonnet = "claude-sonnet-4-6"
 [harness.op.models]
 z  = "zai-coding-plan/glm-5.1"
 gk = "opencode-go/kimi-k2.6"
+
+[harness.ag.models]
+flash = "Gemini 3.5 Flash (High)"
 ```
 
-With the above, `--agent "cc:opus op:z"` resolves to Claude with
-`claude-opus-4-7` and Opencode with `zai-coding-plan/glm-5.1`.
+With the above, `--agent "cc:opus op:z ag:flash"` resolves to Claude with
+`claude-opus-4-7`, Opencode with `zai-coding-plan/glm-5.1`, and
+Antigravity with `Gemini 3.5 Flash (High)`.
 
 Model names must be non-numeric identifiers — `4` is rejected so quota
 parsing stays unambiguous.
 
-Built-in harnesses (`cc`/`cx`/`ge`/`op`) can declare named models but
+Built-in harnesses (`ag`/`cc`/`cx`/`ge`/`op`) can declare named models but
 **cannot** declare `command`, `model_flag`, `output_strategy`, or
 `tail_stream`.
 
@@ -486,8 +502,8 @@ Rally is built around a few focused internal packages:
 
 - `internal/store` — append-only JSONL files with in-memory caching and
   commit-then-truncate windowing.
-- `internal/agent` — pluggable executors (Claude, Codex, Gemini, Opencode,
-  user-defined generic) sharing one prompt builder.
+- `internal/agent` — pluggable executors (Antigravity, Claude, Codex,
+  Gemini, Opencode, user-defined generic) sharing one prompt builder.
 - `internal/relay` — deterministic agent cycling, retries, error
   resilience, freeze detection, graceful stop.
 - `internal/routing` — `[routes]` parser, scheduler, override resolution.
@@ -497,6 +513,12 @@ Rally is built around a few focused internal packages:
 ## Release notes
 
 Recent highlights — see GitHub Releases for the full history.
+
+### v0.8.0 — Antigravity CLI harness
+
+Adds the built-in `antigravity` harness with `ag`/`agy` aliases, native
+`agy --print` execution, `antigravity_model` config, named model shortcuts,
+and real-backend smoke coverage.
 
 ### v0.7.0 — resilient execution
 

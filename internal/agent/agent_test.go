@@ -744,6 +744,113 @@ func TestOpenCodeAdapter_CountsToolUseEvents(t *testing.T) {
 	}
 }
 
+func TestParseAntigravityOutput_JSON(t *testing.T) {
+	tr, err := parseAntigravityOutput([]byte(`{"completed":true,"summary":"ok"}`), "agy-session-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !tr.Completed {
+		t.Error("expected completed")
+	}
+	if tr.Summary != "ok" {
+		t.Errorf("Summary = %q, want ok", tr.Summary)
+	}
+	if tr.SessionID != "agy-session-1" {
+		t.Errorf("SessionID = %q, want agy-session-1", tr.SessionID)
+	}
+}
+
+func TestParseAntigravityOutput_ResumeUsesLastJSONLine(t *testing.T) {
+	out := []byte("previous response\n{\"completed\":false,\"summary\":\"new response\"}\n")
+	tr, err := parseAntigravityOutput(out, "agy-session-2")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tr.Completed {
+		t.Error("expected completed=false from last JSON line")
+	}
+	if tr.Summary != "new response" {
+		t.Errorf("Summary = %q, want new response", tr.Summary)
+	}
+}
+
+func TestParseAntigravityOutput_PlainText(t *testing.T) {
+	tr, err := parseAntigravityOutput([]byte("plain summary\n"), "agy-session-3")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !tr.Completed {
+		t.Error("expected plain text to be treated as completed")
+	}
+	if tr.Summary != "plain summary" {
+		t.Errorf("Summary = %q, want plain summary", tr.Summary)
+	}
+}
+
+func TestAntigravityAdapter_SessionIDCapture(t *testing.T) {
+	logData := []byte(`I0521 printmode.go:130] Print mode: conversation=8eb5b287-eadb-4fc6-ae08-ae5f1ae773f3, sending message`)
+	got := scanAntigravityConversationID(logData)
+	if got != "8eb5b287-eadb-4fc6-ae08-ae5f1ae773f3" {
+		t.Errorf("sessionID = %q", got)
+	}
+}
+
+func TestAntigravityExecutor_ExecuteUsesPrintModeAndRestoresModel(t *testing.T) {
+	tmp := t.TempDir()
+	home := filepath.Join(tmp, "home")
+	t.Setenv("HOME", home)
+
+	binDir := filepath.Join(tmp, "bin")
+	if err := os.MkdirAll(binDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	argsPath := filepath.Join(tmp, "args.txt")
+	settingsSnapshotPath := filepath.Join(tmp, "settings-snapshot.json")
+	scriptPath := filepath.Join(binDir, "agy")
+	script := fmt.Sprintf(`#!/bin/sh
+printf '%%s\n' "$@" > %q
+cat "$HOME/.gemini/antigravity-cli/settings.json" > %q
+printf '{"completed":true,"summary":"agy ok"}'
+`, argsPath, settingsSnapshotPath)
+	if err := os.WriteFile(scriptPath, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	exec := &AntigravityExecutor{Model: DefaultAntigravityModel, PrintTimeout: time.Second}
+	res, err := exec.Execute(context.Background(), RunOptions{Prompt: "do work", LogPath: filepath.Join(tmp, "try.log")})
+	if err != nil {
+		t.Fatalf("Execute failed: %v", err)
+	}
+	if !res.Completed || res.Summary != "agy ok" {
+		t.Fatalf("unexpected result: %+v", res)
+	}
+
+	argsData, err := os.ReadFile(argsPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	args := string(argsData)
+	for _, want := range []string{"--print-timeout=1s", "--dangerously-skip-permissions", "--print", "do work"} {
+		if !strings.Contains(args, want) {
+			t.Errorf("agy args missing %q:\n%s", want, args)
+		}
+	}
+
+	snapshot, err := os.ReadFile(settingsSnapshotPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(snapshot), DefaultAntigravityModel) {
+		t.Errorf("settings snapshot missing model %q:\n%s", DefaultAntigravityModel, string(snapshot))
+	}
+
+	settingsPath := filepath.Join(home, ".gemini", "antigravity-cli", "settings.json")
+	if _, err := os.Stat(settingsPath); !os.IsNotExist(err) {
+		t.Errorf("settings file should be restored/removed, stat err = %v", err)
+	}
+}
+
 func TestCodexAdapterCapabilities(t *testing.T) {
 	c := &CodexExecutor{}
 	if !c.ResumeSupported() {
@@ -804,6 +911,22 @@ func TestGeminiAdapterCapabilities(t *testing.T) {
 		t.Error("LivenessProbeSupported() = true, want false")
 	}
 	if err := g.RotateModel("new-model"); err == nil {
+		t.Error("RotateModel() should return error")
+	}
+}
+
+func TestAntigravityAdapterCapabilities(t *testing.T) {
+	a := &AntigravityExecutor{}
+	if !a.ResumeSupported() {
+		t.Error("ResumeSupported() = false, want true")
+	}
+	if a.RotateSupported() {
+		t.Error("RotateSupported() = true, want false")
+	}
+	if a.LivenessProbeSupported() {
+		t.Error("LivenessProbeSupported() = true, want false")
+	}
+	if err := a.RotateModel("new-model"); err == nil {
 		t.Error("RotateModel() should return error")
 	}
 }

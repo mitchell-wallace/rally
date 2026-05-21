@@ -24,14 +24,17 @@ func overrideResolver(spec string) (agent.ResolvedAgent, error) {
 	}
 
 	aliases := map[string]string{
-		"cc":       "claude",
-		"claude":   "claude",
-		"cx":       "codex",
-		"codex":    "codex",
-		"ge":       "gemini",
-		"gemini":   "gemini",
-		"op":       "opencode",
-		"opencode": "opencode",
+		"ag":          "antigravity",
+		"agy":         "antigravity",
+		"antigravity": "antigravity",
+		"cc":          "claude",
+		"claude":      "claude",
+		"cx":          "codex",
+		"codex":       "codex",
+		"ge":          "gemini",
+		"gemini":      "gemini",
+		"op":          "opencode",
+		"opencode":    "opencode",
 	}
 	harness, ok := aliases[parts[0]]
 	if !ok {

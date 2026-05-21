@@ -91,6 +91,7 @@ func ParseAgentMix(specs []string, resolver Resolver) (AgentMix, error) {
 
 			// Fallback path: no resolver provided (legacy/test path).
 			aliases := map[string]string{
+				"ag": "antigravity", "agy": "antigravity", "antigravity": "antigravity",
 				"cc": "claude", "claude": "claude",
 				"cx": "codex", "codex": "codex",
 				"ge": "gemini", "gemini": "gemini",

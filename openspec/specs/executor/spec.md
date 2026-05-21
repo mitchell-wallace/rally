@@ -63,6 +63,21 @@ The system SHALL provide an `OpenCodeExecutor` that invokes `opencode run <promp
 - **WHEN** the opencode subprocess completes
 - **THEN** the executor SHALL parse each line as an `opencodeJSONEvent` JSON object and extract `text` from events with `type: "text"`
 
+### Requirement: AntigravityExecutor
+The system SHALL provide an `AntigravityExecutor` that invokes `agy --print <prompt>` as a subprocess and returns a `TryResult`.
+
+#### Scenario: Antigravity print-mode execution
+- **WHEN** an Antigravity run is executed
+- **THEN** the executor SHALL pass `--dangerously-skip-permissions`, `--print-timeout=<duration>`, and `--print <prompt>` to the `agy` CLI
+
+#### Scenario: Antigravity model override
+- **WHEN** an Antigravity model label is specified in configuration
+- **THEN** the executor SHALL temporarily set that label in `~/.gemini/antigravity-cli/settings.json` for the duration of the run and restore the prior setting afterwards
+
+#### Scenario: Antigravity conversation id capture
+- **WHEN** the `agy` subprocess writes a print-mode conversation id to its log
+- **THEN** the executor SHALL return that conversation id as the `TryResult.SessionID`
+
 ### Requirement: FixtureExecutor
 The system SHALL provide a `FixtureExecutor` that replays precomputed git diffs and canned JSON outputs without invoking any real agent CLI.
 
@@ -77,4 +92,3 @@ The system SHALL provide a `FixtureExecutor` that replays precomputed git diffs 
 #### Scenario: Fixture handles already-applied diffs
 - **WHEN** the diff has already been applied (e.g., retry scenario)
 - **THEN** the executor SHALL detect this via `git apply --reverse --check` and skip re-application
-

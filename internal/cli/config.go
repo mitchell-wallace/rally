@@ -56,6 +56,7 @@ func runConfig(cmd *cobra.Command, _ []string) error {
 	codexModel := cfg.CodexModel
 	geminiModel := cfg.GeminiModel
 	openCodeModel := cfg.OpenCodeModel
+	antigravityModel := cfg.AntigravityModel
 
 	dataDir := cfg.DataDir
 	lapsInstructions := cfg.Laps.InstructionsFile
@@ -101,6 +102,7 @@ func runConfig(cmd *cobra.Command, _ []string) error {
 		huh.NewInput().Title("codex_model").Value(&codexModel),
 		huh.NewInput().Title("gemini_model").Value(&geminiModel),
 		huh.NewInput().Title("opencode_model").Value(&openCodeModel),
+		huh.NewInput().Title("antigravity_model").Value(&antigravityModel),
 	)
 
 	pathsGroup := huh.NewGroup(
@@ -157,10 +159,12 @@ func runConfig(cmd *cobra.Command, _ []string) error {
 	cfg.CodexModel = strings.TrimSpace(codexModel)
 	cfg.GeminiModel = strings.TrimSpace(geminiModel)
 	cfg.OpenCodeModel = strings.TrimSpace(openCodeModel)
+	cfg.AntigravityModel = strings.TrimSpace(antigravityModel)
 	cfg.Defaults.ClaudeModel = cfg.ClaudeModel
 	cfg.Defaults.CodexModel = cfg.CodexModel
 	cfg.Defaults.GeminiModel = cfg.GeminiModel
 	cfg.Defaults.OpenCodeModel = cfg.OpenCodeModel
+	cfg.Defaults.AntigravityModel = cfg.AntigravityModel
 
 	cfg.DataDir = strings.TrimSpace(dataDir)
 	cfg.Laps.InstructionsFile = strings.TrimSpace(lapsInstructions)
@@ -240,7 +244,7 @@ func promptHarnesses(cmd *cobra.Command, cfg config.V2Config) error {
 		var name string
 		nameForm := huh.NewForm(
 			huh.NewGroup(
-				huh.NewInput().Title("Harness name").Description("Built-in: claude/codex/gemini/opencode. Or invent a new one. Blank to stop.").Value(&name),
+				huh.NewInput().Title("Harness name").Description("Built-in: antigravity/claude/codex/gemini/opencode. Or invent a new one. Blank to stop.").Value(&name),
 			),
 		).WithShowHelp(false).WithInput(cmd.InOrStdin()).WithOutput(cmd.OutOrStderr())
 		if err := nameForm.Run(); err != nil {
