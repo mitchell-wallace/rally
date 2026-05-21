@@ -1,150 +1,114 @@
-# Session Handoff — Rally Model Slugs + Override Round-Robin Fix
+# Session Handoff — Antigravity Harness Support
 
-**Date:** 2026-05-11
-**Session duration:** ~1.5h
-**Branch:** `main` (21+ commits ahead of origin/main; release pending)
-**Rally version:** `0.7.4`
+**Date:** 2026-05-21
+**Branch:** `main`
+**Rally version:** `0.8.0`
 
----
+## User request
 
-## Continued from
+Add first-class Rally support for Google Antigravity CLI (`agy`) after the
+Antigravity/Gemini 3.5 Flash release, including default model/config support,
+end-to-end testing, version bump, and push.
 
-Previous session handoff (2026-05-10) at `tmp/session-handoff.md` — all work
-through commit `3c465f2` ("fix footer showing ✓ passed when agent exits 0 but
-made no changes; add custom harness real-backend test; bump to 0.7.3").
+## What changed
 
----
+- Added built-in `antigravity` harness with `ag` and `agy` aliases.
+- Added `AntigravityExecutor` using:
+  - `agy --print`
+  - `--dangerously-skip-permissions`
+  - `--print-timeout=<duration>`
+  - optional `--conversation=<id>` resume
+- Added settings-backed model selection because `agy 1.0.0` has no model flag.
+  Rally temporarily writes the resolved model label to
+  `~/.gemini/antigravity-cli/settings.json` and restores the previous file
+  after the run.
+- Added `antigravity_model` under `[defaults]`, root-level compatibility
+  loading, `rally config` support, `rally init` template support, and
+  `rally init roles` seeding to `Gemini 3.5 Flash (High)`.
+- Added named-model support through `[harness.ag.models]`,
+  `[harness.agy.models]`, or `[harness.antigravity.models]`.
+- Updated fallback alias maps in config, relay mix parsing, route runtime,
+  route suggestions, and tests.
+- Updated README, OpenSpec executor spec, and the `test-driving-rally` skill.
+- Bumped `internal/buildinfo/VERSION` from `0.7.13` to `0.8.0`.
 
-## Changes made this session
+## CLI findings
 
-Two commits on `main`:
+`agy --help` on 2026-05-21 showed:
 
-### 1. `9b051c5` — skill: lock in current model slugs, strengthen progress recording
+- `-p` / `--print` for non-interactive prompt mode.
+- `--print-timeout` must be supplied as `--print-timeout=20s` before/alongside
+  `--print`; `--print --print-timeout 20s ...` is interpreted as prompt text.
+- `--dangerously-skip-permissions` works with print mode.
+- `--conversation=<uuid>` resumes a specific conversation, but print mode
+  reprints previous visible assistant output before the new response.
+- No `--model` flag exists; `agy --model ...` exits with
+  `flags provided but not defined: -model`.
+- Conversation IDs are visible in the `--log-file` output as
+  `Print mode: conversation=<uuid>`.
 
-Test-driving-rally skill updated with:
+The user settings file was restored after real Antigravity testing; it still
+contains `"model": "Claude Opus 4.6 (Thinking)"` after the Rally run.
 
-- Canonical model slug table in section 1 (gemini-3.1-pro-preview,
-  gemini-3-flash-preview, opencode-go/kimi-k2.6, **opencode/minimax-m2.5-free**
-  — NOT opencode-zen, zai-coding-plan/glm-5.1, claude-haiku-4-5, gpt-5.4-mini).
-- Default workflow section: update skill first → read prior state → test →
-  fix → verify → bump version → wrap up. Calls out the "never replace
-  user-provided slugs with older ones" rule.
-- Stronger progress-recording guidance: section 1 slug table is canonical,
-  delete stale failure notes rather than stacking caveats, single rolling
-  handoff doc, commit skill update separately.
-- Deleted obsolete "Gemini: No auth configured" failure note.
-- Bumped skill metadata to v1.2.
+## Verification
 
-### 2. `5d13a04` — fix multi-harness override round-robin and trim opencode summary; bump to 0.7.4
+Passed:
 
-**Bug A — override route stuck on first harness.** `rally relay --agent "cc ge op"`
-with N iterations always ran claude. Root cause in `internal/routing/override.go`:
-`BuildOverrideRoute` parsed bare aliases as `ParsedEntry{HasQuota: false, ...}`,
-and the scheduler's `shouldStayOnCurrentLocked` treats no-quota entries as
-"stay until failed". The legacy mix path (default `[defaults].mix`) avoided
-this because `legacyMixRouteEntries` always stamps a `:N` count.
+- `go test ./...`
+- `go build -o /tmp/rally ./cmd/rally && /tmp/rally version`
+  - output: `rally v0.8.0-dev`
+- `agy --dangerously-skip-permissions --print-timeout=20s --print ...`
+  - returned the requested exact text.
+- `RALLY_TEST_REAL_AGENTS=1 go test ./internal/relay -run TestRealBackend_AntigravityRelay -v -timeout 240s`
+  - passed in 114.76s.
+  - verified file creation, completed try record, `agent_type=antigravity`, and
+    conversation ID capture in appended `agy` log.
+- Targeted real-backend Codex smoke started after Antigravity:
+  - `TestRealBackend_CodexRelay` passed in 29.44s.
 
-Fix: inject `HasQuota=true, QuotaMin=QuotaMax=1` for bare direct entries in
-`BuildOverrideRoute` so multi-entry `--agent` mixes round-robin. Single-entry
-overrides wrap to themselves (same effective behaviour).
+Not clean in this environment:
 
-**Bug B — opencode minimax summary leading-newline noise.** `minimax-m2.5-free`
-emits its answer as several streamed text parts starting with `"\n\n\n"` each.
-Concatenation left summaries with ~11 leading newlines. Fix: `strings.TrimSpace`
-on combined text in `parseOpenCodeOutput`.
+- Full `RALLY_TEST_REAL_AGENTS=1 go test ./internal/relay/... -run TestRealBackend -v -timeout 600s`
+  was stopped because `TestRealBackend_ClaudeBasicRelay` returned a Claude
+  harness error and entered the existing frozen-agent wait path.
+- A targeted subset run was stopped after `TestRealBackend_OpenCodeRelay`
+  produced no changes and entered the existing frozen-agent wait path.
 
-**Regression coverage added:**
-- `TestBuildOverrideRoute_BareAliasesRoundRobin` (unit, override builder).
-- `TestParseOpenCodeOutput_TrimsWhitespace` (unit, opencode parser).
-- `TestRealBackend_MultiHarnessRoundRobin` (real-backend e2e — runs cc/ge/op
-  one iteration each, asserts `agent_type` order). Takes ~60s.
+These failures were in external real-agent backends, not in the new
+Antigravity adapter. Unit coverage and the new Antigravity real backend test
+passed.
 
----
+## Files touched
 
-## Live verification (test-drive log)
+Key code paths:
 
-All real-backend tests pass (`RALLY_TEST_REAL_AGENTS=1 go test ./internal/relay/... -run TestRealBackend -v -timeout 600s` — 208s total).
+- `internal/agent/antigravity.go`
+- `internal/config/config_v2.go`
+- `cmd/rally/main.go`
+- `cmd/rally/init_roles.go`
+- `internal/cli/config.go`
+- `internal/relay/mix.go`
+- `internal/relay/route_runtime.go`
+- `internal/cli/routes_check.go`
 
-Per-model verification on 2026-05-11:
+Key tests:
 
-| Model | Time | Result |
-|---|---|---|
-| claude-haiku-4-5 | ~18s | ✓ |
-| gemini-3.1-pro-preview | ~115s | ✓ (last-activity counter ticks from t=0 — gemini doesn't write to its log) |
-| gemini-3-flash-preview | ~15s | ✓ |
-| opencode-go/kimi-k2.6 | ~18s | ✓ (rate limit cleared) |
-| opencode/minimax-m2.5-free | ~14s | ✓ (post-fix summary is clean) |
-| zai-coding-plan/glm-5.1 | ~10s | ✓ |
-| gpt-5.4-mini (codex) | ~43s | ✓ |
+- `internal/agent/agent_test.go`
+- `internal/config/config_v2_test.go`
+- `internal/relay/runner_real_backend_test.go`
 
-Additional flow checks:
+Docs/state:
 
-- `rally relay --new --iterations 3 --agent "cc ge op"` → header cycles
-  claude → gemini → opencode (fixed in 0.7.4).
-- `rally routes check` on `default = ["cc:2", "ge:1", "op:1"]` → 4 iterations
-  ran claude, claude, gemini, opencode (correct distribution).
-- `rally relay --new` → closes prior unfinished relay, starts fresh.
-- `rally relay --resume` → resumes silently at next iteration.
-- Interactive prompt (no flag) → `"new"` answer discards previous, `"resume"`
-  picks up.
+- `README.md`
+- `openspec/specs/executor/spec.md`
+- `.claude/skills/test-driving-rally/SKILL.md`
+- `internal/buildinfo/VERSION`
 
----
+## Carryover
 
-## Known gaps / outstanding
-
-### Worth investigating next session
-
-- **Interactive resume prompt exposes internal label.** The prompt reads
-  `Unfinished relay #1 is at iteration 1/3 (mix: __override__:cc). …`.
-  The `__override__:` prefix is an internal marker for route mode; users
-  shouldn't see it. `cmd/rally/main.go:212` — strip the prefix before
-  formatting, or store a user-friendly label alongside.
-- **`[routes]` config with bare aliases** uses the "stay until failed"
-  semantic (enshrined by `TestScheduler_Scenario1_NoQuotas`). This is
-  arguably intentional for routes (vs. `--agent`), but worth documenting
-  explicitly so users know to add `:1` quotas if they want round-robin from
-  config too.
-- **`rally version` shows `dev`** when built locally (no ldflags). Release
-  builds inject the real version. Consider making the dev binary fall back
-  to the `VERSION` file contents instead of literal `"dev"`, so test-drives
-  can confirm they're running the right build.
-
-### Not yet covered (carryover candidates)
-
-- Codex multi-harness in `--agent "cc cx"` end-to-end (codex was verified
-  solo, but the cross-harness header rotation specifically with cc+cx
-  wasn't re-checked this session).
-- Gemini complex task (todo app) with `freeze_threshold_secs = 600` — from
-  previous handoff, still untested.
-- `rally tail --try N` mapping across multiple repos sharing a data dir.
-- Custom harness with `kimi`/`zai` model variants (only the bare `mycode`
-  with default model was verified).
-
----
-
-## Files changed (this session)
-
-```
- .claude/skills/test-driving-rally/SKILL.md     | ~80 lines  (skill update)
- VERSION                                        |  0.7.3 → 0.7.4
- internal/agent/agent_test.go                   | +18  (trim test)
- internal/agent/opencode.go                     | +1/-1 (TrimSpace)
- internal/routing/override.go                   | +10  (quota=1 default)
- internal/routing/override_test.go              | +28  (round-robin test)
- internal/relay/runner_real_backend_test.go     | +75  (real-backend rr test)
- tmp/session-handoff.md                         | overwrites prior handoff
-```
-
----
-
-## Notes for next session
-
-- Build with `go build -o /tmp/rally ./cmd/rally/ && export PATH="/tmp:$PATH"`.
-  `rally version` will print `dev` — that's expected for local builds.
-- All 7 pre-built real-backend tests should pass in ~3.5min. Run them as a
-  baseline before manual smoke tests.
-- `opencode-go/kimi-k2.6` may be rate-limited any given session; if so,
-  `TestRealBackend_OpenCodeRelay` takes ~3min (2m freeze + 1m ctx) and the
-  free tier resets ~every 12h.
-- The skill's "default workflow" section now codifies the test-drive →
-  patch → bump → wrap-up loop. Follow it unless the user overrides.
+- Investigate why Claude real-backend tests are currently returning harness
+  errors in this environment.
+- Investigate current Opencode behavior: `TestRealBackend_OpenCodeRelay`
+  returned no changes and hit frozen-agent wait.
+- Consider adding cross-process locking for the Antigravity settings override
+  if concurrent Rally processes using `ag` become a real workflow.

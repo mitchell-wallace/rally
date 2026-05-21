@@ -2,10 +2,10 @@
 name: test-driving-rally
 description: Smoke-test rally for real to verify features work end-to-end. Use when the user wants to verify that rally is working correctly after changes or before a release.
 license: MIT
-compatibility: Requires rally built from source, plus at least one agent CLI (claude, codex, gemini, opencode).
+compatibility: Requires rally built from source, plus at least one agent CLI (agy, claude, codex, gemini, opencode).
 metadata:
   author: rally
-  version: "1.2"
+  version: "1.3"
 ---
 
 Run real end-to-end smoke tests of rally to verify features work correctly. This skill drives rally from the CLI in isolated `/tmp/` repos, observes actual behaviour, and reports findings.
@@ -44,7 +44,7 @@ Before doing manual smoke tests, run the existing real-backend integration
 tests. They cover the core scenarios automatically:
 
 ```bash
-RALLY_TEST_REAL_AGENTS=1 go test ./internal/relay/... -run TestRealBackend -v -timeout 300s
+RALLY_TEST_REAL_AGENTS=1 go test ./internal/relay/... -run TestRealBackend -v -timeout 600s
 ```
 
 These tests skip automatically when `RALLY_TEST_REAL_AGENTS` is unset. They cover:
@@ -53,6 +53,7 @@ These tests skip automatically when `RALLY_TEST_REAL_AGENTS` is unset. They cove
 - Log scoping per-repo (two repos → two subdirectories in data_dir)
 - Codex executor (checks for CLI arg conflicts)
 - OpenCode executor (checks headless mode — no TUI ANSI in summary)
+- Antigravity executor (checks `agy --print`, settings-backed model selection, and conversation-id capture)
 - Resilience retry budget exhaustion and agent pausing
 - Custom harness via `opencode run` (no TUI, valid try record)
 - Multi-harness round-robin (`cc ge op` → one of each, in order)
@@ -84,7 +85,7 @@ rally version
 **Check which agent CLIs are available:**
 
 ```bash
-which claude codex gemini opencode 2>/dev/null
+which agy claude codex gemini opencode 2>/dev/null
 ```
 
 ### Current model slugs (canonical list)
@@ -93,6 +94,7 @@ Always use these slugs in tests. They are the only slugs known to be available i
 
 | Harness | Slug | Notes |
 |---|---|---|
+| `ag`/`agy` (antigravity) | `Gemini 3.5 Flash (High)` | Verified 2026-05-21 via `agy --print`; `agy` 1.0.0 has no CLI model flag, so Rally sets `~/.gemini/antigravity-cli/settings.json` for the run and restores it. |
 | `cc` (claude) | `claude-haiku-4-5` | Cheapest/fastest; default for smoke tests. |
 | `cx` (codex) | `gpt-5.4-mini` | Verified working (see `TestRealBackend_CodexRelay`). |
 | `ge` (gemini) | `gemini-3.1-pro-preview` | Verified 2026-05-11: simple task in ~2min. Authenticated. `GEMINI_CLI_TRUST_WORKSPACE=true` is set by rally so headless mode works. |
@@ -101,7 +103,7 @@ Always use these slugs in tests. They are the only slugs known to be available i
 | `op` (opencode) | `opencode/minimax-m2.5-free` | Verified 2026-05-11: ~14s. NOT `opencode-zen/...` — the zen prefix is wrong. |
 | `op` (opencode) | `zai-coding-plan/glm-5.1` | Verified 2026-05-11: ~10s. The `zai-coding-plan` provider with `glm-5.1` suffix. |
 
-Alias note: gemini is `ge`, NOT `gm`. Rally rejects `gm` with `unknown agent alias`.
+Alias note: Antigravity is `ag` or `agy`; gemini is `ge`, NOT `gm`. Rally rejects `gm` with `unknown agent alias`.
 
 Check `/workspace/rally.toml` for the project-default slugs in use, and `AGENTS.md` for terminology. The slugs above override anything you see in older docs or memory.
 
