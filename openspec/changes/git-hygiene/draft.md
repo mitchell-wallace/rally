@@ -41,29 +41,44 @@ review, revert, or cherry-pick individual laps.
 
 ## Auto-Squash Consecutive Rally State Commits
 
-**Problem**: When an agent is sitting on retries, Rally creates a state commit
-after each attempt. This leads to long runs of identical-looking commits:
+**Problem**: Between runs (and during retries/skips), Rally creates
+`rally: update state` commits for bookkeeping (runs.json, progress, etc.).
+These pile up and dominate the git log. Real example from `Prayer-app`:
 
 ```
-rally: run 3 attempt 1 (claude)
-rally: run 3 attempt 2 (claude)
-rally: run 3 attempt 3 (claude)
-rally: run 3 attempt 4 (claude)
+e073c89 rally: update state
+d37d086 rally: run 7 attempt 1 (claude)
+b09c1cb rally: update state
+fdf9d22 rally: update state
+86e3fff rally: update state      ← 5 consecutive state commits
+87d6bc6 rally: update state         between run 5 and run 7
+664e93d rally: update state
+2f2259e rally: run 5 attempt 1 (codex)
 ```
 
-These add noise to `git log`.
+The `rally: run N attempt M` commits carry actual code changes and should be
+kept. The `rally: update state` commits are pure Rally bookkeeping noise.
 
-**Change**: Before creating a new auto-commit, check if the previous commit
-message matches the `rally: run N attempt M` pattern for the same run. If so,
-amend the previous commit (`git commit --amend`) instead of creating a new one.
+**Change**: Before creating a new state commit, check if HEAD is already a
+`rally: update state` commit. If so, amend it (`git commit --amend`) instead
+of creating a new one. This collapses any streak of consecutive state updates
+into a single commit.
 
-This keeps exactly one commit per run (with the latest attempt number), instead
-of one per attempt.
+The `rally: run N attempt M` commits are never squashed — they represent
+real agent work.
+
+### Logic
+```
+if HEAD commit message == "rally: update state":
+    git commit --amend --no-verify -m "rally: update state"
+else:
+    git commit --no-verify -m "rally: update state"
+```
 
 ### Edge cases
-- Only squash if HEAD commit author matches Rally's auto-commit identity
-- Don't squash across different runs (run 2 → run 3)
-- Don't squash if there are commits from other sources in between
+- Only amend if HEAD commit message is exactly `rally: update state`
+- Don't amend across different commit authors (someone else committed in between)
+- `rally: run N attempt M` commits are never candidates for squashing
 
 ---
 
