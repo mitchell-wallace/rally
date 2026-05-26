@@ -14,8 +14,11 @@ Use this after a Rally relay when the repo state, git history, or agent outcomes
 ## Core Rules
 
 - Do not rewrite history during the review. No `reset`, `rebase`, squash, amend-away, or force-push unless the user explicitly approves a recovery plan.
-- Preserve Rally state where it was generated. Prefer ignoring/untracking generated `.rally/` and `.laps/` state over deleting it.
-- Do not treat observability tools such as Sentry as the source of truth for Rally state. Sentry can be useful for harness/runtime error telemetry, but lap state, tries, relays, logs, and git refs must remain local/append-only artifacts.
+- Preserve Rally state where it was generated. Do not delete local `.rally/` or `.laps/` artifacts during review.
+- Treat `.laps/` as the structured planning system, not runtime noise. It is normally git-tracked.
+- Treat stable Rally configuration as source: `.rally/config.toml` and `.rally/agents/` are normally git-tracked.
+- Treat high-churn Rally runtime/debug files separately: `tries.jsonl`, `relays.jsonl`, `progress.yaml`, `agent_status.jsonl`, hook audits, relay logs, and harness logs may need pruning or export instead of indefinite git history.
+- Observability tools such as Sentry are appropriate for preserving historical debug logs and harness/runtime errors, especially for container-based runs. They are not the operational source of truth for current lap scheduling; current planning/config still lives in `.laps/` and stable `.rally/` files.
 - Identify the intended target branch before diffing. Do not assume `main`; use repo docs, PR metadata, branch names, `git branch -vv`, `git merge-base`, or user input.
 - Treat work before the first lap/try in the current batch as baseline context. It may be out of the current request scope, but it is not automatically disposable.
 - Report findings before repairs. If recovery is needed, propose options with tradeoffs and make a new branch unless the user asks to repair in place.
@@ -24,12 +27,13 @@ Use this after a Rally relay when the repo state, git history, or agent outcomes
 
 Read these first when present:
 
-- `.laps/laps.json` — task queue, assignees, completed state, follow-up laps.
+- `.laps/laps.json` — task queue, assignees, completed state, follow-up laps. This is planning state and is usually tracked.
+- `.rally/config.toml` and `.rally/agents/` — routing and role instructions. These are usually tracked.
 - `.rally/progress.yaml` — run summaries and lap completions.
 - `.rally/relays.jsonl` — relay batches and first/last try ids.
 - `.rally/tries.jsonl` — one attempt per line, including harness, assignee, summary, changed files, commit hash, and log path.
 
-Use `jq` or small Python helpers for JSONL; these files can be verbose.
+Use `jq` or small Python helpers for JSONL; runtime files can be verbose and may be pruned or exported after review.
 
 ## Git Audit
 
