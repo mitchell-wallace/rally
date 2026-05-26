@@ -1,0 +1,4 @@
+interface:
+  display_name: "Add New Harness"
+  short_description: "Integrate a new Rally agent harness"
+  default_prompt: "Use $add-new-harness to add a new Rally harness end to end, verify it with real CLI smoke tests, and update related skills."

@@ -14,7 +14,7 @@ Use another agent as a real collaborator through CLI delegation. The friend shou
 Two delegation channels:
 
 - **Rally** (`rally relay ...`) — preferred when available. Records tries, handles failure patterns, keeps model syntax consistent, and feeds back into role routes.
-- **Direct headless CLI** (`claude -p ...`, `codex exec ...`, `gemini --prompt ...`, `opencode run ...`) — first-class fallback. Use when Rally is unavailable, when you want a single isolated one-shot, or when the user names the CLI directly.
+- **Direct headless CLI** (`agy --print ...`, `claude -p ...`, `codex exec ...`, `gemini --prompt ...`, `opencode run ...`) — first-class fallback. Use when Rally is unavailable, when you want a single isolated one-shot, or when the user names the CLI directly.
 
 See [rally-cli.md](references/rally-cli.md) for full CLI shapes and prompt templates.
 

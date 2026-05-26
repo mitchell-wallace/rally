@@ -5,7 +5,7 @@ license: MIT
 compatibility: Requires rally built from source, plus at least one agent CLI (agy, claude, codex, gemini, opencode).
 metadata:
   author: rally
-  version: "1.3"
+  version: "1.4"
 ---
 
 Run real end-to-end smoke tests of rally to verify features work correctly. This skill drives rally from the CLI in isolated `/tmp/` repos, observes actual behaviour, and reports findings.
@@ -21,7 +21,7 @@ When the user invokes this skill, follow this loop:
 3. **Test drive.** Run the pre-built real-backend tests as a baseline, then do targeted manual smoke tests on the gaps.
 4. **Apply fixes** for any defects you find that are tractable in-session.
 5. **Verify the fixes** by re-running the relevant smoke test or adding a real-backend test.
-6. **Bump the patch version** in `internal/buildinfo/VERSION` and commit the code patch (one commit per logical change is fine).
+6. **Bump the minor version** in `internal/buildinfo/VERSION` and commit the code patch (one commit per logical change is fine), unless the user explicitly asks for patch or major.
 7. **Wrap up** once confident or approaching ~300k context:
    - Update the skill with any new findings (workflow gotchas, status corrections, new model behaviours).
    - Write a new `./tmp/session-handoff.md` (overwrite the previous — it's a single rolling doc).
@@ -66,12 +66,12 @@ Add new tests to `internal/relay/runner_real_backend_test.go` whenever you find 
 
 ## 1. Setup
 
-**Bump VERSION before testing patches.** Any session that commits patches must increment the patch number in `internal/buildinfo/VERSION` (e.g. `0.7.0` → `0.7.1`) and commit it so CI builds an updated binary for distribution. The file is embedded into the binary, so `rally version` on a dev build reports `vX.Y.Z-dev`. Do this once per session, before building:
+**Bump VERSION before testing patches.** Any session that commits patches should increment the minor number in `internal/buildinfo/VERSION` by default (e.g. `0.7.0` → `0.8.0`) unless the user explicitly asks for patch or major. Commit it so CI builds an updated binary for distribution. The file is embedded into the binary, so `rally version` on a dev build reports `vX.Y.Z-dev`. Do this once per session, before building:
 
 ```bash
-# increment patch version, e.g.:
-echo "0.7.1" > internal/buildinfo/VERSION
-git add internal/buildinfo/VERSION && git commit -m "bump version to 0.7.1"
+# increment minor version, e.g.:
+echo "0.8.0" > internal/buildinfo/VERSION
+git add internal/buildinfo/VERSION && git commit -m "bump version to 0.8.0"
 ```
 
 **Build rally from source** (do not rely on PATH rally — it may be a stale version):

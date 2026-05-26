@@ -12,6 +12,7 @@ Use `--new` for one-off friend calls so an unfinished relay does not capture the
 
 | Alias | Harness | Binary |
 |---|---|---|
+| `ag`/`agy` | `antigravity` | `agy` |
 | `cc` | `claude` | `claude` |
 | `cx` | `codex` | `codex` |
 | `ge` | `gemini` | `gemini` |
@@ -21,6 +22,7 @@ Use `--new` for one-off friend calls so an unfinished relay does not capture the
 
 ```bash
 rally relay --new --iterations 1 --agent "cc:1 cx:1 ge:1" "<prompt>"
+rally relay --new --iterations 1 --agent "agy:Gemini 3.5 Flash (High)" "<prompt>"
 rally relay --new --iterations 1 --agent "cc:opus op:z" "<prompt>"
 rally relay --new --iterations 1 --agent "SENIOR" "<prompt>"
 rally relay --new --iterations 1 --agent "op:opencode-go/kimi-k2.6" "<prompt>"
@@ -108,6 +110,7 @@ A quick `pwd` check before the call is enough. If `pwd` starts with `/home/<user
 ### Sandboxed (skip flags applied — same shapes Rally's adapters use)
 
 ```bash
+agy --print-timeout=20s --dangerously-skip-permissions --print "$PROMPT"
 claude -p "$PROMPT" --dangerously-skip-permissions --output-format stream-json --verbose --model "<model>"
 codex exec --dangerously-bypass-approvals-and-sandbox --json --model "<model>" "$PROMPT"
 GEMINI_CLI_TRUST_WORKSPACE=true gemini --prompt "$PROMPT" --yolo --output-format json --model "<model>"
@@ -117,6 +120,7 @@ OPENCODE_PERMISSION='{"*":"allow"}' opencode run "$PROMPT" --format json --model
 ### Host (read-only — skip flags removed)
 
 ```bash
+agy --print-timeout=20s --print "$PROMPT"
 claude -p "$PROMPT" --output-format stream-json --verbose --model "<model>"
 codex exec --json --model "<model>" "$PROMPT"
 gemini --prompt "$PROMPT" --output-format json --model "<model>"
@@ -125,4 +129,4 @@ opencode run "$PROMPT" --format json --model "<model>"
 
 In host mode, instruct the friend in the prompt itself to produce a plan, diff, or critique rather than apply changes — the absence of skip flags will surface a permission prompt on any write attempt, which is the desired safety net.
 
-Direct CLI output formats differ by tool. Save enough transcript or summary to justify decisions you bring back.
+Direct CLI output formats differ by tool. `agy` 1.0.0 has no model flag; Rally changes `~/.gemini/antigravity-cli/settings.json` for configured Antigravity model runs and restores it afterward. Save enough transcript or summary to justify decisions you bring back.

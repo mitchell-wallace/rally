@@ -8,6 +8,7 @@ These slugs are copied from rally's current real-backend testing guidance. If th
 
 | Harness | Slug | Current notes |
 |---|---|---|
+| `ag`/`agy` | `Gemini 3.5 Flash (High)` | Verified with `agy --print`. `agy` 1.0.0 has no CLI model flag, so Rally applies the model through Antigravity settings and restores the prior setting. |
 | `cc` | `claude-haiku-4-5` | Cheapest/fastest Claude smoke-test default. Good for quick review or routine questions when depth is not critical. |
 | `cx` | `gpt-5.4-mini` | Verified working for Codex relay. Good fast default for code review, planning checks, and bounded implementation questions. |
 | `ge` | `gemini-3.1-pro-preview` | Verified working. Slower, useful for broad design, UI/component direction, alternative architectures, and divergent thinking. |
@@ -16,7 +17,7 @@ These slugs are copied from rally's current real-backend testing guidance. If th
 | `op` | `opencode/minimax-m2.5-free` | Verified working. Use exactly this prefix, not `opencode-zen/...`. |
 | `op` | `zai-coding-plan/glm-5.1` | Verified working. Fast OpenCode option via the `zai-coding-plan` provider. |
 
-Alias note: Gemini is `ge`, not `gm`. Rally rejects `gm` with `unknown agent alias`.
+Alias note: Antigravity is `ag` or `agy`; Gemini is `ge`, not `gm`. Rally rejects `gm` with `unknown agent alias`.
 
 ## User-Calibrated Strengths And Weaknesses
 

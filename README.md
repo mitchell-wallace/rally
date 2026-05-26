@@ -81,7 +81,7 @@ the `[reliability]` section for tunables.
 
 ## Driving Rally
 
-### Built-in agents and aliases
+### Supported built-in harnesses and aliases
 
 | Alias      | Full name     | Binary    |
 |------------|---------------|-----------|
