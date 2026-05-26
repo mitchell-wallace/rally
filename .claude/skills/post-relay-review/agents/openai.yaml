@@ -1,0 +1,4 @@
+interface:
+  display_name: "Post Relay Review"
+  short_description: "Audit Rally runs and recover branch state"
+  default_prompt: "Use $post-relay-review to audit this Rally relay, inspect lap/try artifacts, and propose a branch-safe recovery plan."

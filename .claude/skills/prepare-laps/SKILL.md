@@ -28,6 +28,9 @@ Requires the `laps` CLI. Rally injects per-role guidance from `.rally/agents/<as
 - For lightweight greenfield examples or Rally role-routing smoke tests, a single final `VERIFY` is enough. Spend saved laps on implementation depth.
 - Verification laps may fix only tiny, safe one-liners. Anything larger becomes a new focused lap added to the head of the queue.
 - If any lap uncovers a blocker, the assigned agent should `laps add head ...` for it before marking the lap done.
+- Diff and cleanup instructions must be branch-target aware. Do not assume `main`; tell VERIFY laps to identify the intended merge target from the user, PR metadata, repo docs, branch config, or recent history before using `git diff <target>...HEAD`.
+- Work that predates the first lap in the current batch is valid baseline context, even when it is not part of the current request. VERIFY may flag it as pre-existing, but must not add cleanup laps that remove it unless the user explicitly asks.
+- Never ask a lap to rewrite git history (`reset`, `rebase`, squash, amend-away, force-push) as a cleanup strategy. Prefer additive commits, explicit revert commits, or a user-approved recovery branch so reverted work remains backtrackable.
 
 ## Workflow
 
@@ -72,6 +75,12 @@ Requires the `laps` CLI. Rally injects per-role guidance from `.rally/agents/<as
 For OpenSpec work, a phase `VERIFY` lap should tell the agent to use the `openspec-verify-change` skill against the same change, then focus the report on the phase just completed. The final full-change `VERIFY` lap should run the complete OpenSpec verification and inspect the whole diff.
 
 For non-OpenSpec work, verification laps should read the original request, inspect the diff, run the relevant tests, perform any realistic smoke checks, and report findings first. They should create new head laps for substantive gaps rather than turning review into a hidden implementation phase.
+
+Verification lap descriptions should include:
+
+- Identify the branch target/base before diffing; use that target in diff commands.
+- Identify the first lap/try in the current batch and treat earlier branch work as pre-existing unless the user asks to include it in scope.
+- Do not rewrite git history. If scope cleanup is needed, add a focused lap that uses additive/revert commits or asks the user for an explicit recovery strategy.
 
 ## Skill Maintenance
 
