@@ -25,6 +25,7 @@
 - [ ] 3.6 Probation semantics in `runOne`: `maxAttempts=3` (same as hourly retries); success or incomplete → promote to active; failure (agent or infra) → re-freeze with fresh timestamp
 - [ ] 3.7 Bump `agentStatusWindowSize` from 50 to 500 events; on truncation, synthesize a summary event preserving the latest effective state + timestamp for active frozen/probation entries
 - [ ] 3.8 Tests: frozen decays to probation after window; probation one-shot enforcement; probation success → active; probation incomplete → active; probation failure → re-frozen; all-frozen ends pass but remains decayable; window truncation preserves freeze timestamps
+- [ ] 3.9 Baseline tests for `resilience.go`: create `internal/relay/resilience_test.go` covering `getState` state transitions, `PauseAgent`/`UnpauseAgent`/`FreezeAgent` event recording, `RecordHourlyFailure` threshold + counting-loop boundaries, and `SelectActiveAgent` cycling (run before probation work begins)
 
 ## 4. `--new` explicitly resets agent status
 
@@ -70,5 +71,4 @@
 ## 10. Docs & coordination
 
 - [ ] 10.1 Update `AGENTS.md`/role-doc references if stall-recovery or VERIFY-verdict behavior is documented there
-- [ ] 10.2 Coordinate with `tidy-rally-runtime-data-storage`: this change adds `laps_attempted` to `TryRecord`, `verify-reports.jsonl` to the store (with 50-event window), and a `model` field to `AgentStatusEvent`; `tidy` may restructure later
-- [ ] 10.3 Bump `internal/buildinfo/VERSION` (per release process) as part of the change
+- [ ] 10.2 Bump `internal/buildinfo/VERSION` (per release process) as part of the change

@@ -1,0 +1,185 @@
+{
+  "version": 1,
+  "tasks": [
+    {
+      "id": "rall-3b66",
+      "title": "Rename freeze→stall in liveness detector and Frozen→Benched in scheduler",
+      "description": "## Context\nOpenSpec change: `harden-relay-run-lifecycle` — tasks 9.1–9.4.\nThree systems currently use \"freeze\" naming. This lap renames two of them for clarity; the third (per-agent-type `frozen` in `agent_status.jsonl`) keeps its name.\n\n## Outcome\n- `internal/reliability/freeze.go` renamed to `stall.go`; `FreezeDetector`→`StallDetector`, `Assessment.Frozen`→`Assessment.Stalled`, all threshold/field names updated.\n- `internal/routing/scheduler.go`: `EntryState.Frozen`→`EntryState.Benched`; `failureFreezesEntry`→`failureBenchesEntry` with an explicit enum/boolean parameter on `OnAgentFailed` (replace `strings.Contains(reason, \"freeze\")` string-matching).\n- `internal/relay/resilience.go`: `RecordHourlyFailure` counting loop also breaks on `frozen` and `probation` events, not just `active` (task 9.4).\n- All callers in `internal/relay/runner.go`, `internal/relay/route_runtime.go`, and tests updated.\n- The per-agent-type `frozen` name and `agent_status.jsonl` `event_type` value stay unchanged (task 9.3 — no data-format change).\n\n## Files \u0026 scope\n- `internal/reliability/freeze.go` → `stall.go` (rename file + all exported names)\n- `internal/reliability/freeze_test.go` → `stall_test.go`\n- `internal/routing/scheduler.go` + `scheduler_test.go`\n- `internal/relay/runner.go`, `route_runtime.go` — update callers only\n- `internal/relay/resilience.go` — task 9.4 counting-loop fix\n- Do NOT touch `agent_status.jsonl` event_type values or the per-agent-type `frozen` name in resilience.go.\n\n## Acceptance\n- `go build ./...` passes\n- All existing tests pass (`go test ./internal/reliability/... ./internal/routing/... ./internal/relay/...`)\n- `grep -r \"FreezeDetector\\|Assessment\\.Frozen\\|EntryState\\.Frozen\\|failureFreezesEntry\" internal/` returns zero hits\n- `grep -r \"StallDetector\\|Assessment\\.Stalled\\|EntryState\\.Benched\\|failureBenchesEntry\" internal/` returns expected hits\n- Mark off tasks 9.1, 9.2, 9.3, 9.4 in the change tasks.md",
+      "assignee": "junior",
+      "isDone": false,
+      "createdAt": "2026-05-27T08:41:50.160187766Z",
+      "updatedAt": "2026-05-27T08:41:50.160187766Z",
+      "completedAt": null
+    },
+    {
+      "id": "rall-463a",
+      "title": "Extend ClassifyError with infra/agent/incomplete failure classes",
+      "description": "## Context\nOpenSpec change: `harden-relay-run-lifecycle` — tasks 2.1, 5.1, 5.6.\nCurrently `ClassifyError` has basic classification. This lap adds the three-class distinction that everything else depends on.\n\n## Outcome\n- `internal/reliability/patterns.go` exports a `FailureClass` enum: `FailureInfra`, `FailureAgent`, `FailureIncomplete`.\n- `ClassifyError` extended with patterns for:\n  - **infra**: rate-limit keywords, harness/launch errors (`argument list too long`, `fork/exec`), API timeout/network stall patterns, stall-detection signals.\n  - **agent**: ordinary agent errors, short no-op markers.\n  - **incomplete**: new class (caller will set this based on working-tree state, not error text — but the type must be defined here).\n- Unknown failures default to `FailureAgent` (task 5.6 — does-not-freeze side).\n- Tests cover each pattern family and the unknown-defaults-to-agent behavior.\n\n## Design\n- `FailureIncomplete` is special: it cannot be determined from error text alone. The classification function should accept an optional context struct (e.g. `ClassifyContext{HasFileChanges bool, Finalized bool}`) or the caller sets it post-hoc. Choose whichever is cleaner — the key contract is that `FailureIncomplete` is a first-class member of the enum.\n- Keep patterns testable: the pattern table should be a var or const slice, not buried in if/else chains.\n\n## Acceptance\n- `go test ./internal/reliability/...` passes with new tests\n- Each infra pattern (rate-limit, fork/exec, argument list too long, timeout, stall) has at least one test case\n- Unknown/unmatched errors return `FailureAgent`\n- Mark off tasks 2.1, 5.1, 5.6 in the change tasks.md",
+      "assignee": "senior",
+      "isDone": false,
+      "createdAt": "2026-05-27T08:42:06.776911174Z",
+      "updatedAt": "2026-05-27T08:42:06.776911174Z",
+      "completedAt": null
+    },
+    {
+      "id": "rall-4f7e",
+      "title": "VERIFY: naming renames + failure classification foundation",
+      "description": "## Context\nOpenSpec change: `harden-relay-run-lifecycle`. Verifying the first two laps: naming renames (tasks 9.1–9.4) and failure classification (tasks 2.1, 5.1, 5.6).\n\n## Outcome\n- Confirm naming renames are complete and consistent (no stale `FreezeDetector`/`Assessment.Frozen`/`EntryState.Frozen`/`failureFreezesEntry` references remain in source)\n- Confirm `FailureClass` enum has `FailureInfra`, `FailureAgent`, `FailureIncomplete`\n- Confirm unknown errors default to `FailureAgent`\n- Confirm `OnAgentFailed` uses an explicit enum/boolean, not string-matching\n- Confirm `RecordHourlyFailure` counting loop breaks on `frozen` and `probation` events\n- All tests pass: `go test ./internal/reliability/... ./internal/routing/... ./internal/relay/...`\n- `go build ./...` passes\n- Use `openspec-verify-change` skill against `harden-relay-run-lifecycle`, focused on tasks 9.1–9.4, 2.1, 5.1, 5.6\n- Report findings; create head laps for substantive gaps",
+      "assignee": "verify",
+      "isDone": false,
+      "createdAt": "2026-05-27T08:42:24.498387613Z",
+      "updatedAt": "2026-05-27T08:42:24.498387613Z",
+      "completedAt": null
+    },
+    {
+      "id": "rall-3561",
+      "title": "Add ResilienceKey type and refactor all resilience methods to per-harness-model keying",
+      "description": "## Context\nOpenSpec change: `harden-relay-run-lifecycle` — tasks 5.2, 5.3, 5.4.\nCurrently all resilience methods key on `agentType string`. This lap refactors to `ResilienceKey{Harness, Model}` so rate-limit/freeze state is per harness-model pair.\n\n## Outcome\n- `internal/relay/resilience.go`: define `ResilienceKey{Harness, Model string}` type. Update all method signatures: `getState(key)`, `PauseAgent(key, relayID)`, `RecordHourlyFailure(key, relayID)`, `FreezeAgent(key, relayID)`, `UnpauseAgent(key, relayID)`, `SelectActiveAgent(mix, runIndex)` — keying on `harness:model`.\n- `internal/store/store.go` / `records.go`: add optional `model` field to `AgentStatusEvent`; update `GetAgentStatus` to accept a model parameter and filter on both `agent_type` and `model` when model is present.\n- All callers in `internal/relay/runner.go` (~20+ call sites) and `internal/relay/route_runtime.go` updated to construct `ResilienceKey` from `selection.Agent.Model` (or resolved model).\n- Existing tests updated to pass `ResilienceKey` instead of plain strings.\n\n## Design\n- The `ResilienceKey` type should have a `String()` method returning `harness:model` for logging/display.\n- `SelectActiveAgent` uniqueness map keys change from `string` to `ResilienceKey`.\n- `GetAgentStatus(agentType, model)` — when model is empty string, filter on `agent_type` only (backward compat).\n- This is a wide-but-mechanical refactor. Enumerate all 10 method signatures and confirm all callers at the end.\n\n## Acceptance\n- `go build ./...` passes\n- All existing tests pass (with updated keying)\n- `grep -rn \"func.*PauseAgent\\|func.*FreezeAgent\\|func.*getState\\|func.*RecordHourlyFailure\\|func.*UnpauseAgent\\|func.*SelectActiveAgent\" internal/relay/` shows all signatures take `ResilienceKey`\n- Mark off tasks 5.2, 5.3, 5.4 in the change tasks.md",
+      "assignee": "senior",
+      "isDone": false,
+      "createdAt": "2026-05-27T08:42:43.508688839Z",
+      "updatedAt": "2026-05-27T08:42:43.508688839Z",
+      "completedAt": null
+    },
+    {
+      "id": "rall-28b3",
+      "title": "VERIFY: per-harness-model keying refactor",
+      "description": "## Context\nOpenSpec change: `harden-relay-run-lifecycle`. Verifying the ResilienceKey refactor (tasks 5.2, 5.3, 5.4). This was a wide refactor across ~10 method signatures and 20+ call sites — high risk.\n\n## Outcome\n- Confirm every resilience method signature takes `ResilienceKey`, not bare `string`\n- Confirm `AgentStatusEvent` has `model` field and `GetAgentStatus` filters on both `agent_type` and `model`\n- Confirm all callers in `runner.go` and `route_runtime.go` construct `ResilienceKey` correctly\n- `go build ./...` passes\n- All tests pass: `go test ./internal/relay/... ./internal/store/...`\n- Use `openspec-verify-change` skill focused on tasks 5.2, 5.3, 5.4\n- Report findings; create head laps for substantive gaps",
+      "assignee": "verify",
+      "isDone": false,
+      "createdAt": "2026-05-27T08:42:51.766393148Z",
+      "updatedAt": "2026-05-27T08:42:51.766393148Z",
+      "completedAt": null
+    },
+    {
+      "id": "rall-42e3",
+      "title": "Add baseline tests for resilience.go",
+      "description": "## Context\nOpenSpec change: `harden-relay-run-lifecycle`.\n`internal/relay/resilience.go` currently has NO dedicated test file — all testing is indirect through `runner_test.go` (117KB). The probation state machine (next laps) will heavily modify resilience.go, and we need a safety net of baseline tests before that work begins.\n\n## Outcome\n- Create `internal/relay/resilience_test.go` with tests covering the current behavior:\n  - `getState` returns `StateActive` for an agent with no events\n  - `getState` returns `StatePaused` after a pause event\n  - `getState` returns `StateFrozen` after a freeze event\n  - `PauseAgent` writes a paused event and `getState` reflects it\n  - `UnpauseAgent` restores to active\n  - `FreezeAgent` writes a frozen event\n  - `RecordHourlyFailure` counts retry_failed events and auto-freezes after threshold\n  - `RecordHourlyFailure` counting loop breaks correctly at state boundaries\n  - `SelectActiveAgent` skips paused and frozen agents, cycles through active ones\n- Use a test store (in-memory or temp dir) and `NowFunc` for time control.\n\n## Design\n- These tests should be straightforward unit tests — no integration with runner.\n- Test the public API surface plus `getState` (even if unexported, test via exported methods if needed).\n- Keep tests focused and independent so probation additions can be appended cleanly.\n\n## Acceptance\n- `go test ./internal/relay/... -run TestResilience -v` passes\n- Each state transition (active→paused, paused→active, paused→frozen, frozen stays frozen) has at least one test\n- `RecordHourlyFailure` threshold behavior tested\n- `SelectActiveAgent` cycling tested",
+      "assignee": "junior",
+      "isDone": false,
+      "createdAt": "2026-05-27T09:00:14.917096343Z",
+      "updatedAt": "2026-05-27T09:00:14.917096343Z",
+      "completedAt": null
+    },
+    {
+      "id": "rall-99f2",
+      "title": "Add probation state machine, resilience constants, and agent status window bump",
+      "description": "## Context\nOpenSpec change: `harden-relay-run-lifecycle` — tasks 3.1–3.7.\nThe resilience state machine currently has Active/Paused/Frozen with no decay. This lap adds `StateProbation` and makes freeze recoverable.\n\n## Outcome\n- `internal/relay/constants.go` (new file): centralize `FreezeDuration` (5h), `PauseDuration` (1h), `HourlyRetriesBeforeFreeze` (5), `HourlyRetryMaxAttempts` (3). Replace any existing hardcoded values in `resilience.go` and `runner.go`.\n- `internal/relay/resilience.go`: add `StateProbation` to the state enum. `getState(key)` returns `StateProbation` when a frozen event is older than `FreezeDuration`; remains a pure read function (no side effects, no event writes).\n- `internal/relay/route_runtime.go` `syncRecoverySignals`: implement one-shot enforcement — unbench the scheduler entry for probation, then immediately re-bench it so the same entry cannot be re-selected. When the run resolves, the new state (active or frozen) is reflected back. Persist probation event (`event_type: \"probation\"`) exactly once when first observing the frozen→probation transition.\n- `internal/relay/runner.go` `runOne`: probation runs get `maxAttempts=3`; success or incomplete → promote to active; failure (agent or infra) → re-freeze with fresh timestamp.\n- `internal/store/store.go`: bump `agentStatusWindowSize` from 50 to 500. On truncation, synthesize a summary event preserving the latest effective state + timestamp for any active frozen/probation entries.\n\n## Design\n- `getState` must NOT write events. Only `syncRecoverySignals` persists the probation event.\n- The probation persistence check: scan recent events for a `probation` event with the same key after the last `frozen` event. If found, skip writing.\n- Window truncation summary: when truncating, scan the about-to-be-dropped events for the latest frozen/probation per key, then prepend synthesized summary events to the retained window.\n\n## Acceptance\n- `go build ./...` passes\n- All existing tests pass\n- New tests (task 3.8): frozen decays to probation after FreezeDuration; probation one-shot enforcement in syncRecoverySignals; probation success → active; probation incomplete → active; probation failure → re-frozen; all-frozen ends pass but remains decayable; window truncation preserves freeze timestamps\n- `go test ./internal/relay/... ./internal/store/...` passes\n- Mark off tasks 3.1–3.7 in the change tasks.md",
+      "assignee": "senior",
+      "isDone": false,
+      "createdAt": "2026-05-27T08:43:16.176071994Z",
+      "updatedAt": "2026-05-27T08:43:16.176071994Z",
+      "completedAt": null
+    },
+    {
+      "id": "rall-06ab",
+      "title": "Tests for probation state machine",
+      "description": "## Context\nOpenSpec change: `harden-relay-run-lifecycle` — task 3.8.\nThe probation state machine is the highest-risk piece of this change. This dedicated lap ensures thorough test coverage.\n\n## Outcome\n- Dedicated test file or section in `internal/relay/resilience_test.go` (create if needed) covering:\n  - Frozen state decays to probation after `FreezeDuration` window\n  - Probation one-shot enforcement in `syncRecoverySignals` (unbench → immediately re-bench)\n  - Probation success → promoted to active\n  - Probation incomplete → promoted to active (incomplete is progress, not availability)\n  - Probation failure → re-frozen with fresh timestamp (decay window restarts)\n  - All agents frozen: relay ends pass but freeze remains decayable for future starts\n  - Window truncation at 500 events preserves freeze timestamps via synthesized summary events\n  - `getState` is pure (no side effects, no event writes)\n  - Probation event persisted exactly once per transition (not duplicated on re-evaluation)\n\n## Design\n- Use time-control (mock clock / `NowFunc`) to test freeze decay without real waits.\n- Test the `syncRecoverySignals` scheduler interaction by checking entry state before/after.\n- Integration-style tests that cover the full `runOne` → probation → promote/re-freeze flow are ideal.\n\n## Acceptance\n- `go test ./internal/relay/... -run TestProbation -v` passes\n- `go test ./internal/store/... -run TestWindow -v` covers truncation\n- All existing tests still pass\n- Mark off task 3.8 in the change tasks.md",
+      "assignee": "senior",
+      "isDone": false,
+      "createdAt": "2026-05-27T08:43:28.261349764Z",
+      "updatedAt": "2026-05-27T08:43:28.261349764Z",
+      "completedAt": null
+    },
+    {
+      "id": "rall-a731",
+      "title": "VERIFY: probation state machine and resilience constants",
+      "description": "## Context\nOpenSpec change: `harden-relay-run-lifecycle`. Verifying the probation state machine (tasks 3.1–3.8) — the highest-risk piece of this change.\n\n## Outcome\n- Confirm `StateProbation` exists and `getState` returns it correctly based on `FreezeDuration`\n- Confirm `getState` is a pure read (no event writes, no side effects)\n- Confirm `syncRecoverySignals` one-shot enforcement works (unbench + re-bench)\n- Confirm probation event is persisted exactly once per transition\n- Confirm all constants centralized in `constants.go`\n- Confirm `agentStatusWindowSize` is 500 and truncation synthesizes summary events\n- `go test ./internal/relay/... ./internal/store/...` passes\n- `go build ./...` passes\n- Use `openspec-verify-change` skill focused on tasks 3.1–3.8\n- Report findings; create head laps for substantive gaps",
+      "assignee": "verify",
+      "isDone": false,
+      "createdAt": "2026-05-27T08:43:38.195101995Z",
+      "updatedAt": "2026-05-27T08:43:38.195101995Z",
+      "completedAt": null
+    },
+    {
+      "id": "rall-41bb",
+      "title": "Implement lap-ID pinning and attempted-lap recording",
+      "description": "## Context\nOpenSpec change: `harden-relay-run-lifecycle` — tasks 1.1–1.5.\nThe primary state-integrity guard: prevent phantom and multi-lap completions.\n\n## Outcome\n- `internal/relay/runner.go` / `RunState` (or equivalent): pin the assigned lap ID at run start. On finalization (`laps wrapup` / run end), compare recorded-completed laps against the pinned ID.\n- Mismatch → fail the run with `wrong_lap_consumed` (different lap) or `multi_lap_consumed` (\u003e1 lap completed), and do NOT advance the queue.\n- `internal/store/records.go` `TryRecord`: add `laps_attempted` field — a list of `{lap_id, timestamp}` recording every lap completion attempt.\n- Tests: phantom-completion rejection (completed lap ≠ pinned lap), multi-lap rejection (\u003e1 lap completed), normal single-lap pass-through, attempted-lap recording on try records.\n\n## Design\n- The pinning check is detection+containment, not prevention. The external laps queue may already be mutated by the time rally detects the mismatch. The important thing is that rally does NOT silently proceed.\n- Log the pinned and consumed lap IDs on mismatch for manual/VERIFY recovery.\n- `laps_attempted` is appended to for every `laps done`/`laps handoff` call observed, not just successful ones.\n\n## Acceptance\n- `go build ./...` passes\n- `go test ./internal/relay/... -run TestLapPin -v` passes\n- Tests cover: wrong-lap rejection, multi-lap rejection, normal pass-through, attempted-lap field populated\n- Mark off tasks 1.1–1.5 in the change tasks.md",
+      "assignee": "senior",
+      "isDone": false,
+      "createdAt": "2026-05-27T08:43:54.62447544Z",
+      "updatedAt": "2026-05-27T08:43:54.62447544Z",
+      "completedAt": null
+    },
+    {
+      "id": "rall-924a",
+      "title": "Implement incomplete failure class behavior and failure cascade gating",
+      "description": "## Context\nOpenSpec change: `harden-relay-run-lifecycle` — tasks 2.2–2.6, 5.5.\nThe incomplete class and \u003e1 infra threshold both modify how `runner.go` handles try outcomes. Bundled because they share the same code path.\n\n## Outcome\n- `internal/relay/runner.go`:\n  - When a try produces file changes (dirty working tree) but the agent did not finalize (no `laps done`/`laps handoff`): classify as incomplete.\n  - Suppress auto-commit for incomplete tries — leave changes uncommitted so the retry agent inherits them as partial progress.\n  - On retry after incomplete: inject prompt guidance: \"The last run was incomplete. Check any current git changes, finish anything not done, verify correctness, commit when good, then run `laps done`.\"\n  - Incomplete runs retry but do NOT call `PauseAgent`/`RecordHourlyFailure` (do not advance the resilience cascade).\n  - Only call `PauseAgent`/`RecordHourlyFailure` when \u003e1 attempt within a run is classified as infra-class. A single infra failure retries without escalation. Agent-class and incomplete failures stay retry-eligible but do not escalate.\n- Tests:\n  - Incomplete run leaves changes uncommitted\n  - Retry agent gets incomplete guidance in prompt\n  - Incomplete does not count toward pause/freeze cascade\n  - \u003e1 infra failure increments cascade\n  - Single infra failure does not increment cascade\n  - Agent error and incomplete do not increment cascade\n\n## Acceptance\n- `go build ./...` passes\n- `go test ./internal/relay/... -run TestIncomplete -v` and `go test ./internal/relay/... -run TestFailureCascade -v` pass\n- Mark off tasks 2.2, 2.3, 2.4, 2.5, 2.6, 5.5 in the change tasks.md",
+      "assignee": "senior",
+      "isDone": false,
+      "createdAt": "2026-05-27T08:44:11.649209415Z",
+      "updatedAt": "2026-05-27T08:44:11.649209415Z",
+      "completedAt": null
+    },
+    {
+      "id": "rall-2109",
+      "title": "Hourly retry budget, --new agent reset, and per-harness-model isolation tests",
+      "description": "## Context\nOpenSpec change: `harden-relay-run-lifecycle` — tasks 6.1, 6.2, 4.1–4.3, 5.7.\nThree bounded, pattern-following changes that depend on the foundation from earlier laps.\n\n## Outcome\n- `internal/relay/runner.go`: set `maxAttempts=3` on the hourly retry path (the `isHourlyRetry` path). Currently it is 1.\n- `internal/store/store.go`: add `ResetAgentStatus()` that truncates agent status history for a clean slate.\n- `cmd/rally/main.go`: route `--new` through `ResetAgentStatus()` so all harness-model pairs start active.\n- Tests:\n  - A single transient failure during an hourly retry does not burn a freeze life; retry budget of 3 honored (tasks 6.1, 6.2)\n  - `--new` starts all agents active regardless of prior frozen/probation/paused history (task 4.3)\n  - \u003e1 infra failure increments cascade; single infra failure does not; agent error and incomplete do not; per-harness-model keying isolates rate-limit to specific model (task 5.7)\n\n## Acceptance\n- `go build ./...` passes\n- `go test ./internal/relay/... ./internal/store/... ./cmd/rally/...` passes\n- Mark off tasks 6.1, 6.2, 4.1, 4.2, 4.3, 5.7 in the change tasks.md",
+      "assignee": "junior",
+      "isDone": false,
+      "createdAt": "2026-05-27T08:44:24.165621024Z",
+      "updatedAt": "2026-05-27T08:44:24.165621024Z",
+      "completedAt": null
+    },
+    {
+      "id": "rall-1b4c",
+      "title": "VERIFY: lap pinning, incomplete class, failure gating, hourly retry, and --new reset",
+      "description": "## Context\nOpenSpec change: `harden-relay-run-lifecycle`. Verifying the core runner behavior changes: tasks 1.1–1.5, 2.2–2.6, 5.5, 5.7, 6.1–6.2, 4.1–4.3.\n\n## Outcome\n- Confirm lap-ID pinning works: wrong-lap and multi-lap mismatch fails the run, normal single-lap passes through, `laps_attempted` recorded on try records.\n- Confirm incomplete classification: auto-commit suppressed, retry gets guidance prompt, incomplete does NOT escalate cascade.\n- Confirm \u003e1 infra threshold: single infra failure does not pause, \u003e1 does.\n- Confirm hourly retry budget is 3.\n- Confirm `--new` calls `ResetAgentStatus()` and all agents start active.\n- Confirm per-harness-model keying isolates rate-limit to specific model.\n- `go build ./...` passes\n- `go test ./...` passes\n- Use `openspec-verify-change` skill focused on these tasks\n- Report findings; create head laps for substantive gaps",
+      "assignee": "verify",
+      "isDone": false,
+      "createdAt": "2026-05-27T08:44:35.32621183Z",
+      "updatedAt": "2026-05-27T08:44:35.32621183Z",
+      "completedAt": null
+    },
+    {
+      "id": "rall-534a",
+      "title": "Add verify-reports.jsonl store and role-aware stall-recovery",
+      "description": "## Context\nOpenSpec change: `harden-relay-run-lifecycle` — tasks 7.1–7.3.\nThe \"files committed → success\" stall-recovery is unsafe for VERIFY runs. This lap adds the verdict artifact store and gates recovery on role.\n\n## Outcome\n- `internal/store/store.go`: add `.rally/state/verify-reports.jsonl` store (append-only JSONL). Fields: `lap_id`, `verdict` (pass/fail), `timestamp`, `relay_id`, optional `summary`. 50-event window with oldest-first rotation.\n- Methods: `AppendVerifyReport(report)`, `GetVerifyReport(lapID)` (returns latest report for a given lap).\n- `internal/relay/runner.go`: gate the stall-recovery logic on role. When a try is killed by the stall detector:\n  - VERIFY: require a verdict artifact in `verify-reports.jsonl` with `verdict: pass` for the current lap before treating as success. If absent, stay a retry-eligible failure.\n  - Implementation roles (junior/senior/ui): keep existing files-committed recovery.\n- Tests:\n  - Stalled VERIFY without verdict stays failed\n  - Stalled VERIFY with pass verdict recovers as success\n  - Stalled implementation try with commits still recovers\n\n## Acceptance\n- `go build ./...` passes\n- `go test ./internal/store/... -run TestVerifyReport -v` passes\n- `go test ./internal/relay/... -run TestStallRecovery -v` passes\n- Mark off tasks 7.1, 7.2, 7.3 in the change tasks.md",
+      "assignee": "senior",
+      "isDone": false,
+      "createdAt": "2026-05-27T08:44:49.452620015Z",
+      "updatedAt": "2026-05-27T08:44:49.452620015Z",
+      "completedAt": null
+    },
+    {
+      "id": "rall-2901",
+      "title": "Add bounded prompt context with configurable budgets",
+      "description": "## Context\nOpenSpec change: `harden-relay-run-lifecycle` — tasks 8.1–8.3.\nThe assembled prompt can grow unbounded because recent-try summaries are concatenated in full. This lap adds budgets.\n\n## Outcome\n- Config: add `recent_try_count` (default 5), `recent_try_char_limit` (per-summary char limit), `recent_context_char_limit` (overall char limit) under `[reliability]` in config.toml schema.\n- `internal/relay/runner.go` (around line ~581 where `recentContext` is built): apply count + per-summary + overall character budgets. Truncation strategy: head/tail (keep first N and last N chars of each summary, with \"... [truncated] ...\" marker).\n- Tests:\n  - Verbose summaries truncated to per-summary limit\n  - Count of recent tries honored (default 5)\n  - Overall budget enforced\n  - Short summaries pass through unchanged\n\n## Files \u0026 scope\n- `internal/relay/runner.go` — prompt assembly section\n- Rally config struct (wherever `[reliability]` is parsed) — add fields\n- Tests in `runner_test.go`\n\n## Acceptance\n- `go build ./...` passes\n- `go test ./internal/relay/... -run TestPromptBudget -v` passes\n- Mark off tasks 8.1, 8.2, 8.3 in the change tasks.md",
+      "assignee": "junior",
+      "isDone": false,
+      "createdAt": "2026-05-27T08:45:01.279868298Z",
+      "updatedAt": "2026-05-27T08:45:01.279868298Z",
+      "completedAt": null
+    },
+    {
+      "id": "rall-49aa",
+      "title": "VERIFY: verify-reports store, stall-recovery, and bounded prompt",
+      "description": "## Context\nOpenSpec change: `harden-relay-run-lifecycle`. Verifying tasks 7.1–7.3 (role-aware stall-recovery) and 8.1–8.3 (bounded prompt context).\n\n## Outcome\n- Confirm `verify-reports.jsonl` store works: append, 50-event window, lookup by lap_id\n- Confirm stall-recovery is role-gated: VERIFY requires verdict, implementation roles keep files-committed recovery\n- Confirm prompt context is bounded: count, per-summary, and overall budgets enforced\n- `go build ./...` and `go test ./...` pass\n- Use `openspec-verify-change` skill focused on tasks 7.1–7.3, 8.1–8.3\n- Report findings; create head laps for substantive gaps",
+      "assignee": "verify",
+      "isDone": false,
+      "createdAt": "2026-05-27T08:45:10.544225718Z",
+      "updatedAt": "2026-05-27T08:45:10.544225718Z",
+      "completedAt": null
+    },
+    {
+      "id": "rall-184a",
+      "title": "Update docs, naming references, and bump version",
+      "description": "## Context\nOpenSpec change: `harden-relay-run-lifecycle` — tasks 9.5, 10.1–10.3.\nFinal cleanup: update documentation references to use the new naming, coordinate with tidy, and bump version.\n\n## Outcome\n- Update `AGENTS.md` and any role-doc references so the three concepts (stall / frozen / benched) read distinctly (task 9.5).\n- Update `AGENTS.md`/role-doc references if stall-recovery or VERIFY-verdict behavior is documented there (task 10.1).\n- Add a coordination note for `tidy-rally-runtime-data-storage`: this change adds `laps_attempted` to `TryRecord`, `verify-reports.jsonl` to the store (with 50-event window), and a `model` field to `AgentStatusEvent`; `tidy` may restructure later (task 10.2). If a coordination file or change description already exists, add a note there.\n- Bump `internal/buildinfo/VERSION` — increment the patch version per release process (task 10.3).\n\n## Files \u0026 scope\n- `AGENTS.md` (at repo root or `.agent/AGENTS.md`)\n- `.rally/agents/*.md` — only if they reference freeze/stall/benched terminology\n- `internal/buildinfo/VERSION`\n- Do NOT modify any Go source code in this lap.\n\n## Acceptance\n- `grep -r \"freeze detector\\|FreezeDetector\\|freeze-detection\" AGENTS.md .rally/agents/` returns zero stale hits (should say stall)\n- VERSION file has been incremented\n- Mark off tasks 9.5, 10.1, 10.2, 10.3 in the change tasks.md",
+      "assignee": "junior",
+      "isDone": false,
+      "createdAt": "2026-05-27T08:45:26.219140523Z",
+      "updatedAt": "2026-05-27T08:45:26.219140523Z",
+      "completedAt": null
+    },
+    {
+      "id": "rall-d3e0",
+      "title": "VERIFY: full change — final verification",
+      "description": "## Context\nOpenSpec change: `harden-relay-run-lifecycle`. Final full-change verification covering the complete outcome.\n\n## Outcome\n- Run full OpenSpec verification: use `openspec-verify-change` skill against `harden-relay-run-lifecycle` to verify all tasks are marked done and implementation matches specs.\n- Identify the branch target/base before diffing; use `git diff \u003ctarget\u003e...HEAD` to inspect the whole diff.\n- Identify the first lap/try in the current batch; treat earlier branch work as pre-existing baseline.\n- Full test suite: `go build ./...` and `go test ./...`\n- Confirm:\n  - No stale naming (FreezeDetector, Assessment.Frozen, EntryState.Frozen, failureFreezesEntry)\n  - All resilience methods use ResilienceKey\n  - Probation state machine correct (getState pure, one-shot enforcement, decay/re-freeze)\n  - Lap-ID pinning works\n  - Incomplete class behavior correct (no auto-commit, guidance prompt, no cascade)\n  - \u003e1 infra threshold enforced\n  - Hourly retry budget is 3\n  - --new resets agent status\n  - verify-reports.jsonl store works with 50-event window\n  - Stall-recovery role-gated\n  - Prompt context bounded\n  - VERSION bumped\n  - Docs updated\n- Do NOT rewrite git history. If cleanup is needed, create focused head laps.\n- Report findings with pass/fail verdict and summary.",
+      "assignee": "verify",
+      "isDone": false,
+      "createdAt": "2026-05-27T08:45:41.538044177Z",
+      "updatedAt": "2026-05-27T08:45:41.538044177Z",
+      "completedAt": null
+    }
+  ]
+}

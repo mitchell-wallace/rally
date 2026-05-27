@@ -22,6 +22,7 @@ Requires the `laps` CLI. Rally injects per-role guidance from `.rally/agents/<as
   - 2 laps: familiar cross-module work, implementation plus focused tests, moderate uncertainty.
   - 3 laps: high-risk boundaries, broad tests, UI flows with states, migrations/backcompat, significant refactors.
 - Split large test-writing phases aggressively — usually 2–3 laps by layer, harness, or scenario family.
+- When a key file being modified has no dedicated test file, add a baseline-tests lap before the modification laps. This gives the implementation agent a safety net and catches regressions early. Route baseline-tests laps to the same role that would write the implementation tests (usually JUNIOR for mechanical coverage, SENIOR if the behavior under test is subtle).
 - Add a `VERIFY` lap immediately after any single high-risk lap (production data path, auth/session/sync behavior, migrations, broad shared contracts, brownfield architecture changes).
 - Otherwise insert `VERIFY` every 2–4 implementation laps **or at natural slice boundaries** (e.g., "all user-visible UX before infra"), whichever comes first.
 - After the final phase, add one `VERIFY` lap covering the whole outcome.
@@ -66,10 +67,19 @@ Requires the `laps` CLI. Rally injects per-role guidance from `.rally/agents/<as
    - **Acceptance** — tests, commands, smoke checks, docs updates, observable behavior. Almost always include.
 
 5. **Add tasks**
-   - Use `laps add tail` for planned work in execution order. `--description` with a multi-line shell-quoted string is the default; switch to `--json '{"title":"...","description":"...","assignee":"..."}'` when the description contains shell metacharacters that would be painful to escape.
+   - Use `laps add tail` for planned work in execution order. Use `--json '{"title":"...","description":"...","assignee":"..."}'` by default — most lap descriptions contain quotes, backticks, or special characters that make shell quoting painful. Use `--title`/`--description` flags for short ad-hoc laps where the description is a plain sentence.
    - For urgent blockers, use `laps add head` (reverse execution order for multiple) or `laps add after <id>`.
    - Always set `--assignee`; rally routes from it.
    - Run `laps list` at the end and sanity-check role order, VERIFY placement, and the final full-outcome verification lap.
+
+## Testing Laps
+
+- **Bundled tests (default):** include tests in the implementation lap when the tests are tightly scoped to that lap's outcome and the combined work is a reasonable size. The acceptance section should specify test names or patterns.
+- **Split tests into a separate lap** when:
+  - The implementation is high-risk and you want the test lap to serve as a thorough review (e.g., state machine transitions, scheduler interactions).
+  - The test matrix is large enough that bundling would make the implementation lap too big (>3 scenario families or >2 layers).
+  - Tests require a different perspective or role than the implementation (rare — usually same role).
+- **Baseline tests** (before modification): when a key file has no existing test coverage and you are about to heavily modify it, add a baseline-tests lap before the modification lap. This tests the current behavior so the implementation agent has a safety net.
 
 ## Verification Laps
 
