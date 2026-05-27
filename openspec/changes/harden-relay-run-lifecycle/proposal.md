@@ -36,10 +36,15 @@ already fixed upstream (laps v0.4.6); it is out of scope here.
 - **Completion file-change cross-check (opt-in).** When a lap declares expected
   file paths, verify those files were modified since the run started before
   accepting `laps done`; otherwise warn/reject.
-- **Role-aware freeze-recovery.** "Files committed → success" is no longer
-  sufficient for a VERIFY run; a frozen VERIFY try requires a verification
-  verdict artifact before being treated as success. Implementation roles keep
-  the current files-committed recovery.
+- **Role-aware stall-recovery.** "Files committed → success" is no longer
+  sufficient for a VERIFY run; a VERIFY try killed by the liveness stall detector
+  requires a verification verdict artifact before being treated as success.
+  Implementation roles keep the current files-committed recovery.
+- **Naming disambiguation.** Rename so "freeze" stops meaning three things: the
+  liveness detector freeze→**stall**, the scheduler `EntryState.Frozen`→**`Benched`**;
+  the persisted per-agent-type `frozen` keeps its name. Pure rename, no behavior
+  change. (`FallbackConfig`→`FreeRunPrompt` is a related but separate cleanup
+  owned by `cli-polish`.)
 - **Freeze decay + recovery (BREAKING for the resilience cascade).** `frozen` is
   no longer terminal for the remainder of the relay. A frozen agent type decays
   back to active (or probation) after a bounded duration, and the decay is
@@ -74,11 +79,12 @@ already fixed upstream (laps v0.4.6); it is out of scope here.
 ## Impact
 
 - **Code**: `internal/relay/runner.go` (lap pinning, file cross-check,
-  freeze-recovery verdict, retry/classification gating, prompt-context budget),
+  stall-recovery verdict, retry/classification gating, prompt-context budget),
   `internal/relay/resilience.go` (freeze decay, what increments the counter),
   `internal/relay/route_runtime.go` (re-evaluate vs re-apply on resume),
-  `internal/reliability/patterns.go` (classify infra vs agent failures),
-  `internal/store/store.go` (agent-status decay/reset), `cmd/rally/main.go`
+  `internal/reliability/{patterns,freeze}.go` (classify infra vs agent failures;
+  freeze→stall rename), `internal/routing/scheduler.go` (`Frozen`→`Benched`
+  rename), `internal/store/store.go` (agent-status decay/reset), `cmd/rally/main.go`
   (`--new` reset, lap-expected-files config surface if added).
 - **Behavior**: a harness can no longer be permanently bricked for a repo;
   `rally resume`/`start` recover after a freeze window; phantom lap completions

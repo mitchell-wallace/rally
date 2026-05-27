@@ -60,8 +60,16 @@ are not yet renamed on disk.
    (R1 pinning prevents the drift; R12 keeps tasks.md current).
 
 5. **agent-lifecycle**
-   R9 route/runner fallback (repo's `FallbackConfig` is *instructions*, not
-   runner fallback — multi-entry routes parse, scheduler-on-death unverified).
+   R9 route/runner fallback: the chain (e.g. `senior = ['claude','kimi','gpt']`)
+   **already exists** — the routing Scheduler rotates a lane to the next entry
+   when the current one is `Frozen`/`Exhausted` (`internal/routing/scheduler.go`).
+   The Prayer-app stall was a single-entry lane (`senior=['claude']`) with nothing
+   to rotate to. So R9 is NOT a feature build; it reduces to: (a) a dependency on
+   #1's failure classification marking infra failures frozen/exhausted so rotation
+   actually triggers, and (b) docs/defaults encouraging multi-runner lanes plus a
+   relay-start warning when a lane has no fallback runner. NOTE: `FallbackConfig`
+   is unrelated — it is the default prompt for a laps-less/promptless run, not
+   runner failover (rename pending; see "Naming cleanups").
    R12 VERIFY role boundary: the generic VERIFY role (`.rally/agents/verify.md`)
    stays OpenSpec-agnostic. The "mark off tasks.md" behavior is OpenSpec-
    specific and is injected **per-lap by `prepare-laps`** only when a lap has a
@@ -101,6 +109,28 @@ OpenSpec-aware instructions into laps only when a run has a related change**
 (e.g. "mark off the relevant `tasks.md` boxes"). OpenSpec-specific references
 are fair game inside prepare-laps to smooth that integration; they should not
 leak into rally's generic surfaces.
+
+## Naming cleanups (clarity refactors)
+
+Surfaced while tracing the freeze/fallback logic; names confused even us.
+
+- **`FallbackConfig` → `FreeRunPrompt`.** `FallbackConfig.InstructionsFile` /
+  `loadFallbackInstructions()` / `builtInDefaultFallback` only set the task
+  prompt for a laps-less, promptless run (`runner.go:1054`). "Fallback" reads
+  like runner failover, which it is not. Rename to `loadFreeRunPrompt()` /
+  `FreeRunPromptFile` / `builtInDefaultFreeRunPrompt`, config key
+  `[free_run] prompt_file` with a back-compat alias for the old
+  `[fallback] instructions_file`. **Home: #4 cli-polish** (config/naming polish).
+- **Three "freeze" concepts → three words.** (1) liveness detector
+  (`reliability/freeze.go`) = a *stalled process* → rename freeze→**stall**
+  (`StallDetector`, `Assessment.Stalled`, "stalled try"); (2) resilience circuit
+  breaker (`resilience.go`, persisted `agent_status.jsonl`) = an *agent type
+  benched after repeated infra failures* → **keep "frozen"** (user-facing; its
+  `event_type` is persisted); (3) scheduler `EntryState.Frozen`
+  (`routing/scheduler.go`) = a *route entry currently unavailable* → rename
+  **`Frozen`→`Benched`**. **Home: #1** — it already reworks these subsystems.
+  Consequently #1's spec language uses "stall-recovery" (not "freeze-recovery")
+  for recovery from a liveness kill, while the agent-type cascade keeps "frozen".
 
 ## Out of scope for rally
 

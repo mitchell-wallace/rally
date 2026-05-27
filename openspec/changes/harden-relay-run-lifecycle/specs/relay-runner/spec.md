@@ -34,16 +34,16 @@ When a lap declares expected file paths, the system SHALL verify those files wer
 - **WHEN** a lap declares no expected file paths
 - **THEN** the system SHALL skip the cross-check and finalize as it would without this feature
 
-### Requirement: Role-aware freeze-recovery
-The system SHALL NOT treat "files were committed" as sufficient to convert a frozen try into a success for a VERIFY run. A frozen VERIFY try SHALL require a verification verdict artifact to be treated as success. Implementation roles SHALL retain files-committed freeze-recovery.
+### Requirement: Role-aware stall-recovery
+The system SHALL NOT treat "files were committed" as sufficient to convert a stalled try (one killed by the liveness stall detector) into a success for a VERIFY run. A stalled VERIFY try SHALL require a verification verdict artifact to be treated as success. Implementation roles SHALL retain files-committed stall-recovery.
 
-#### Scenario: Frozen VERIFY try without a verdict
-- **WHEN** a VERIFY try is killed for freeze and files were committed but no verification verdict artifact is present
+#### Scenario: Stalled VERIFY try without a verdict
+- **WHEN** a VERIFY try is killed for a stall and files were committed but no verification verdict artifact is present
 - **THEN** the system SHALL NOT treat the try as success and SHALL keep it a retry-eligible failure
 
-#### Scenario: Frozen implementation try with commits
-- **WHEN** a non-VERIFY implementation try is killed for freeze and files were committed
-- **THEN** the system SHALL retain the existing freeze-recovery and may treat the committed work as success
+#### Scenario: Stalled implementation try with commits
+- **WHEN** a non-VERIFY implementation try is killed for a stall and files were committed
+- **THEN** the system SHALL retain the existing stall-recovery and may treat the committed work as success
 
 ### Requirement: Bounded prompt context
 The system SHALL bound the recent-try context included in the assembled prompt by a configurable run count (default approximately 5) and by per-summary and overall character budgets, truncating sensibly when a budget is exceeded.

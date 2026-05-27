@@ -32,6 +32,17 @@ The system SHALL maintain per-type maximum record counts: 200 for tries, 50 for 
 
 ## ADDED Requirements
 
+### Requirement: Try commit history
+The system SHALL persist, per try, the full ordered list of commits made during that try rather than only a single final commit hash, so causal chains across tries (e.g. blocker → fix → follow-up) are recoverable from the try record.
+
+#### Scenario: Multiple commits in a try preserved
+- **WHEN** a try produces more than one commit
+- **THEN** the try record SHALL retain all commit hashes from that try, in order
+
+#### Scenario: Single commit still recorded
+- **WHEN** a try produces exactly one commit
+- **THEN** the try record SHALL retain that commit as a single-element list, preserving existing behavior
+
 ### Requirement: Runtime data layout migration
 The system SHALL migrate a legacy `.rally/` directory to the new layout on initialization and idempotently on first write. Migration SHALL move flat machine-managed files (`tries.jsonl`, `messages.jsonl`, `relays.jsonl`, `agent_status.jsonl`, `hook-audit.jsonl`, `run-state.json`, `current_task.md`) into `.rally/state/`, convert `progress.yaml` into `summary.jsonl`, and remove the legacy `batches/` directory, the legacy top-level `relays/` log directory, and `config.toml.bak`.
 

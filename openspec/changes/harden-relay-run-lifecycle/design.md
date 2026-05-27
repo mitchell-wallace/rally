@@ -8,17 +8,23 @@ being scoped in. Findings that were QA inference rather than fact (a "monthly
 org cap" reading of a `five_hour` limit, an E2BIG "resource leak" theory, a
 "Codex violated its VERIFY role" claim) are treated as motivation only.
 
-Two distinct "frozen" systems exist and must not be conflated:
+Three distinct "frozen"-flavored systems exist and must not be conflated — and
+this change renames them so they read distinctly (see Decision 9):
 
 - **Liveness detector** (`internal/reliability/freeze.go`): a per-try watchdog
   that kills a single stuck process based on log-silence plus connection/IO
-  signals. It is already well-targeted (it keys on the rate-limit/network-stall
-  shape) and self-clearing. **Not changed here.**
+  signals. Already well-targeted (it keys on the rate-limit/network-stall shape)
+  and self-clearing. Behavior unchanged; **renamed freeze→stall** for clarity.
 - **Per-agent-type circuit breaker** (`internal/relay/resilience.go`): the
   persisted state machine over `agent_status.jsonl`. `frozen` is terminal —
   cleared only by a successful hourly retry that a frozen agent can never get
   (`resilience.go getState`) — and is re-applied verbatim on resume
-  (`route_runtime.go` `syncRecoverySignals`). **This is the lockout. Changed here.**
+  (`route_runtime.go` `syncRecoverySignals`). **This is the lockout. Changed
+  here.** Keeps the name "frozen" (user-facing; the `event_type` is persisted).
+- **Scheduler entry state** (`internal/routing/scheduler.go`): per route-entry
+  availability that drives lane rotation (`EntryState.Frozen`/`Exhausted`).
+  Behavior unchanged; **`Frozen` renamed to `Benched`** to separate it from the
+  agent-type freeze that sets it via `syncRecoverySignals`.
 
 The current `relay-runner` and `store` specs actively mandate the buggy
 behavior ("frozen for the remainder of the relay"; "still frozen from a previous
@@ -95,6 +101,17 @@ full. Add a configurable run count (default ~5) plus per-summary and overall
 character budgets with head/tail truncation, and min/max bounds for terse vs
 verbose outliers. Per-source size telemetry is emitted by the Sentry sink in
 `tidy-rally-runtime-data-storage`; this change only enforces the budget.
+
+**9. Naming disambiguation (clarity refactor).**
+Because "freeze" currently names three unrelated things, rename while reworking
+them: the liveness detector freeze→**stall** (`StallDetector`,
+`Assessment.Stalled`, "stalled try"; recovery becomes "stall-recovery"), and the
+scheduler `EntryState.Frozen`→**`Benched`**. The persisted per-agent-type
+`frozen` keeps its name (and `agent_status.jsonl` `event_type` value) to avoid a
+data-format change. Pure rename — no behavior change beyond what Decisions 3–7
+already specify. Separately, `FallbackConfig`/`loadFallbackInstructions` (the
+default prompt for a laps-less, promptless run) is misnamed but is owned by
+`cli-polish` (#4) as `FreeRunPrompt`, not this change.
 
 ## Risks / Trade-offs
 

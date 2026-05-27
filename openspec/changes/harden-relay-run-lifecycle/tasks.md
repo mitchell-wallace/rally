@@ -39,11 +39,11 @@
 - [ ] 6.1 Allow hourly retries more than one attempt in `internal/relay/runner.go` (the `isHourlyRetry` / `maxAttempts=1` path)
 - [ ] 6.2 Tests: a single transient failure during an hourly retry does not record an hourly failure toward freeze
 
-## 7. Role-aware freeze-recovery
+## 7. Role-aware stall-recovery
 
-- [ ] 7.1 Gate the "files committed → success" freeze-recovery in `internal/relay/runner.go` on role: VERIFY requires a verification verdict artifact
+- [ ] 7.1 Gate the "files committed → success" stall-recovery in `internal/relay/runner.go` on role: VERIFY requires a verification verdict artifact
 - [ ] 7.2 Define/locate the verdict artifact contract (what VERIFY must produce)
-- [ ] 7.3 Tests: frozen VERIFY without verdict stays failed; frozen implementation try with commits still recovers
+- [ ] 7.3 Tests: stalled VERIFY without verdict stays failed; stalled implementation try with commits still recovers
 
 ## 8. Bounded prompt context
 
@@ -51,8 +51,15 @@
 - [ ] 8.2 Apply count + char budget with head/tail truncation where `recentContext` is built (`internal/relay/runner.go:~581`)
 - [ ] 8.3 Tests: verbose summaries truncated; count honored; argv transport unchanged
 
-## 9. Docs & coordination
+## 9. Naming disambiguation (clarity refactor)
 
-- [ ] 9.1 Update `AGENTS.md`/role-doc references if freeze/recovery or VERIFY-verdict behavior is documented there
-- [ ] 9.2 Confirm record-shape needs (attempted laps, commit list) are reflected in `tidy-rally-runtime-data-storage` rather than forked here
-- [ ] 9.3 Bump `internal/buildinfo/VERSION` (per release process) as part of the change
+- [ ] 9.1 Rename the liveness detector freeze→stall: `internal/reliability/freeze.go` (`StallDetector`, `Assessment.Stalled`, threshold/field names, callers in `internal/relay/runner.go`)
+- [ ] 9.2 Rename scheduler `EntryState.Frozen`→`Benched` in `internal/routing/scheduler.go` and callers (keep `Exhausted`)
+- [ ] 9.3 Keep the per-agent-type `frozen` name and `agent_status.jsonl` `event_type` value unchanged (no data-format change)
+- [ ] 9.4 Update references in `AGENTS.md`/specs/tests so the three concepts (stall / frozen / benched) read distinctly
+
+## 10. Docs & coordination
+
+- [ ] 10.1 Update `AGENTS.md`/role-doc references if stall-recovery or VERIFY-verdict behavior is documented there
+- [ ] 10.2 Confirm record-shape needs (attempted laps, commit list) are reflected in `tidy-rally-runtime-data-storage` rather than forked here
+- [ ] 10.3 Bump `internal/buildinfo/VERSION` (per release process) as part of the change

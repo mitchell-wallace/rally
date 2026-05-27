@@ -8,7 +8,8 @@ Rally's `.rally/` directory has accreted a flat pile of machine-churned files (`
 - **BREAKING**: Replace `.rally/progress.yaml` with an append-only `.rally/summary.jsonl` — the sole top-level data file and the only tracked run-history artifact. Same per-run/handoff record shape, one JSON line each.
 - Reduce tracked `.rally/` contents to: `config.toml`, `agents/`, `README.md`, `summary.jsonl`. The new `.rally/.gitignore` is just `state/`.
 - Add a one-time, idempotent migration: move existing flat files into `state/`, convert `progress.yaml` → `summary.jsonl`, and remove legacy `batches/`, `relays/`, and `config.toml.bak`.
-- Add an opt-in Sentry telemetry sink (default off; DSN via `config.toml [telemetry]` + `SENTRY_DSN` env; `RALLY_TELEMETRY=0` kill switch). Emits tries as structured logs, relay/run/try as a trace hierarchy, and genuine failures as Issues, tagged with `relay_id`/`run_id`/`try_id`/`role`/`runner`/`repo`/`lap_ids`. Flushes on CLI exit; a `before_send` scrubber never ships `current_task.md` or full transcripts.
+- Add an opt-in Sentry telemetry sink (default off; DSN via `config.toml [telemetry]` + `SENTRY_DSN` env; `RALLY_TELEMETRY=0` kill switch). Emits tries as structured logs, relay/run/try as a trace hierarchy, and genuine failures as Issues, tagged with `relay_id`/`run_id`/`try_id`/`role`/`runner`/`repo`/`lap_ids`. Issues are reserved for operator-worthy failures (infra-class failures, relay stall with all agents frozen, panic, no-finalize, `laps done`-as-text, lap-integrity violations); ordinary agent-class retries stay spans/logs to avoid alert noise. Each try log also carries the assembled-prompt size and a per-source breakdown so runaway prompt growth is caught (the enforcement-side budget lives in `harden-relay-run-lifecycle`). Flushes on CLI exit; a `before_send` scrubber never ships `current_task.md` or full transcripts.
+- Persist the full ordered commit list per try (not just one final hash) so causal chains across tries survive in the try record.
 - Bundle the `laps` binary alongside `rally` in `install.sh`, add a `rally update` command that upgrades both, and add a startup minimum-laps-version check. `.laps/` stays a separate top-level dir (laps never reads `.rally/`).
 - Remove the stray manually-committed `.laps/.gitignore` and track `laps.json`.
 
@@ -16,11 +17,11 @@ Rally's `.rally/` directory has accreted a flat pile of machine-churned files (`
 
 ### New Capabilities
 - `run-summary`: the append-only `summary.jsonl` digest of finalized runs and handoffs that replaces `progress.yaml` as the sole tracked top-level data file.
-- `telemetry`: opt-in Sentry sink emitting structured try logs, relay/run/try traces, and failure Issues, with config, scrubbing, and CLI-exit flushing.
+- `telemetry`: opt-in Sentry sink emitting structured try logs (with assembled-prompt size + per-source breakdown), relay/run/try traces, and operator-worthy failure Issues (infra failures and relay stalls, not agent-class retries), with config, scrubbing, and CLI-exit flushing.
 - `tooling-distribution`: bundling laps alongside rally (install + `rally update` + min-version check) and removing the stray `.laps/.gitignore`.
 
 ### Modified Capabilities
-- `store`: JSONL records relocate to gitignored `.rally/state/` and are no longer git-tracked (**BREAKING**); the commit-then-truncate-to-git windowing requirement is replaced with local-only retention since git history is no longer the archive; adds the one-time migration requirement.
+- `store`: JSONL records relocate to gitignored `.rally/state/` and are no longer git-tracked (**BREAKING**); the commit-then-truncate-to-git windowing requirement is replaced with local-only retention since git history is no longer the archive; adds the one-time migration requirement and a per-try commit-history field (full ordered commit list, not a single hash).
 
 ## Impact
 
@@ -29,4 +30,5 @@ Rally's `.rally/` directory has accreted a flat pile of machine-churned files (`
 - **New config**: `[telemetry] sentry_dsn` in `config.toml`; `SENTRY_DSN` / `RALLY_TELEMETRY` env vars.
 - **Distribution**: `install.sh` fetches/installs laps; new `rally update`.
 - **Repos using rally**: existing `.rally/` dirs migrate on next run; consumers of `progress.yaml` must switch to `summary.jsonl`; the false "git-tracked JSONL" expectation is corrected.
+- **Sequencing with `harden-relay-run-lifecycle`**: that change ships first and alters `agent_status.jsonl` freeze semantics (decay + `--new` reset) and defines failure classification. This change relocates `agent_status.jsonl` to `state/` (path-agnostic, no semantic conflict) and consumes the classification for Issue criteria. Record-shape additions here (per-try commit list) must stay compatible with that change's attempted-laps recording — neither change forks the try record.
 - **Not changed**: `dataDir` verbose logs (`~/.local/share/rally/`), laps' own `.laps/` location and standalone usability.

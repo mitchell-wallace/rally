@@ -16,7 +16,7 @@ The system SHALL provide a telemetry sink that is disabled by default. The sink 
 - **THEN** the `SENTRY_DSN` value SHALL take precedence
 
 ### Requirement: Telemetry event taxonomy
-When enabled, the system SHALL emit a structured log event per try, model a relay as a trace whose runs and tries are spans, and report genuine failures as Sentry Issues. Failures SHALL include non-zero agent exit, route fallback, panic, "agent exited without finalizing", and detection of `laps done` emitted as text.
+When enabled, the system SHALL emit a structured log event per try, model a relay as a trace whose runs and tries are spans, and report genuine failures as Sentry Issues. Issues SHALL be reserved for failures that warrant operator attention: infra-class failures (rate limit, harness/launch error, API timeout), a relay ending with all agent types frozen (stall), panic, "agent exited without finalizing", detection of `laps done` emitted as text, and lap-integrity violations (`wrong_lap_consumed` / `multi_lap_consumed`). Ordinary agent-class try failures (recoverable agent errors, short no-ops) SHALL be recorded as spans/logs, NOT Issues, to avoid alert noise. Failure classification (infra vs agent) is defined by the `harden-relay-run-lifecycle` change.
 
 #### Scenario: Try emits a structured log
 - **WHEN** a try is appended via the store
@@ -26,9 +26,32 @@ When enabled, the system SHALL emit a structured log event per try, model a rela
 - **WHEN** a relay starts and runs/tries execute
 - **THEN** the sink SHALL produce a transaction for the relay with child spans for runs and tries
 
-#### Scenario: Failure becomes an Issue
-- **WHEN** a try fails with a recognized failure mode
+#### Scenario: Infra failure becomes an Issue
+- **WHEN** a try fails with an infra-class failure mode
 - **THEN** the sink SHALL capture a Sentry Issue describing the failure
+
+#### Scenario: Relay stall becomes an Issue
+- **WHEN** a relay pass ends with all agent types frozen
+- **THEN** the sink SHALL capture a Sentry Issue describing the stall, so the lockout is surfaced for operator attention
+
+#### Scenario: Agent-class failure does not raise an Issue
+- **WHEN** a try fails with an agent-class failure that remains retry-eligible
+- **THEN** the sink SHALL record it as a span/log only and SHALL NOT capture an Issue
+
+#### Scenario: Runner fallback recorded as recovery
+- **WHEN** the routing scheduler rotates a lane to the next runner entry after the current entry becomes unavailable
+- **THEN** the sink SHALL record the rotation as a recovery span/breadcrumb and SHALL NOT capture it as an Issue (rotating to a backup runner is a healthy recovery, not an alert)
+
+### Requirement: Prompt-size observability
+When enabled, the system SHALL record the assembled-prompt size for each try and a breakdown of how much each source contributes (e.g. recent-try context, previous summary, project instructions, role instructions, task prompt, inbox/relay messages), so runaway prompt growth is detectable without reading transcripts.
+
+#### Scenario: Prompt size emitted per try
+- **WHEN** a try's prompt is assembled and the try is logged
+- **THEN** the structured log event SHALL include the total assembled-prompt size and a per-source size breakdown
+
+#### Scenario: Breakdown attributes each source
+- **WHEN** the prompt-size breakdown is emitted
+- **THEN** it SHALL attribute byte counts to each prompt source so a dominant source can be identified
 
 ### Requirement: Telemetry tagging and correlation
 Every telemetry event SHALL be tagged with `relay_id`, `run_id`, `try_id`, `role`, `runner` (harness+model), `repo`, and `lap_ids` where applicable, so events are filterable and correlate with the local `summary.jsonl` digest.

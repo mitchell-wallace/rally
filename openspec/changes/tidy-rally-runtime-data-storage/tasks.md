@@ -15,6 +15,7 @@
 - [ ] 3.3 Update the `.rally/.gitignore` template in `cmd/rally/main.go` to a single `state/` line
 - [ ] 3.4 Replace commit-then-truncate-to-git windowing with in-place local truncation (no git commit)
 - [ ] 3.5 Update the `.rally/README.md` template to describe the new layout and correct the false "git-tracked JSONL source of truth" claim
+- [ ] 3.6 Persist the full ordered commit list per try in the try record (`tries.jsonl`) instead of a single commit hash; a single commit becomes a one-element list (coordinate the field with `harden-relay-run-lifecycle` so the try record is not forked)
 
 ## 4. Replace `progress.yaml` with `summary.jsonl`
 
@@ -39,6 +40,8 @@
 - [ ] 6.6 Capture recognized failures (non-zero exit, route fallback, panic, "agent exited without finalizing", `laps done`-as-text) as Sentry Issues
 - [ ] 6.7 Add a `before_send` scrubber that never ships `current_task.md` contents or full transcripts
 - [ ] 6.8 Init the sink once in `cmd/rally/main.go` and `defer sentry.Flush(2s)` before exit (no-op/bounded when disabled or offline)
+- [ ] 6.9 Add assembled-prompt size + per-source byte breakdown (recent-context, previous-summary, instructions, role, task, inbox/relay) to the per-try structured log
+- [ ] 6.10 Gate Issue capture on operator-worthy failures: infra-class failures (consume `harden-relay-run-lifecycle` classification) and relay stalls (pass ends all-frozen); agent-class retries emit spans/logs only, no Issue
 
 ## 7. Bundle laps alongside rally
 
@@ -52,6 +55,8 @@
 - [ ] 8.2 Tests for store/cache reading and writing under `.rally/state/` and for local-only truncation windowing
 - [ ] 8.3 Tests for `summary.jsonl` append shape and that `progress.yaml` is never written
 - [ ] 8.4 Tests for the telemetry sink: no-op without DSN, kill switch, env-over-config precedence, tag presence, and scrubber dropping `current_task.md`
+- [ ] 8.6 Tests for prompt-size fields (total + per-source breakdown present on the try log) and Issue criteria (infra failure + relay stall → Issue; agent-class retry → no Issue)
+- [ ] 8.7 Tests for try commit history (multiple commits retained in order; single commit as one-element list)
 - [ ] 8.5 Test that `rally update` and the min-version check behave correctly (warn vs silent)
 
 ## 9. Docs & rollout
