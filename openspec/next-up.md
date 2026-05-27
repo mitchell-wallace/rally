@@ -46,7 +46,7 @@ are not yet renamed on disk.
    size logging**: emit assembled-prompt size + per-source breakdown so runaway
    prompts are caught empirically.
 
-3. **git-hygiene** _(draft reworked for the post-#2 world)_
+3. **git-hygiene** _(full artifacts — proposal/design/tasks/specs written, `openspec validate --strict` passes; reworked for the post-#2 world)_
    Depends on #2. Slimmed to two surviving items + one rewrite: auto-commit on
    init/hook-install (commits whatever #2 declares tracked), agent commit at lap
    boundary, and **folding `summary.jsonl` into the work commit** (no standalone
@@ -56,7 +56,7 @@ are not yet renamed on disk.
    Coordination flag: #2's relocation makes `CommitRallyState`'s `.rally/*.jsonl`
    glob a near-no-op — retire/repurpose it when folding.
 
-4. **cli-polish** _(draft reviewed)_
+4. **cli-polish** _(full artifacts — proposal/design/tasks/specs written, `openspec validate --strict` passes)_
    Display fixes (shortcut-hint width-aware truncation + left-align, full-width
    headers) and config UX (model shorthands, `rally init` subcommands). Adds the
    **`FallbackConfig`→`FreeRunPrompt`** rename (config/naming clarity). NOTE:
@@ -65,7 +65,7 @@ are not yet renamed on disk.
    by #1 + #5's resume work. Coordination: `style.ShortcutHint()` is also edited
    by #5 (label rename) — co-implement/sequence.
 
-5. **agent-lifecycle** _(draft reviewed)_
+5. **agent-lifecycle** _(full artifacts — proposal/design/tasks/specs written, `openspec validate --strict` passes)_
    Core scope (storage-independent): graceful subprocess shutdown (SIGINT +
    `WaitDelay` instead of bare SIGKILL), pause-now + session resume
    (`--resume <session>` where the harness supports it), and shortcut-label
