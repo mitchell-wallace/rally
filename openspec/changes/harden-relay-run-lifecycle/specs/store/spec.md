@@ -1,16 +1,3 @@
-## ADDED Requirements
-
-### Requirement: Verify reports store
-The system SHALL maintain a verification verdict store in `.rally/state/verify-reports.jsonl` (append-only JSONL). Each record SHALL contain: `lap_id`, `verdict` (string: `pass` or `fail`), `timestamp`, `relay_id`, and optional `summary`. The store SHALL maintain a 50-event window, rotating oldest entries out on truncation. This store is used by the stall-recovery logic to determine whether a stalled VERIFY try produced a valid verdict.
-
-#### Scenario: Verdict recorded
-- **WHEN** a VERIFY agent produces a verification verdict
-- **THEN** the system SHALL append a record to `verify-reports.jsonl`
-
-#### Scenario: Verdict absent on stalled VERIFY try
-- **WHEN** a VERIFY try is stalled and no verdict record exists for its lap in `verify-reports.jsonl`
-- **THEN** stall-recovery SHALL NOT treat the try as success regardless of file commits
-
 ## MODIFIED Requirements
 
 ### Requirement: Agent status store

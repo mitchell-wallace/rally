@@ -23,9 +23,9 @@ only.
 
 ## What this change does (summary)
 1. **State integrity** — lap-ID pinning (detects and contains phantom lap completions),
-   attempted-lap recording on try records, role-aware stall-recovery (VERIFY
-   success requires a verdict in `.rally/state/verify-reports.jsonl`, not just
-   committed files), and a new "incomplete" failure class for runs that produced
+   attempted-lap recording on try records, role-aware stall-recovery (a stalled
+   VERIFY try is never auto-accepted on the basis of committed files; it retries
+   or resumes), and a new "incomplete" failure class for runs that produced
    file changes without finalizing the lap.
 2. **Freeze/retry/resume reliability** — freeze decays to probation (a new
    tentative-active state) after a configurable window (default 5h); probation

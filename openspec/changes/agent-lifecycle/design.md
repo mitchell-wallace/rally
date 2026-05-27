@@ -30,7 +30,7 @@ in `AGENTS.md`: the generic role doc stays OpenSpec-agnostic; OpenSpec coupling 
 - Pause is "pause now"; resume reuses the harness session where supported.
 - Shortcut labels state whether they act now or after the current try.
 - Operators are warned when a lane has no fallback runner.
-- The default VERIFY role is read-only/reporting and OpenSpec-agnostic.
+- The default VERIFY role is reporting-focused (trivial fixes allowed, substantial gaps → head lap) and OpenSpec-agnostic.
 
 **Non-Goals:**
 - Building a new fallback/rotation mechanism (it already exists; R9 is dependency + docs).
@@ -75,8 +75,10 @@ this already exists; its effectiveness depends on #1's infra-failure classificat
 entries `Benched`/`Exhausted`.
 
 **5. VERIFY default boundary (R12/R13).**
-The default `verify.md` role doc states VERIFY is read-only/reporting and that large gaps
-become a new head lap rather than inline fixes. The "mark off `tasks.md`" behavior stays
+The default `verify.md` role doc keeps its current stance: VERIFY is reporting-focused,
+may apply trivial clearly-correct fixes, and routes substantial fixes/unclear follow-up
+to a new head lap rather than doing them inline. (The existing doc already says this; #5
+only reconciles the spec language, it does not strip the trivial-fix allowance.) The "mark off `tasks.md`" behavior stays
 OpenSpec-specific and is injected per-lap by `prepare-laps` only when a lap has a related
 OpenSpec change — not in rally core or the generic role doc. This subsumes R13: no separate
 sync mechanism. See `AGENTS.md` boundary rules.

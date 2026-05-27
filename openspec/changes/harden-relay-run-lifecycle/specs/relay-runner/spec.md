@@ -31,15 +31,11 @@ The system SHALL classify a try as "incomplete" rather than "failed" when file c
 - **THEN** the system SHALL classify as a normal agent-class failure (retry-eligible, does not escalate)
 
 ### Requirement: Role-aware stall-recovery
-The system SHALL NOT treat "files were committed" as sufficient to convert a stalled try (one killed by the liveness stall detector) into a success for a VERIFY run. A stalled VERIFY try SHALL require a verification verdict artifact in `.rally/state/verify-reports.jsonl` before being treated as success. Implementation roles SHALL retain files-committed stall-recovery.
+The system SHALL NOT treat "files were committed" as sufficient to convert a stalled try (one killed by the liveness stall detector) into a success for a VERIFY run. A stalled VERIFY try SHALL remain a retry-eligible failure regardless of committed files (a VERIFY run may legitimately commit only a trivial fix, which is not evidence that verification occurred); it is retried or resumed rather than accepted. Implementation roles SHALL retain files-committed stall-recovery.
 
-#### Scenario: Stalled VERIFY try without a verdict
-- **WHEN** a VERIFY try is killed for a stall and files were committed but no verification verdict artifact is present in `verify-reports.jsonl`
+#### Scenario: Stalled VERIFY try is not auto-accepted
+- **WHEN** a VERIFY try is killed for a stall and files were committed
 - **THEN** the system SHALL NOT treat the try as success and SHALL keep it a retry-eligible failure
-
-#### Scenario: Stalled VERIFY try with a pass verdict
-- **WHEN** a VERIFY try is killed for a stall and files were committed AND a verdict artifact with `verdict: pass` exists in `verify-reports.jsonl`
-- **THEN** the system SHALL treat the try as successful recoverable work
 
 #### Scenario: Stalled implementation try with commits
 - **WHEN** a non-VERIFY implementation try is killed for a stall and files were committed

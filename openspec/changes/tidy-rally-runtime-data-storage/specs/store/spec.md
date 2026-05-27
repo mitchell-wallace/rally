@@ -1,7 +1,7 @@
 ## MODIFIED Requirements
 
 ### Requirement: JSONL source of truth
-The system SHALL persist machine-managed state as JSONL files inside the `.rally/state/` subdirectory at the repository root. Each record type SHALL have its own file: `tries.jsonl`, `messages.jsonl`, `relays.jsonl`, `agent_status.jsonl`, and `verify-reports.jsonl` (the last introduced by `harden-relay-run-lifecycle`; relocated here alongside its peers). The `.rally/state/` directory SHALL be gitignored and is NOT version-controlled; durability for these records is provided by local retention and the opt-in telemetry sink rather than git history.
+The system SHALL persist machine-managed state as JSONL files inside the `.rally/state/` subdirectory at the repository root. Each record type SHALL have its own file: `tries.jsonl`, `messages.jsonl`, `relays.jsonl`, `agent_status.jsonl`. The `.rally/state/` directory SHALL be gitignored and is NOT version-controlled; durability for these records is provided by local retention and the opt-in telemetry sink rather than git history.
 
 #### Scenario: Record appended to JSONL
 - **WHEN** a new record is created (try, message, relay, or agent status event)
@@ -16,7 +16,7 @@ The system SHALL persist machine-managed state as JSONL files inside the `.rally
 - **THEN** the tracked data files SHALL be limited to `summary.jsonl` (plus `config.toml`, `agents/`, and `README.md`); the `state/` JSONL records SHALL NOT be committed
 
 ### Requirement: Record windowing
-The system SHALL maintain per-type maximum record counts: 200 for tries, 50 for relays, 500 for agent status events, and 50 for verify reports. Messages SHALL only be windowed when resolved (consumed + addressed) or cancelled — pending messages are never truncated. The agent status window (500) and its truncation semantics (synthesizing a summary event to preserve effective frozen/probation state) are defined by `harden-relay-run-lifecycle`; this change relocates the file and preserves those semantics rather than re-specifying them.
+The system SHALL maintain per-type maximum record counts: 200 for tries, 50 for relays, 500 for agent status events, and 200 for resolved messages. Messages SHALL only be windowed when resolved (consumed + addressed) or cancelled — pending messages are never truncated. The agent status window (500) and its truncation semantics (synthesizing a summary event to preserve effective frozen/probation state) are defined by `harden-relay-run-lifecycle`; this change relocates the file and preserves those semantics rather than re-specifying them.
 
 #### Scenario: Window exceeded triggers local truncate
 - **WHEN** a JSONL file under `.rally/state/` exceeds its window limit after an append

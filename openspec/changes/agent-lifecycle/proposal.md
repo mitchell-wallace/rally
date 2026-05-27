@@ -17,7 +17,8 @@ features:
   a feature build — it is a dependency on `harden-relay-run-lifecycle`'s failure
   classification (so a dying runner is actually marked unavailable) plus operator
   guidance for single-runner lanes.
-- **R12/R13 VERIFY boundary** — VERIFY should default to read-only/reporting; the
+- **R12/R13 VERIFY boundary** — VERIFY should default to reporting-focused (trivial
+  fixes allowed, substantial gaps → head lap); the
   "mark off `tasks.md`" behavior is OpenSpec-specific and belongs in `prepare-laps`,
   not the generic role doc or rally core.
 
@@ -40,7 +41,8 @@ features:
   runner entry (no fallback), so the operator knows a single dead harness can stall that
   lane. Plus docs/defaults encouraging multi-runner lanes.
 - **VERIFY role default boundary (R12/R13).** The generic VERIFY role doc
-  (`.rally/agents/verify.md`) stays read-only/reporting and OpenSpec-agnostic; the
+  (`.rally/agents/verify.md`) stays reporting-focused (trivial fixes allowed,
+  substantial gaps → head lap) and OpenSpec-agnostic; the
   "mark off `tasks.md`" behavior is injected per-lap by `prepare-laps` only when a lap
   has a related OpenSpec change. No separate OpenSpec↔laps sync mechanism.
 
@@ -49,7 +51,7 @@ features:
 ### Added Capabilities
 - `agent-lifecycle`: graceful subprocess shutdown, pause-now + session resume,
   shortcut-label clarity, single-runner-lane warning, and the generic VERIFY role
-  read-only boundary.
+  reporting boundary.
 
 ## Impact
 

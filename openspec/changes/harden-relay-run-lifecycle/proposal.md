@@ -8,9 +8,9 @@ could not be cleanly closed or recovered. Three classes of defect stand out:
 
 1. **State drift** — a `laps done` retry consumed the *next* lap as "done" with
    zero code written (a phantom completion), because rally never checks that the
-   lap completed matches the lap the run was assigned. Separately, a VERIFY
-   agent's freeze-recovery was blessed as success purely because files were
-   committed, even though VERIFY produced no verification verdict.
+   lap completed matches the lap the run was assigned. Separately, a stalled
+   VERIFY agent's recovery was blessed as success purely because files were
+   committed, even though VERIFY did no actual verification work.
 2. **A permanent freeze lockout** — after extended failures every agent type was
    marked `frozen`, and because frozen state is terminal with no decay and is
    re-applied verbatim across relays, neither `rally resume` nor a fresh
@@ -34,11 +34,12 @@ already fixed upstream (laps v0.4.6); it is out of scope here.
   mismatch fails the run with a distinct reason (`wrong_lap_consumed` /
   `multi_lap_consumed`) and does NOT advance the queue. Record attempted lap IDs
   (with timestamps) on the try record so multi-lap consumption is traceable.
-- **Role-aware stall-recovery.** "Files committed → success" is no longer
-  sufficient for a VERIFY run; a VERIFY try killed by the liveness stall detector
-  requires a verification verdict artifact (written to `.rally/state/verify-reports.jsonl`)
-  before being treated as success. Implementation roles keep the current
-  files-committed recovery.
+- **Role-aware stall-recovery.** "Files committed → success" is no longer applied
+  to a VERIFY run; a VERIFY try killed by the liveness stall detector is NOT
+  auto-accepted on the basis of commits (VERIFY may legitimately commit only a
+  trivial fix), so it stays a retry-eligible failure and is retried/resumed.
+  Implementation roles keep the current files-committed recovery. (No verdict
+  artifact is introduced — see design Decision 7 for why it was rejected.)
 - **Naming disambiguation.** Rename so "freeze" stops meaning three things: the
   liveness detector freeze→**stall**, the scheduler `EntryState.Frozen`→**`Benched`**;
   the persisted per-agent-type `frozen` keeps its name. Pure rename, no behavior
@@ -77,23 +78,22 @@ already fixed upstream (laps v0.4.6); it is out of scope here.
   at per-harness-model granularity; only >1 infra-class failure drives the cascade;
   the cascade's freeze is no longer terminal (adds probation+decay); hourly retries
   allow up to 3 attempts; try execution gains lap-ID pinning with attempted-lap
-  recording, role-aware stall-recovery with verify-reports.jsonl, and bounded
-  prompt context.
+  recording, role-aware stall-recovery (VERIFY excluded from files-committed
+  recovery), and bounded prompt context.
 - `store`: the agent status store records and honors freeze expiry/decay, supports
-  probation state and an explicit reset via `--new`, and stores verification
-  verdict artifacts in `verify-reports.jsonl`.
+  probation state and an explicit reset via `--new`.
 
 ## Impact
 
 - **Code**: `internal/relay/runner.go` (lap pinning with attempted-lap recording,
-  stall-recovery verdict, failure classification gating with >1 infra threshold,
+  role-aware stall-recovery, failure classification gating with >1 infra threshold,
   "incomplete" class, prompt-context budget), `internal/relay/resilience.go`
   (freeze decay to probation, per-harness-model tracking, what increments the
   counter), `internal/relay/route_runtime.go` (re-evaluate vs re-apply on resume,
   probation handling), `internal/reliability/{patterns,freeze}.go` (classify
   infra/agent/incomplete failures; freeze→stall rename), `internal/routing/scheduler.go`
   (`Frozen`→`Benched` rename), `internal/store/store.go` (agent-status decay/reset
-  with probation, verify-reports.jsonl), `cmd/rally/main.go` (`--new` explicit
+  with probation), `cmd/rally/main.go` (`--new` explicit
   reset).
 - **Behavior**: a harness can no longer be permanently bricked for a repo;
   `rally resume`/`start` recover after a freeze window; phantom lap completions
@@ -102,9 +102,8 @@ already fixed upstream (laps v0.4.6); it is out of scope here.
 - **Coordination with `tidy-rally-runtime-data-storage`**: that change reworks
   `agent_status.jsonl` location (`state/`) and the try/summary record shapes.
   This change adds a laps-attempted field to the try record (a simple list of
-  lap IDs with timestamps) and a verify-reports.jsonl store; `tidy` may later
-  restructure these but the fields ship here. Prompt-size telemetry rides tidy's
-  Sentry sink.
+  lap IDs with timestamps); `tidy` may later restructure it but the field ships
+  here. Prompt-size telemetry rides tidy's Sentry sink.
 - **Out of scope**: stdin prompt transport (deferred; argv stays), a
   `rally reconcile` command (rejected — correctness should be intrinsic), and
   Prayer-app target-repo remediation (tracked separately).

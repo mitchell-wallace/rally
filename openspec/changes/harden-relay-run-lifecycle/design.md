@@ -34,7 +34,7 @@ relay"), so the fixes are genuine MODIFIED requirements, not just code edits.
 
 **Goals**
 - A run's recorded state faithfully reflects the work it did (no phantom lap
-  completions; VERIFY success means a real verdict).
+  completions; a stalled VERIFY is not silently blessed as success).
 - A freeze is always recoverable: bounded decay to probation, re-evaluated on
   resume, and an explicit `--new` reset.
 - Only repeated genuine infra failures push a harness toward freeze.
@@ -137,14 +137,20 @@ filters on both `agent_type` and `model` when model is present.
 decision 3 so freeze is both harder to reach (more retries per hourly cycle) and
 self-healing (probation decay with 3-attempt runway).
 
-**7. Role-aware stall-recovery requires a verdict artifact for VERIFY.**
-The "files committed → success" stall-recovery is unsafe for VERIFY. A stalled
-VERIFY try requires a verification verdict artifact in `.rally/state/verify-reports.jsonl`
-(append-only JSONL, consistent with existing patterns) before being treated as
-success. The artifact records at minimum: `lap_id`, `verdict` (pass/fail),
-`timestamp`, `relay_id`. If the artifact is absent and the try was stalled, it
-remains a retry-eligible failure regardless of commits. Implementation roles
-keep the current files-committed recovery.
+**7. Role-aware stall-recovery: VERIFY is excluded from files-committed recovery.**
+The "files committed → success" stall-recovery is unsafe for VERIFY. VERIFY's job
+is to verify, not produce committed work, and it may legitimately commit only a
+trivial fix (its role allows small clearly-correct edits), so "files were
+committed" is not evidence the verification actually happened. A stalled VERIFY
+try is therefore NOT auto-accepted on the basis of commits — it stays a
+retry-eligible failure and is retried/resumed (session resume from #4/#5 lets it
+pick up rather than restart). Implementation roles keep the current
+files-committed recovery. We considered a dedicated verdict artifact
+(`verify-reports.jsonl`) to gate VERIFY success, but rejected it: a verdict is
+essentially a more targeted progress summary (redundant with the summary the
+agent already writes), forcing it mid-run would pressure verification quality,
+and "stalled-but-passed" is not a state VERIFY needs — simply failing and
+resuming is cleaner and correct.
 
 **8. Bounded prompt context.**
 `runner.go` already caps to `RecentTries(5)` but concatenates each summary in
@@ -182,11 +188,6 @@ spread across `resilience.go` and `runner.go`.
 The backward-counting loop that tallies `retry_failed` events currently breaks
 only on `active`. It must also break on `frozen` and `probation` to avoid
 counting across state-transition boundaries from different freeze cycles.
-
-**13. `verify-reports.jsonl` has a 50-event window.**
-Consistent with `relays.jsonl`; reports are fewer and more valuable than tries
-but still need bounding. Rotation appends and truncates oldest entries at the
-50-event mark.
 
 ## Risks / Trade-offs
 

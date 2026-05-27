@@ -30,7 +30,7 @@
 
 ## 5. VERIFY role default boundary (R12/R13)
 
-- [ ] 5.1 Make the default `verify.md` role doc read-only/reporting: large gaps become a new head lap, not inline fixes
+- [ ] 5.1 Confirm/align the default `verify.md` role doc: reporting-focused, trivial clearly-correct fixes allowed, substantial gaps become a new head lap (the doc already states this — reconcile #5's spec language to it, do not remove the small-fix allowance)
 - [ ] 5.2 Keep the generic role doc OpenSpec-agnostic — no "mark off tasks.md" in rally core or the default doc
 - [ ] 5.3 Confirm the OpenSpec-specific tasks.md behavior is injected per-lap by `prepare-laps` only for laps with a related change (no separate sync mechanism)
 - [ ] 5.4 Cross-check against the boundary rules in `AGENTS.md`

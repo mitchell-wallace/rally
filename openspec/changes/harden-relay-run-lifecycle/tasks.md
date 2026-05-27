@@ -50,9 +50,8 @@
 
 ## 7. Role-aware stall-recovery
 
-- [ ] 7.1 Add `.rally/state/verify-reports.jsonl` store (append-only JSONL, fields: `lap_id`, `verdict` [pass/fail], `timestamp`, `relay_id`, `summary`)
-- [ ] 7.2 Gate the "files committed → success" stall-recovery in `internal/relay/runner.go` on role: VERIFY requires a verdict artifact in `verify-reports.jsonl`; implementation roles keep current behavior
-- [ ] 7.3 Tests: stalled VERIFY without verdict stays failed; stalled VERIFY with pass verdict recovers; stalled implementation try with commits still recovers
+- [ ] 7.1 Gate the "files committed → success" stall-recovery in `internal/relay/runner.go` on role: VERIFY is excluded (a stalled VERIFY try is never auto-accepted on the basis of commits); implementation roles keep current behavior
+- [ ] 7.2 Tests: stalled VERIFY (even with a committed trivial fix) stays a retry-eligible failure; stalled implementation try with commits still recovers
 
 ## 8. Bounded prompt context
 
@@ -70,5 +69,5 @@
 
 ## 10. Docs & coordination
 
-- [ ] 10.1 Update `AGENTS.md`/role-doc references if stall-recovery or VERIFY-verdict behavior is documented there
+- [ ] 10.1 Update `AGENTS.md`/role-doc references if stall-recovery behavior is documented there
 - [ ] 10.2 Bump `internal/buildinfo/VERSION` (per release process) as part of the change

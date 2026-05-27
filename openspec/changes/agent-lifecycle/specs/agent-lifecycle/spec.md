@@ -66,15 +66,21 @@ rotate to.
 - **THEN** the system SHALL NOT emit the single-runner-lane warning
 
 ### Requirement: VERIFY role default boundary
-The default VERIFY role SHALL be read-only/reporting: gaps it finds SHALL become a new
-head lap rather than being fixed inline. The generic VERIFY role document SHALL remain
-OpenSpec-agnostic; OpenSpec-specific behavior such as marking off `tasks.md` SHALL be
-injected per-lap by the `prepare-laps` skill only when a lap has a related OpenSpec
-change, and SHALL NOT be baked into rally core or the default role document.
+The default VERIFY role SHALL be reporting-focused: it MAY apply trivial,
+clearly-correct fixes (a few lines), but substantial fixes, unclear follow-up, or
+work deserving its own implementation pass SHALL become a new head lap rather than
+being done inline. The generic VERIFY role document SHALL remain OpenSpec-agnostic;
+OpenSpec-specific behavior such as marking off `tasks.md` SHALL be injected per-lap by
+the `prepare-laps` skill only when a lap has a related OpenSpec change, and SHALL NOT be
+baked into rally core or the default role document.
 
-#### Scenario: Default VERIFY reports rather than fixes
-- **WHEN** the default VERIFY role finds a large gap
-- **THEN** it SHALL record a new head lap rather than fixing the gap inline
+#### Scenario: Default VERIFY routes substantial gaps to a head lap
+- **WHEN** the default VERIFY role finds a substantial gap (beyond a trivial fix)
+- **THEN** it SHALL record a new head lap rather than doing the work inline
+
+#### Scenario: Default VERIFY may apply a trivial fix
+- **WHEN** the default VERIFY role finds an issue fixable by a few clearly-correct lines
+- **THEN** it MAY apply that fix directly rather than creating a head lap
 
 #### Scenario: tasks.md updating is OpenSpec-scoped
 - **WHEN** a lap has no related OpenSpec change

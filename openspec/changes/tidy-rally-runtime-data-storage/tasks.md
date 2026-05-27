@@ -16,7 +16,7 @@
 - [ ] 3.4 Replace commit-then-truncate-to-git windowing with in-place local truncation (no git commit)
 - [ ] 3.5 Update the `.rally/README.md` template to describe the new layout and correct the false "git-tracked JSONL source of truth" claim
 - [ ] 3.6 Persist the full ordered commit list per try in the try record (`tries.jsonl`) instead of a single commit hash; a single commit becomes a one-element list (coordinate the field with `harden-relay-run-lifecycle` so the try record is not forked)
-- [ ] 3.7 Coordinate with `harden-relay-run-lifecycle`: that change adds `laps_attempted` to `TryRecord`, `verify-reports.jsonl` to the store (with 50-event window), and a `model` field to `AgentStatusEvent`; restructure these fields into the new `state/` layout if they land before tidy
+- [ ] 3.7 Coordinate with `harden-relay-run-lifecycle`: that change adds `laps_attempted` to `TryRecord` and a `model` field to `AgentStatusEvent` (with a 500-event window); restructure these fields into the new `state/` layout if they land before tidy
 
 ## 4. Replace `progress.yaml` with `summary.jsonl`
 

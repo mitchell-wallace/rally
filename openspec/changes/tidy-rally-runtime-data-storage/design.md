@@ -23,7 +23,7 @@ The `store` spec asserts JSONL files are git-tracked "source of truth", but `git
 ## Decisions
 
 **1. `state/` subfolder, gitignored; `summary.jsonl` tracked.**
-Centralise path construction behind helpers (e.g. `store.StateDir(workspaceDir)`), then move `tries|relays|agent_status|messages.jsonl`, `verify-reports.jsonl` (introduced by `harden-relay-run-lifecycle`), `hook-audit.jsonl`, `run-state.json`, and `current_task.md` under `.rally/state/`. New `.rally/.gitignore` is a single line: `state/`. Alternative considered: per-file gitignore entries at top level — rejected as the current brittle approach (easy to forget a new file; `current_task.md` 120KB churn already leaks intent).
+Centralise path construction behind helpers (e.g. `store.StateDir(workspaceDir)`), then move `tries|relays|agent_status|messages.jsonl`, `hook-audit.jsonl`, `run-state.json`, and `current_task.md` under `.rally/state/`. New `.rally/.gitignore` is a single line: `state/`. Alternative considered: per-file gitignore entries at top level — rejected as the current brittle approach (easy to forget a new file; `current_task.md` 120KB churn already leaks intent).
 
 **2. `summary.jsonl` replaces `progress.yaml`.**
 Keep the existing `RunEntry`/`HandoffEntry` shape from `internal/progress/store.go`; serialize one JSON object per line instead of a windowed YAML doc. Rationale: consistency with every other record file, append-only (no rewrite/merge races), trivially `tail`/`jq`-able, and small enough to track in git. `history_window` trimming is dropped — the file is the canonical digest and stays small (one line per finalized run/handoff). The `AppendRunEntry` signature is preserved so `runner.go:1302` is untouched.
