@@ -4,7 +4,7 @@ Rally's `.rally/` directory has accreted a flat pile of machine-churned files (`
 
 ## What Changes
 
-- **BREAKING**: Move all machine-churned data into a new gitignored `.rally/state/` subfolder: `tries.jsonl`, `relays.jsonl`, `agent_status.jsonl`, `messages.jsonl`, `hook-audit.jsonl`, `run-state.json`, `current_task.md`. These are no longer git-tracked; durability shifts to Sentry + local retention.
+- **BREAKING**: Move all machine-churned data into a new gitignored `.rally/state/` subfolder: `tries.jsonl`, `relays.jsonl`, `agent_status.jsonl`, `messages.jsonl`, `verify-reports.jsonl` (introduced by `harden-relay-run-lifecycle`), `hook-audit.jsonl`, `run-state.json`, `current_task.md`. These are no longer git-tracked; durability shifts to Sentry + local retention.
 - **BREAKING**: Replace `.rally/progress.yaml` with an append-only `.rally/summary.jsonl` — the sole top-level data file and the only tracked run-history artifact. Same per-run/handoff record shape, one JSON line each.
 - Reduce tracked `.rally/` contents to: `config.toml`, `agents/`, `README.md`, `summary.jsonl`. The new `.rally/.gitignore` is just `state/`.
 - Add a one-time, idempotent migration: move existing flat files into `state/`, convert `progress.yaml` → `summary.jsonl`, and remove legacy `batches/`, `relays/`, and `config.toml.bak`.
@@ -30,5 +30,5 @@ Rally's `.rally/` directory has accreted a flat pile of machine-churned files (`
 - **New config**: `[telemetry] sentry_dsn` in `config.toml`; `SENTRY_DSN` / `RALLY_TELEMETRY` env vars.
 - **Distribution**: `install.sh` fetches/installs laps; new `rally update`.
 - **Repos using rally**: existing `.rally/` dirs migrate on next run; consumers of `progress.yaml` must switch to `summary.jsonl`; the false "git-tracked JSONL" expectation is corrected.
-- **Sequencing with `harden-relay-run-lifecycle`**: that change ships first and alters `agent_status.jsonl` freeze semantics (decay + `--new` reset) and defines failure classification. This change relocates `agent_status.jsonl` to `state/` (path-agnostic, no semantic conflict) and consumes the classification for Issue criteria. Record-shape additions here (per-try commit list) must stay compatible with that change's attempted-laps recording — neither change forks the try record.
+- **Sequencing with `harden-relay-run-lifecycle`**: that change ships first and alters `agent_status.jsonl` freeze semantics (decay to probation + `--new` reset, per-harness-model `model` field, 500-event window), adds `verify-reports.jsonl` (50-event window), defines failure classification (infra/agent/incomplete), and adds `laps_attempted` to the try record. This change relocates all of those files to `state/` (path-agnostic, no semantic conflict), preserves their windowing/semantics rather than re-specifying them, and consumes the classification for Issue criteria. Record-shape additions here (per-try commit list) must stay compatible with that change's `laps_attempted` recording — neither change forks the try record.
 - **Not changed**: `dataDir` verbose logs (`~/.local/share/rally/`), laps' own `.laps/` location and standalone usability.
