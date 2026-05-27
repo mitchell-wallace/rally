@@ -9,19 +9,22 @@
 ## 2. "Incomplete" failure class
 
 - [ ] 2.1 Add an `incomplete` failure class to `internal/reliability/patterns.go` alongside infra/agent
-- [ ] 2.2 In `internal/relay/runner.go`, classify a try as incomplete when it produces file changes (commits) but the agent did not finalize the lap (no `laps done`/`laps handoff` detected)
-- [ ] 2.3 Incomplete runs retry but do NOT call `PauseAgent`/`RecordHourlyFailure` (do not advance the cascade)
-- [ ] 2.4 Tests: incomplete run retries; incomplete does not count toward pause/freeze
+- [ ] 2.2 In `internal/relay/runner.go`, classify a try as incomplete when it produces file changes (dirty working tree) but the agent did not finalize the lap (no `laps done`/`laps handoff` detected)
+- [ ] 2.3 Suppress auto-commit for incomplete tries — leave changes uncommitted so the retry agent inherits them as partial progress
+- [ ] 2.4 On retry after incomplete, inject prompt guidance: "The last run was incomplete. Check any current git changes, finish anything not done, verify correctness, commit when good, then run `laps done`."
+- [ ] 2.5 Incomplete runs retry but do NOT call `PauseAgent`/`RecordHourlyFailure` (do not advance the resilience cascade)
+- [ ] 2.6 Tests: incomplete run leaves changes uncommitted; retry agent gets guidance; incomplete does not count toward pause/freeze
 
 ## 3. Probation state + freeze decay
 
 - [ ] 3.1 Add `StateProbation` to `internal/relay/resilience.go` state machine
-- [ ] 3.2 Add `FreezeDuration` to resilience config (default 5h, under `[reliability]` in config.toml)
-- [ ] 3.3 Make `getState` return `StateProbation` when a frozen event is older than `FreezeDuration`
-- [ ] 3.4 Probation semantics in `SelectActiveAgent`: eligible for one run; success → promote to active (`UnpauseAgent`); failure → re-freeze with fresh timestamp
-- [ ] 3.5 Make `syncRecoverySignals` (`internal/relay/route_runtime.go`) reflect probation in scheduler entries (similar to paused handling)
-- [ ] 3.6 Update `agent_status.jsonl` reconstruction in `internal/store/store.go` to honor freeze decay and probation
-- [ ] 3.7 Tests: frozen decays to probation after window; probation run success → active; probation run failure → re-frozen; all-frozen ends pass but remains decayable
+- [ ] 3.2 Centralize resilience constants in a single location (`internal/relay/constants.go` or similar): `FreezeDuration` (5h), `PauseDuration` (1h), `HourlyRetriesBeforeFreeze` (5), `HourlyRetryMaxAttempts` (3)
+- [ ] 3.3 Make `getState` return `StateProbation` when a frozen event is older than `FreezeDuration`; `getState` remains a pure read function (no side effects)
+- [ ] 3.4 One-shot enforcement: `syncRecoverySignals` unbenches the scheduler entry for probation then immediately re-benches it so the same entry cannot be re-selected. When the run resolves, the new state (active or frozen) is reflected back into the scheduler.
+- [ ] 3.5 Persist probation event (`event_type: "probation"`) exactly once in `syncRecoverySignals` when it first observes a key transitioning from frozen to probation
+- [ ] 3.6 Probation semantics in `runOne`: `maxAttempts=3` (same as hourly retries); success or incomplete → promote to active; failure (agent or infra) → re-freeze with fresh timestamp
+- [ ] 3.7 Bump `agentStatusWindowSize` from 50 to 500 events; on truncation, synthesize a summary event preserving the latest effective state + timestamp for active frozen/probation entries
+- [ ] 3.8 Tests: frozen decays to probation after window; probation one-shot enforcement; probation success → active; probation incomplete → active; probation failure → re-frozen; all-frozen ends pass but remains decayable; window truncation preserves freeze timestamps
 
 ## 4. `--new` explicitly resets agent status
 
@@ -32,10 +35,12 @@
 ## 5. Failure classification (per-harness-model, >1 infra threshold)
 
 - [ ] 5.1 Extend `internal/reliability/patterns.go` `ClassifyError` with infra/agent/incomplete distinction; add patterns for harness/launch errors (`argument list too long`, `fork/exec`), API timeouts/network stalls, rate limits, and stall detection
-- [ ] 5.2 Add per-harness-model keying: rate-limit flags keyed on `harness:model`, not just `harness`; add optional `model` field to `AgentStatusEvent`
-- [ ] 5.3 In `internal/relay/runner.go`, only call `PauseAgent`/`RecordHourlyFailure` when >1 attempt within a run is classified as infra-class; agent-class and incomplete failures stay retry-eligible but do not escalate
-- [ ] 5.4 Default unknown failures to the agent-class (does-not-freeze) side
-- [ ] 5.5 Tests: >1 infra failure increments cascade; single infra failure does not; agent error and incomplete do not
+- [ ] 5.2 Define `ResilienceKey{Harnes, Model}` type in `internal/relay/resilience.go`; update every method signature: `getState(key)`, `PauseAgent(key, relayID)`, `RecordHourlyFailure(key, relayID)`, `FreezeAgent(key, relayID)`, `UnpauseAgent(key, relayID)`, `SelectActiveAgent(mix, runIndex)` (uniqueness map keys on `harness:model`)
+- [ ] 5.3 Add optional `model` field to `AgentStatusEvent`; update `GetAgentStatus` to accept model parameter and filter on both `agent_type` and `model` when model is present
+- [ ] 5.4 Update all callers of resilience methods in `internal/relay/runner.go` and `internal/relay/route_runtime.go` to pass `selection.Agent.Model` (or resolved model); enumerate all 10 method signatures and 20+ call sites
+- [ ] 5.5 In `internal/relay/runner.go`, only call `PauseAgent`/`RecordHourlyFailure` when >1 attempt within a run is classified as infra-class; agent-class and incomplete failures stay retry-eligible but do not escalate
+- [ ] 5.6 Default unknown failures to the agent-class (does-not-freeze) side
+- [ ] 5.7 Tests: >1 infra failure increments cascade; single infra failure does not; agent error and incomplete do not; per-harness-model keying isolates rate-limit to specific model
 
 ## 6. Hourly retries up to 3 attempts
 
@@ -57,12 +62,13 @@
 ## 9. Naming disambiguation (clarity refactor)
 
 - [ ] 9.1 Rename the liveness detector freeze→stall: `internal/reliability/freeze.go` (`StallDetector`, `Assessment.Stalled`, threshold/field names, callers in `internal/relay/runner.go`)
-- [ ] 9.2 Rename scheduler `EntryState.Frozen`→`Benched` in `internal/routing/scheduler.go` and callers (keep `Exhausted`); rename `failureFreezesEntry`→`failureBenchesEntry` and update reason matching
+- [ ] 9.2 Rename scheduler `EntryState.Frozen`→`Benched` in `internal/routing/scheduler.go` and callers (keep `Exhausted`); rename `failureFreezesEntry`→`failureBenchesEntry` and replace string-matching with an explicit enum/boolean parameter on `OnAgentFailed`; update `AllExhausted` reference; clarify `syncRecoverySignals` `StatePaused` boolean logic (`!state.Frozen && !state.Exhausted` → explicit `!(state.Frozen && state.Exhausted)`)
 - [ ] 9.3 Keep the per-agent-type `frozen` name and `agent_status.jsonl` `event_type` value unchanged (no data-format change)
-- [ ] 9.4 Update references in `AGENTS.md`/specs/tests so the three concepts (stall / frozen / benched) read distinctly
+- [ ] 9.4 Update `RecordHourlyFailure` counting loop to also break on `frozen` and `probation` events (not just `active`), avoiding cross-cycle counting bugs
+- [ ] 9.5 Update references in `AGENTS.md`/specs/tests so the three concepts (stall / frozen / benched) read distinctly
 
 ## 10. Docs & coordination
 
 - [ ] 10.1 Update `AGENTS.md`/role-doc references if stall-recovery or VERIFY-verdict behavior is documented there
-- [ ] 10.2 Coordinate with `tidy-rally-runtime-data-storage`: this change adds `laps_attempted` to `TryRecord` and `verify-reports.jsonl` to the store; `tidy` may restructure later
+- [ ] 10.2 Coordinate with `tidy-rally-runtime-data-storage`: this change adds `laps_attempted` to `TryRecord`, `verify-reports.jsonl` to the store (with 50-event window), and a `model` field to `AgentStatusEvent`; `tidy` may restructure later
 - [ ] 10.3 Bump `internal/buildinfo/VERSION` (per release process) as part of the change

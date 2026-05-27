@@ -76,21 +76,30 @@ enforcement.
 
 **3. Freeze decays to probation; probation is a distinct tentative-active state.**
 Add `StateProbation` to the resilience state machine. When `getState` sees a
-frozen event older than `FreezeDuration` (default 5h), it returns `StateProbation`
-rather than `StateActive`. A probationary agent:
-- Is eligible for exactly one run per probation cycle (not continuously scheduled).
-- On success: promoted to `StateActive` (unfreeze).
-- On failure: re-frozen (with a fresh timestamp, restarting the decay window).
-- On resume/start: freeze state is re-evaluated (via `getState`) rather than
-  re-applied verbatim; `syncRecoverySignals` reflects probation in the scheduler
-  the same way it reflects paused — the agent gets one shot, and the outcome
-  determines the next state.
+frozen event older than `FreezeDuration` (default 5h, hardcoded constant), it
+returns `StateProbation` rather than `StateActive`. A probationary agent:
+- Is eligible for exactly one run per probation cycle. The one-shot is enforced
+  by `syncRecoverySignals`: after unbenching the scheduler entry to allow the
+  probation run, the entry is immediately re-benched so it cannot be selected
+  again. When the run resolves, `syncRecoverySignals` reflects the new state
+  (active on success, frozen on failure).
+- On success (any non-failed run, including incomplete): promoted to `StateActive`.
+- On failure (agent-class or infra-class): re-frozen with a fresh timestamp,
+  restarting the decay window. Incomplete results do NOT re-freeze — they're a
+  behavioral/progress issue, not a model-availability issue.
+- Gets `maxAttempts=3` (same as hourly retries). A single transient blip
+  shouldn't keep an otherwise-usable agent frozen; retries are cheap compared
+  to lost agent time.
+- On resume/start: freeze state is re-evaluated (via `getState`, which remains
+  a pure read function) rather than re-applied verbatim. The probation event
+  (`event_type: "probation"`) is persisted exactly once in `syncRecoverySignals`
+  when it first observes a key transitioning from `StateFrozen` to
+  `StateProbation`.
 
 **4. `--new` explicitly truncates agent status.**
-`rally start --new` resets agent status history for all harnesses so every
-harness-model pair starts deterministically active. This is a store-level
-truncation, not an append of `active` events. Today `--new` only ends the old
-relay and recovered by timing luck; make it intentional.
+`rally start --new` truncates agent status history via `store.ResetAgentStatus()`
+so every harness-model pair starts deterministically active. Today `--new` only
+ends the old relay and recovered by timing luck; make it intentional.
 
 **5. Failure classification at per-harness-model granularity with a >1 infra threshold.**
 Extend `internal/reliability/patterns.go` `ClassifyError` with an
@@ -98,7 +107,7 @@ infra/agent/incomplete distinction. The failure classes are:
 - **infra-class**: rate-limit, harness/launch error (`argument list too long`,
   `fork/exec`), API timeout/network stall, liveness-stall detection.
 - **agent-class**: ordinary agent errors, short no-op tries (<3min, no changes).
-- **incomplete**: file changes were committed but the agent did not finalize the
+- **incomplete**: file changes were produced but the agent did not finalize the
   lap (no `laps done`/`laps handoff`).
 
 In `runner.go`, `PauseAgent`/`RecordHourlyFailure` are called only when >1
@@ -106,15 +115,27 @@ attempt within a run is classified as infra-class. A single infra failure retrie
 without escalation. Agent-class and incomplete failures fail the try and retry
 but do NOT increment the freeze counter.
 
-Rate-limit flags are tracked per harness-model pair (not per harness). This means
-an opencode runner using multiple providers (e.g. kimi + gemini models) does not
-freeze the entire opencode harness when only one provider hits its rate limit.
-The key for rate-limit tracking is `harness:model`.
+Incomplete tries leave their file changes *uncommitted* — the auto-commit is
+suppressed. The retry agent inherits the working-tree changes as partial progress
+and receives prompt guidance: "The last run was incomplete. Check any current git
+changes, finish anything not done, verify correctness, commit when good, then run
+`laps done`."
+
+Rate-limit flags are tracked per harness-model pair (not per harness). The key
+for all resilience operations is `harness:model`. This means an opencode runner
+using multiple providers (e.g. kimi + gemini models) does not freeze the entire
+opencode harness when only one provider hits its rate limit. Every method in
+`Resilience` (`getState`, `PauseAgent`, `RecordHourlyFailure`, `FreezeAgent`,
+`UnpauseAgent`, `SelectActiveAgent`) and every caller in `runner.go` and
+`route_runtime.go` must be updated to thread the model through. Define a
+`ResilienceKey` type (`{Harness, Model}`) to keep signatures clean. The
+`AgentStatusEvent` gains an optional `model` field; `GetAgentStatus` always
+filters on both `agent_type` and `model` when model is present.
 
 **6. Hourly retries get up to 3 attempts.**
 `runner.go` sets `maxAttempts=3` on the hourly retry path (was 1). Pairs with
 decision 3 so freeze is both harder to reach (more retries per hourly cycle) and
-self-healing (probation decay).
+self-healing (probation decay with 3-attempt runway).
 
 **7. Role-aware stall-recovery requires a verdict artifact for VERIFY.**
 The "files committed → success" stall-recovery is unsafe for VERIFY. A stalled
@@ -144,23 +165,63 @@ already specify. Separately, `FallbackConfig`/`loadFallbackInstructions` (the
 default prompt for a laps-less, promptless run) is misnamed but is owned by
 `cli-polish` (#4) as `FreeRunPrompt`, not this change.
 
+**10. Bench-trigger uses enum, not string-matching.**
+Replace `failureFreezesEntry`'s substring-scanning (`strings.Contains(reason, "freeze")`)
+with an explicit enum or boolean parameter on `OnAgentFailed`. The current
+implicit behavior (only `"freeze"` benches, `"retry-budget-exhausted"` does not)
+is preserved but made explicit. The rename to `failureBenchesEntry` (task 9.2)
+is the natural place for this refactor.
+
+**11. Resilience constants centralized in a single location.**
+`FreezeDuration` (5h), `PauseDuration` (1h), `HourlyRetriesBeforeFreeze` (5),
+and `HourlyRetryMaxAttempts` (3) stay hardcoded (not in `config.toml`) but are
+centralized in a `constants.go` or similar single-location file rather than
+spread across `resilience.go` and `runner.go`.
+
+**12. `RecordHourlyFailure` counting loop guards against new event types.**
+The backward-counting loop that tallies `retry_failed` events currently breaks
+only on `active`. It must also break on `frozen` and `probation` to avoid
+counting across state-transition boundaries from different freeze cycles.
+
+**13. `verify-reports.jsonl` has a 50-event window.**
+Consistent with `relays.jsonl`; reports are fewer and more valuable than tries
+but still need bounding. Rotation appends and truncates oldest entries at the
+50-event mark.
+
 ## Risks / Trade-offs
 
 - **Freeze decay lets a genuinely-broken harness retry forever** → probation
-  bounds this: a probationary agent gets exactly one run; if it fails, it's
-  re-frozen with a fresh timestamp, resetting the decay window. Persistent
-  failure stays frozen.
+  bounds this: a probationary agent gets exactly one run enforced by
+  `syncRecoverySignals` re-benching the scheduler entry after unbenching; if it
+  fails, it's re-frozen with a fresh timestamp, resetting the decay window.
+  Incomplete results move back to active (they're progress issues, not
+  availability issues).
 - **Misclassifying an agent error as infra (or vice versa)** → the pattern table
   is the single, testable update point; default unknown failures to the agent
   side to avoid premature lockout. The >1 infra threshold further reduces the
   blast radius of a single misclassification.
-- **Probation + scheduler interaction** → `syncRecoverySignals` treats probation
-  like paused: the scheduler entry gets one attempt. If the entry has alternatives
-  (route fallback), the scheduler cycles normally. If it's the only entry, the
-  relay waits for the next probation check (same cadence as paused hourly retries).
+- **Probation + scheduler interaction** → `syncRecoverySignals` unbenches the
+  entry for probation then immediately re-benches it so the scheduler blocks
+  re-entry. When the run resolves, the new state (active or frozen) is reflected.
+  If the entry has alternatives (route fallback), the scheduler cycles normally.
+  If it's the only entry, the relay waits for the next probation check (same
+  cadence as paused hourly retries).
 - **Lap pinning false-positives on legitimate multi-lap runs** → only the
   pinned-vs-completed comparison fails; if multi-lap completion is ever intended,
-  it must be expressed as multiple explicitly assigned laps, not silent consumption.
-- **Per-harness-model keying adds state complexity** → the key is `harness:model`;
-  `agent_status.jsonl` gets a new optional `model` field. Falls back gracefully:
-  if `model` is absent, the key is just `harness` (backward-compatible).
+  it must be expressed as multiple explicitly assigned laps, not silent
+  consumption. Wrongly-consumed laps cannot be automatically recovered by rally
+  (the external laps queue was already mutated); rally logs the pinned and
+  consumed lap IDs for manual operator or VERIFY-run recovery.
+- **Per-harness-model keying adds state complexity** → the key is `harness:model`
+  (a `ResilienceKey` type); `agent_status.jsonl` gets a new optional `model`
+  field. Callers always provide model when available; `GetAgentStatus` filters on
+  both. Every resilience method signature changes — the scope is approximately 10
+  method signatures and 20+ call sites, explicitly enumerated in the tasks.
+- **`agent_status.jsonl` 50-event window can drop freeze timestamps** → bump the
+  window to 500 events and, when truncating, synthesize a summary event preserving
+  the latest effective state and timestamp for any active frozen/probation entries,
+  so `getState` always reconstructs correctly regardless of window.
+- **Incomplete runs leave uncommitted changes for the retry agent** → this is
+  intentional; the retry inherits partial progress with prompt guidance to finish
+  and commit. If this proves too noisy in practice, a future `auto-squash` flag
+  could revert incomplete changes before retry.

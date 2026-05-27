@@ -20,11 +20,11 @@ The system SHALL pin the assigned lap ID when a run starts and SHALL verify, whe
 - **THEN** the system SHALL record the lap ID and timestamp on the try record, not only the lap(s) accepted as done, so multi-lap consumption is traceable
 
 ### Requirement: Incomplete failure class
-The system SHALL classify a try as "incomplete" rather than "failed" when file changes were committed but the agent neither finalized the lap (`laps done`) nor handed off (`laps handoff`). An incomplete try SHALL be retried but SHALL NOT count toward the pause/freeze resilience cascade.
+The system SHALL classify a try as "incomplete" rather than "failed" when file changes were produced (dirty working tree) but the agent neither finalized the lap (`laps done`) nor handed off (`laps handoff`). An incomplete try SHALL have its auto-commit suppressed, leaving changes uncommitted. The retry run SHALL inherit the uncommitted changes and SHALL receive prompt guidance: "The last run was incomplete. Check any current git changes, finish anything not done, verify correctness, commit when good, then run `laps done`." An incomplete try SHALL be retried but SHALL NOT count toward the pause/freeze resilience cascade.
 
-#### Scenario: Agent commits files without finalizing
-- **WHEN** a try produces committed file changes but the agent does not call `laps done` or `laps handoff`
-- **THEN** the system SHALL classify the try as incomplete, retry the run, and SHALL NOT call `PauseAgent` or `RecordHourlyFailure`
+#### Scenario: Agent produces file changes without finalizing
+- **WHEN** a try produces file changes in the working tree but the agent does not call `laps done` or `laps handoff`
+- **THEN** the system SHALL classify the try as incomplete, suppress auto-commit, retry the run with prompt guidance, and SHALL NOT call `PauseAgent` or `RecordHourlyFailure`
 
 #### Scenario: No file changes and no finalization
 - **WHEN** a try produces no file changes and the agent does not finalize
@@ -62,9 +62,9 @@ The system SHALL bound the recent-try context included in the assembled prompt b
 The system SHALL consider a try failed if the agent reports `Completed: false`, exits with an error, or produces no meaningful work (no file changes and runs less than 3 minutes). The system SHALL classify each failure as one of three classes:
 - **infra-class**: rate limit, harness/launch error (e.g. `argument list too long`, `fork/exec`), API timeout / network stall, or liveness stall detection.
 - **agent-class**: ordinary agent error or short no-op.
-- **incomplete**: file changes were committed but the agent did not finalize the lap (`laps done` or `laps handoff`).
+- **incomplete**: file changes were produced but the agent did not finalize the lap (`laps done` or `laps handoff`).
 
-Only repeated infra-class failures SHALL drive the per-agent-type resilience cascade; a single infra-class failure retries without escalation. Agent-class and incomplete failures SHALL fail the try and be retry-eligible but SHALL NOT increment the pause/freeze counter. Rate-limit flags SHALL be tracked per harness-model pair (`harness:model`), not per harness alone, so that an opencode runner using multiple providers does not freeze wholesale when only one provider hits its rate limit.
+Only repeated infra-class failures SHALL drive the per-agent-type resilience cascade; a single infra-class failure retries without escalation. Agent-class and incomplete failures SHALL fail the try and be retry-eligible but SHALL NOT increment the pause/freeze counter. Rate-limit flags SHALL be tracked per harness-model pair (`harness:model`) using a `ResilienceKey` type, not per harness alone, so that an opencode runner using multiple providers does not freeze wholesale when only one provider hits its rate limit. All resilience methods (`getState`, `PauseAgent`, `RecordHourlyFailure`, `FreezeAgent`, `UnpauseAgent`, `SelectActiveAgent`) and their callers in `runner.go` and `route_runtime.go` SHALL use the `ResilienceKey`.
 
 #### Scenario: Short no-op try detected as failure
 - **WHEN** a try produces no file changes and completes in under 3 minutes
@@ -84,7 +84,7 @@ Only repeated infra-class failures SHALL drive the per-agent-type resilience cas
 
 #### Scenario: Incomplete try does not escalate
 - **WHEN** a try produces file changes but the agent did not finalize
-- **THEN** the system SHALL classify it as incomplete, retry the run, and SHALL NOT count it toward pause/freeze
+- **THEN** the system SHALL classify it as incomplete, suppress auto-commit, retry the run, and SHALL NOT count it toward pause/freeze
 
 ### Requirement: Retry logic
 The system SHALL retry failed tries up to the configured budget within a single run. Retries do NOT count against the relay's iteration count. The previous try's summary is passed to the next attempt. Hourly retries of a paused agent SHALL allow up to 3 attempts so transient failures do not escalate the agent toward freeze.
@@ -102,36 +102,53 @@ The system SHALL retry failed tries up to the configured budget within a single 
 - **THEN** the system SHALL allow up to 3 attempts before recording an hourly failure toward freeze
 
 ### Requirement: Error resilience cascade
-The system SHALL implement a per-agent-type error resilience cascade driven by repeated infra-class failures (>1 within a run). After the threshold, the agent type is paused for 1 hour. The system retries hourly. After continued infra-failures the agent type is frozen, but the freeze SHALL NOT be terminal: a frozen agent type SHALL decay to probation (a tentative-active state) after a bounded `FreezeDuration` (default 5h), and the decay SHALL be re-evaluated on resume/start rather than re-applied verbatim. A probationary agent gets one run: success promotes to active, failure re-freezes with a fresh timestamp. If all agent types are paused, the system waits for the next hourly check. If all agent types are frozen, the relay ends as a failure for the current pass but the freeze remains subject to decay for subsequent starts.
+The system SHALL implement a per-harness-model error resilience cascade driven by repeated infra-class failures (>1 within a run). After the threshold, the harness-model pair is paused for 1 hour. The system retries hourly. After continued infra-failures the pair is frozen, but the freeze SHALL NOT be terminal: a frozen pair SHALL decay to probation (a tentative-active state) after a bounded `FreezeDuration` (5h, hardcoded constant), and the decay SHALL be re-evaluated on resume/start rather than re-applied verbatim.
+
+A probationary agent:
+- Gets at most one run per probation cycle. The one-shot is enforced by `syncRecoverySignals`: the scheduler entry is unbenched for the run, then immediately re-benched so it cannot be re-selected.
+- Gets `maxAttempts=3` (same as hourly retries).
+- On success or incomplete: promoted to active (incomplete is a progress issue, not a model-availability issue).
+- On failure (agent or infra): re-frozen with a fresh timestamp, restarting the decay window.
+- The probation event (`event_type: "probation"`) is persisted exactly once when the transition is first observed.
+
+If all harness-model pairs are paused, the system waits for the next hourly check. If all pairs are frozen, the relay ends as a failure for the current pass but the freeze remains subject to decay for subsequent starts.
 
 #### Scenario: Agent paused after repeated infra-failure
-- **WHEN** an agent type's tries within a run have >1 infra-class failure
-- **THEN** the system SHALL mark that agent type as paused, skip it in the agent mix, and schedule an hourly retry
+- **WHEN** a harness-model pair's tries within a run have >1 infra-class failure
+- **THEN** the system SHALL mark that pair as paused, skip it in the agent mix, and schedule an hourly retry
 
 #### Scenario: Agent unfreezes after hourly retry succeeds
-- **WHEN** a paused agent type's hourly retry try succeeds
-- **THEN** the system SHALL restore the agent type to active status in the mix
+- **WHEN** a paused pair's hourly retry try succeeds
+- **THEN** the system SHALL restore the pair to active status in the mix
 
 #### Scenario: Frozen agent decays to probation
-- **WHEN** an agent type has been frozen for longer than `FreezeDuration`
+- **WHEN** a harness-model pair has been frozen for longer than `FreezeDuration`
 - **THEN** `getState` SHALL report it as probation, making it eligible for a single tentative run
 
 #### Scenario: Probation run succeeds, promotes to active
-- **WHEN** a probationary agent's run succeeds
-- **THEN** the system SHALL promote the agent to active status
+- **WHEN** a probationary pair's run succeeds (not failed)
+- **THEN** the system SHALL promote the pair to active status
+
+#### Scenario: Probation run incomplete, moves to active
+- **WHEN** a probationary pair's run is classified as incomplete
+- **THEN** the system SHALL promote the pair to active (incomplete is progress, not availability)
 
 #### Scenario: Probation run fails, re-freezes
-- **WHEN** a probationary agent's run fails
-- **THEN** the system SHALL re-freeze the agent with a fresh timestamp, restarting the decay window
+- **WHEN** a probationary pair's run fails (agent-class or infra-class)
+- **THEN** the system SHALL re-freeze the pair with a fresh timestamp, restarting the decay window
+
+#### Scenario: Probation one-shot enforced
+- **WHEN** a probationary pair's scheduler entry is unbenched for a run
+- **THEN** `syncRecoverySignals` SHALL immediately re-bench the entry so it cannot be selected again until the run resolves
 
 #### Scenario: Freeze re-evaluated on resume
-- **WHEN** a relay resumes or a non-`--new` relay starts and an agent type's freeze has decayed
-- **THEN** the system SHALL re-evaluate freeze state via `getState` rather than re-apply the stored frozen state verbatim
+- **WHEN** a relay resumes or a non-`--new` relay starts and a pair's freeze has decayed
+- **THEN** the system SHALL re-evaluate freeze state via `getState` (a pure read) rather than re-apply the stored frozen state verbatim
 
 #### Scenario: All agents frozen ends the current pass
-- **WHEN** all agent types in the mix are currently frozen and none have decayed to probation
+- **WHEN** all harness-model pairs in the mix are currently frozen and none have decayed to probation
 - **THEN** the system SHALL end the relay pass as a failure, leaving freezes subject to later decay
 
 #### Scenario: System waits when all agents paused
-- **WHEN** all available agent types are paused (but not frozen)
-- **THEN** the system SHALL wait until the next agent's hourly retry check
+- **WHEN** all available harness-model pairs are paused (but not frozen)
+- **THEN** the system SHALL wait until the next pair's hourly retry check
