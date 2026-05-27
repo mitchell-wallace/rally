@@ -56,13 +56,23 @@ are not yet renamed on disk.
    Coordination flag: #2's relocation makes `CommitRallyState`'s `.rally/*.jsonl`
    glob a near-no-op — retire/repurpose it when folding.
 
-4. **cli-polish**
-   Candidate home for: prompt-context pruning (R5, see below) if not folded
-   elsewhere. NOTE: `rally reconcile` (R8) is **rejected** — fixing internal
-   state via a CLI command is a code smell; correctness should be intrinsic
-   (R1 pinning prevents the drift; R12 keeps tasks.md current).
+4. **cli-polish** _(draft reviewed)_
+   Display fixes (shortcut-hint width-aware truncation + left-align, full-width
+   headers) and config UX (model shorthands, `rally init` subcommands). Adds the
+   **`FallbackConfig`→`FreeRunPrompt`** rename (config/naming clarity). NOTE:
+   prompt-context pruning is NOT here — it lives in #1 (Bounded prompt context).
+   `rally reconcile` (R8) is **rejected**; `rally resume` (R14) is **subsumed**
+   by #1 + #5's resume work. Coordination: `style.ShortcutHint()` is also edited
+   by #5 (label rename) — co-implement/sequence.
 
-5. **agent-lifecycle**
+5. **agent-lifecycle** _(draft reviewed)_
+   Core scope (storage-independent): graceful subprocess shutdown (SIGINT +
+   `WaitDelay` instead of bare SIGKILL), pause-now + session resume
+   (`--resume <session>` where the harness supports it), and shortcut-label
+   renames ("graceful stop" / "quit now"). Coordination with #1: the graceful
+   shutdown changes the stall-kill path #1 renames/owns; pause/resume + run-state
+   overlaps #1's freeze-decay + `--new` reset; #1 ships first. Plus the routed QA
+   items:
    R9 route/runner fallback: the chain (e.g. `senior = ['claude','kimi','gpt']`)
    **already exists** — the routing Scheduler rotates a lane to the next entry
    when the current one is `Frozen`/`Exhausted` (`internal/routing/scheduler.go`).

@@ -75,3 +75,30 @@ g25 = "gemini-2.5-pro"
 Consider tabs or sections in the config TUI to make it easier to browse.
 Current flat TOML is hard to scan when it gets large. This might be better
 addressed in the `build-new-tui` change — note here and defer if so.
+
+### Rename `FallbackConfig` → `FreeRunPrompt` (clarity)
+
+`FallbackConfig.InstructionsFile` / `loadFallbackInstructions()` /
+`builtInDefaultFallback` only set the task prompt for a laps-less, promptless
+run (`runner.go:1054`) — "fallback" misleadingly reads like runner failover,
+which it is not (real runner failover is the routing Scheduler's lane rotation).
+Rename to `loadFreeRunPrompt()` / `FreeRunPromptFile` / `builtInDefaultFreeRunPrompt`,
+config key `[free_run] prompt_file`, with a back-compat alias accepting the old
+`[fallback] instructions_file` for one release. Pure naming/config clarity.
+
+---
+
+## Out of scope / coordination
+
+- **`rally reconcile` (QA R8) — rejected.** Fixing internal state via a CLI
+  command is a code smell; correctness is made intrinsic instead (lap pinning in
+  `harden-relay-run-lifecycle` prevents the drift; VERIFY keeps `tasks.md`
+  current via `prepare-laps`). Do not add.
+- **`rally resume` after manual stop (QA R14) — subsumed.** The resume capability
+  is built by `agent-lifecycle` (session resume) and `harden-relay-run-lifecycle`
+  (freeze-decay + `--new` reset that unblock resume). No separate cli-polish item.
+- **`style.ShortcutHint()` overlap.** The width-aware truncation, left-align, and
+  full-width headers here touch the same function that `agent-lifecycle` edits to
+  rename the shortcut labels ("graceful stop" / "quit now"). The narrow/medium
+  examples above already assume those renamed labels. Sequence or co-implement so
+  the two changes don't clobber each other.

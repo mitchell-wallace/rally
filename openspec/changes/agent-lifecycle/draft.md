@@ -66,3 +66,53 @@ Update `style.ShortcutHint()` in `internal/style/style.go`:
 ```
 [Ctrl+S skip] [Ctrl+P pause] [Ctrl+X graceful stop] [Ctrl+C quit now]
 ```
+
+> **Overlaps `cli-polish`**, which also edits `style.ShortcutHint()` (width-aware
+> truncation, left-align). Co-implement or sequence so the rename and the layout
+> work don't clobber each other.
+
+---
+
+## Route/runner fallback (QA R9)
+
+The fallback chain (`senior = ['claude','kimi','gpt']`) **already exists** — the
+routing Scheduler rotates a lane to the next entry when the current one becomes
+unavailable (`internal/routing/scheduler.go`). So this is not a feature build.
+What remains:
+
+- **Depends on `harden-relay-run-lifecycle`'s failure classification** so that
+  infra failures (rate limit, harness/launch error, API timeout) mark the entry
+  unavailable and rotation actually triggers — without that, a dying single-lane
+  runner just stalls (as it did in the Prayer-app run).
+- **Relay-start warning** when a lane has only one runner entry (no fallback), so
+  the operator is told a single dead harness can stall that lane.
+- **Docs/defaults** encouraging multi-runner lanes.
+
+(Note: `FallbackConfig` is unrelated — it is the free-run default prompt, renamed
+to `FreeRunPrompt` in `cli-polish`.)
+
+## VERIFY role boundary (QA R12 / R13)
+
+VERIFY should default to read-only/reporting; large gaps it finds should become a
+new head lap rather than being fixed inline. Keep this split clean:
+
+- The **generic** VERIFY role doc (`.rally/agents/verify.md`) stays
+  OpenSpec-agnostic.
+- The "mark off `tasks.md`" behavior is OpenSpec-specific and is injected
+  **per-lap by the `prepare-laps` skill** only when a lap has a related OpenSpec
+  change — not baked into rally core or the default role doc. This subsumes the
+  OpenSpec↔laps "bridge" (R13): no separate sync mechanism.
+
+See the rally/laps/OpenSpec boundary rules in `AGENTS.md`.
+
+## Coordination with `harden-relay-run-lifecycle` (#1)
+
+- **Stall-kill path**: the graceful subprocess shutdown above (SIGINT +
+  `WaitDelay`) changes how a cancelled/stalled try is killed. #1 renames the
+  liveness detector freeze→**stall** and owns its kill→recovery path. Align so
+  the stall detector uses the new graceful shutdown, not the old SIGTERM/SIGKILL.
+- **Resume / run-state**: pause-now + session resume here, and #1's freeze-decay
+  + `--new` reset, both touch the resume path and run-state. Sequence to avoid
+  conflicting edits. #1 ships first.
+- **`frozen` vs `benched`**: #1 also renames scheduler `EntryState.Frozen`→
+  `Benched`; the rotation logic referenced under R9 uses that renamed field.
