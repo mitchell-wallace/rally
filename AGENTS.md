@@ -44,6 +44,22 @@ The intended flow is:
    which records progress and, for handoff, creates follow-up laps at the head
    of the queue.
 
+### Tool boundaries: rally, laps, and OpenSpec
+
+- **Laps is Rally's permanent backend**, not one work-queue option among many.
+  Rally always drives laps; the two ship and version together. Code may assume
+  laps is present.
+- **OpenSpec is optional.** Rally is not married to OpenSpec — they're dating.
+  Rally core, the executor, and the default role docs (`.rally/agents/<role>.md`)
+  stay OpenSpec-agnostic. Nothing in rally should *require* OpenSpec to function
+  or feel complete, and OpenSpec-specific references should not leak into
+  rally's generic surfaces.
+- **OpenSpec coupling lives in the `prepare-laps` skill.** That layer has strong
+  OpenSpec support: it decomposes a change into laps and injects OpenSpec-aware
+  instructions into a lap *only when that lap has a related change* (e.g. "mark
+  off the relevant `tasks.md` boxes"). Smoothing the integration with
+  OpenSpec-specific references is expected there — and only there.
+
 ## Releasing
 
 Rally uses GoReleaser via GitHub Actions to publish releases. The workflow
