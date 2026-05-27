@@ -46,12 +46,15 @@ are not yet renamed on disk.
    size logging**: emit assembled-prompt size + per-source breakdown so runaway
    prompts are caught empirically.
 
-3. **git-hygiene**
-   MUST be updated for #2 first. After #2, `state/` is gitignored and
-   `summary.jsonl` is the only churning tracked data file, so most
-   `rally: update state` commit noise disappears — auto-squash section largely
-   evaporates; `.gitattributes`/logs section likely moot (verbose logs live in
-   `dataDir`, not `.rally/logs/`).
+3. **git-hygiene** _(draft reworked for the post-#2 world)_
+   Depends on #2. Slimmed to two surviving items + one rewrite: auto-commit on
+   init/hook-install (commits whatever #2 declares tracked), agent commit at lap
+   boundary, and **folding `summary.jsonl` into the work commit** (no standalone
+   `rally: update state` commit; amend-fallback only). Dropped: `.gitattributes`
+   for `.rally/logs/` (no such dir; logs live in `dataDir`) and the elaborate
+   auto-squash (window git-commits are removed by #2, so there are no streaks).
+   Coordination flag: #2's relocation makes `CommitRallyState`'s `.rally/*.jsonl`
+   glob a near-no-op — retire/repurpose it when folding.
 
 4. **cli-polish**
    Candidate home for: prompt-context pruning (R5, see below) if not folded
