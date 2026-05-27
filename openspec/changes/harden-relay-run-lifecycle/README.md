@@ -22,13 +22,19 @@ only.
   evidence file that spot-checked rally source)
 
 ## What this change does (summary)
-1. **State integrity** — lap-ID pinning (rejects phantom lap completions),
-   opt-in completion file cross-check, and role-aware freeze-recovery (VERIFY
-   success requires a verdict, not just committed files).
-2. **Freeze/retry/resume reliability** — freeze decay (no longer terminal),
-   `--new` resets agent status, infra-only failure classification feeds the
-   breaker, and less-timid hourly retries — so a harness can no longer be
-   permanently frozen for a repo.
+1. **State integrity** — lap-ID pinning (detects and contains phantom lap completions),
+   attempted-lap recording on try records, role-aware stall-recovery (VERIFY
+   success requires a verdict in `.rally/state/verify-reports.jsonl`, not just
+   committed files), and a new "incomplete" failure class for runs that produced
+   file changes without finalizing the lap.
+2. **Freeze/retry/resume reliability** — freeze decays to probation (a new
+   tentative-active state) after a configurable window (default 5h); probation
+   agents get one run — success promotes to active, failure re-freezes.
+   `--new` explicitly truncates agent status. Failure classification at
+   per-harness-model (`harness:model`) granularity; only >1 infra-class failure
+   within a run triggers pause. Rate-limit flags tracked per-provider so opencode
+   doesn't freeze wholesale when one model's provider hits its limit. Hourly
+   retries get up to 3 attempts (was 1).
 3. **Bounded prompt context** — caps recent-try context by count + character
    budget so the assembled prompt can't blow up the argv limit.
 
