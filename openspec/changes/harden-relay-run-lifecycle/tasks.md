@@ -65,9 +65,9 @@
 - [x] 9.2 Rename scheduler `EntryState.Frozen`→`Benched` in `internal/routing/scheduler.go` and callers (keep `Exhausted`); rename `failureFreezesEntry`→`failureBenchesEntry` and replace string-matching with an explicit enum/boolean parameter on `OnAgentFailed`; update `AllExhausted` reference; clarify `syncRecoverySignals` `StatePaused` boolean logic (`!state.Frozen && !state.Exhausted` → explicit `!(state.Frozen && state.Exhausted)`)
 - [x] 9.3 Keep the per-agent-type `frozen` name and `agent_status.jsonl` `event_type` value unchanged (no data-format change)
 - [x] 9.4 Update `RecordHourlyFailure` counting loop to also break on `frozen` and `probation` events (not just `active`), avoiding cross-cycle counting bugs
-- [ ] 9.5 Update references in `AGENTS.md`/specs/tests so the three concepts (stall / frozen / benched) read distinctly
+- [x] 9.5 Update references in `AGENTS.md`/specs/tests so the three concepts (stall / frozen / benched) read distinctly
 
 ## 10. Docs & coordination
 
-- [ ] 10.1 Update `AGENTS.md`/role-doc references if stall-recovery behavior is documented there
-- [ ] 10.2 Bump `internal/buildinfo/VERSION` (per release process) as part of the change
+- [x] 10.1 Update `AGENTS.md`/role-doc references if stall-recovery behavior is documented there
+- [x] 10.2 Bump `internal/buildinfo/VERSION` (per release process) as part of the change

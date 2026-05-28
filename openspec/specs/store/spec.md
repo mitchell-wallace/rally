@@ -79,19 +79,19 @@ The system SHALL store relay records in `relays.jsonl` with fields: `id`, `targe
 - **THEN** the relay record SHALL include the message ID in `consumed_message_ids`
 
 ### Requirement: Agent status store
-The system SHALL maintain agent status in a dedicated `agent_status.jsonl` file, separate from relay records. Each event records: `agent_type`, `event_type` (paused, unfrozen, frozen, active), `timestamp`, `relay_id`, and optional `reason`. This store persists across relays with a 50-event window.
+The system SHALL maintain agent status in a dedicated `agent_status.jsonl` file, separate from relay records. Each event records: `agent_type`, optional `model`, `event_type` (paused, unfrozen, frozen, active, probation), `timestamp`, `relay_id`, and optional `reason`. Per-harness-model granularity is supported via the `model` field; rate-limit and freeze state are keyed on `harness:model`. This store persists across relays with a 500-event window. On window truncation, the system SHALL synthesize a summary event preserving the latest effective state and timestamp for any active frozen or probation entries.
 
 #### Scenario: Agent paused event recorded
-- **WHEN** an agent type is paused after retry exhaustion
+- **WHEN** a harness-model pair is paused after retry exhaustion
 - **THEN** the system SHALL append a `paused` event to `agent_status.jsonl`
 
 #### Scenario: Agent status restored on startup
 - **WHEN** rally starts
-- **THEN** the system SHALL replay `agent_status.jsonl` to reconstruct current pause/freeze state per agent type, including timestamps for hourly retry scheduling
+- **THEN** the system SHALL replay `agent_status.jsonl` to reconstruct current pause/freeze/probation state per harness-model pair, including timestamps for hourly retry scheduling and freeze-decay evaluation
 
 #### Scenario: Agent status persists across relays
-- **WHEN** a new relay starts
-- **THEN** the system SHALL check `agent_status.jsonl` for any agents that are still frozen from a previous relay
+- **WHEN** a new relay starts (non-`--new`)
+- **THEN** the system SHALL re-evaluate frozen harness-model pairs against `FreezeDuration` via `getState` rather than unconditionally inheriting frozen state from a previous relay
 
 ### Requirement: Unified store interface
 The system SHALL provide a single `Store` interface that abstracts JSONL + in-memory operations, exposing write methods (which append/rewrite JSONL and update in-memory cache) and read methods (which query the in-memory cache).

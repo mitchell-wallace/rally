@@ -82,31 +82,35 @@ The system SHALL retry failed tries up to 3 times within a single run. Retries d
 - **THEN** the system SHALL trigger the error resilience cascade for that agent type (NOT halt the relay)
 
 ### Requirement: Error resilience cascade
-The system SHALL implement a per-agent-type error resilience cascade. After 3 consecutive try failures within a run, the agent type is paused for 1 hour. The system retries hourly. After 5 hours of continued failures, the agent type is frozen for the remainder of the relay. If all agent types are paused, the system waits for the next hourly check. If all agent types are frozen, the relay ends as a failure.
+The system SHALL implement a per-harness-model error resilience cascade (keyed on `harness:model`). Only repeated infra-class failures (>1 within a run) drive the cascade; agent-class and incomplete failures are retry-eligible but do not escalate. After escalation, the harness-model pair is paused for 1 hour. The system retries hourly (up to 3 attempts per cycle). After continued infra-failures the pair is frozen, but frozen is NOT terminal: a frozen pair SHALL decay to probation (a tentative-active state) after a bounded `FreezeDuration` (5h). Probation allows one run per cycle; success promotes to active, failure re-freezes with a fresh timestamp. If all harness-model pairs are paused, the system waits for the next hourly check. If all pairs are frozen (and none have decayed to probation), the relay ends as a failure for the current pass but freezes remain subject to decay for subsequent starts.
 
 #### Scenario: Agent paused after retry exhaustion
-- **WHEN** an agent type's tries fail 3 consecutive times within a run
-- **THEN** the system SHALL mark that agent type as paused, skip it in the agent mix, and schedule an hourly retry
+- **WHEN** a harness-model pair's tries fail with repeated infra-class failures (>1 within a run)
+- **THEN** the system SHALL mark that pair as paused (benched in the scheduler), skip it in the agent mix, and schedule an hourly retry
 
 #### Scenario: Agent unfreezes after hourly retry succeeds
-- **WHEN** a paused agent type's hourly retry try succeeds
-- **THEN** the system SHALL restore the agent type to active status in the mix
+- **WHEN** a paused harness-model pair's hourly retry try succeeds
+- **THEN** the system SHALL restore the pair to active status in the mix
 
 #### Scenario: Agent frozen after extended failure
-- **WHEN** a paused agent type continues to fail after 5 hours of hourly retries
-- **THEN** the system SHALL freeze that agent type for the remainder of the relay
+- **WHEN** a paused harness-model pair continues to fail after sustained hourly retries
+- **THEN** the system SHALL freeze that pair; the freeze SHALL decay to probation after `FreezeDuration`
 
-#### Scenario: All agents frozen ends relay
-- **WHEN** all agent types in the mix are frozen
-- **THEN** the system SHALL end the relay as a relay failure
+#### Scenario: Frozen agent decays to probation
+- **WHEN** a harness-model pair has been frozen for longer than `FreezeDuration`
+- **THEN** the system SHALL transition the pair to probation, allowing one tentative run; success promotes to active, failure re-freezes with a fresh timestamp
+
+#### Scenario: All agents frozen ends current pass
+- **WHEN** all harness-model pairs in the mix are currently frozen and none have decayed to probation
+- **THEN** the system SHALL end the relay pass as a failure, leaving freezes subject to later decay
 
 #### Scenario: System waits when all agents paused
-- **WHEN** all available agent types are paused (but not frozen)
-- **THEN** the system SHALL wait until the next agent's hourly retry check
+- **WHEN** all available harness-model pairs are paused (but not frozen or benched)
+- **THEN** the system SHALL wait until the next pair's hourly retry check
 
-#### Scenario: Pause/freeze state persisted across restarts
-- **WHEN** rally is restarted while agents are paused or frozen
-- **THEN** the system SHALL restore pause/freeze state and timestamps from `agent_status.jsonl`, so that timers are not reset by a restart
+#### Scenario: Pause/freeze/probation state persisted across restarts
+- **WHEN** rally is restarted while agents are paused, frozen, or on probation
+- **THEN** the system SHALL restore state and timestamps from `agent_status.jsonl`, re-evaluating frozen entries against `FreezeDuration` rather than inheriting stale state
 
 ### Requirement: Graceful stop
 The system SHALL support graceful stopping: when requested, the current try completes, and the relay halts without starting a new run. The relay state is preserved for future resumption.
