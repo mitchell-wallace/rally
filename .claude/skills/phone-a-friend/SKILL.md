@@ -1,6 +1,6 @@
 ---
 name: phone-a-friend
-description: Delegate bounded design, review, debugging, or implementation questions to another local agent CLI through Rally. Use when an agent needs an independent second opinion, model-specific critique, CLI-based delegation, or user-visible comparison between model outputs; includes Rally agent syntax, model notes, failure recording, and feedback calibration.
+description: Call another agent vlia cli as a real collaborator, use only when told explicitly to phone a friend, otherwise prefer your harness's native subagent tool.
 license: MIT
 metadata:
   author: rally
@@ -10,6 +10,8 @@ metadata:
 # Phone A Friend
 
 Use another agent as a real collaborator through CLI delegation. The friend should receive a bounded ask, enough context to be useful, and explicit rules about whether it may edit files.
+
+Delegate bounded design, review, debugging, or implementation questions to another local agent CLI through Rally. Use when an agent needs an independent second opinion, model-specific critique, CLI-based delegation, or user-visible comparison between model outputs; includes Rally agent syntax, model notes, failure recording, and feedback calibration.
 
 Two delegation channels:
 
