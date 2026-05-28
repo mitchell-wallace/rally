@@ -24,7 +24,7 @@
 - [x] 3.5 Persist probation event (`event_type: "probation"`) exactly once in `syncRecoverySignals` when it first observes a key transitioning from frozen to probation
 - [x] 3.6 Probation semantics in `runOne`: `maxAttempts=3` (same as hourly retries); success or incomplete → promote to active; failure (agent or infra) → re-freeze with fresh timestamp
 - [x] 3.7 Bump `agentStatusWindowSize` from 50 to 500 events; on truncation, synthesize a summary event preserving the latest effective state + timestamp for active frozen/probation entries
-- [ ] 3.8 Tests: frozen decays to probation after window; probation one-shot enforcement; probation success → active; probation incomplete → active; probation failure → re-frozen; all-frozen ends pass but remains decayable; window truncation preserves freeze timestamps
+- [x] 3.8 Tests: frozen decays to probation after window; probation one-shot enforcement; probation success → active; probation incomplete → active; probation failure → re-frozen; all-frozen ends pass but remains decayable; window truncation preserves freeze timestamps
 - [ ] 3.9 Baseline tests for `resilience.go`: create `internal/relay/resilience_test.go` covering `getState` state transitions, `PauseAgent`/`UnpauseAgent`/`FreezeAgent` event recording, `RecordHourlyFailure` threshold + counting-loop boundaries, and `SelectActiveAgent` cycling (run before probation work begins)
 
 ## 4. `--new` explicitly resets agent status
