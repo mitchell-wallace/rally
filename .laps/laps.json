@@ -216,10 +216,10 @@
       "title": "Update docs, naming references, and bump version",
       "description": "## Context\nOpenSpec change: `harden-relay-run-lifecycle` — tasks 9.5, 10.1–10.2.\nFinal cleanup: update documentation references to use the new naming, coordinate with tidy, and bump version.\n\n## Outcome\n- Update `AGENTS.md` and any role-doc references so the three concepts (stall / frozen / benched) read distinctly (task 9.5).\n- Update `AGENTS.md`/role-doc references if stall-recovery behavior is documented there (task 10.1).\n- Bump `internal/buildinfo/VERSION` — increment the patch version per release process (task 10.2).\n\n## Files \u0026 scope\n- `AGENTS.md` (at repo root or `.agent/AGENTS.md`)\n- `.rally/agents/*.md` — only if they reference freeze/stall/benched terminology\n- `internal/buildinfo/VERSION`\n- Do NOT modify any Go source code in this lap.\n\n## Acceptance\n- `grep -r \"freeze detector\\|FreezeDetector\\|freeze-detection\" AGENTS.md .rally/agents/` returns zero stale hits (should say stall)\n- VERSION file has been incremented\n- Mark off tasks 9.5, 10.1, 10.2 in the change tasks.md",
       "assignee": "junior",
-      "isDone": false,
+      "isDone": true,
       "createdAt": "2026-05-27T08:45:26.219140523Z",
-      "updatedAt": "2026-05-27T08:45:26.219140523Z",
-      "completedAt": null
+      "updatedAt": "2026-05-28T11:20:11.549004817Z",
+      "completedAt": "2026-05-28T11:20:11.549004817Z"
     },
     {
       "id": "rall-d3e0",
