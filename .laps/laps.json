@@ -6,20 +6,20 @@
       "title": "Add default values for RecentTryCharLimit and RecentContextCharLimit in config_v2.go",
       "description": "In config_v2.go, add sensible defaults (e.g., per-summary 2000 chars, overall 8000 chars) alongside the existing RecentTryCount default",
       "assignee": "JUNIOR",
-      "isDone": false,
+      "isDone": true,
       "createdAt": "2026-05-28T10:54:50.062656186Z",
-      "updatedAt": "2026-05-28T10:54:50.062656186Z",
-      "completedAt": null
+      "updatedAt": "2026-05-28T10:55:26.119707219Z",
+      "completedAt": "2026-05-28T10:55:26.119707219Z"
     },
     {
       "id": "work-ad48",
       "title": "Add tests for bounded prompt context (task 8.3)",
       "description": "Write tests for buildRecentContext: per-summary truncation with head/tail, overall budget truncation, count honored, zero-limit passthrough",
       "assignee": "JUNIOR",
-      "isDone": false,
+      "isDone": true,
       "createdAt": "2026-05-28T10:54:44.100339575Z",
-      "updatedAt": "2026-05-28T10:54:44.100339575Z",
-      "completedAt": null
+      "updatedAt": "2026-05-28T10:56:02.488082457Z",
+      "completedAt": "2026-05-28T10:56:02.488082457Z"
     },
     {
       "id": "work-1b9b",
