@@ -36,10 +36,10 @@
       "title": "Add ResilienceKey type and refactor all resilience methods to per-harness-model keying",
       "description": "## Context\nOpenSpec change: `harden-relay-run-lifecycle` — tasks 5.2, 5.3, 5.4.\nCurrently all resilience methods key on `agentType string`. This lap refactors to `ResilienceKey{Harness, Model}` so rate-limit/freeze state is per harness-model pair.\n\n## Outcome\n- `internal/relay/resilience.go`: define `ResilienceKey{Harness, Model string}` type. Update all method signatures: `getState(key)`, `PauseAgent(key, relayID)`, `RecordHourlyFailure(key, relayID)`, `FreezeAgent(key, relayID)`, `UnpauseAgent(key, relayID)`, `SelectActiveAgent(mix, runIndex)` — keying on `harness:model`.\n- `internal/store/store.go` / `records.go`: add optional `model` field to `AgentStatusEvent`; update `GetAgentStatus` to accept a model parameter and filter on both `agent_type` and `model` when model is present.\n- All callers in `internal/relay/runner.go` (~20+ call sites) and `internal/relay/route_runtime.go` updated to construct `ResilienceKey` from `selection.Agent.Model` (or resolved model).\n- Existing tests updated to pass `ResilienceKey` instead of plain strings.\n\n## Design\n- The `ResilienceKey` type should have a `String()` method returning `harness:model` for logging/display.\n- `SelectActiveAgent` uniqueness map keys change from `string` to `ResilienceKey`.\n- `GetAgentStatus(agentType, model)` — when model is empty string, filter on `agent_type` only (backward compat).\n- This is a wide-but-mechanical refactor. Enumerate all 10 method signatures and confirm all callers at the end.\n\n## Acceptance\n- `go build ./...` passes\n- All existing tests pass (with updated keying)\n- `grep -rn \"func.*PauseAgent\\|func.*FreezeAgent\\|func.*getState\\|func.*RecordHourlyFailure\\|func.*UnpauseAgent\\|func.*SelectActiveAgent\" internal/relay/` shows all signatures take `ResilienceKey`\n- Mark off tasks 5.2, 5.3, 5.4 in the change tasks.md",
       "assignee": "senior",
-      "isDone": false,
+      "isDone": true,
       "createdAt": "2026-05-27T08:42:43.508688839Z",
-      "updatedAt": "2026-05-27T08:42:43.508688839Z",
-      "completedAt": null
+      "updatedAt": "2026-05-28T05:20:26.17685515Z",
+      "completedAt": "2026-05-28T05:20:26.17685515Z"
     },
     {
       "id": "rall-28b3",

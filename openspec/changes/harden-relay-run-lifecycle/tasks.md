@@ -36,9 +36,9 @@
 ## 5. Failure classification (per-harness-model, >1 infra threshold)
 
 - [x] 5.1 Extend `internal/reliability/patterns.go` `ClassifyError` with infra/agent/incomplete distinction; add patterns for harness/launch errors (`argument list too long`, `fork/exec`), API timeouts/network stalls, rate limits, and stall detection
-- [ ] 5.2 Define `ResilienceKey{Harnes, Model}` type in `internal/relay/resilience.go`; update every method signature: `getState(key)`, `PauseAgent(key, relayID)`, `RecordHourlyFailure(key, relayID)`, `FreezeAgent(key, relayID)`, `UnpauseAgent(key, relayID)`, `SelectActiveAgent(mix, runIndex)` (uniqueness map keys on `harness:model`)
-- [ ] 5.3 Add optional `model` field to `AgentStatusEvent`; update `GetAgentStatus` to accept model parameter and filter on both `agent_type` and `model` when model is present
-- [ ] 5.4 Update all callers of resilience methods in `internal/relay/runner.go` and `internal/relay/route_runtime.go` to pass `selection.Agent.Model` (or resolved model); enumerate all 10 method signatures and 20+ call sites
+- [x] 5.2 Define `ResilienceKey{Harnes, Model}` type in `internal/relay/resilience.go`; update every method signature: `getState(key)`, `PauseAgent(key, relayID)`, `RecordHourlyFailure(key, relayID)`, `FreezeAgent(key, relayID)`, `UnpauseAgent(key, relayID)`, `SelectActiveAgent(mix, runIndex)` (uniqueness map keys on `harness:model`)
+- [x] 5.3 Add optional `model` field to `AgentStatusEvent`; update `GetAgentStatus` to accept model parameter and filter on both `agent_type` and `model` when model is present
+- [x] 5.4 Update all callers of resilience methods in `internal/relay/runner.go` and `internal/relay/route_runtime.go` to pass `selection.Agent.Model` (or resolved model); enumerate all 10 method signatures and 20+ call sites
 - [ ] 5.5 In `internal/relay/runner.go`, only call `PauseAgent`/`RecordHourlyFailure` when >1 attempt within a run is classified as infra-class; agent-class and incomplete failures stay retry-eligible but do not escalate
 - [x] 5.6 Default unknown failures to the agent-class (does-not-freeze) side
 - [ ] 5.7 Tests: >1 infra failure increments cascade; single infra failure does not; agent error and incomplete do not; per-harness-model keying isolates rate-limit to specific model
