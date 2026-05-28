@@ -11,9 +11,10 @@ import (
 type AgentState string
 
 const (
-	StateActive AgentState = "active"
-	StatePaused AgentState = "paused"
-	StateFrozen AgentState = "frozen"
+	StateActive    AgentState = "active"
+	StatePaused    AgentState = "paused"
+	StateFrozen    AgentState = "frozen"
+	StateProbation AgentState = "probation"
 )
 
 // ResilienceKey identifies a specific harness+model pair for resilience tracking.
@@ -40,6 +41,7 @@ func KeyFromAgent(a agent.ResolvedAgent) ResilienceKey {
 type Resilience struct {
 	Store                     *store.Store
 	PauseDuration             time.Duration
+	FreezeDuration            time.Duration
 	HourlyRetriesBeforeFreeze int
 	NowFunc                   func() time.Time
 }
@@ -47,8 +49,9 @@ type Resilience struct {
 func NewResilience(s *store.Store) *Resilience {
 	return &Resilience{
 		Store:                     s,
-		PauseDuration:             time.Hour,
-		HourlyRetriesBeforeFreeze: 5,
+		PauseDuration:             PauseDuration,
+		FreezeDuration:            FreezeDuration,
+		HourlyRetriesBeforeFreeze: HourlyRetriesBeforeFreeze,
 		NowFunc:                   time.Now,
 	}
 }
@@ -69,9 +72,20 @@ func (r *Resilience) getState(key ResilienceKey) (AgentState, time.Time) {
 		case "frozen":
 			state = StateFrozen
 			since = t
+		case "probation":
+			state = StateProbation
+			since = t
 		case "active", "unfrozen":
 			state = StateActive
 			since = t
+		}
+	}
+	// Pure-read freeze decay: if the most recent state is frozen and it has
+	// aged past FreezeDuration, surface it as probation. The on-disk event log
+	// is untouched; syncRecoverySignals owns persisting the probation event.
+	if state == StateFrozen && r.FreezeDuration > 0 && !since.IsZero() {
+		if !r.NowFunc().Before(since.Add(r.FreezeDuration)) {
+			state = StateProbation
 		}
 	}
 	return state, since
@@ -199,5 +213,18 @@ func (r *Resilience) FreezeAgent(key ResilienceKey, relayID int) error {
 		Timestamp: r.NowFunc().UTC().Format(time.RFC3339),
 		RelayID:   relayID,
 		Reason:    "5 hourly retries failed",
+	})
+}
+
+// persistProbationEvent appends a probation event for the given key. Callers
+// (currently syncRecoverySignals) are responsible for the once-per-cycle
+// guard; this method does not check whether a probation event already exists.
+func (r *Resilience) persistProbationEvent(key ResilienceKey) error {
+	return r.Store.AppendAgentStatus(store.AgentStatusEvent{
+		AgentType: key.Harness,
+		Model:     key.Model,
+		EventType: "probation",
+		Timestamp: r.NowFunc().UTC().Format(time.RFC3339),
+		Reason:    "freeze decayed to probation",
 	})
 }

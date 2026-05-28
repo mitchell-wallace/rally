@@ -50,6 +50,7 @@ type routeSelection struct {
 	Entry         *routing.EntryState
 	Scheduler     *routing.Scheduler
 	HourlyRetry   bool
+	Probation     bool
 }
 
 type routeSelectionError struct {
@@ -190,6 +191,7 @@ func (r *routeRuntime) next(task runTask, resilience *Resilience) (routeSelectio
 
 	st, since := resilience.getState(KeyFromAgent(picked))
 	hourlyRetry := st == StatePaused && !resilience.NowFunc().Before(since.Add(resilience.PauseDuration))
+	probation := st == StateProbation
 
 	var previousAgent *agent.ResolvedAgent
 	routeKey := strings.ToLower(route.Name)
@@ -208,6 +210,7 @@ func (r *routeRuntime) next(task runTask, resilience *Resilience) (routeSelectio
 		Entry:         entry,
 		Scheduler:     scheduler,
 		HourlyRetry:   hourlyRetry,
+		Probation:     probation,
 	}, nil
 }
 
@@ -242,12 +245,48 @@ func (r *routeRuntime) syncRecoverySignals(scheduler *routing.Scheduler, resilie
 			} else if !(state.Benched && state.Exhausted) {
 				scheduler.OnAgentFailed(state, "paused", true)
 			}
+		case StateProbation:
+			// Probation is the freeze-decay window: a frozen agent has aged
+			// past FreezeDuration and is granted exactly one one-shot
+			// recovery attempt per probation cycle. The first time we
+			// observe the frozen→probation transition, persist the
+			// probation event and unbench the entry so Next() can pick it
+			// for this iteration. On any subsequent sync where state is
+			// still probation (e.g. the prior probation run did not
+			// resolve cleanly) we re-bench the entry — that is the
+			// "one-shot" enforcement: a given probation cycle yields a
+			// single selectable opportunity. When the probation run
+			// resolves, runOne writes an active or frozen event and the
+			// next sync reflects the new state into the scheduler.
+			if !r.hasProbationEventForCurrentFreeze(resilience, key) {
+				_ = resilience.persistProbationEvent(key)
+				scheduler.ResetEntry(state)
+			} else if !(state.Benched && state.Exhausted) {
+				scheduler.OnAgentFailed(state, "probation", true)
+			}
 		case StateFrozen:
 			if !(state.Benched && state.Exhausted) {
 				scheduler.OnAgentFailed(state, "frozen", true)
 			}
 		}
 	}
+}
+
+// hasProbationEventForCurrentFreeze returns true when the agent's event log
+// already contains a probation event newer than the latest frozen event for
+// this key. Used by syncRecoverySignals so the probation event is persisted
+// exactly once per freeze cycle.
+func (r *routeRuntime) hasProbationEventForCurrentFreeze(resilience *Resilience, key ResilienceKey) bool {
+	events := resilience.Store.GetAgentStatus(key.Harness, key.Model)
+	for i := len(events) - 1; i >= 0; i-- {
+		switch events[i].EventType {
+		case "probation":
+			return true
+		case "frozen":
+			return false
+		}
+	}
+	return false
 }
 
 func (r *routeRuntime) selectionWaitError(scheduler *routing.Scheduler, resilience *Resilience) error {

@@ -561,6 +561,7 @@ func (r *Runner) runOne(
 	consumedMsg *store.MessageRecord,
 	relayMsg *store.MessageRecord,
 	isHourlyRetry bool,
+	isProbation bool,
 	onStall func(),
 	onStallRecovered func(),
 	log io.Writer,
@@ -602,6 +603,9 @@ func (r *Runner) runOne(
 	}
 	if isHourlyRetry {
 		maxAttempts = 1
+	}
+	if isProbation {
+		maxAttempts = HourlyRetryMaxAttempts
 	}
 attemptLoop:
 	for attempt := 1; attempt <= maxAttempts; attempt++ {
