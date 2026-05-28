@@ -56,10 +56,10 @@
       "title": "Add baseline tests for resilience.go",
       "description": "## Context\nOpenSpec change: `harden-relay-run-lifecycle`.\n`internal/relay/resilience.go` currently has NO dedicated test file — all testing is indirect through `runner_test.go` (117KB). The probation state machine (next laps) will heavily modify resilience.go, and we need a safety net of baseline tests before that work begins.\n\n## Outcome\n- Create `internal/relay/resilience_test.go` with tests covering the current behavior:\n  - `getState` returns `StateActive` for an agent with no events\n  - `getState` returns `StatePaused` after a pause event\n  - `getState` returns `StateFrozen` after a freeze event\n  - `PauseAgent` writes a paused event and `getState` reflects it\n  - `UnpauseAgent` restores to active\n  - `FreezeAgent` writes a frozen event\n  - `RecordHourlyFailure` counts retry_failed events and auto-freezes after threshold\n  - `RecordHourlyFailure` counting loop breaks correctly at state boundaries\n  - `SelectActiveAgent` skips paused and frozen agents, cycles through active ones\n- Use a test store (in-memory or temp dir) and `NowFunc` for time control.\n\n## Design\n- These tests should be straightforward unit tests — no integration with runner.\n- Test the public API surface plus `getState` (even if unexported, test via exported methods if needed).\n- Keep tests focused and independent so probation additions can be appended cleanly.\n\n## Acceptance\n- `go test ./internal/relay/... -run TestResilience -v` passes\n- Each state transition (active→paused, paused→active, paused→frozen, frozen stays frozen) has at least one test\n- `RecordHourlyFailure` threshold behavior tested\n- `SelectActiveAgent` cycling tested",
       "assignee": "junior",
-      "isDone": false,
+      "isDone": true,
       "createdAt": "2026-05-27T09:00:14.917096343Z",
-      "updatedAt": "2026-05-27T09:00:14.917096343Z",
-      "completedAt": null
+      "updatedAt": "2026-05-28T05:25:15.64367674Z",
+      "completedAt": "2026-05-28T05:25:15.64367674Z"
     },
     {
       "id": "rall-99f2",
