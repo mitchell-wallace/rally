@@ -121,6 +121,15 @@ func testResolver(spec string) (agent.ResolvedAgent, error) {
 	return agent.ResolvedAgent{Harness: harness}, nil
 }
 
+const cheapTestModel = "opencode/deepseek-v4-flash-free"
+
+func cheapTestResolver(spec string) (agent.ResolvedAgent, error) {
+	if spec == "op:dsf" {
+		return agent.ResolvedAgent{Harness: "opencode", Model: cheapTestModel}, nil
+	}
+	return testResolver(spec)
+}
+
 func TestFormatRemainingRoundsToSeconds(t *testing.T) {
 	cases := []struct {
 		in   time.Duration
@@ -300,6 +309,9 @@ func TestLapsHeadTaskPassedToExecutor(t *testing.T) {
 			receivedTaskName = opts.TaskName
 			receivedRequirements = opts.TaskRequirements
 			receivedTaskPrompt = opts.TaskPrompt
+			if err := progress.RecordLap(workspaceDir, "lap-42"); err != nil {
+				return nil, err
+			}
 			changeCounter++
 			f, _ := os.OpenFile(filepath.Join(workspaceDir, "changes.txt"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
 			fmt.Fprintf(f, "change %d\n", changeCounter)
@@ -1081,7 +1093,7 @@ func TestFreshStartRetryMidHandoffClearsFlag(t *testing.T) {
 	}
 }
 
-func TestRetryExhaustionTriggersPause(t *testing.T) {
+func TestFailureCascadeMultipleInfraIncrements(t *testing.T) {
 	workspaceDir := t.TempDir()
 	rallyDir := filepath.Join(workspaceDir, ".rally")
 	os.MkdirAll(rallyDir, 0o755)
@@ -1090,16 +1102,21 @@ func TestRetryExhaustionTriggersPause(t *testing.T) {
 	s := newTestStore(t, rallyDir)
 	exec := &funcExecutor{
 		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+			if opts.LogPath != "" {
+				_ = os.WriteFile(opts.LogPath, []byte("fork/exec failed\n"), 0o644)
+			}
 			return &agent.TryResult{Completed: false, Summary: "fail"}, nil
 		},
 	}
-	executors := map[string]agent.Executor{"claude": exec}
+	executors := map[string]agent.Executor{"opencode": exec}
 
 	r := NewRunner(s, Config{
 		WorkspaceDir:     workspaceDir,
 		DataDir:          t.TempDir(),
-		AgentMixSpecs:    []string{"cc:1"},
+		AgentMixSpecs:    []string{"op:dsf"},
 		TargetIterations: 1,
+		RetryBudget:      3,
+		Resolver:         cheapTestResolver,
 	}, executors)
 	r.resilience = &Resilience{
 		Store:                     s,
@@ -1107,6 +1124,7 @@ func TestRetryExhaustionTriggersPause(t *testing.T) {
 		HourlyRetriesBeforeFreeze: 2,
 		NowFunc:                   time.Now,
 	}
+	r.sleepFunc = func(time.Duration) {}
 
 	_ = r.Run(context.Background())
 
@@ -1115,7 +1133,7 @@ func TestRetryExhaustionTriggersPause(t *testing.T) {
 		t.Fatalf("got %d tries, want at least 3", len(tries))
 	}
 
-	status := s.GetAgentStatus("claude", "")
+	status := s.GetAgentStatus("opencode", cheapTestModel)
 	foundPause := false
 	for _, e := range status {
 		if e.EventType == "paused" {
@@ -1126,6 +1144,218 @@ func TestRetryExhaustionTriggersPause(t *testing.T) {
 	if !foundPause {
 		t.Fatal("expected agent paused event")
 	}
+}
+
+func TestIncompleteRunLeavesChangesUncommitted(t *testing.T) {
+	oldHeadPull := headPullLap
+	headPullLap = func(context.Context, string) (laps.Lap, error) {
+		return laps.Lap{ID: "lap-1", Title: "test", Assignee: "senior"}, nil
+	}
+	defer func() { headPullLap = oldHeadPull }()
+
+	workspaceDir := t.TempDir()
+	rallyDir := filepath.Join(workspaceDir, ".rally")
+	os.MkdirAll(rallyDir, 0o755)
+	initRepo(t, workspaceDir)
+
+	s := newTestStore(t, rallyDir)
+	exec := &funcExecutor{
+		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+			if err := os.WriteFile(filepath.Join(workspaceDir, "partial.txt"), []byte("partial"), 0o644); err != nil {
+				return nil, err
+			}
+			return &agent.TryResult{Completed: true, Summary: "changed but did not finalize"}, nil
+		},
+	}
+
+	r := NewRunner(s, Config{
+		WorkspaceDir:     workspaceDir,
+		DataDir:          t.TempDir(),
+		AgentMixSpecs:    []string{"op:dsf"},
+		TargetIterations: 1,
+		RetryBudget:      1,
+		LapsEnabled:      true,
+		Resolver:         cheapTestResolver,
+	}, map[string]agent.Executor{"opencode": exec})
+
+	_ = r.Run(context.Background())
+
+	tries := s.AllTries()
+	if len(tries) == 0 {
+		t.Fatal("expected at least one try")
+	}
+	if tries[0].Completed {
+		t.Fatal("incomplete try should be failed")
+	}
+	if tries[0].FailReason != "incomplete: file changes without finalization" {
+		t.Fatalf("FailReason = %q, want incomplete classification", tries[0].FailReason)
+	}
+	if tries[0].CommitHash != "" {
+		t.Fatalf("CommitHash = %q, want empty for incomplete try", tries[0].CommitHash)
+	}
+	status := runGit(t, workspaceDir, "status", "--porcelain", "partial.txt")
+	if !strings.Contains(status, "partial.txt") {
+		t.Fatalf("partial.txt should remain uncommitted, status=%q", status)
+	}
+}
+
+func TestIncompleteRetryPromptGuidance(t *testing.T) {
+	oldHeadPull := headPullLap
+	headPullLap = func(context.Context, string) (laps.Lap, error) {
+		return laps.Lap{ID: "lap-1", Title: "test", Description: "finish lap", Assignee: "senior"}, nil
+	}
+	defer func() { headPullLap = oldHeadPull }()
+
+	workspaceDir := t.TempDir()
+	rallyDir := filepath.Join(workspaceDir, ".rally")
+	os.MkdirAll(rallyDir, 0o755)
+	initRepo(t, workspaceDir)
+
+	s := newTestStore(t, rallyDir)
+	attempt := 0
+	var retryPrompt string
+	exec := &funcExecutor{
+		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+			attempt++
+			if attempt == 1 {
+				if err := os.WriteFile(filepath.Join(workspaceDir, "partial.txt"), []byte("partial"), 0o644); err != nil {
+					return nil, err
+				}
+				return &agent.TryResult{Completed: true, Summary: "partial"}, nil
+			}
+			retryPrompt = opts.TaskPrompt
+			if err := progress.RecordLap(workspaceDir, "lap-1"); err != nil {
+				return nil, err
+			}
+			return &agent.TryResult{Completed: true, Summary: "done"}, nil
+		},
+	}
+
+	r := NewRunner(s, Config{
+		WorkspaceDir:     workspaceDir,
+		DataDir:          t.TempDir(),
+		AgentMixSpecs:    []string{"op:dsf"},
+		TargetIterations: 1,
+		RetryBudget:      2,
+		LapsEnabled:      true,
+		Resolver:         cheapTestResolver,
+	}, map[string]agent.Executor{"opencode": exec})
+
+	if err := r.Run(context.Background()); err != nil {
+		t.Fatalf("Run error = %v", err)
+	}
+	if !strings.Contains(retryPrompt, incompleteRetryGuidance) {
+		t.Fatalf("retry prompt missing incomplete guidance: %q", retryPrompt)
+	}
+}
+
+func TestIncompleteDoesNotCountTowardFailureCascade(t *testing.T) {
+	oldHeadPull := headPullLap
+	headPullLap = func(context.Context, string) (laps.Lap, error) {
+		return laps.Lap{ID: "lap-1", Title: "test", Assignee: "senior"}, nil
+	}
+	defer func() { headPullLap = oldHeadPull }()
+
+	workspaceDir := t.TempDir()
+	rallyDir := filepath.Join(workspaceDir, ".rally")
+	os.MkdirAll(rallyDir, 0o755)
+	initRepo(t, workspaceDir)
+
+	s := newTestStore(t, rallyDir)
+	exec := &funcExecutor{
+		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+			_ = os.WriteFile(filepath.Join(workspaceDir, "partial.txt"), []byte("partial"), 0o644)
+			return &agent.TryResult{Completed: true, Summary: "partial"}, nil
+		},
+	}
+	r := NewRunner(s, Config{
+		WorkspaceDir:     workspaceDir,
+		DataDir:          t.TempDir(),
+		AgentMixSpecs:    []string{"op:dsf"},
+		TargetIterations: 1,
+		RetryBudget:      1,
+		LapsEnabled:      true,
+		Resolver:         cheapTestResolver,
+	}, map[string]agent.Executor{"opencode": exec})
+
+	_ = r.Run(context.Background())
+
+	if got := countAgentStatusEvents(s, "paused", "frozen"); got != 0 {
+		t.Fatalf("cascade events = %d, want 0", got)
+	}
+}
+
+func TestFailureCascadeSingleInfraDoesNotIncrement(t *testing.T) {
+	workspaceDir := t.TempDir()
+	rallyDir := filepath.Join(workspaceDir, ".rally")
+	os.MkdirAll(rallyDir, 0o755)
+	initRepo(t, workspaceDir)
+
+	s := newTestStore(t, rallyDir)
+	exec := &funcExecutor{
+		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+			if opts.LogPath != "" {
+				_ = os.WriteFile(opts.LogPath, []byte("fork/exec failed\n"), 0o644)
+			}
+			return &agent.TryResult{Completed: false, Summary: "infra"}, nil
+		},
+	}
+	r := NewRunner(s, Config{
+		WorkspaceDir:     workspaceDir,
+		DataDir:          t.TempDir(),
+		AgentMixSpecs:    []string{"op:dsf"},
+		TargetIterations: 1,
+		RetryBudget:      1,
+		Resolver:         cheapTestResolver,
+	}, map[string]agent.Executor{"opencode": exec})
+
+	_ = r.Run(context.Background())
+
+	if got := countAgentStatusEvents(s, "paused", "frozen"); got != 0 {
+		t.Fatalf("cascade events = %d, want 0", got)
+	}
+}
+
+func TestFailureCascadeAgentErrorDoesNotIncrement(t *testing.T) {
+	workspaceDir := t.TempDir()
+	rallyDir := filepath.Join(workspaceDir, ".rally")
+	os.MkdirAll(rallyDir, 0o755)
+	initRepo(t, workspaceDir)
+
+	s := newTestStore(t, rallyDir)
+	exec := &funcExecutor{
+		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+			return &agent.TryResult{Completed: false, Summary: "agent failed"}, nil
+		},
+	}
+	r := NewRunner(s, Config{
+		WorkspaceDir:     workspaceDir,
+		DataDir:          t.TempDir(),
+		AgentMixSpecs:    []string{"op:dsf"},
+		TargetIterations: 1,
+		RetryBudget:      2,
+		Resolver:         cheapTestResolver,
+	}, map[string]agent.Executor{"opencode": exec})
+
+	_ = r.Run(context.Background())
+
+	if got := countAgentStatusEvents(s, "paused", "frozen"); got != 0 {
+		t.Fatalf("cascade events = %d, want 0", got)
+	}
+}
+
+func countAgentStatusEvents(s *store.Store, eventTypes ...string) int {
+	wanted := map[string]bool{}
+	for _, eventType := range eventTypes {
+		wanted[eventType] = true
+	}
+	count := 0
+	for _, event := range s.AllAgentStatus() {
+		if wanted[event.EventType] {
+			count++
+		}
+	}
+	return count
 }
 
 func TestGracefulStop(t *testing.T) {
@@ -1552,6 +1782,9 @@ func TestFreezeCascade(t *testing.T) {
 	s := newTestStore(t, rallyDir)
 	exec := &funcExecutor{
 		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+			if opts.LogPath != "" {
+				_ = os.WriteFile(opts.LogPath, []byte("fork/exec failed\n"), 0o644)
+			}
 			return &agent.TryResult{Completed: false, Summary: "fail"}, nil
 		},
 	}
@@ -1562,6 +1795,7 @@ func TestFreezeCascade(t *testing.T) {
 		DataDir:          t.TempDir(),
 		AgentMixSpecs:    []string{"cc:1"},
 		TargetIterations: 1,
+		RetryBudget:      3,
 	}, executors)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
@@ -1648,6 +1882,9 @@ func TestFailedRunDoesNotCountIteration(t *testing.T) {
 	s := newTestStore(t, rallyDir)
 	exec := &funcExecutor{
 		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+			if opts.LogPath != "" {
+				_ = os.WriteFile(opts.LogPath, []byte("fork/exec failed\n"), 0o644)
+			}
 			return &agent.TryResult{Completed: false, Summary: "fail"}, nil
 		},
 	}
@@ -1658,6 +1895,7 @@ func TestFailedRunDoesNotCountIteration(t *testing.T) {
 		DataDir:          t.TempDir(),
 		AgentMixSpecs:    []string{"cc:1"},
 		TargetIterations: 1,
+		RetryBudget:      3,
 	}, executors)
 	r.resilience = &Resilience{
 		Store:                     s,
@@ -2630,6 +2868,9 @@ func TestRunnerRouteIntegration_AssigneesQuotasFreezeAndRoleFiles(t *testing.T) 
 	exec := &funcExecutor{
 		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
 			if opts.Persona == "claude" && opts.RoleInstructions == "Senior route guidance." && failSeniorClaudeAttempts > 0 {
+				if opts.LogPath != "" {
+					_ = os.WriteFile(opts.LogPath, []byte("fork/exec failed\n"), 0o644)
+				}
 				failSeniorClaudeAttempts--
 				return &agent.TryResult{Completed: false, Summary: "simulated senior claude failure"}, nil
 			}
@@ -3749,6 +3990,9 @@ func TestE2E_WindowsFreezeDisabledRetryBudgetExhaustion(t *testing.T) {
 	s := newTestStore(t, rallyDir)
 	exec := &funcExecutor{
 		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+			if opts.LogPath != "" {
+				_ = os.WriteFile(opts.LogPath, []byte("fork/exec failed\n"), 0o644)
+			}
 			return &agent.TryResult{Completed: false, Summary: "fail"}, nil
 		},
 	}

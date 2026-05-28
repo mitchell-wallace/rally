@@ -9,11 +9,11 @@
 ## 2. "Incomplete" failure class
 
 - [x] 2.1 Add an `incomplete` failure class to `internal/reliability/patterns.go` alongside infra/agent
-- [ ] 2.2 In `internal/relay/runner.go`, classify a try as incomplete when it produces file changes (dirty working tree) but the agent did not finalize the lap (no `laps done`/`laps handoff` detected)
-- [ ] 2.3 Suppress auto-commit for incomplete tries — leave changes uncommitted so the retry agent inherits them as partial progress
-- [ ] 2.4 On retry after incomplete, inject prompt guidance: "The last run was incomplete. Check any current git changes, finish anything not done, verify correctness, commit when good, then run `laps done`."
-- [ ] 2.5 Incomplete runs retry but do NOT call `PauseAgent`/`RecordHourlyFailure` (do not advance the resilience cascade)
-- [ ] 2.6 Tests: incomplete run leaves changes uncommitted; retry agent gets guidance; incomplete does not count toward pause/freeze
+- [x] 2.2 In `internal/relay/runner.go`, classify a try as incomplete when it produces file changes (dirty working tree) but the agent did not finalize the lap (no `laps done`/`laps handoff` detected)
+- [x] 2.3 Suppress auto-commit for incomplete tries — leave changes uncommitted so the retry agent inherits them as partial progress
+- [x] 2.4 On retry after incomplete, inject prompt guidance: "The last run was incomplete. Check any current git changes, finish anything not done, verify correctness, commit when good, then run `laps done`."
+- [x] 2.5 Incomplete runs retry but do NOT call `PauseAgent`/`RecordHourlyFailure` (do not advance the resilience cascade)
+- [x] 2.6 Tests: incomplete run leaves changes uncommitted; retry agent gets guidance; incomplete does not count toward pause/freeze
 
 ## 3. Probation state + freeze decay
 
@@ -39,7 +39,7 @@
 - [x] 5.2 Define `ResilienceKey{Harnes, Model}` type in `internal/relay/resilience.go`; update every method signature: `getState(key)`, `PauseAgent(key, relayID)`, `RecordHourlyFailure(key, relayID)`, `FreezeAgent(key, relayID)`, `UnpauseAgent(key, relayID)`, `SelectActiveAgent(mix, runIndex)` (uniqueness map keys on `harness:model`)
 - [x] 5.3 Add optional `model` field to `AgentStatusEvent`; update `GetAgentStatus` to accept model parameter and filter on both `agent_type` and `model` when model is present
 - [x] 5.4 Update all callers of resilience methods in `internal/relay/runner.go` and `internal/relay/route_runtime.go` to pass `selection.Agent.Model` (or resolved model); enumerate all 10 method signatures and 20+ call sites
-- [ ] 5.5 In `internal/relay/runner.go`, only call `PauseAgent`/`RecordHourlyFailure` when >1 attempt within a run is classified as infra-class; agent-class and incomplete failures stay retry-eligible but do not escalate
+- [x] 5.5 In `internal/relay/runner.go`, only call `PauseAgent`/`RecordHourlyFailure` when >1 attempt within a run is classified as infra-class; agent-class and incomplete failures stay retry-eligible but do not escalate
 - [x] 5.6 Default unknown failures to the agent-class (does-not-freeze) side
 - [ ] 5.7 Tests: >1 infra failure increments cascade; single infra failure does not; agent error and incomplete do not; per-harness-model keying isolates rate-limit to specific model
 

@@ -443,6 +443,9 @@ func (r *Runner) Run(ctx context.Context) error {
 			}
 			continue
 		}
+		if !success {
+			selection.Scheduler.OnAgentFailed(selection.Entry, "retry-budget-exhausted", false)
+		}
 
 		if selection.Probation {
 			if success || failReason == "incomplete run" {
@@ -450,7 +453,6 @@ func (r *Runner) Run(ctx context.Context) error {
 					return err
 				}
 			} else {
-				selection.Scheduler.OnAgentFailed(selection.Entry, "retry-budget-exhausted", false)
 				if err := resilience.FreezeAgent(KeyFromAgent(selection.Agent), relay.ID); err != nil {
 					return err
 				}
@@ -461,14 +463,12 @@ func (r *Runner) Run(ctx context.Context) error {
 					return err
 				}
 			} else if failureClass == reliability.FailureInfra && infraFailures > 1 {
-				selection.Scheduler.OnAgentFailed(selection.Entry, "retry-budget-exhausted", false)
 				if err := resilience.RecordHourlyFailure(KeyFromAgent(selection.Agent), relay.ID); err != nil {
 					return err
 				}
 			}
 		} else {
 			if !success && failureClass == reliability.FailureInfra && infraFailures > 1 {
-				selection.Scheduler.OnAgentFailed(selection.Entry, "retry-budget-exhausted", false)
 				if err := resilience.PauseAgent(KeyFromAgent(selection.Agent), relay.ID); err != nil {
 					return err
 				}
@@ -619,7 +619,7 @@ func (r *Runner) runOne(
 		maxAttempts = 5
 	}
 	if isHourlyRetry {
-		maxAttempts = 1
+		maxAttempts = HourlyRetryMaxAttempts
 	}
 	if isProbation {
 		maxAttempts = HourlyRetryMaxAttempts
@@ -838,11 +838,12 @@ attemptLoop:
 		commitHash := ""
 		preCommitFilesChanged := r.filesChangedList(result, headBefore, headAfter, "")
 		dirtyBeforeAutoCommit, _ := gitx.IsWorkspaceDirty(r.cfg.WorkspaceDir)
-		finalized := !task.IsLapsBacked || len(recordedLaps) > 0 || handoffState != 0
-		incomplete := task.IsLapsBacked && dirtyBeforeAutoCommit && len(preCommitFilesChanged) > 0 && !finalized
+		finalized := !task.IsLapsBacked || len(recordedLaps) > 0 || handoffState != 0 || (task.LapID == "" && result != nil && result.Completed)
+		hasUserFileChanges := len(preCommitFilesChanged) > 0
+		incomplete := task.IsLapsBacked && dirtyBeforeAutoCommit && hasUserFileChanges && !finalized
 		if headBefore != "" && headAfter != "" && headBefore != headAfter {
 			commitHash = headAfter
-		} else if dirtyBeforeAutoCommit && !incomplete {
+		} else if dirtyBeforeAutoCommit && hasUserFileChanges && !incomplete {
 			hash, commitErr := r.autoCommit(runIndex, picked.Harness, attempt)
 			if commitErr != nil {
 				fmt.Fprintf(log, "relay %d run %d attempt %d auto-commit warning: %v\n", relay.ID, runIndex+1, attempt, commitErr)
@@ -883,7 +884,7 @@ attemptLoop:
 			failReason = "harness error"
 		} else if result == nil || !result.Completed {
 			failed = true
-			failReason = "incomplete run"
+			failReason = "agent error"
 		} else {
 			hasChanges := commitHash != "" || filesChangedCount > 0
 			if !hasChanges {
