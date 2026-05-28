@@ -16,10 +16,10 @@
       "title": "Extend ClassifyError with infra/agent/incomplete failure classes",
       "description": "## Context\nOpenSpec change: `harden-relay-run-lifecycle` — tasks 2.1, 5.1, 5.6.\nCurrently `ClassifyError` has basic classification. This lap adds the three-class distinction that everything else depends on.\n\n## Outcome\n- `internal/reliability/patterns.go` exports a `FailureClass` enum: `FailureInfra`, `FailureAgent`, `FailureIncomplete`.\n- `ClassifyError` extended with patterns for:\n  - **infra**: rate-limit keywords, harness/launch errors (`argument list too long`, `fork/exec`), API timeout/network stall patterns, stall-detection signals.\n  - **agent**: ordinary agent errors, short no-op markers.\n  - **incomplete**: new class (caller will set this based on working-tree state, not error text — but the type must be defined here).\n- Unknown failures default to `FailureAgent` (task 5.6 — does-not-freeze side).\n- Tests cover each pattern family and the unknown-defaults-to-agent behavior.\n\n## Design\n- `FailureIncomplete` is special: it cannot be determined from error text alone. The classification function should accept an optional context struct (e.g. `ClassifyContext{HasFileChanges bool, Finalized bool}`) or the caller sets it post-hoc. Choose whichever is cleaner — the key contract is that `FailureIncomplete` is a first-class member of the enum.\n- Keep patterns testable: the pattern table should be a var or const slice, not buried in if/else chains.\n\n## Acceptance\n- `go test ./internal/reliability/...` passes with new tests\n- Each infra pattern (rate-limit, fork/exec, argument list too long, timeout, stall) has at least one test case\n- Unknown/unmatched errors return `FailureAgent`\n- Mark off tasks 2.1, 5.1, 5.6 in the change tasks.md",
       "assignee": "senior",
-      "isDone": false,
+      "isDone": true,
       "createdAt": "2026-05-27T08:42:06.776911174Z",
-      "updatedAt": "2026-05-27T08:42:06.776911174Z",
-      "completedAt": null
+      "updatedAt": "2026-05-28T05:03:03.822605524Z",
+      "completedAt": "2026-05-28T05:03:03.822605524Z"
     },
     {
       "id": "rall-4f7e",
