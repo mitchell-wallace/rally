@@ -971,15 +971,15 @@ attemptLoop:
 		fmt.Fprintf(log, "relay %d run %d attempt %d result: completed=%v fail_reason=%q runtime=%s files_changed=%d tool_calls=%d commit=%q lap_id=%q assignee=%q recorded_laps=%v handoff_state=%d\n",
 			relay.ID, runIndex+1, attempt, !failed, failReason, runtime, filesChangedCount, tryRecord.ToolCalls, shortHash, task.LapID, task.Assignee, recordedLaps, handoffState)
 		if err := r.store.AppendTry(tryRecord); err != nil {
-			return false, false, false, err
+			return false, false, false, "", err
 		}
 
 		if actionTaken {
 			if r.stopFlag.Load() {
-				return false, false, true, nil
+				return false, false, true, "", nil
 			}
 			if r.skipFlag.Load() {
-				return false, false, false, nil
+				return false, false, false, "", nil
 			}
 			fmt.Println("Paused — press Enter to resume")
 			bufio.NewReader(os.Stdin).ReadString('\n')

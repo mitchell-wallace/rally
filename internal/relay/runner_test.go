@@ -774,7 +774,7 @@ func TestRunOneFreezeRetryResumesAndRecovers(t *testing.T) {
 
 	freezeCalls := 0
 	recoveredCalls := 0
-	success, addressed, interrupted, err := r.runOne(
+	success, addressed, interrupted, _, err := r.runOne(
 		context.Background(),
 		&store.RelayRecord{ID: 1, TargetIterations: 1},
 		0,
