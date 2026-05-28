@@ -783,6 +783,7 @@ func TestRunOneFreezeRetryResumesAndRecovers(t *testing.T) {
 		nil,
 		nil,
 		false,
+		false,
 		func() { freezeCalls++ },
 		func() { recoveredCalls++ },
 		io.Discard,

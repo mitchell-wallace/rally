@@ -400,7 +400,7 @@ func (r *Runner) Run(ctx context.Context) error {
 			}
 		}
 
-		success, addressed, interrupted, err := r.runOne(
+		success, addressed, interrupted, failReason, err := r.runOne(
 			ctx,
 			relay,
 			runIndex,
@@ -443,7 +443,18 @@ func (r *Runner) Run(ctx context.Context) error {
 			continue
 		}
 
-		if selection.HourlyRetry {
+		if selection.Probation {
+			if success || failReason == "incomplete run" {
+				if err := resilience.UnpauseAgent(KeyFromAgent(selection.Agent), relay.ID); err != nil {
+					return err
+				}
+			} else {
+				selection.Scheduler.OnAgentFailed(selection.Entry, "retry-budget-exhausted", false)
+				if err := resilience.FreezeAgent(KeyFromAgent(selection.Agent), relay.ID); err != nil {
+					return err
+				}
+			}
+		} else if selection.HourlyRetry {
 			if success {
 				if err := resilience.UnpauseAgent(KeyFromAgent(selection.Agent), relay.ID); err != nil {
 					return err
@@ -566,7 +577,7 @@ func (r *Runner) runOne(
 	onStall func(),
 	onStallRecovered func(),
 	log io.Writer,
-) (bool, bool, bool, error) {
+) (bool, bool, bool, string, error) {
 	// Initialize run-state for this run.
 	runID := fmt.Sprintf("relay-%d-run-%d", relay.ID, runIndex+1)
 	_ = progress.SaveRunState(r.cfg.WorkspaceDir, &progress.RunState{RunID: runID, HandoffState: 0, RecordedLaps: []string{}})
@@ -590,10 +601,11 @@ func (r *Runner) runOne(
 	var lastResult *agent.TryResult
 	var sessionID string
 	success := false
+	failReason := ""
 	stallMarked := false
 	roleInstructions, err := r.resolveRoleInstructions(task.Assignee)
 	if err != nil {
-		return false, false, false, err
+		return false, false, false, "", err
 	}
 
 	exec := r.executors[picked.Harness]
@@ -611,10 +623,10 @@ func (r *Runner) runOne(
 attemptLoop:
 	for attempt := 1; attempt <= maxAttempts; attempt++ {
 		if ctx.Err() != nil {
-			return false, false, false, ctx.Err()
+			return false, false, false, "", ctx.Err()
 		}
 		if r.stopFlag.Load() {
-			return false, false, true, nil
+			return false, false, true, "", nil
 		}
 
 		if attempt > 1 {
@@ -650,7 +662,7 @@ attemptLoop:
 
 		taskPath := filepath.Join(r.cfg.WorkspaceDir, ".rally", "current_task.md")
 		if err := os.WriteFile(taskPath, []byte(prompt), 0o644); err != nil {
-			return false, false, false, fmt.Errorf("write current_task.md: %w", err)
+			return false, false, false, "", fmt.Errorf("write current_task.md: %w", err)
 		}
 
 		tryLogPath := filepath.Join(r.cfg.DataDir, "tries", repoKey(r.cfg.WorkspaceDir), fmt.Sprintf("try-%d.log", r.store.NextTryID()))
@@ -837,7 +849,7 @@ attemptLoop:
 		// Compute failed before rendering the footer so the displayed result
 		// matches what gets recorded in the try record.
 		failed := false
-		failReason := ""
+		failReason = ""
 		if execErr != nil {
 			failed = true
 			failReason = "harness error"
@@ -1023,7 +1035,7 @@ attemptLoop:
 	if lastResult != nil && lastResult.MessageAddressed != nil {
 		addressed = *lastResult.MessageAddressed
 	}
-	return success, addressed, false, nil
+	return success, addressed, false, failReason, nil
 }
 
 func (r *Runner) newStallController(tryLogPath string, exec agent.Executor) reliability.StallController {

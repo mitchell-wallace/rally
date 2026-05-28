@@ -101,6 +101,7 @@ func (r *Resilience) SelectActiveAgent(mix AgentMix, runIndex int) (agent.Resolv
 
 	allFrozen := true
 	anyActive := false
+	anyProbation := false
 	uniqueAgents := map[ResilienceKey]struct{}{}
 	for _, a := range mix.Cycle {
 		key := KeyFromAgent(a)
@@ -114,6 +115,9 @@ func (r *Resilience) SelectActiveAgent(mix AgentMix, runIndex int) (agent.Resolv
 		}
 		if st == StateActive {
 			anyActive = true
+		}
+		if st == StateProbation {
+			anyProbation = true
 		}
 	}
 	if allFrozen {
@@ -129,6 +133,8 @@ func (r *Resilience) SelectActiveAgent(mix AgentMix, runIndex int) (agent.Resolv
 		switch st {
 		case StateActive:
 			return a, runIndex + i + 1, false, nil
+		case StateProbation:
+			return a, runIndex + i + 1, false, nil
 		case StatePaused:
 			if !r.NowFunc().Before(since.Add(r.PauseDuration)) {
 				return a, runIndex + i + 1, true, nil
@@ -136,7 +142,7 @@ func (r *Resilience) SelectActiveAgent(mix AgentMix, runIndex int) (agent.Resolv
 		}
 	}
 
-	if !anyActive {
+	if !anyActive && !anyProbation {
 		return agent.ResolvedAgent{}, runIndex, false, fmt.Errorf("all agents paused")
 	}
 	return agent.ResolvedAgent{}, runIndex, false, fmt.Errorf("no active agent found")

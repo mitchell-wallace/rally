@@ -574,3 +574,114 @@ func TestResilience_ResilienceKey_String(t *testing.T) {
 		}
 	}
 }
+
+func TestResilience_GetState_FrozenDecaysToProbation(t *testing.T) {
+	s := newResilienceTestStore(t)
+	now := time.Now()
+	frozenAt := now.Add(-6 * time.Hour)
+	r := &Resilience{
+		Store:                     s,
+		PauseDuration:             time.Hour,
+		FreezeDuration:            5 * time.Hour,
+		HourlyRetriesBeforeFreeze: 5,
+		NowFunc:                   func() time.Time { return now },
+	}
+	k := key("claude", "sonnet")
+
+	if err := s.AppendAgentStatus(store.AgentStatusEvent{
+		AgentType: k.Harness,
+		Model:     k.Model,
+		EventType: "frozen",
+		Timestamp: frozenAt.UTC().Format(time.RFC3339),
+		RelayID:   1,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	st, since := r.getState(k)
+	if st != StateProbation {
+		t.Fatalf("expected StateProbation after freeze decay, got %s", st)
+	}
+	if since.IsZero() {
+		t.Fatal("expected non-zero since time")
+	}
+}
+
+func TestResilience_GetState_FrozenNotDecayed(t *testing.T) {
+	s := newResilienceTestStore(t)
+	now := time.Now()
+	frozenAt := now.Add(-2 * time.Hour)
+	r := &Resilience{
+		Store:                     s,
+		PauseDuration:             time.Hour,
+		FreezeDuration:            5 * time.Hour,
+		HourlyRetriesBeforeFreeze: 5,
+		NowFunc:                   func() time.Time { return now },
+	}
+	k := key("claude", "sonnet")
+
+	if err := s.AppendAgentStatus(store.AgentStatusEvent{
+		AgentType: k.Harness,
+		Model:     k.Model,
+		EventType: "frozen",
+		Timestamp: frozenAt.UTC().Format(time.RFC3339),
+		RelayID:   1,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	st, _ := r.getState(k)
+	if st != StateFrozen {
+		t.Fatalf("expected StateFrozen (not yet decayed), got %s", st)
+	}
+}
+
+func TestResilience_SelectActiveAgent_AllFrozenButDecayable(t *testing.T) {
+	s := newResilienceTestStore(t)
+	now := time.Now()
+	frozenAt := now.Add(-6 * time.Hour)
+	r := &Resilience{
+		Store:                     s,
+		PauseDuration:             time.Hour,
+		FreezeDuration:            5 * time.Hour,
+		HourlyRetriesBeforeFreeze: 5,
+		NowFunc:                   func() time.Time { return now },
+	}
+
+	claudeKey := key("claude", "")
+	codexKey := key("codex", "")
+
+	if err := s.AppendAgentStatus(store.AgentStatusEvent{
+		AgentType: claudeKey.Harness,
+		Model:     claudeKey.Model,
+		EventType: "frozen",
+		Timestamp: frozenAt.UTC().Format(time.RFC3339),
+		RelayID:   1,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.AppendAgentStatus(store.AgentStatusEvent{
+		AgentType: codexKey.Harness,
+		Model:     codexKey.Model,
+		EventType: "frozen",
+		Timestamp: frozenAt.UTC().Format(time.RFC3339),
+		RelayID:   1,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	mix := AgentMix{
+		Cycle: []agent.ResolvedAgent{
+			{Harness: "claude"},
+			{Harness: "codex"},
+		},
+	}
+
+	selected, _, _, err := r.SelectActiveAgent(mix, 0)
+	if err != nil {
+		t.Fatalf("expected probation agent to be selectable, got error: %v", err)
+	}
+	if selected.Harness != "claude" {
+		t.Fatalf("expected claude (first in cycle) to be selected for probation, got %s", selected.Harness)
+	}
+}

@@ -5,6 +5,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/mitchell-wallace/rally/internal/store"
 )
 
 func newRouteRuntimeHarness(t *testing.T) *Resilience {
@@ -435,5 +437,60 @@ func TestRouteRuntime_NoBackendAlwaysUsesDefaultRoute(t *testing.T) {
 		if got := agentRouteSpec(sel.Agent); got != want[i] {
 			t.Fatalf("assignee %q pick = %q, want %q", assignee, got, want[i])
 		}
+	}
+}
+
+func TestRouteRuntime_ProbationOneShotEnforcement(t *testing.T) {
+	rt, resilience := newResolvedRouteRuntimeOrDie(t, map[string][]string{
+		"default": {"claude:opus-4.7"},
+	}, false)
+
+	now := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
+	resilience.NowFunc = func() time.Time { return now }
+	resilience.FreezeDuration = 5 * time.Hour
+
+	frozenAt := now.Add(-6 * time.Hour)
+	k := ResilienceKey{Harness: "claude", Model: "opus-4.7"}
+	if err := resilience.Store.AppendAgentStatus(store.AgentStatusEvent{
+		AgentType: k.Harness,
+		Model:     k.Model,
+		EventType: "frozen",
+		Timestamp: frozenAt.UTC().Format(time.RFC3339),
+		RelayID:   1,
+	}); err != nil {
+		t.Fatalf("AppendAgentStatus: %v", err)
+	}
+
+	sel := mustNextRouteSelection(t, rt, resilience, "")
+	if !sel.Probation {
+		t.Fatal("expected probation selection on first sync")
+	}
+
+	events := resilience.Store.GetAgentStatus(k.Harness, k.Model)
+	foundProbation := false
+	for _, e := range events {
+		if e.EventType == "probation" {
+			foundProbation = true
+			break
+		}
+	}
+	if !foundProbation {
+		t.Fatal("expected probation event to be persisted")
+	}
+
+	sel2 := mustNextRouteSelection(t, rt, resilience, "")
+	if !sel2.Probation {
+		t.Fatal("expected probation selection on second sync (entry benched but still selectable)")
+	}
+
+	probationCount := 0
+	events = resilience.Store.GetAgentStatus(k.Harness, k.Model)
+	for _, e := range events {
+		if e.EventType == "probation" {
+			probationCount++
+		}
+	}
+	if probationCount != 1 {
+		t.Fatalf("expected exactly 1 probation event, got %d", probationCount)
 	}
 }

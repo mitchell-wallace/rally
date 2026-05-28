@@ -9,7 +9,7 @@ import (
 const (
 	triesWindowSize       = 200
 	relaysWindowSize      = 50
-	agentStatusWindowSize = 50
+	agentStatusWindowSize = 500
 	messagesWindowSize    = 200
 )
 
@@ -79,7 +79,7 @@ func (s *Store) AppendAgentStatus(e AgentStatusEvent) error {
 	}
 	s.cache.AgentStatus = append(s.cache.AgentStatus, e)
 	if len(s.cache.AgentStatus) > agentStatusWindowSize {
-		if err := commitThenTruncate(path, agentStatusWindowSize); err != nil {
+		if err := s.truncateAgentStatus(path); err != nil {
 			return fmt.Errorf("truncate agent_status: %w", err)
 		}
 		c, err := LoadCache(s.dir)
@@ -88,6 +88,63 @@ func (s *Store) AppendAgentStatus(e AgentStatusEvent) error {
 		}
 		s.cache = c
 	}
+	return nil
+}
+
+// truncateAgentStatus truncates the agent status log while preserving summary
+// events for any active frozen or probation entries that would otherwise be
+// lost. This ensures that after truncation, the resilience state machine can
+// still correctly identify agents that are frozen or in probation.
+func (s *Store) truncateAgentStatus(path string) error {
+	events := s.cache.AgentStatus
+	if len(events) <= agentStatusWindowSize {
+		return nil
+	}
+
+	dropped := events[:len(events)-agentStatusWindowSize]
+	retained := events[len(events)-agentStatusWindowSize:]
+
+	type agentKey struct {
+		AgentType string
+		Model     string
+	}
+	summaryEvents := make(map[agentKey]AgentStatusEvent)
+
+	for _, e := range dropped {
+		if e.EventType != "frozen" && e.EventType != "probation" {
+			continue
+		}
+		key := agentKey{AgentType: e.AgentType, Model: e.Model}
+		if existing, ok := summaryEvents[key]; ok {
+			if e.Timestamp > existing.Timestamp {
+				summaryEvents[key] = e
+			}
+		} else {
+			summaryEvents[key] = e
+		}
+	}
+
+	var summaries []AgentStatusEvent
+	for _, e := range summaryEvents {
+		summaries = append(summaries, AgentStatusEvent{
+			AgentType: e.AgentType,
+			Model:     e.Model,
+			EventType: e.EventType,
+			Timestamp: e.Timestamp,
+			Reason:    "truncation summary",
+		})
+	}
+
+	sort.Slice(summaries, func(i, j int) bool {
+		return summaries[i].Timestamp < summaries[j].Timestamp
+	})
+
+	kept := append(summaries, retained...)
+
+	if err := commitThenTruncateWithContent(path, kept); err != nil {
+		return err
+	}
+
 	return nil
 }
 

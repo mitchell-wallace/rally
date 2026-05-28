@@ -557,3 +557,85 @@ func TestAgentStatusPersistsAcrossRelays(t *testing.T) {
 		t.Fatalf("expected 2 events across reloads, got %d", len(events))
 	}
 }
+
+func TestAgentStatusTruncationPreservesFreezeTimestamps(t *testing.T) {
+	_, store := setupTempStore(t)
+
+	frozenAt := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	_ = store.AppendAgentStatus(AgentStatusEvent{
+		AgentType: "claude",
+		Model:     "sonnet",
+		EventType: "frozen",
+		Timestamp: frozenAt.Format(time.RFC3339),
+		RelayID:   1,
+	})
+
+	for i := 0; i < agentStatusWindowSize+10; i++ {
+		_ = store.AppendAgentStatus(AgentStatusEvent{
+			AgentType: "codex",
+			Model:     "",
+			EventType: "paused",
+			Timestamp: time.Now().Add(time.Duration(i) * time.Second).Format(time.RFC3339),
+			RelayID:   1,
+		})
+	}
+
+	events := store.GetAgentStatus("claude", "sonnet")
+	if len(events) == 0 {
+		t.Fatal("expected frozen event to be preserved after truncation")
+	}
+
+	foundSummary := false
+	for _, e := range events {
+		if e.EventType == "frozen" && e.Reason == "truncation summary" {
+			foundSummary = true
+			if e.Timestamp != frozenAt.Format(time.RFC3339) {
+				t.Fatalf("expected preserved timestamp %q, got %q", frozenAt.Format(time.RFC3339), e.Timestamp)
+			}
+		}
+	}
+	if !foundSummary {
+		t.Fatal("expected truncation summary event for frozen agent")
+	}
+}
+
+func TestAgentStatusTruncationPreservesProbationTimestamps(t *testing.T) {
+	_, store := setupTempStore(t)
+
+	probationAt := time.Date(2026, 1, 1, 6, 0, 0, 0, time.UTC)
+	_ = store.AppendAgentStatus(AgentStatusEvent{
+		AgentType: "opencode",
+		Model:     "gemini",
+		EventType: "probation",
+		Timestamp: probationAt.Format(time.RFC3339),
+		RelayID:   1,
+	})
+
+	for i := 0; i < agentStatusWindowSize+10; i++ {
+		_ = store.AppendAgentStatus(AgentStatusEvent{
+			AgentType: "codex",
+			Model:     "",
+			EventType: "paused",
+			Timestamp: time.Now().Add(time.Duration(i) * time.Second).Format(time.RFC3339),
+			RelayID:   1,
+		})
+	}
+
+	events := store.GetAgentStatus("opencode", "gemini")
+	if len(events) == 0 {
+		t.Fatal("expected probation event to be preserved after truncation")
+	}
+
+	foundSummary := false
+	for _, e := range events {
+		if e.EventType == "probation" && e.Reason == "truncation summary" {
+			foundSummary = true
+			if e.Timestamp != probationAt.Format(time.RFC3339) {
+				t.Fatalf("expected preserved timestamp %q, got %q", probationAt.Format(time.RFC3339), e.Timestamp)
+			}
+		}
+	}
+	if !foundSummary {
+		t.Fatal("expected truncation summary event for probation agent")
+	}
+}
