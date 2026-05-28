@@ -86,10 +86,10 @@
       "title": "VERIFY: probation state machine and resilience constants",
       "description": "## Context\nOpenSpec change: `harden-relay-run-lifecycle`. Verifying the probation state machine (tasks 3.1–3.8) — the highest-risk piece of this change.\n\n## Outcome\n- Confirm `StateProbation` exists and `getState` returns it correctly based on `FreezeDuration`\n- Confirm `getState` is a pure read (no event writes, no side effects)\n- Confirm `syncRecoverySignals` one-shot enforcement works (unbench + re-bench)\n- Confirm probation event is persisted exactly once per transition\n- Confirm all constants centralized in `constants.go`\n- Confirm `agentStatusWindowSize` is 500 and truncation synthesizes summary events\n- `go test ./internal/relay/... ./internal/store/...` passes\n- `go build ./...` passes\n- Use `openspec-verify-change` skill focused on tasks 3.1–3.8\n- Report findings; create head laps for substantive gaps",
       "assignee": "verify",
-      "isDone": false,
+      "isDone": true,
       "createdAt": "2026-05-27T08:43:38.195101995Z",
-      "updatedAt": "2026-05-27T08:43:38.195101995Z",
-      "completedAt": null
+      "updatedAt": "2026-05-28T08:47:30.525245566Z",
+      "completedAt": "2026-05-28T08:47:30.525245566Z"
     },
     {
       "id": "rall-41bb",
