@@ -4546,3 +4546,307 @@ func TestPromptBudget_OverallLimit(t *testing.T) {
 		t.Fatal("expected tail of overall context to contain second summary")
 	}
 }
+
+func TestLapPinValidation_NormalPassThrough(t *testing.T) {
+	reason, mismatch := validatePinnedLap("lap-1", []string{"lap-1"})
+	if mismatch {
+		t.Fatalf("expected no mismatch for normal pass-through, got reason=%q", reason)
+	}
+}
+
+func TestLapPinValidation_WrongLapConsumed(t *testing.T) {
+	reason, mismatch := validatePinnedLap("lap-1", []string{"lap-9"})
+	if !mismatch {
+		t.Fatal("expected mismatch when consumed lap differs from pinned")
+	}
+	if reason != "wrong_lap_consumed" {
+		t.Fatalf("reason = %q, want %q", reason, "wrong_lap_consumed")
+	}
+}
+
+func TestLapPinValidation_MultiLapConsumed(t *testing.T) {
+	reason, mismatch := validatePinnedLap("lap-1", []string{"lap-1", "lap-2"})
+	if !mismatch {
+		t.Fatal("expected mismatch when multiple laps consumed")
+	}
+	if reason != "multi_lap_consumed" {
+		t.Fatalf("reason = %q, want %q", reason, "multi_lap_consumed")
+	}
+}
+
+func TestLapPinValidation_EmptyPinnedID(t *testing.T) {
+	reason, mismatch := validatePinnedLap("", []string{"lap-1"})
+	if mismatch {
+		t.Fatalf("expected no mismatch when pinned lap ID is empty, got reason=%q", reason)
+	}
+}
+
+func TestLapPinValidation_NoRecordedLaps(t *testing.T) {
+	reason, mismatch := validatePinnedLap("lap-1", nil)
+	if mismatch {
+		t.Fatalf("expected no mismatch when no laps recorded, got reason=%q", reason)
+	}
+	reason, mismatch = validatePinnedLap("lap-1", []string{})
+	if mismatch {
+		t.Fatalf("expected no mismatch when empty laps recorded, got reason=%q", reason)
+	}
+}
+
+func TestLapPinValidation_DuplicateSameLap(t *testing.T) {
+	reason, mismatch := validatePinnedLap("lap-1", []string{"lap-1", "lap-1"})
+	if mismatch {
+		t.Fatalf("expected no mismatch for duplicate same lap, got reason=%q", reason)
+	}
+}
+
+func TestLapPinRejectionInRunOne(t *testing.T) {
+	workspaceDir := t.TempDir()
+	rallyDir := filepath.Join(workspaceDir, ".rally")
+	os.MkdirAll(rallyDir, 0o755)
+	initRepo(t, workspaceDir)
+	runGit(t, workspaceDir, "commit", "--allow-empty", "-m", "initial", "--no-verify")
+
+	s := newTestStore(t, rallyDir)
+	exec := &funcExecutor{
+		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+			rs, _ := progress.LoadRunState(workspaceDir)
+			rs.RecordedLaps = []string{"other-lap"}
+			progress.SaveRunState(workspaceDir, rs)
+			return &agent.TryResult{Completed: true, Summary: "wrong lap"}, nil
+		},
+	}
+
+	r := NewRunner(s, Config{
+		WorkspaceDir:     workspaceDir,
+		DataDir:          t.TempDir(),
+		AgentMixSpecs:    []string{"op:dsf"},
+		TargetIterations: 1,
+		RetryBudget:      1,
+		LapsEnabled:      true,
+		Resolver:         cheapTestResolver,
+	}, map[string]agent.Executor{"opencode": exec})
+
+	success, _, _, _, _, _, err := r.runOne(
+		context.Background(),
+		&store.RelayRecord{ID: 1, TargetIterations: 1},
+		0,
+		agent.ResolvedAgent{Harness: "opencode", Model: cheapTestModel},
+		runTask{Name: "pinned task", Prompt: "do work", Assignee: "senior", LapID: "lap-1", IsLapsBacked: true, LapsRemaining: 1},
+		nil,
+		nil,
+		false,
+		false,
+		nil,
+		nil,
+		io.Discard,
+	)
+	if err != nil {
+		t.Fatalf("runOne error = %v", err)
+	}
+	if success {
+		t.Fatal("expected failure for wrong-lap consumption")
+	}
+
+	tries := s.AllTries()
+	if len(tries) == 0 {
+		t.Fatal("expected at least one try")
+	}
+	if tries[0].FailReason != "wrong_lap_consumed" {
+		t.Fatalf("FailReason = %q, want %q", tries[0].FailReason, "wrong_lap_consumed")
+	}
+}
+
+func TestLapPinMultiLapRejectionInRunOne(t *testing.T) {
+	workspaceDir := t.TempDir()
+	rallyDir := filepath.Join(workspaceDir, ".rally")
+	os.MkdirAll(rallyDir, 0o755)
+	initRepo(t, workspaceDir)
+	runGit(t, workspaceDir, "commit", "--allow-empty", "-m", "initial", "--no-verify")
+
+	s := newTestStore(t, rallyDir)
+	exec := &funcExecutor{
+		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+			rs, _ := progress.LoadRunState(workspaceDir)
+			rs.RecordedLaps = []string{"lap-1", "lap-2"}
+			progress.SaveRunState(workspaceDir, rs)
+			return &agent.TryResult{Completed: true, Summary: "multi lap"}, nil
+		},
+	}
+
+	r := NewRunner(s, Config{
+		WorkspaceDir:     workspaceDir,
+		DataDir:          t.TempDir(),
+		AgentMixSpecs:    []string{"op:dsf"},
+		TargetIterations: 1,
+		RetryBudget:      1,
+		LapsEnabled:      true,
+		Resolver:         cheapTestResolver,
+	}, map[string]agent.Executor{"opencode": exec})
+
+	success, _, _, _, _, _, err := r.runOne(
+		context.Background(),
+		&store.RelayRecord{ID: 1, TargetIterations: 1},
+		0,
+		agent.ResolvedAgent{Harness: "opencode", Model: cheapTestModel},
+		runTask{Name: "pinned task", Prompt: "do work", Assignee: "senior", LapID: "lap-1", IsLapsBacked: true, LapsRemaining: 1},
+		nil,
+		nil,
+		false,
+		false,
+		nil,
+		nil,
+		io.Discard,
+	)
+	if err != nil {
+		t.Fatalf("runOne error = %v", err)
+	}
+	if success {
+		t.Fatal("expected failure for multi-lap consumption")
+	}
+
+	tries := s.AllTries()
+	if len(tries) == 0 {
+		t.Fatal("expected at least one try")
+	}
+	if tries[0].FailReason != "multi_lap_consumed" {
+		t.Fatalf("FailReason = %q, want %q", tries[0].FailReason, "multi_lap_consumed")
+	}
+}
+
+func TestLapPinNormalPassThroughInRunOne(t *testing.T) {
+	workspaceDir := t.TempDir()
+	rallyDir := filepath.Join(workspaceDir, ".rally")
+	os.MkdirAll(rallyDir, 0o755)
+	initRepo(t, workspaceDir)
+	runGit(t, workspaceDir, "commit", "--allow-empty", "-m", "initial", "--no-verify")
+
+	s := newTestStore(t, rallyDir)
+	exec := &funcExecutor{
+		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+			rs, _ := progress.LoadRunState(workspaceDir)
+			rs.RecordedLaps = []string{"lap-1"}
+			progress.SaveRunState(workspaceDir, rs)
+			os.WriteFile(filepath.Join(workspaceDir, "work.txt"), []byte("done"), 0o644)
+			runGit(t, workspaceDir, "add", "work.txt")
+			runGit(t, workspaceDir, "commit", "-m", "completed work", "--no-verify")
+			return &agent.TryResult{Completed: true, Summary: "done"}, nil
+		},
+	}
+
+	r := NewRunner(s, Config{
+		WorkspaceDir:     workspaceDir,
+		DataDir:          t.TempDir(),
+		AgentMixSpecs:    []string{"op:dsf"},
+		TargetIterations: 1,
+		RetryBudget:      1,
+		LapsEnabled:      true,
+		Resolver:         cheapTestResolver,
+	}, map[string]agent.Executor{"opencode": exec})
+
+	success, _, _, _, _, _, err := r.runOne(
+		context.Background(),
+		&store.RelayRecord{ID: 1, TargetIterations: 1},
+		0,
+		agent.ResolvedAgent{Harness: "opencode", Model: cheapTestModel},
+		runTask{Name: "pinned task", Prompt: "do work", Assignee: "senior", LapID: "lap-1", IsLapsBacked: true, LapsRemaining: 1},
+		nil,
+		nil,
+		false,
+		false,
+		nil,
+		nil,
+		io.Discard,
+	)
+	if err != nil {
+		t.Fatalf("runOne error = %v", err)
+	}
+	if !success {
+		t.Fatal("expected success for normal single-lap pass-through")
+	}
+
+	tries := s.AllTries()
+	if len(tries) == 0 {
+		t.Fatal("expected at least one try")
+	}
+	if tries[0].FailReason != "" {
+		t.Fatalf("FailReason = %q, want empty", tries[0].FailReason)
+	}
+	if tries[0].LapID != "lap-1" {
+		t.Fatalf("LapID = %q, want %q", tries[0].LapID, "lap-1")
+	}
+	if len(tries[0].RecordedLaps) != 1 || tries[0].RecordedLaps[0] != "lap-1" {
+		t.Fatalf("RecordedLaps = %v, want [lap-1]", tries[0].RecordedLaps)
+	}
+}
+
+func TestLapAttemptRecordedInTryRecord(t *testing.T) {
+	workspaceDir := t.TempDir()
+	rallyDir := filepath.Join(workspaceDir, ".rally")
+	os.MkdirAll(rallyDir, 0o755)
+	initRepo(t, workspaceDir)
+	runGit(t, workspaceDir, "commit", "--allow-empty", "-m", "initial", "--no-verify")
+
+	s := newTestStore(t, rallyDir)
+	exec := &funcExecutor{
+		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+			progress.RecordLap(workspaceDir, "lap-1")
+			os.WriteFile(filepath.Join(workspaceDir, "work.txt"), []byte("done"), 0o644)
+			runGit(t, workspaceDir, "add", "work.txt")
+			runGit(t, workspaceDir, "commit", "-m", "completed work", "--no-verify")
+			return &agent.TryResult{Completed: true, Summary: "done"}, nil
+		},
+	}
+
+	r := NewRunner(s, Config{
+		WorkspaceDir:     workspaceDir,
+		DataDir:          t.TempDir(),
+		AgentMixSpecs:    []string{"op:dsf"},
+		TargetIterations: 1,
+		RetryBudget:      1,
+		LapsEnabled:      true,
+		Resolver:         cheapTestResolver,
+	}, map[string]agent.Executor{"opencode": exec})
+
+	success, _, _, _, _, _, err := r.runOne(
+		context.Background(),
+		&store.RelayRecord{ID: 1, TargetIterations: 1},
+		0,
+		agent.ResolvedAgent{Harness: "opencode", Model: cheapTestModel},
+		runTask{Name: "pinned task", Prompt: "do work", Assignee: "senior", LapID: "lap-1", IsLapsBacked: true, LapsRemaining: 1},
+		nil,
+		nil,
+		false,
+		false,
+		nil,
+		nil,
+		io.Discard,
+	)
+	if err != nil {
+		t.Fatalf("runOne error = %v", err)
+	}
+	if !success {
+		t.Fatal("expected success")
+	}
+
+	tries := s.AllTries()
+	if len(tries) == 0 {
+		t.Fatal("expected at least one try")
+	}
+	attempts := tries[0].LapsAttempted
+	if len(attempts) == 0 {
+		t.Fatal("expected laps_attempted to be recorded on TryRecord")
+	}
+	found := false
+	for _, a := range attempts {
+		if a.LapID == "lap-1" {
+			found = true
+			if a.Timestamp == "" {
+				t.Fatal("expected non-empty timestamp in lap attempt")
+			}
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("laps_attempted = %v, want lap-1 present", attempts)
+	}
+}
