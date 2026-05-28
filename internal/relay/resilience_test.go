@@ -38,7 +38,7 @@ func key(harness, model string) ResilienceKey {
 func TestResilience_GetState_ActiveByDefault(t *testing.T) {
 	s := newResilienceTestStore(t)
 	r := testResilience(s, time.Now())
-	st, _ := r.getState(key("claude", ""))
+	st, _ := r.GetState(key("claude", ""))
 	if st != StateActive {
 		t.Fatalf("expected StateActive for agent with no events, got %s", st)
 	}
@@ -60,7 +60,7 @@ func TestResilience_GetState_PausedAfterPauseEvent(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	st, since := r.getState(k)
+	st, since := r.GetState(k)
 	if st != StatePaused {
 		t.Fatalf("expected StatePaused, got %s", st)
 	}
@@ -85,7 +85,7 @@ func TestResilience_GetState_FrozenAfterFreezeEvent(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	st, _ := r.getState(k)
+	st, _ := r.GetState(k)
 	if st != StateFrozen {
 		t.Fatalf("expected StateFrozen, got %s", st)
 	}
@@ -101,7 +101,7 @@ func TestResilience_PauseAgent_WritesPausedEvent(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	st, _ := r.getState(k)
+	st, _ := r.GetState(k)
 	if st != StatePaused {
 		t.Fatalf("expected StatePaused after PauseAgent, got %s", st)
 	}
@@ -143,7 +143,7 @@ func TestResilience_UnpauseAgent_RestoresActive(t *testing.T) {
 	if err := r.PauseAgent(k, 1); err != nil {
 		t.Fatal(err)
 	}
-	st, _ := r.getState(k)
+	st, _ := r.GetState(k)
 	if st != StatePaused {
 		t.Fatalf("expected paused after PauseAgent, got %s", st)
 	}
@@ -151,7 +151,7 @@ func TestResilience_UnpauseAgent_RestoresActive(t *testing.T) {
 	if err := r.UnpauseAgent(k, 1); err != nil {
 		t.Fatal(err)
 	}
-	st, _ = r.getState(k)
+	st, _ = r.GetState(k)
 	if st != StateActive {
 		t.Fatalf("expected StateActive after UnpauseAgent, got %s", st)
 	}
@@ -183,7 +183,7 @@ func TestResilience_FreezeAgent_WritesFrozenEvent(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	st, _ := r.getState(k)
+	st, _ := r.GetState(k)
 	if st != StateFrozen {
 		t.Fatalf("expected StateFrozen after FreezeAgent, got %s", st)
 	}
@@ -225,7 +225,7 @@ func TestResilience_StateTransition_PausedToFrozen(t *testing.T) {
 	if err := r.PauseAgent(k, 1); err != nil {
 		t.Fatal(err)
 	}
-	st, _ := r.getState(k)
+	st, _ := r.GetState(k)
 	if st != StatePaused {
 		t.Fatalf("expected paused, got %s", st)
 	}
@@ -233,7 +233,7 @@ func TestResilience_StateTransition_PausedToFrozen(t *testing.T) {
 	if err := r.FreezeAgent(k, 1); err != nil {
 		t.Fatal(err)
 	}
-	st, _ = r.getState(k)
+	st, _ = r.GetState(k)
 	if st != StateFrozen {
 		t.Fatalf("expected frozen after freeze of paused agent, got %s", st)
 	}
@@ -253,7 +253,7 @@ func TestResilience_StateTransition_FrozenStaysFrozen(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	st, _ := r.getState(k)
+	st, _ := r.GetState(k)
 	if st != StateActive {
 		t.Fatalf("expected StateActive after unfrozen event, got %s", st)
 	}
@@ -271,7 +271,7 @@ func TestResilience_RecordHourlyFailure_CountsAndAutoFreezes(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	st, _ := r.getState(k)
+	st, _ := r.GetState(k)
 	if st != StatePaused {
 		t.Fatalf("expected paused after 2 retry_failed events, got %s", st)
 	}
@@ -279,7 +279,7 @@ func TestResilience_RecordHourlyFailure_CountsAndAutoFreezes(t *testing.T) {
 	if err := r.RecordHourlyFailure(k, 1); err != nil {
 		t.Fatal(err)
 	}
-	st, _ = r.getState(k)
+	st, _ = r.GetState(k)
 	if st != StateFrozen {
 		t.Fatalf("expected frozen after 3rd retry_failed (>= threshold), got %s", st)
 	}
@@ -317,7 +317,7 @@ func TestResilience_RecordHourlyFailure_CountBreaksAtActiveBoundary(t *testing.T
 		}
 	}
 
-	st, _ := r.getState(k)
+	st, _ := r.GetState(k)
 	if st != StatePaused {
 		t.Fatalf("expected paused (not frozen — old failures before 'active' should not count), got %s", st)
 	}
@@ -353,7 +353,7 @@ func TestResilience_RecordHourlyFailure_CountBreaksAtFrozenBoundary(t *testing.T
 		t.Fatal(err)
 	}
 
-	st, _ := r.getState(k)
+	st, _ := r.GetState(k)
 	if st != StatePaused {
 		t.Fatalf("expected paused (old retry_failed before frozen should not count), got %s", st)
 	}
@@ -598,7 +598,7 @@ func TestResilience_GetState_FrozenDecaysToProbation(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	st, since := r.getState(k)
+	st, since := r.GetState(k)
 	if st != StateProbation {
 		t.Fatalf("expected StateProbation after freeze decay, got %s", st)
 	}
@@ -630,7 +630,7 @@ func TestResilience_GetState_FrozenNotDecayed(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	st, _ := r.getState(k)
+	st, _ := r.GetState(k)
 	if st != StateFrozen {
 		t.Fatalf("expected StateFrozen (not yet decayed), got %s", st)
 	}
@@ -713,7 +713,7 @@ func TestResilience_ProbationSuccess_PromotesToActive(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	st, _ := r.getState(k)
+	st, _ := r.GetState(k)
 	if st != StateProbation {
 		t.Fatalf("setup: expected probation, got %s", st)
 	}
@@ -722,7 +722,7 @@ func TestResilience_ProbationSuccess_PromotesToActive(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	st, _ = r.getState(k)
+	st, _ = r.GetState(k)
 	if st != StateActive {
 		t.Fatalf("expected active after probation success, got %s", st)
 	}
@@ -758,7 +758,7 @@ func TestResilience_ProbationIncomplete_PromotesToActive(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	st, _ := r.getState(k)
+	st, _ := r.GetState(k)
 	if st != StateActive {
 		t.Fatalf("expected active after probation incomplete, got %s", st)
 	}
@@ -791,7 +791,7 @@ func TestResilience_ProbationFailure_ReFreezesWithFreshTimestamp(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	st, _ := r.getState(k)
+	st, _ := r.GetState(k)
 	if st != StateProbation {
 		t.Fatalf("setup: expected probation, got %s", st)
 	}
@@ -800,7 +800,7 @@ func TestResilience_ProbationFailure_ReFreezesWithFreshTimestamp(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	st, since := r.getState(k)
+	st, since := r.GetState(k)
 	if st != StateFrozen {
 		t.Fatalf("expected frozen after probation failure, got %s", st)
 	}

@@ -2,11 +2,14 @@ package main
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/mitchell-wallace/rally/internal/config"
+	"github.com/mitchell-wallace/rally/internal/relay"
+	"github.com/mitchell-wallace/rally/internal/store"
 	"github.com/spf13/cobra"
 )
 
@@ -229,13 +232,13 @@ func TestRunRelayNewResetsAgentStatus(t *testing.T) {
 	}
 	writeTestConfig(t, workspaceDir, "schema_version = 2\n")
 
-	s, err := store.New(rallyDir)
+	s, err := store.NewStore(rallyDir)
 	if err != nil {
 		t.Fatalf("failed to init store: %v", err)
 	}
 
 	resilience := relay.NewResilience(s)
-	key := relay.ResilienceKey{Harness: "test", Model: "model"}
+	key := relay.ResilienceKey{Harness: "gemini", Model: ""}
 	if err := resilience.FreezeAgent(key, 1); err != nil {
 		t.Fatalf("freeze agent: %v", err)
 	}
@@ -248,12 +251,12 @@ func TestRunRelayNewResetsAgentStatus(t *testing.T) {
 	os.Chdir(workspaceDir)
 	defer os.Chdir(origWd)
 
-	cmd := startCmd
-	// Set iterations=0 so it stops immediately
-	cmd.SetArgs([]string{"--new", "--agent", "test:model", "--iterations", "0"})
-	cmd.Execute()
+	rootCmd.SetArgs([]string{"start", "--new", "--iterations", "0"})
+	rootCmd.Execute()
 
-	st2, _ := resilience.GetState(key)
+	s2, _ := store.NewStore(rallyDir)
+	resilience2 := relay.NewResilience(s2)
+	st2, _ := resilience2.GetState(key)
 	if st2 == relay.StateFrozen {
 		t.Fatalf("expected agent to NOT be frozen after --new, got %v", st2)
 	}

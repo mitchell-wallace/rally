@@ -335,7 +335,7 @@ func TestRouteRuntime_ForceUnpauseAll(t *testing.T) {
 
 	for _, spec := range []string{"claude:opus-4.7", "codex:gpt-5.5", "opencode:opencode-go/kimi-k2.6"} {
 		parts := strings.SplitN(spec, ":", 2)
-		st, _ := resilience.getState(ResilienceKey{Harness: parts[0], Model: parts[1]})
+		st, _ := resilience.GetState(ResilienceKey{Harness: parts[0], Model: parts[1]})
 		if st != StateActive {
 			t.Errorf("state(%s) = %s, want active", spec, st)
 		}

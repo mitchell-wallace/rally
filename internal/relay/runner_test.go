@@ -1805,7 +1805,7 @@ func TestFreezeCascade(t *testing.T) {
 
 	// Verify agent is paused after 3 retries exhausted
 	cheapKey := ResilienceKey{Harness: "opencode", Model: cheapTestModel}
-	st, _ := NewResilience(s).getState(cheapKey)
+	st, _ := NewResilience(s).GetState(cheapKey)
 	if st != StatePaused {
 		t.Fatalf("expected agent paused after retry exhaustion, got %s", st)
 	}
@@ -1829,7 +1829,7 @@ func TestFreezeCascade(t *testing.T) {
 	}
 
 	// Verify agent is now frozen
-	st, _ = resilience.getState(cheapKey)
+	st, _ = resilience.GetState(cheapKey)
 	if st != StateFrozen {
 		t.Fatalf("expected agent frozen after 5 hourly retries, got %s", st)
 	}
@@ -1860,7 +1860,7 @@ func TestAgentUnfreeze(t *testing.T) {
 		t.Fatalf("PauseAgent failed: %v", err)
 	}
 
-	st, _ := resilience.getState(ResilienceKey{Harness: "claude"})
+	st, _ := resilience.GetState(ResilienceKey{Harness: "claude"})
 	if st != StatePaused {
 		t.Fatalf("expected StatePaused after pause, got %s", st)
 	}
@@ -1869,7 +1869,7 @@ func TestAgentUnfreeze(t *testing.T) {
 		t.Fatalf("UnpauseAgent failed: %v", err)
 	}
 
-	st, _ = resilience.getState(ResilienceKey{Harness: "claude"})
+	st, _ = resilience.GetState(ResilienceKey{Harness: "claude"})
 	if st != StateActive {
 		t.Fatalf("expected StateActive after unpause, got %s", st)
 	}
@@ -1917,7 +1917,7 @@ func TestFailedRunDoesNotCountIteration(t *testing.T) {
 		t.Fatalf("expected 0 completed iterations after failed run, got %d", relays[0].CompletedIterations)
 	}
 
-	st, _ := NewResilience(s).getState(ResilienceKey{Harness: "opencode", Model: cheapTestModel})
+	st, _ := NewResilience(s).GetState(ResilienceKey{Harness: "opencode", Model: cheapTestModel})
 	if st != StateFrozen {
 		t.Fatalf("expected agent frozen after hourly retry exhaustion, got %s", st)
 	}
@@ -2964,7 +2964,7 @@ func TestRunnerRouteIntegration_AssigneesQuotasFreezeAndRoleFiles(t *testing.T) 
 		}
 	}
 
-	st, _ := r.resilience.getState(ResilienceKey{Harness: "opencode", Model: cheapTestModel})
+	st, _ := r.resilience.GetState(ResilienceKey{Harness: "opencode", Model: cheapTestModel})
 	if st != StatePaused {
 		t.Fatalf("cheap model state = %s, want %s after simulated freeze", st, StatePaused)
 	}

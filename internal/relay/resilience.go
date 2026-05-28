@@ -56,7 +56,7 @@ func NewResilience(s *store.Store) *Resilience {
 	}
 }
 
-func (r *Resilience) getState(key ResilienceKey) (AgentState, time.Time) {
+func (r *Resilience) GetState(key ResilienceKey) (AgentState, time.Time) {
 	events := r.Store.GetAgentStatus(key.Harness, key.Model)
 	var state AgentState = StateActive
 	var since time.Time
@@ -109,7 +109,7 @@ func (r *Resilience) SelectActiveAgent(mix AgentMix, runIndex int) (agent.Resolv
 			continue
 		}
 		uniqueAgents[key] = struct{}{}
-		st, _ := r.getState(key)
+		st, _ := r.GetState(key)
 		if st != StateFrozen {
 			allFrozen = false
 		}
@@ -129,7 +129,7 @@ func (r *Resilience) SelectActiveAgent(mix AgentMix, runIndex int) (agent.Resolv
 		idx := (runIndex + i) % cycleLen
 		a := mix.Cycle[idx]
 		key := KeyFromAgent(a)
-		st, since := r.getState(key)
+		st, since := r.GetState(key)
 		switch st {
 		case StateActive:
 			return a, runIndex + i + 1, false, nil
@@ -149,7 +149,7 @@ func (r *Resilience) SelectActiveAgent(mix AgentMix, runIndex int) (agent.Resolv
 }
 
 func (r *Resilience) PauseAgent(key ResilienceKey, relayID int) error {
-	st, _ := r.getState(key)
+	st, _ := r.GetState(key)
 	if st != StateActive {
 		return nil
 	}
@@ -164,7 +164,7 @@ func (r *Resilience) PauseAgent(key ResilienceKey, relayID int) error {
 }
 
 func (r *Resilience) UnpauseAgent(key ResilienceKey, relayID int) error {
-	st, _ := r.getState(key)
+	st, _ := r.GetState(key)
 	if st == StateActive {
 		return nil
 	}
@@ -208,7 +208,7 @@ func (r *Resilience) RecordHourlyFailure(key ResilienceKey, relayID int) error {
 }
 
 func (r *Resilience) FreezeAgent(key ResilienceKey, relayID int) error {
-	st, _ := r.getState(key)
+	st, _ := r.GetState(key)
 	if st == StateFrozen {
 		return nil
 	}

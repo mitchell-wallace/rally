@@ -29,9 +29,9 @@
 
 ## 4. `--new` explicitly resets agent status
 
-- [ ] 4.1 Add `store.ResetAgentStatus()` that truncates agent status history for a clean slate
-- [ ] 4.2 Route `--new` in `cmd/rally/main.go` through `ResetAgentStatus()` so all harness-model pairs start active
-- [ ] 4.3 Tests: `--new` starts all agents active regardless of prior frozen/probation/paused history
+- [x] 4.1 Add `store.ResetAgentStatus()` that truncates agent status history for a clean slate
+- [x] 4.2 Route `--new` in `cmd/rally/main.go` through `ResetAgentStatus()` so all harness-model pairs start active
+- [x] 4.3 Tests: `--new` starts all agents active regardless of prior frozen/probation/paused history
 
 ## 5. Failure classification (per-harness-model, >1 infra threshold)
 
@@ -41,12 +41,12 @@
 - [x] 5.4 Update all callers of resilience methods in `internal/relay/runner.go` and `internal/relay/route_runtime.go` to pass `selection.Agent.Model` (or resolved model); enumerate all 10 method signatures and 20+ call sites
 - [x] 5.5 In `internal/relay/runner.go`, only call `PauseAgent`/`RecordHourlyFailure` when >1 attempt within a run is classified as infra-class; agent-class and incomplete failures stay retry-eligible but do not escalate
 - [x] 5.6 Default unknown failures to the agent-class (does-not-freeze) side
-- [ ] 5.7 Tests: >1 infra failure increments cascade; single infra failure does not; agent error and incomplete do not; per-harness-model keying isolates rate-limit to specific model. New fake-executor cascade tests use `op:dsf` (`opencode/deepseek-v4-flash-free`) rather than Claude labels.
+- [x] 5.7 Tests: >1 infra failure increments cascade; single infra failure does not; agent error and incomplete do not; per-harness-model keying isolates rate-limit to specific model. New fake-executor cascade tests use `op:dsf` (`opencode/deepseek-v4-flash-free`) rather than Claude labels.
 
 ## 6. Hourly retries up to 3 attempts
 
-- [ ] 6.1 Set `maxAttempts=3` on the hourly retry path in `internal/relay/runner.go` (the `isHourlyRetry` path)
-- [ ] 6.2 Tests: a single transient failure during an hourly retry does not burn a freeze life; retry budget of 3 honored
+- [x] 6.1 Set `maxAttempts=3` on the hourly retry path in `internal/relay/runner.go` (the `isHourlyRetry` path)
+- [x] 6.2 Tests: a single transient failure during an hourly retry does not burn a freeze life; retry budget of 3 honored
 
 ## 7. Role-aware stall-recovery
 

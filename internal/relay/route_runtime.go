@@ -189,7 +189,7 @@ func (r *routeRuntime) next(task runTask, resilience *Resilience) (routeSelectio
 		return routeSelection{}, err
 	}
 
-	st, since := resilience.getState(KeyFromAgent(picked))
+	st, since := resilience.GetState(KeyFromAgent(picked))
 	hourlyRetry := st == StatePaused && !resilience.NowFunc().Before(since.Add(resilience.PauseDuration))
 	probation := st == StateProbation
 
@@ -233,7 +233,7 @@ func (r *routeRuntime) syncRecoverySignals(scheduler *routing.Scheduler, resilie
 		}
 
 		key := KeyFromAgent(resolved)
-		status, since := resilience.getState(key)
+		status, since := resilience.GetState(key)
 		switch status {
 		case StateActive:
 			if state.Benched {
@@ -304,7 +304,7 @@ func (r *routeRuntime) selectionWaitError(scheduler *routing.Scheduler, resilien
 		}
 		seenKeys[key] = struct{}{}
 
-		status, since := resilience.getState(key)
+		status, since := resilience.GetState(key)
 		if status != StatePaused {
 			continue
 		}
@@ -349,7 +349,7 @@ func (r *routeRuntime) forceUnpauseAll(resilience *Resilience, relayID int) (int
 				continue
 			}
 			seen[key] = struct{}{}
-			status, _ := resilience.getState(key)
+			status, _ := resilience.GetState(key)
 			if status != StatePaused {
 				continue
 			}

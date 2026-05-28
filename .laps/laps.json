@@ -116,10 +116,10 @@
       "title": "Hourly retry budget, --new agent reset, and per-harness-model isolation tests",
       "description": "## Context\nOpenSpec change: `harden-relay-run-lifecycle` — tasks 6.1, 6.2, 4.1–4.3, 5.7.\nThree bounded, pattern-following changes that depend on the foundation from earlier laps.\n\n## Outcome\n- `internal/relay/runner.go`: set `maxAttempts=3` on the hourly retry path (the `isHourlyRetry` path). Currently it is 1.\n- `internal/store/store.go`: add `ResetAgentStatus()` that truncates agent status history for a clean slate.\n- `cmd/rally/main.go`: route `--new` through `ResetAgentStatus()` so all harness-model pairs start active.\n- Tests:\n  - A single transient failure during an hourly retry does not burn a freeze life; retry budget of 3 honored (tasks 6.1, 6.2)\n  - `--new` starts all agents active regardless of prior frozen/probation/paused history (task 4.3)\n  - \u003e1 infra failure increments cascade; single infra failure does not; agent error and incomplete do not; per-harness-model keying isolates rate-limit to specific model (task 5.7)\n\n## Acceptance\n- `go build ./...` passes\n- `go test ./internal/relay/... ./internal/store/... ./cmd/rally/...` passes\n- Mark off tasks 6.1, 6.2, 4.1, 4.2, 4.3, 5.7 in the change tasks.md",
       "assignee": "junior",
-      "isDone": false,
+      "isDone": true,
       "createdAt": "2026-05-27T08:44:24.165621024Z",
-      "updatedAt": "2026-05-27T08:44:24.165621024Z",
-      "completedAt": null
+      "updatedAt": "2026-05-28T10:21:49.805286185Z",
+      "completedAt": "2026-05-28T10:21:49.805286185Z"
     },
     {
       "id": "rall-1b4c",
