@@ -3745,7 +3745,7 @@ func TestE2E_WindowsFreezeDisabledRetryBudgetExhaustion(t *testing.T) {
 		TargetIterations: 1,
 		RetryBudget:      2,
 	}, executors)
-	// Simulate Windows path: freeze controller disabled
+	// Simulate Windows path: stall controller disabled
 	r.stallControllerFactory = func(string) reliability.StallController { return nil }
 
 	ctx, cancel := context.WithCancel(context.Background())

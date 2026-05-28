@@ -201,7 +201,7 @@ func isFinalByte(b byte) bool {
 // ansiFilterWriter strips ANSI/VT escape sequences before writing to the
 // underlying writer. This lets the log file's modification time track real
 // content activity rather than TUI redraw cycles, which is critical for the
-// freeze detector's log-silence signal.
+// stall detector's log-silence signal.
 type ansiFilterWriter struct {
 	w io.Writer
 }

@@ -26,10 +26,10 @@
       "title": "VERIFY: naming renames + failure classification foundation",
       "description": "## Context\nOpenSpec change: `harden-relay-run-lifecycle`. Verifying the first two laps: naming renames (tasks 9.1–9.4) and failure classification (tasks 2.1, 5.1, 5.6).\n\n## Outcome\n- Confirm naming renames are complete and consistent (no stale `FreezeDetector`/`Assessment.Frozen`/`EntryState.Frozen`/`failureFreezesEntry` references remain in source)\n- Confirm `FailureClass` enum has `FailureInfra`, `FailureAgent`, `FailureIncomplete`\n- Confirm unknown errors default to `FailureAgent`\n- Confirm `OnAgentFailed` uses an explicit enum/boolean, not string-matching\n- Confirm `RecordHourlyFailure` counting loop breaks on `frozen` and `probation` events\n- All tests pass: `go test ./internal/reliability/... ./internal/routing/... ./internal/relay/...`\n- `go build ./...` passes\n- Use `openspec-verify-change` skill against `harden-relay-run-lifecycle`, focused on tasks 9.1–9.4, 2.1, 5.1, 5.6\n- Report findings; create head laps for substantive gaps",
       "assignee": "verify",
-      "isDone": false,
+      "isDone": true,
       "createdAt": "2026-05-27T08:42:24.498387613Z",
-      "updatedAt": "2026-05-27T08:42:24.498387613Z",
-      "completedAt": null
+      "updatedAt": "2026-05-28T05:09:52.979513748Z",
+      "completedAt": "2026-05-28T05:09:52.979513748Z"
     },
     {
       "id": "rall-3561",
