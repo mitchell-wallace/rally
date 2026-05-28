@@ -101,7 +101,7 @@ The system SHALL retry failed tries up to the configured budget within a single 
 The system SHALL implement a per-harness-model error resilience cascade driven by repeated infra-class failures (>1 within a run). After the threshold, the harness-model pair is paused for 1 hour. The system retries hourly. After continued infra-failures the pair is frozen, but the freeze SHALL NOT be terminal: a frozen pair SHALL decay to probation (a tentative-active state) after a bounded `FreezeDuration` (5h, hardcoded constant), and the decay SHALL be re-evaluated on resume/start rather than re-applied verbatim.
 
 A probationary agent:
-- Gets at most one run per probation cycle. The one-shot is enforced by `syncRecoverySignals`: the scheduler entry is unbenched for the run, then immediately re-benched so it cannot be re-selected.
+- Gets at most one run per probation cycle. The one-shot is enforced by `syncRecoverySignals`: when the frozen→probation transition is first observed, a probation event is persisted and the scheduler entry is unbenched. The entry remains selectable while state is probation; the once-per-cycle guarantee is enforced by the probation event guard (no duplicate probation events are written) and by `runOne` writing an active or frozen event when the run resolves.
 - Gets `maxAttempts=3` (same as hourly retries).
 - On success or incomplete: promoted to active (incomplete is a progress issue, not a model-availability issue).
 - On failure (agent or infra): re-frozen with a fresh timestamp, restarting the decay window.
@@ -134,8 +134,8 @@ If all harness-model pairs are paused, the system waits for the next hourly chec
 - **THEN** the system SHALL re-freeze the pair with a fresh timestamp, restarting the decay window
 
 #### Scenario: Probation one-shot enforced
-- **WHEN** a probationary pair's scheduler entry is unbenched for a run
-- **THEN** `syncRecoverySignals` SHALL immediately re-bench the entry so it cannot be selected again until the run resolves
+- **WHEN** a probationary pair's frozen→probation transition is first observed by `syncRecoverySignals`
+- **THEN** the system SHALL persist a probation event and unbench the entry. The entry remains selectable while state is probation. The once-per-cycle guarantee is enforced by the probation event guard (preventing duplicate probation events) and by `runOne` writing an active or frozen event when the run resolves.
 
 #### Scenario: Freeze re-evaluated on resume
 - **WHEN** a relay resumes or a non-`--new` relay starts and a pair's freeze has decayed

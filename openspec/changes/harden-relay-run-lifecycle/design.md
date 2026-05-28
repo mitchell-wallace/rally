@@ -79,10 +79,11 @@ Add `StateProbation` to the resilience state machine. When `getState` sees a
 frozen event older than `FreezeDuration` (default 5h, hardcoded constant), it
 returns `StateProbation` rather than `StateActive`. A probationary agent:
 - Is eligible for exactly one run per probation cycle. The one-shot is enforced
-  by `syncRecoverySignals`: after unbenching the scheduler entry to allow the
-  probation run, the entry is immediately re-benched so it cannot be selected
-  again. When the run resolves, `syncRecoverySignals` reflects the new state
-  (active on success, frozen on failure).
+  by `syncRecoverySignals`: when the frozen→probation transition is first observed,
+  a probation event is persisted and the scheduler entry is unbenched. The entry
+  remains selectable while state is probation; the once-per-cycle guarantee is
+  enforced by the probation event guard (no duplicate probation events are written)
+  and by `runOne` writing an active or frozen event when the run resolves.
 - On success (any non-failed run, including incomplete): promoted to `StateActive`.
 - On failure (agent-class or infra-class): re-frozen with a fresh timestamp,
   restarting the decay window. Incomplete results do NOT re-freeze — they're a
@@ -192,21 +193,23 @@ counting across state-transition boundaries from different freeze cycles.
 ## Risks / Trade-offs
 
 - **Freeze decay lets a genuinely-broken harness retry forever** → probation
-  bounds this: a probationary agent gets exactly one run enforced by
-  `syncRecoverySignals` re-benching the scheduler entry after unbenching; if it
-  fails, it's re-frozen with a fresh timestamp, resetting the decay window.
-  Incomplete results move back to active (they're progress issues, not
-  availability issues).
+  bounds this: a probationary agent gets exactly one run per cycle enforced by
+  the probation event guard (preventing duplicate probation events) and `runOne`
+  writing an active or frozen event when the run resolves; if it fails, it's
+  re-frozen with a fresh timestamp, resetting the decay window. Incomplete results
+  move back to active (they're progress issues, not availability issues).
 - **Misclassifying an agent error as infra (or vice versa)** → the pattern table
   is the single, testable update point; default unknown failures to the agent
   side to avoid premature lockout. The >1 infra threshold further reduces the
   blast radius of a single misclassification.
 - **Probation + scheduler interaction** → `syncRecoverySignals` unbenches the
-  entry for probation then immediately re-benches it so the scheduler blocks
-  re-entry. When the run resolves, the new state (active or frozen) is reflected.
-  If the entry has alternatives (route fallback), the scheduler cycles normally.
-  If it's the only entry, the relay waits for the next probation check (same
-  cadence as paused hourly retries).
+  entry when the frozen→probation transition is first observed and persists a
+  probation event. The entry remains selectable while state is probation; the
+  once-per-cycle guarantee is enforced by the probation event guard and `runOne`
+  writing an active or frozen event when the run resolves. If the entry has
+  alternatives (route fallback), the scheduler cycles normally. If it's the only
+  entry, the relay waits for the next probation check (same cadence as paused
+  hourly retries).
 - **Lap pinning false-positives on legitimate multi-lap runs** → only the
   pinned-vs-completed comparison fails; if multi-lap completion is ever intended,
   it must be expressed as multiple explicitly assigned laps, not silent
