@@ -149,7 +149,7 @@ func (r *Resilience) RecordHourlyFailure(agentType string, relayID int) error {
 	retryFailedCount := 0
 	for i := len(events) - 1; i >= 0; i-- {
 		e := events[i]
-		if e.EventType == "active" {
+		if e.EventType == "active" || e.EventType == "frozen" || e.EventType == "probation" {
 			break
 		}
 		if e.EventType == "retry_failed" {

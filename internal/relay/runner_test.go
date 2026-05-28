@@ -53,13 +53,13 @@ func (f *funcExecutor) ProbeLiveness(ctx context.Context) (bool, error) {
 	return false, fmt.Errorf("liveness probe not supported by func executor")
 }
 
-type fakeFreezeController struct {
+type fakeStallController struct {
 	check func(context.Context) (bool, error)
 }
 
-func (f *fakeFreezeController) SetProcessGroupID(int) {}
+func (f *fakeStallController) SetProcessGroupID(int) {}
 
-func (f *fakeFreezeController) Check(ctx context.Context) (bool, error) {
+func (f *fakeStallController) Check(ctx context.Context) (bool, error) {
 	if f.check == nil {
 		return false, nil
 	}
@@ -749,12 +749,12 @@ func TestRunOneFreezeRetryResumesAndRecovers(t *testing.T) {
 	}, map[string]agent.Executor{"claude": exec})
 
 	controllerCount := 0
-	r.freezeControllerFactory = func(logPath string) reliability.FreezeController {
+	r.stallControllerFactory = func(logPath string) reliability.StallController {
 		_ = logPath
 		controllerCount++
 		if controllerCount == 1 {
 			triggered := false
-			return &fakeFreezeController{
+			return &fakeStallController{
 				check: func(context.Context) (bool, error) {
 					if triggered {
 						return false, nil
@@ -765,12 +765,12 @@ func TestRunOneFreezeRetryResumesAndRecovers(t *testing.T) {
 				},
 			}
 		}
-		return &fakeFreezeController{}
+		return &fakeStallController{}
 	}
 
-	oldInterval := freezeCheckInterval
-	freezeCheckInterval = time.Millisecond
-	defer func() { freezeCheckInterval = oldInterval }()
+	oldInterval := stallCheckInterval
+	stallCheckInterval = time.Millisecond
+	defer func() { stallCheckInterval = oldInterval }()
 
 	freezeCalls := 0
 	recoveredCalls := 0
@@ -3335,12 +3335,12 @@ func TestE2E_SimulatedFreezeGracefulKillResumeRecovery(t *testing.T) {
 	}, map[string]agent.Executor{"claude": exec})
 
 	controllerCount := 0
-	r.freezeControllerFactory = func(logPath string) reliability.FreezeController {
+	r.stallControllerFactory = func(logPath string) reliability.StallController {
 		_ = logPath
 		controllerCount++
 		if controllerCount == 1 {
 			triggered := false
-			return &fakeFreezeController{
+			return &fakeStallController{
 				check: func(context.Context) (bool, error) {
 					if triggered {
 						return false, nil
@@ -3351,12 +3351,12 @@ func TestE2E_SimulatedFreezeGracefulKillResumeRecovery(t *testing.T) {
 				},
 			}
 		}
-		return &fakeFreezeController{}
+		return &fakeStallController{}
 	}
 
-	oldInterval := freezeCheckInterval
-	freezeCheckInterval = time.Millisecond
-	defer func() { freezeCheckInterval = oldInterval }()
+	oldInterval := stallCheckInterval
+	stallCheckInterval = time.Millisecond
+	defer func() { stallCheckInterval = oldInterval }()
 
 	if err := r.Run(context.Background()); err != nil {
 		t.Fatalf("run failed: %v", err)
@@ -3403,12 +3403,12 @@ func TestE2E_LivenessProbeClearsFreezeFlag(t *testing.T) {
 		TargetIterations: 1,
 		RetryBudget:      3,
 		LivenessProbe:    true,
-		FreezeThreshold:  50 * time.Millisecond,
+		StallThreshold:  50 * time.Millisecond,
 	}, map[string]agent.Executor{"codex": exec})
 
-	r.freezeControllerFactory = func(string) reliability.FreezeController {
+	r.stallControllerFactory = func(string) reliability.StallController {
 		probe := r.buildLivenessProbe(exec)
-		return &fakeFreezeController{
+		return &fakeStallController{
 			check: func(ctx context.Context) (bool, error) {
 				if probe == nil {
 					t.Fatal("expected liveness probe to be built for codex")
@@ -3421,9 +3421,9 @@ func TestE2E_LivenessProbeClearsFreezeFlag(t *testing.T) {
 		}
 	}
 
-	oldInterval := freezeCheckInterval
-	freezeCheckInterval = 30 * time.Millisecond
-	defer func() { freezeCheckInterval = oldInterval }()
+	oldInterval := stallCheckInterval
+	stallCheckInterval = 30 * time.Millisecond
+	defer func() { stallCheckInterval = oldInterval }()
 
 	if err := r.Run(context.Background()); err != nil {
 		t.Fatalf("run failed: %v", err)
@@ -3483,9 +3483,9 @@ func TestE2E_LivenessProbeFailureConfirmsFreeze(t *testing.T) {
 	}, map[string]agent.Executor{"codex": exec})
 
 	triggered := false
-	r.freezeControllerFactory = func(string) reliability.FreezeController {
+	r.stallControllerFactory = func(string) reliability.StallController {
 		probe := r.buildLivenessProbe(exec)
-		return &fakeFreezeController{
+		return &fakeStallController{
 			check: func(ctx context.Context) (bool, error) {
 				if triggered {
 					return false, nil
@@ -3503,9 +3503,9 @@ func TestE2E_LivenessProbeFailureConfirmsFreeze(t *testing.T) {
 		}
 	}
 
-	oldInterval := freezeCheckInterval
-	freezeCheckInterval = time.Millisecond
-	defer func() { freezeCheckInterval = oldInterval }()
+	oldInterval := stallCheckInterval
+	stallCheckInterval = time.Millisecond
+	defer func() { stallCheckInterval = oldInterval }()
 
 	if err := r.Run(context.Background()); err != nil {
 		t.Fatalf("run failed: %v", err)
@@ -3746,7 +3746,7 @@ func TestE2E_WindowsFreezeDisabledRetryBudgetExhaustion(t *testing.T) {
 		RetryBudget:      2,
 	}, executors)
 	// Simulate Windows path: freeze controller disabled
-	r.freezeControllerFactory = func(string) reliability.FreezeController { return nil }
+	r.stallControllerFactory = func(string) reliability.StallController { return nil }
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

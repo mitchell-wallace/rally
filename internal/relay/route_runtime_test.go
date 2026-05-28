@@ -359,7 +359,7 @@ func TestRouteRuntime_ActiveExhaustedEntryStaysAdvanced(t *testing.T) {
 	}
 
 	first.Entry.Exhausted = true
-	first.Entry.Frozen = false
+	first.Entry.Benched = false
 
 	second := mustNextRouteSelection(t, rt, resilience, "")
 	if got := agentRouteSpec(second.Agent); got != "codex:gpt-5" {
@@ -378,7 +378,7 @@ func TestRouteRuntime_PausedExpiryResetsExhaustedEntry(t *testing.T) {
 
 	first := mustNextRouteSelection(t, rt, resilience, "")
 	first.Entry.Exhausted = true
-	first.Entry.Frozen = false
+	first.Entry.Benched = false
 
 	if err := resilience.PauseAgent("claude", 1); err != nil {
 		t.Fatalf("PauseAgent(claude) error = %v", err)

@@ -6,10 +6,10 @@
       "title": "Rename freeze→stall in liveness detector and Frozen→Benched in scheduler",
       "description": "## Context\nOpenSpec change: `harden-relay-run-lifecycle` — tasks 9.1–9.4.\nThree systems currently use \"freeze\" naming. This lap renames two of them for clarity; the third (per-agent-type `frozen` in `agent_status.jsonl`) keeps its name.\n\n## Outcome\n- `internal/reliability/freeze.go` renamed to `stall.go`; `FreezeDetector`→`StallDetector`, `Assessment.Frozen`→`Assessment.Stalled`, all threshold/field names updated.\n- `internal/routing/scheduler.go`: `EntryState.Frozen`→`EntryState.Benched`; `failureFreezesEntry`→`failureBenchesEntry` with an explicit enum/boolean parameter on `OnAgentFailed` (replace `strings.Contains(reason, \"freeze\")` string-matching).\n- `internal/relay/resilience.go`: `RecordHourlyFailure` counting loop also breaks on `frozen` and `probation` events, not just `active` (task 9.4).\n- All callers in `internal/relay/runner.go`, `internal/relay/route_runtime.go`, and tests updated.\n- The per-agent-type `frozen` name and `agent_status.jsonl` `event_type` value stay unchanged (task 9.3 — no data-format change).\n\n## Files \u0026 scope\n- `internal/reliability/freeze.go` → `stall.go` (rename file + all exported names)\n- `internal/reliability/freeze_test.go` → `stall_test.go`\n- `internal/routing/scheduler.go` + `scheduler_test.go`\n- `internal/relay/runner.go`, `route_runtime.go` — update callers only\n- `internal/relay/resilience.go` — task 9.4 counting-loop fix\n- Do NOT touch `agent_status.jsonl` event_type values or the per-agent-type `frozen` name in resilience.go.\n\n## Acceptance\n- `go build ./...` passes\n- All existing tests pass (`go test ./internal/reliability/... ./internal/routing/... ./internal/relay/...`)\n- `grep -r \"FreezeDetector\\|Assessment\\.Frozen\\|EntryState\\.Frozen\\|failureFreezesEntry\" internal/` returns zero hits\n- `grep -r \"StallDetector\\|Assessment\\.Stalled\\|EntryState\\.Benched\\|failureBenchesEntry\" internal/` returns expected hits\n- Mark off tasks 9.1, 9.2, 9.3, 9.4 in the change tasks.md",
       "assignee": "junior",
-      "isDone": false,
+      "isDone": true,
       "createdAt": "2026-05-27T08:41:50.160187766Z",
-      "updatedAt": "2026-05-27T08:41:50.160187766Z",
-      "completedAt": null
+      "updatedAt": "2026-05-28T04:59:08.906411409Z",
+      "completedAt": "2026-05-28T04:59:08.906411409Z"
     },
     {
       "id": "rall-463a",

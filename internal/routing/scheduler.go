@@ -11,7 +11,7 @@ type EntryState struct {
 	Entry           ParsedEntry
 	ConsecutiveRuns int
 	Exhausted       bool
-	Frozen          bool
+	Benched         bool
 	RangeQuotaUsed  int
 }
 
@@ -82,7 +82,7 @@ func (s *Scheduler) Next() (*Selection, error) {
 }
 
 func (s *Scheduler) shouldStayOnCurrentLocked(current *EntryState) bool {
-	if current.Frozen || current.Exhausted {
+	if current.Benched || current.Exhausted {
 		return false
 	}
 
@@ -140,7 +140,7 @@ func (s *Scheduler) findSelectableLocked(start int) (int, bool) {
 }
 
 func (s *Scheduler) isSelectableLocked(entry *EntryState) bool {
-	return !entry.Frozen && !entry.Exhausted
+	return !entry.Benched && !entry.Exhausted
 }
 
 func (s *Scheduler) hasAlternativeLocked(exclude int) bool {
@@ -202,19 +202,19 @@ func (s *Scheduler) resetCycleLocked() {
 	}
 }
 
-func (s *Scheduler) OnAgentFailed(entry *EntryState, reason string) {
+func (s *Scheduler) OnAgentFailed(entry *EntryState, reason string, bench bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	entry.Exhausted = true
-	entry.Frozen = failureFreezesEntry(reason)
+	entry.Benched = bench
 }
 
 func (s *Scheduler) OnAgentRecovered(entry *EntryState) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if !entry.Frozen {
+	if !entry.Benched {
 		return
 	}
 	resetEntryState(entry)
@@ -246,7 +246,7 @@ func (s *Scheduler) AllExhausted() bool {
 	}
 
 	for _, entry := range s.entries {
-		if !entry.Frozen {
+		if !entry.Benched {
 			return false
 		}
 	}
@@ -283,7 +283,7 @@ func cloneEntryState(entry *EntryState) *EntryState {
 	return &clone
 }
 
-func failureFreezesEntry(reason string) bool {
+func failureBenchesEntry(reason string) bool {
 	reason = strings.ToLower(reason)
 	return strings.Contains(reason, "freeze") ||
 		strings.Contains(reason, "frozen") ||
@@ -295,7 +295,7 @@ func failureFreezesEntry(reason string) bool {
 
 func resetEntryState(entry *EntryState) {
 	entry.Exhausted = false
-	entry.Frozen = false
+	entry.Benched = false
 	entry.ConsecutiveRuns = 0
 	entry.RangeQuotaUsed = 0
 }

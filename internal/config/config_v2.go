@@ -169,7 +169,7 @@ func LoadV2(workspaceDir string) (V2Config, error) {
 		// 120s: opencode agents typically complete in 25-30s then hold the process
 		// open; connections drop to 0 around 120s of log silence, so 120s lets the
 		// freeze fire as soon as the connection check is satisfied. npm install
-		// silence is ~35s max (well below 120s). The `DefaultFreezeThreshold`
+		// silence is ~35s max (well below 120s). The `DefaultStallThreshold`
 		// constant in the reliability package stays at 180s as a bare-code fallback
 		// when no config is loaded.
 		cfg.Reliability.FreezeThresholdSecs = 120

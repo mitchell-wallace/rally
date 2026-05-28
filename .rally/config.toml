@@ -91,10 +91,10 @@ sonnet = 'Claude Sonnet 4.6 (Thinking)'
 default = ['cc:opus:1', 'cx:g55:1', 'op:zai:1', 'ag:flash:1', 'ag:pro:1', 'op:kimi:1']
 
 # Frontier models to make judgement calls
-senior = ['cc:opus', 'ag:opus', 'op:kimi', 'cx:g55']
+senior = ['ag:opus', 'cc:opus', 'op:kimi', 'cx:g55', 'op:zai', 'op:zgo']
 
 # Regular well-defined work. Rotates per iteration.
-junior = ['op:zai', 'op:kimi', 'ge:pro', 'ag:flash', 'op:qwen']
+junior = ['op:zai', 'op:kimi', 'ge:pro', 'ag:flash', 'op:zgo']
 
 # UI / visual reasoning. Prefer gemini, fall back to claude sonnet.
 ui = ['ag:flash', 'ge:pro', 'ag:pro', 'op:kimi', 'cc:sonnet', 'ag:sonnet']

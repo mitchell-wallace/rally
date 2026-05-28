@@ -232,18 +232,18 @@ func (r *routeRuntime) syncRecoverySignals(scheduler *routing.Scheduler, resilie
 		status, since := resilience.getState(resolved.Harness)
 		switch status {
 		case StateActive:
-			if state.Frozen {
+			if state.Benched {
 				scheduler.OnAgentRecovered(state)
 			}
 		case StatePaused:
-			if !resilience.NowFunc().Before(since.Add(resilience.PauseDuration)) && (state.Frozen || state.Exhausted) {
+			if !resilience.NowFunc().Before(since.Add(resilience.PauseDuration)) && (state.Benched || state.Exhausted) {
 				scheduler.ResetEntry(state)
-			} else if !state.Frozen || !state.Exhausted {
-				scheduler.OnAgentFailed(state, "paused")
+			} else if !(state.Benched && state.Exhausted) {
+				scheduler.OnAgentFailed(state, "paused", true)
 			}
 		case StateFrozen:
-			if !state.Frozen || !state.Exhausted {
-				scheduler.OnAgentFailed(state, "frozen")
+			if !(state.Benched && state.Exhausted) {
+				scheduler.OnAgentFailed(state, "frozen", true)
 			}
 		}
 	}

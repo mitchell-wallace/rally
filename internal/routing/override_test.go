@@ -184,7 +184,7 @@ func TestBuildOverrideRoute_Scenario6_RoleReferenceAdvancesCursor(t *testing.T) 
 		t.Fatalf("first pick = %q, want fancy", resolved.Spec)
 	}
 
-	s.OnAgentFailed(fancy, "rate limit")
+	s.OnAgentFailed(fancy, "rate limit", true)
 
 	defaultPick := mustNext(t, s)
 	resolved, err = override.ResolveSelection(defaultPick.Entry)
@@ -206,7 +206,7 @@ func TestBuildOverrideRoute_Scenario6_RoleReferenceAdvancesCursor(t *testing.T) 
 		t.Fatalf("second fancy pick = %q, want fancy", resolved.Spec)
 	}
 
-	s.OnAgentFailed(fancy, "rate limit")
+	s.OnAgentFailed(fancy, "rate limit", true)
 
 	defaultPick = mustNext(t, s)
 	resolved, err = override.ResolveSelection(defaultPick.Entry)

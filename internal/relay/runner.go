@@ -32,7 +32,7 @@ type Config struct {
 	RouteSpecs               map[string][]string
 	UseOverrideRoute         bool
 	TargetIterations         int
-	FreezeThreshold          time.Duration
+	StallThreshold            time.Duration
 	LivenessProbe            bool
 	RetryBudget              int
 	RunHooksOnAutoCommit     bool
@@ -60,7 +60,7 @@ type Runner struct {
 	fallbackInstructionsCache string
 	fallbackWarned            bool
 
-	freezeControllerFactory func(logPath string) reliability.FreezeController
+	stallControllerFactory func(logPath string) reliability.StallController
 	sleepFunc               func(time.Duration)
 }
 
@@ -80,7 +80,7 @@ func NewRunner(s *store.Store, cfg Config, executors map[string]agent.Executor) 
 	}
 }
 
-var freezeCheckInterval = monitor.TickInterval
+var stallCheckInterval = monitor.TickInterval
 
 const builtInDefaultFallback = "Continue the relay run. Review the current state of the codebase and continue making progress on the project."
 
@@ -410,7 +410,7 @@ func (r *Runner) Run(ctx context.Context) error {
 			relayMsg,
 			selection.HourlyRetry,
 			func() {
-				selection.Scheduler.OnAgentFailed(selection.Entry, "freeze")
+				selection.Scheduler.OnAgentFailed(selection.Entry, "freeze", true)
 			},
 			func() {
 				selection.Scheduler.OnAgentRecovered(selection.Entry)
@@ -430,7 +430,7 @@ func (r *Runner) Run(ctx context.Context) error {
 		if r.skipFlag.Load() {
 			r.skipFlag.Store(false)
 			selection.Entry.Exhausted = true
-			selection.Entry.Frozen = false
+			selection.Entry.Benched = false
 			runIndex++
 			relay.LastTryID = r.store.NextTryID() - 1
 			if relay.FirstTryID == 0 {
@@ -448,14 +448,14 @@ func (r *Runner) Run(ctx context.Context) error {
 					return err
 				}
 			} else {
-				selection.Scheduler.OnAgentFailed(selection.Entry, "retry-budget-exhausted")
+				selection.Scheduler.OnAgentFailed(selection.Entry, "retry-budget-exhausted", false)
 				if err := resilience.RecordHourlyFailure(selection.Agent.Harness, relay.ID); err != nil {
 					return err
 				}
 			}
 		} else {
 			if !success {
-				selection.Scheduler.OnAgentFailed(selection.Entry, "retry-budget-exhausted")
+				selection.Scheduler.OnAgentFailed(selection.Entry, "retry-budget-exhausted", false)
 				if err := resilience.PauseAgent(selection.Agent.Harness, relay.ID); err != nil {
 					return err
 				}
@@ -561,8 +561,8 @@ func (r *Runner) runOne(
 	consumedMsg *store.MessageRecord,
 	relayMsg *store.MessageRecord,
 	isHourlyRetry bool,
-	onFreeze func(),
-	onFreezeRecovered func(),
+	onStall func(),
+	onStallRecovered func(),
 	log io.Writer,
 ) (bool, bool, bool, error) {
 	// Initialize run-state for this run.
@@ -588,8 +588,7 @@ func (r *Runner) runOne(
 	var lastResult *agent.TryResult
 	var sessionID string
 	success := false
-	freezeMarked := false
-
+	stallMarked := false
 	roleInstructions, err := r.resolveRoleInstructions(task.Assignee)
 	if err != nil {
 		return false, false, false, err
@@ -683,14 +682,14 @@ attemptLoop:
 		actionCh := kb.Start(kbCtx)
 
 		mon := monitor.NewMonitor(r.cfg.WorkspaceDir, tryLogPath, 0)
-		freezeController := r.newFreezeController(tryLogPath, exec)
+		stallController := r.newStallController(tryLogPath, exec)
 
 		// Wire reliability indicators into the monitor.
-		freezeThreshold := r.cfg.FreezeThreshold
-		if freezeThreshold <= 0 {
-			freezeThreshold = reliability.DefaultFreezeThreshold
+		stallThreshold := r.cfg.StallThreshold
+		if stallThreshold <= 0 {
+			stallThreshold = reliability.DefaultStallThreshold
 		}
-		mon.SetFreezeThreshold(freezeThreshold)
+		mon.SetFreezeThreshold(stallThreshold)
 
 		initialStatus, _ := mon.Tick()
 		// Skip empty/whitespace status to avoid an extra blank line below the
@@ -726,8 +725,8 @@ attemptLoop:
 		var result *agent.TryResult
 		var execErr error
 		actionTaken := false
-		freezeTriggered := false
-		freezeTicker := time.NewTicker(freezeCheckInterval)
+		stallTriggered := false
+		stallTicker := time.NewTicker(stallCheckInterval)
 	actionLoop:
 		for {
 			select {
@@ -737,28 +736,28 @@ attemptLoop:
 				break actionLoop
 			case pid := <-pidCh:
 				mon.SetProcessGroupID(pid)
-				if freezeController != nil {
-					freezeController.SetProcessGroupID(pid)
+				if stallController != nil {
+					stallController.SetProcessGroupID(pid)
 				}
-			case <-freezeTicker.C:
-				if freezeController == nil || freezeTriggered {
+			case <-stallTicker.C:
+				if stallController == nil || stallTriggered {
 					continue
 				}
-				frozen, err := freezeController.Check(attemptCtx)
+				stalled, err := stallController.Check(attemptCtx)
 				if err != nil {
-					fmt.Fprintf(log, "relay %d run %d attempt %d freeze check warning: %v\n", relay.ID, runIndex+1, attempt, err)
+					fmt.Fprintf(log, "relay %d run %d attempt %d stall check warning: %v\n", relay.ID, runIndex+1, attempt, err)
 					continue
 				}
-				if !frozen {
+				if !stalled {
 					continue
 				}
-				freezeTriggered = true
-				freezeMarked = true
+				stallTriggered = true
+				stallMarked = true
 				mon.SetFrozen(true)
-				if onFreeze != nil {
-					onFreeze()
+				if onStall != nil {
+					onStall()
 				}
-				fmt.Fprintf(log, "relay %d run %d attempt %d freeze detected for %s\n", relay.ID, runIndex+1, attempt, picked.Harness)
+				fmt.Fprintf(log, "relay %d run %d attempt %d stall detected for %s\n", relay.ID, runIndex+1, attempt, picked.Harness)
 			case action := <-actionCh:
 				switch action {
 				case keyboard.ActionSkip:
@@ -781,7 +780,7 @@ attemptLoop:
 				}
 			}
 		}
-		freezeTicker.Stop()
+		stallTicker.Stop()
 
 		mon.Stop()
 		kbCancel()
@@ -867,14 +866,14 @@ attemptLoop:
 				fmt.Fprintf(log, "relay %d run %d attempt %d laps-marker-as-text: agent wrote %q in summary but did not invoke the shell command (no hook fired, tool_calls=%d). Likely a model/harness output-vs-tool-call mismatch.\n", relay.ID, runIndex+1, attempt, markerAsText, result.ToolCalls)
 			}
 		}
-		// Freeze recovery: if the freeze killed the process but the agent had
+		// Stall recovery: if the stall detector killed the process but the agent had
 		// already committed or created files (autoCommit ran), treat the try as
 		// successful. This handles agents (e.g. opencode TUI) that complete the
-		// task then idle in an interactive loop until the freeze kills them.
-		if failed && freezeMarked && commitHash != "" {
+		// task then idle in an interactive loop until the stall detector kills them.
+		if failed && stallMarked && commitHash != "" {
 			failed = false
 			success = true
-			fmt.Fprintf(log, "relay %d run %d attempt %d freeze recovery: files committed, treating as success\n", relay.ID, runIndex+1, attempt)
+			fmt.Fprintf(log, "relay %d run %d attempt %d stall recovery: files committed, treating as success\n", relay.ID, runIndex+1, attempt)
 		}
 
 		// Error classification and strategy dispatch.
@@ -981,11 +980,11 @@ attemptLoop:
 		}
 
 		if !failed {
-			if freezeMarked && onFreezeRecovered != nil {
-				onFreezeRecovered()
+			if stallMarked && onStallRecovered != nil {
+				onStallRecovered()
 				mon.SetFrozen(false)
 				mon.SetRecovered()
-				freezeMarked = false
+				stallMarked = false
 			}
 			success = true
 			lastResult = result
@@ -1022,16 +1021,16 @@ attemptLoop:
 	return success, addressed, false, nil
 }
 
-func (r *Runner) newFreezeController(tryLogPath string, exec agent.Executor) reliability.FreezeController {
-	if r.freezeControllerFactory != nil {
-		return r.freezeControllerFactory(tryLogPath)
+func (r *Runner) newStallController(tryLogPath string, exec agent.Executor) reliability.StallController {
+	if r.stallControllerFactory != nil {
+		return r.stallControllerFactory(tryLogPath)
 	}
-	threshold := r.cfg.FreezeThreshold
+	threshold := r.cfg.StallThreshold
 	if threshold <= 0 {
-		threshold = reliability.DefaultFreezeThreshold
+		threshold = reliability.DefaultStallThreshold
 	}
 	netStatsPath := strings.TrimSuffix(tryLogPath, ".log") + ".netstat.jsonl"
-	return reliability.NewFreezeControllerFull(tryLogPath, threshold, r.buildLivenessProbe(exec), netStatsPath)
+	return reliability.NewStallControllerFull(tryLogPath, threshold, r.buildLivenessProbe(exec), netStatsPath)
 }
 
 func (r *Runner) buildLivenessProbe(exec agent.Executor) *reliability.LivenessProbe {
