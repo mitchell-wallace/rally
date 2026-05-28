@@ -4063,3 +4063,110 @@ func TestE2E_WindowsFreezeDisabledRetryBudgetExhaustion(t *testing.T) {
 		t.Fatal("expected agent paused after retry budget exhaustion")
 	}
 }
+
+// TestProbationIncompletePromotesToActive is an end-to-end test exercising the
+// full Run loop: an agent starts in probation (frozen > FreezeDuration ago),
+// produces an incomplete result (laps-backed run with file changes but no
+// finalization), and should be promoted back to active — not re-frozen.
+//
+// This catches the bug where the probation branch in Run() compared
+// failReason == "incomplete run", but runOne's ClassifyError had already
+// overwritten failReason to the classified string before returning. The fix
+// checks failureClass == reliability.FailureIncomplete instead.
+func TestProbationIncompletePromotesToActive(t *testing.T) {
+	// Stub the laps head pull so the run is laps-backed (needed for incomplete detection).
+	oldHeadPull := headPullLap
+	headPullLap = func(context.Context, string) (laps.Lap, error) {
+		return laps.Lap{ID: "lap-1", Title: "probation test", Assignee: "senior"}, nil
+	}
+	defer func() { headPullLap = oldHeadPull }()
+
+	workspaceDir := t.TempDir()
+	rallyDir := filepath.Join(workspaceDir, ".rally")
+	os.MkdirAll(rallyDir, 0o755)
+	initRepo(t, workspaceDir)
+
+	s := newTestStore(t, rallyDir)
+
+	// The executor writes a file (dirty tree) but never calls laps done →
+	// incomplete. All attempts behave identically so the run exhausts its
+	// retry budget as an incomplete failure.
+	exec := &funcExecutor{
+		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+			_ = os.WriteFile(filepath.Join(workspaceDir, "partial.txt"), []byte("partial"), 0o644)
+			return &agent.TryResult{Completed: true, Summary: "made progress but did not finalize"}, nil
+		},
+	}
+	executors := map[string]agent.Executor{"opencode": exec}
+
+	// Set up the agent as frozen long enough ago that it decays to probation.
+	baseTime := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	frozenAt := baseTime // frozen 6 hours before "now"
+	nowTime := baseTime.Add(6 * time.Hour)
+
+	r := NewRunner(s, Config{
+		WorkspaceDir:     workspaceDir,
+		DataDir:          t.TempDir(),
+		AgentMixSpecs:    []string{"op:dsf"},
+		TargetIterations: 1,
+		RetryBudget:      1,
+		LapsEnabled:      true,
+		Resolver:         cheapTestResolver,
+	}, executors)
+	r.sleepFunc = func(time.Duration) {}
+	r.resilience = &Resilience{
+		Store:                     s,
+		PauseDuration:             time.Hour,
+		FreezeDuration:            5 * time.Hour,
+		HourlyRetriesBeforeFreeze: 5,
+		NowFunc:                   func() time.Time { return nowTime },
+	}
+
+	// Seed a frozen event old enough to trigger probation.
+	if err := s.AppendAgentStatus(store.AgentStatusEvent{
+		AgentType: "opencode",
+		Model:     cheapTestModel,
+		EventType: "frozen",
+		Timestamp: frozenAt.UTC().Format(time.RFC3339),
+		RelayID:   1,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Confirm setup: agent should be in probation before the run.
+	key := ResilienceKey{Harness: "opencode", Model: cheapTestModel}
+	st, _ := r.resilience.GetState(key)
+	if st != StateProbation {
+		t.Fatalf("setup: expected probation, got %s", st)
+	}
+
+	_ = r.Run(context.Background())
+
+	// After the incomplete probation run, agent should be active (promoted),
+	// not re-frozen.
+	st, _ = r.resilience.GetState(key)
+	if st != StateActive {
+		t.Fatalf("expected active after probation incomplete, got %s", st)
+	}
+
+	// Verify the try was recorded as incomplete (not completed).
+	tries := s.AllTries()
+	if len(tries) == 0 {
+		t.Fatal("expected at least one try")
+	}
+	lastTry := tries[len(tries)-1]
+	if lastTry.Completed {
+		t.Fatal("incomplete try should be failed")
+	}
+
+	// Verify that no frozen event was written after the probation run
+	// (an "active"/"unfrozen" event should appear instead of another "frozen").
+	events := s.GetAgentStatus("opencode", cheapTestModel)
+	lastEventType := ""
+	for _, e := range events {
+		lastEventType = e.EventType
+	}
+	if lastEventType == "frozen" {
+		t.Fatalf("last event should NOT be frozen after incomplete probation; got events: %v", events)
+	}
+}

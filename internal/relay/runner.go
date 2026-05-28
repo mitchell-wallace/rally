@@ -401,7 +401,7 @@ func (r *Runner) Run(ctx context.Context) error {
 			}
 		}
 
-		success, addressed, interrupted, failReason, failureClass, infraFailures, err := r.runOne(
+		success, addressed, interrupted, _, failureClass, infraFailures, err := r.runOne(
 			ctx,
 			relay,
 			runIndex,
@@ -448,7 +448,7 @@ func (r *Runner) Run(ctx context.Context) error {
 		}
 
 		if selection.Probation {
-			if success || failReason == "incomplete run" {
+			if success || failureClass == reliability.FailureIncomplete {
 				if err := resilience.UnpauseAgent(KeyFromAgent(selection.Agent), relay.ID); err != nil {
 					return err
 				}
