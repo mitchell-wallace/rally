@@ -6,20 +6,20 @@
       "title": "Fix probation incomplete promotion",
       "description": "Probation runs should promote back to active on incomplete results. internal/relay/runner.go currently keys that branch on failReason == \"incomplete run\", but runOne rewrites the fail reason to the classified string before returning. Switch this to explicit incomplete/failure-class handling and add an end-to-end test for probation incomplete -\u003e active.",
       "assignee": "senior",
-      "isDone": false,
+      "isDone": true,
       "createdAt": "2026-05-28T10:27:57.84016964Z",
-      "updatedAt": "2026-05-28T10:27:57.84016964Z",
-      "completedAt": null
+      "updatedAt": "2026-05-28T10:44:30.785975903Z",
+      "completedAt": "2026-05-28T10:44:30.785975903Z"
     },
     {
       "id": "work-19ea",
       "title": "Add lap pinning coverage",
       "description": "Add runner-level coverage for lap-ID pinning: normal single-lap success, wrong-lap rejection, multi-lap rejection, and laps_attempted persistence on TryRecord. Reconcile openspec/changes/harden-relay-run-lifecycle/tasks.md items 1.1-1.5 to match the implementation.",
       "assignee": "senior",
-      "isDone": false,
+      "isDone": true,
       "createdAt": "2026-05-28T10:27:53.768965391Z",
-      "updatedAt": "2026-05-28T10:27:53.768965391Z",
-      "completedAt": null
+      "updatedAt": "2026-05-28T10:44:34.480060886Z",
+      "completedAt": "2026-05-28T10:44:34.480060886Z"
     },
     {
       "id": "work-6ece",

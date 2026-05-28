@@ -4074,10 +4074,14 @@ func TestE2E_WindowsFreezeDisabledRetryBudgetExhaustion(t *testing.T) {
 // overwritten failReason to the classified string before returning. The fix
 // checks failureClass == reliability.FailureIncomplete instead.
 func TestProbationIncompletePromotesToActive(t *testing.T) {
-	// Stub the laps head pull so the run is laps-backed (needed for incomplete detection).
 	oldHeadPull := headPullLap
+	pullCount := 0
 	headPullLap = func(context.Context, string) (laps.Lap, error) {
-		return laps.Lap{ID: "lap-1", Title: "probation test", Assignee: "senior"}, nil
+		pullCount++
+		if pullCount == 1 {
+			return laps.Lap{ID: "lap-1", Title: "probation test", Assignee: "senior"}, nil
+		}
+		return laps.NoLap, nil
 	}
 	defer func() { headPullLap = oldHeadPull }()
 
