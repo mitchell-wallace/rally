@@ -229,3 +229,8 @@ counting across state-transition boundaries from different freeze cycles.
   intentional; the retry inherits partial progress with prompt guidance to finish
   and commit. If this proves too noisy in practice, a future `auto-squash` flag
   could revert incomplete changes before retry.
+- **Lifecycle tests must not imply paid Claude usage** → relay lifecycle and
+  cascade tests use fake in-process executors, but their visible route labels
+  should resolve through the cheap/free `op:dsf` alias (`opencode/deepseek-v4-flash-free`)
+  where the harness identity is not under test. This keeps test output from
+  looking like a real Claude run while preserving per-harness-model coverage.

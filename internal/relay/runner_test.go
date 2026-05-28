@@ -1788,14 +1788,15 @@ func TestFreezeCascade(t *testing.T) {
 			return &agent.TryResult{Completed: false, Summary: "fail"}, nil
 		},
 	}
-	executors := map[string]agent.Executor{"claude": exec}
+	executors := map[string]agent.Executor{"opencode": exec}
 
 	r := NewRunner(s, Config{
 		WorkspaceDir:     workspaceDir,
 		DataDir:          t.TempDir(),
-		AgentMixSpecs:    []string{"cc:1"},
+		AgentMixSpecs:    []string{"op:dsf"},
 		TargetIterations: 1,
 		RetryBudget:      3,
+		Resolver:         cheapTestResolver,
 	}, executors)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
@@ -1803,7 +1804,8 @@ func TestFreezeCascade(t *testing.T) {
 	_ = r.Run(ctx)
 
 	// Verify agent is paused after 3 retries exhausted
-	st, _ := NewResilience(s).getState(ResilienceKey{Harness: "claude"})
+	cheapKey := ResilienceKey{Harness: "opencode", Model: cheapTestModel}
+	st, _ := NewResilience(s).getState(cheapKey)
 	if st != StatePaused {
 		t.Fatalf("expected agent paused after retry exhaustion, got %s", st)
 	}
@@ -1821,19 +1823,19 @@ func TestFreezeCascade(t *testing.T) {
 	}
 
 	for i := 0; i < 5; i++ {
-		if err := resilience.RecordHourlyFailure(ResilienceKey{Harness: "claude"}, 1); err != nil {
+		if err := resilience.RecordHourlyFailure(cheapKey, 1); err != nil {
 			t.Fatalf("RecordHourlyFailure %d failed: %v", i+1, err)
 		}
 	}
 
 	// Verify agent is now frozen
-	st, _ = resilience.getState(ResilienceKey{Harness: "claude"})
+	st, _ = resilience.getState(cheapKey)
 	if st != StateFrozen {
 		t.Fatalf("expected agent frozen after 5 hourly retries, got %s", st)
 	}
 
 	// Verify a "frozen" event was recorded
-	events := s.GetAgentStatus("claude", "")
+	events := s.GetAgentStatus("opencode", cheapTestModel)
 	foundFrozen := false
 	for _, e := range events {
 		if e.EventType == "frozen" {
@@ -1888,14 +1890,15 @@ func TestFailedRunDoesNotCountIteration(t *testing.T) {
 			return &agent.TryResult{Completed: false, Summary: "fail"}, nil
 		},
 	}
-	executors := map[string]agent.Executor{"claude": exec}
+	executors := map[string]agent.Executor{"opencode": exec}
 
 	r := NewRunner(s, Config{
 		WorkspaceDir:     workspaceDir,
 		DataDir:          t.TempDir(),
-		AgentMixSpecs:    []string{"cc:1"},
+		AgentMixSpecs:    []string{"op:dsf"},
 		TargetIterations: 1,
 		RetryBudget:      3,
+		Resolver:         cheapTestResolver,
 	}, executors)
 	r.resilience = &Resilience{
 		Store:                     s,
@@ -1914,7 +1917,7 @@ func TestFailedRunDoesNotCountIteration(t *testing.T) {
 		t.Fatalf("expected 0 completed iterations after failed run, got %d", relays[0].CompletedIterations)
 	}
 
-	st, _ := NewResilience(s).getState(ResilienceKey{Harness: "claude"})
+	st, _ := NewResilience(s).getState(ResilienceKey{Harness: "opencode", Model: cheapTestModel})
 	if st != StateFrozen {
 		t.Fatalf("expected agent frozen after hourly retry exhaustion, got %s", st)
 	}
@@ -2863,16 +2866,16 @@ func TestRunnerRouteIntegration_AssigneesQuotasFreezeAndRoleFiles(t *testing.T) 
 	}
 
 	var executions []execution
-	failSeniorClaudeAttempts := 3
+	failSeniorCheapAttempts := 3
 	changeCounter := 0
 	exec := &funcExecutor{
 		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
-			if opts.Persona == "claude" && opts.RoleInstructions == "Senior route guidance." && failSeniorClaudeAttempts > 0 {
+			if opts.Persona == "opencode" && opts.Model == cheapTestModel && opts.RoleInstructions == "Senior route guidance." && failSeniorCheapAttempts > 0 {
 				if opts.LogPath != "" {
 					_ = os.WriteFile(opts.LogPath, []byte("fork/exec failed\n"), 0o644)
 				}
-				failSeniorClaudeAttempts--
-				return &agent.TryResult{Completed: false, Summary: "simulated senior claude failure"}, nil
+				failSeniorCheapAttempts--
+				return &agent.TryResult{Completed: false, Summary: "simulated senior cheap-model failure"}, nil
 			}
 
 			executions = append(executions, execution{
@@ -2888,8 +2891,8 @@ func TestRunnerRouteIntegration_AssigneesQuotasFreezeAndRoleFiles(t *testing.T) 
 		},
 	}
 	executors := map[string]agent.Executor{
-		"claude": exec,
-		"codex":  exec,
+		"opencode": exec,
+		"codex":    exec,
 	}
 
 	oldHeadPull := headPullLap
@@ -2912,14 +2915,14 @@ func TestRunnerRouteIntegration_AssigneesQuotasFreezeAndRoleFiles(t *testing.T) 
 		DataDir:      t.TempDir(),
 		RouteSpecs: map[string][]string{
 			"default": []string{"cx:1"},
-			"SENIOR":  []string{"cc:1", "cx:1"},
+			"SENIOR":  []string{"op:dsf", "cx:1"},
 			"JUNIOR":  []string{"cx:2"},
 		},
 		TargetIterations: 4,
 		RetryBudget:      3,
 		LapsEnabled:      true,
 		Instructions:     "Base instructions.",
-		Resolver:         testResolver,
+		Resolver:         cheapTestResolver,
 	}, executors)
 	r.resilience = &Resilience{
 		Store:                     s,
@@ -2961,9 +2964,9 @@ func TestRunnerRouteIntegration_AssigneesQuotasFreezeAndRoleFiles(t *testing.T) 
 		}
 	}
 
-	st, _ := r.resilience.getState(ResilienceKey{Harness: "claude"})
+	st, _ := r.resilience.getState(ResilienceKey{Harness: "opencode", Model: cheapTestModel})
 	if st != StatePaused {
-		t.Fatalf("claude state = %s, want %s after simulated freeze", st, StatePaused)
+		t.Fatalf("cheap model state = %s, want %s after simulated freeze", st, StatePaused)
 	}
 }
 
@@ -3996,14 +3999,15 @@ func TestE2E_WindowsFreezeDisabledRetryBudgetExhaustion(t *testing.T) {
 			return &agent.TryResult{Completed: false, Summary: "fail"}, nil
 		},
 	}
-	executors := map[string]agent.Executor{"claude": exec}
+	executors := map[string]agent.Executor{"opencode": exec}
 
 	r := NewRunner(s, Config{
 		WorkspaceDir:     workspaceDir,
 		DataDir:          t.TempDir(),
-		AgentMixSpecs:    []string{"cc:1"},
+		AgentMixSpecs:    []string{"op:dsf"},
 		TargetIterations: 1,
 		RetryBudget:      2,
+		Resolver:         cheapTestResolver,
 	}, executors)
 	// Simulate Windows path: stall controller disabled
 	r.stallControllerFactory = func(string) reliability.StallController { return nil }
@@ -4019,7 +4023,7 @@ func TestE2E_WindowsFreezeDisabledRetryBudgetExhaustion(t *testing.T) {
 	deadline := time.After(2 * time.Second)
 	for {
 		tries := s.AllTries()
-		status := s.GetAgentStatus("claude", "")
+		status := s.GetAgentStatus("opencode", cheapTestModel)
 		foundPause := false
 		for _, e := range status {
 			if e.EventType == "paused" {
@@ -4047,7 +4051,7 @@ func TestE2E_WindowsFreezeDisabledRetryBudgetExhaustion(t *testing.T) {
 	if len(tries) != 2 {
 		t.Fatalf("expected 2 tries (retry budget exhausted), got %d", len(tries))
 	}
-	status := s.GetAgentStatus("claude", "")
+	status := s.GetAgentStatus("opencode", cheapTestModel)
 	foundPause := false
 	for _, e := range status {
 		if e.EventType == "paused" {

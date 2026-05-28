@@ -13,7 +13,7 @@
 - [x] 2.3 Suppress auto-commit for incomplete tries — leave changes uncommitted so the retry agent inherits them as partial progress
 - [x] 2.4 On retry after incomplete, inject prompt guidance: "The last run was incomplete. Check any current git changes, finish anything not done, verify correctness, commit when good, then run `laps done`."
 - [x] 2.5 Incomplete runs retry but do NOT call `PauseAgent`/`RecordHourlyFailure` (do not advance the resilience cascade)
-- [x] 2.6 Tests: incomplete run leaves changes uncommitted; retry agent gets guidance; incomplete does not count toward pause/freeze
+- [x] 2.6 Tests: incomplete run leaves changes uncommitted; retry agent gets guidance; incomplete does not count toward pause/freeze; fake-executor lifecycle tests use `op:dsf` (`opencode/deepseek-v4-flash-free`) labels to avoid Claude-looking output and paid-model anxiety
 
 ## 3. Probation state + freeze decay
 
@@ -41,7 +41,7 @@
 - [x] 5.4 Update all callers of resilience methods in `internal/relay/runner.go` and `internal/relay/route_runtime.go` to pass `selection.Agent.Model` (or resolved model); enumerate all 10 method signatures and 20+ call sites
 - [x] 5.5 In `internal/relay/runner.go`, only call `PauseAgent`/`RecordHourlyFailure` when >1 attempt within a run is classified as infra-class; agent-class and incomplete failures stay retry-eligible but do not escalate
 - [x] 5.6 Default unknown failures to the agent-class (does-not-freeze) side
-- [ ] 5.7 Tests: >1 infra failure increments cascade; single infra failure does not; agent error and incomplete do not; per-harness-model keying isolates rate-limit to specific model
+- [ ] 5.7 Tests: >1 infra failure increments cascade; single infra failure does not; agent error and incomplete do not; per-harness-model keying isolates rate-limit to specific model. New fake-executor cascade tests use `op:dsf` (`opencode/deepseek-v4-flash-free`) rather than Claude labels.
 
 ## 6. Hourly retries up to 3 attempts
 
