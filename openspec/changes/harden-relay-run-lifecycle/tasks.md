@@ -1,10 +1,10 @@
 ## 1. Lap-ID pinning (state integrity)
 
-- [ ] 1.1 Pin the assigned lap ID at run start (carry on the run/RunState)
-- [ ] 1.2 On finalization (`laps wrapup`/run end), compare recorded-completed laps against the pinned ID in `internal/relay/runner.go`
-- [ ] 1.3 Fail the run with `wrong_lap_consumed` / `multi_lap_consumed` reasons and do not advance the queue on a mismatch
-- [ ] 1.4 Add a `laps_attempted` field to `TryRecord` (list of `{lap_id, timestamp}`) and record every lap completion attempt
-- [ ] 1.5 Tests: phantom-completion rejection, multi-lap rejection, normal single-lap pass-through, attempted-lap recording
+- [x] 1.1 Pin the assigned lap ID at run start (carry on the run/RunState)
+- [x] 1.2 On finalization (`laps wrapup`/run end), compare recorded-completed laps against the pinned ID in `internal/relay/runner.go`
+- [x] 1.3 Fail the run with `wrong_lap_consumed` / `multi_lap_consumed` reasons and do not advance the queue on a mismatch
+- [x] 1.4 Add a `laps_attempted` field to `TryRecord` (list of `{lap_id, timestamp}`) and record every lap completion attempt
+- [x] 1.5 Tests: phantom-completion rejection, multi-lap rejection, normal single-lap pass-through, attempted-lap recording
 
 ## 2. "Incomplete" failure class
 
@@ -25,7 +25,7 @@
 - [x] 3.6 Probation semantics in `runOne`: `maxAttempts=3` (same as hourly retries); success or incomplete → promote to active; failure (agent or infra) → re-freeze with fresh timestamp
 - [x] 3.7 Bump `agentStatusWindowSize` from 50 to 500 events; on truncation, synthesize a summary event preserving the latest effective state + timestamp for active frozen/probation entries
 - [x] 3.8 Tests: frozen decays to probation after window; probation one-shot enforcement; probation success → active; probation incomplete → active; probation failure → re-frozen; all-frozen ends pass but remains decayable; window truncation preserves freeze timestamps
-- [ ] 3.9 Baseline tests for `resilience.go`: create `internal/relay/resilience_test.go` covering `getState` state transitions, `PauseAgent`/`UnpauseAgent`/`FreezeAgent` event recording, `RecordHourlyFailure` threshold + counting-loop boundaries, and `SelectActiveAgent` cycling (run before probation work begins)
+- [x] 3.9 Baseline tests for `resilience.go`: create `internal/relay/resilience_test.go` covering `getState` state transitions, `PauseAgent`/`UnpauseAgent`/`FreezeAgent` event recording, `RecordHourlyFailure` threshold + counting-loop boundaries, and `SelectActiveAgent` cycling (run before probation work begins)
 
 ## 4. `--new` explicitly resets agent status
 

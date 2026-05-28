@@ -226,10 +226,10 @@
       "title": "VERIFY: full change — final verification",
       "description": "## Context\nOpenSpec change: `harden-relay-run-lifecycle`. Final full-change verification covering the complete outcome.\n\n## Outcome\n- Run full OpenSpec verification: use `openspec-verify-change` skill against `harden-relay-run-lifecycle` to verify all tasks are marked done and implementation matches specs.\n- Identify the branch target/base before diffing; use `git diff \u003ctarget\u003e...HEAD` to inspect the whole diff.\n- Identify the first lap/try in the current batch; treat earlier branch work as pre-existing baseline.\n- Full test suite: `go build ./...` and `go test ./...`\n- Confirm:\n  - No stale naming (FreezeDetector, Assessment.Frozen, EntryState.Frozen, failureFreezesEntry)\n  - All resilience methods use ResilienceKey\n  - Probation state machine correct (getState pure, one-shot enforcement, decay/re-freeze)\n  - Lap-ID pinning works\n  - Incomplete class behavior correct (no auto-commit, guidance prompt, no cascade)\n  - \u003e1 infra threshold enforced\n  - Hourly retry budget is 3\n  - --new resets agent status\n  - Stall-recovery role-gated (VERIFY excluded from files-committed recovery)\n  - Prompt context bounded\n  - VERSION bumped\n  - Docs updated\n- Do NOT rewrite git history. If cleanup is needed, create focused head laps.\n- Report findings with pass/fail verdict and summary.",
       "assignee": "verify",
-      "isDone": false,
+      "isDone": true,
       "createdAt": "2026-05-27T08:45:41.538044177Z",
-      "updatedAt": "2026-05-27T08:45:41.538044177Z",
-      "completedAt": null
+      "updatedAt": "2026-05-28T11:47:43.647631684Z",
+      "completedAt": "2026-05-28T11:47:43.647631684Z"
     }
   ]
 }
