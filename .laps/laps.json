@@ -2,6 +2,36 @@
   "version": 1,
   "tasks": [
     {
+      "id": "work-1b9b",
+      "title": "Fix probation incomplete promotion",
+      "description": "Probation runs should promote back to active on incomplete results. internal/relay/runner.go currently keys that branch on failReason == \"incomplete run\", but runOne rewrites the fail reason to the classified string before returning. Switch this to explicit incomplete/failure-class handling and add an end-to-end test for probation incomplete -\u003e active.",
+      "assignee": "senior",
+      "isDone": false,
+      "createdAt": "2026-05-28T10:27:57.84016964Z",
+      "updatedAt": "2026-05-28T10:27:57.84016964Z",
+      "completedAt": null
+    },
+    {
+      "id": "work-19ea",
+      "title": "Add lap pinning coverage",
+      "description": "Add runner-level coverage for lap-ID pinning: normal single-lap success, wrong-lap rejection, multi-lap rejection, and laps_attempted persistence on TryRecord. Reconcile openspec/changes/harden-relay-run-lifecycle/tasks.md items 1.1-1.5 to match the implementation.",
+      "assignee": "senior",
+      "isDone": false,
+      "createdAt": "2026-05-28T10:27:53.768965391Z",
+      "updatedAt": "2026-05-28T10:27:53.768965391Z",
+      "completedAt": null
+    },
+    {
+      "id": "work-6ece",
+      "title": "Fix probation incomplete promotion",
+      "description": "Probation runs should promote back to active on incomplete results. internal/relay/runner.go currently keys that branch on failReason == \"incomplete run\", but runOne rewrites the fail reason to the classified string before returning. Switch this to explicit incomplete/failure-class handling and add an end-to-end test for probation incomplete -\u003e active.",
+      "assignee": "senior",
+      "isDone": true,
+      "createdAt": "2026-05-28T10:26:34.368647119Z",
+      "updatedAt": "2026-05-28T10:26:45.786564166Z",
+      "completedAt": "2026-05-28T10:26:45.786564166Z"
+    },
+    {
       "id": "rall-3b66",
       "title": "Rename freeze→stall in liveness detector and Frozen→Benched in scheduler",
       "description": "## Context\nOpenSpec change: `harden-relay-run-lifecycle` — tasks 9.1–9.4.\nThree systems currently use \"freeze\" naming. This lap renames two of them for clarity; the third (per-agent-type `frozen` in `agent_status.jsonl`) keeps its name.\n\n## Outcome\n- `internal/reliability/freeze.go` renamed to `stall.go`; `FreezeDetector`→`StallDetector`, `Assessment.Frozen`→`Assessment.Stalled`, all threshold/field names updated.\n- `internal/routing/scheduler.go`: `EntryState.Frozen`→`EntryState.Benched`; `failureFreezesEntry`→`failureBenchesEntry` with an explicit enum/boolean parameter on `OnAgentFailed` (replace `strings.Contains(reason, \"freeze\")` string-matching).\n- `internal/relay/resilience.go`: `RecordHourlyFailure` counting loop also breaks on `frozen` and `probation` events, not just `active` (task 9.4).\n- All callers in `internal/relay/runner.go`, `internal/relay/route_runtime.go`, and tests updated.\n- The per-agent-type `frozen` name and `agent_status.jsonl` `event_type` value stay unchanged (task 9.3 — no data-format change).\n\n## Files \u0026 scope\n- `internal/reliability/freeze.go` → `stall.go` (rename file + all exported names)\n- `internal/reliability/freeze_test.go` → `stall_test.go`\n- `internal/routing/scheduler.go` + `scheduler_test.go`\n- `internal/relay/runner.go`, `route_runtime.go` — update callers only\n- `internal/relay/resilience.go` — task 9.4 counting-loop fix\n- Do NOT touch `agent_status.jsonl` event_type values or the per-agent-type `frozen` name in resilience.go.\n\n## Acceptance\n- `go build ./...` passes\n- All existing tests pass (`go test ./internal/reliability/... ./internal/routing/... ./internal/relay/...`)\n- `grep -r \"FreezeDetector\\|Assessment\\.Frozen\\|EntryState\\.Frozen\\|failureFreezesEntry\" internal/` returns zero hits\n- `grep -r \"StallDetector\\|Assessment\\.Stalled\\|EntryState\\.Benched\\|failureBenchesEntry\" internal/` returns expected hits\n- Mark off tasks 9.1, 9.2, 9.3, 9.4 in the change tasks.md",
@@ -126,10 +156,10 @@
       "title": "VERIFY: lap pinning, incomplete class, failure gating, hourly retry, and --new reset",
       "description": "## Context\nOpenSpec change: `harden-relay-run-lifecycle`. Verifying the core runner behavior changes: tasks 1.1–1.5, 2.2–2.6, 5.5, 5.7, 6.1–6.2, 4.1–4.3.\n\n## Outcome\n- Confirm lap-ID pinning works: wrong-lap and multi-lap mismatch fails the run, normal single-lap passes through, `laps_attempted` recorded on try records.\n- Confirm incomplete classification: auto-commit suppressed, retry gets guidance prompt, incomplete does NOT escalate cascade.\n- Confirm \u003e1 infra threshold: single infra failure does not pause, \u003e1 does.\n- Confirm hourly retry budget is 3.\n- Confirm `--new` calls `ResetAgentStatus()` and all agents start active.\n- Confirm per-harness-model keying isolates rate-limit to specific model.\n- `go build ./...` passes\n- `go test ./...` passes\n- Use `openspec-verify-change` skill focused on these tasks\n- Report findings; create head laps for substantive gaps",
       "assignee": "verify",
-      "isDone": false,
+      "isDone": true,
       "createdAt": "2026-05-27T08:44:35.32621183Z",
-      "updatedAt": "2026-05-27T08:44:35.32621183Z",
-      "completedAt": null
+      "updatedAt": "2026-05-28T10:27:44.54401284Z",
+      "completedAt": "2026-05-28T10:27:44.54401284Z"
     },
     {
       "id": "rall-534a",
