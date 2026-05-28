@@ -166,10 +166,10 @@
       "title": "Implement role-aware stall-recovery (VERIFY excluded from files-committed recovery)",
       "description": "## Context\nOpenSpec change: `harden-relay-run-lifecycle` — tasks 7.1–7.2.\nThe \"files committed → success\" stall-recovery is unsafe for VERIFY runs: a VERIFY agent may legitimately commit only a trivial fix, which is not evidence that verification actually happened. This lap gates that recovery on role. No verdict artifact is introduced — that approach was considered and rejected (see design Decision 7).\n\n## Outcome\n- `internal/relay/runner.go`: gate the stall-recovery logic on role. When a try is killed by the stall detector:\n  - VERIFY: NOT auto-accepted on the basis of committed files — the try stays a retry-eligible failure and is retried/resumed.\n  - Implementation roles (junior/senior/ui): keep existing files-committed recovery.\n- Tests:\n  - Stalled VERIFY (even with a committed trivial fix) stays a retry-eligible failure\n  - Stalled implementation try with commits still recovers\n\n## Acceptance\n- `go build ./...` passes\n- `go test ./internal/relay/... -run TestStallRecovery -v` passes\n- Mark off tasks 7.1, 7.2 in the change tasks.md",
       "assignee": "senior",
-      "isDone": false,
+      "isDone": true,
       "createdAt": "2026-05-27T08:44:49.452620015Z",
-      "updatedAt": "2026-05-27T08:44:49.452620015Z",
-      "completedAt": null
+      "updatedAt": "2026-05-28T10:49:40.034954822Z",
+      "completedAt": "2026-05-28T10:49:40.034954822Z"
     },
     {
       "id": "rall-2901",

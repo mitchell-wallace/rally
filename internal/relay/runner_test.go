@@ -4174,3 +4174,300 @@ func TestProbationIncompletePromotesToActive(t *testing.T) {
 		t.Fatalf("last event should NOT be frozen after incomplete probation; got events: %v", events)
 	}
 }
+
+func TestStallRecovery_VerifyRoleExcluded(t *testing.T) {
+	workspaceDir := t.TempDir()
+	rallyDir := filepath.Join(workspaceDir, ".rally")
+	os.MkdirAll(rallyDir, 0o755)
+	initRepo(t, workspaceDir)
+
+	s := newTestStore(t, rallyDir)
+	stallCh := make(chan struct{})
+	exec := &funcExecutor{
+		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+			os.WriteFile(filepath.Join(workspaceDir, "fix.txt"), []byte("trivial fix"), 0o644)
+			runGit(t, workspaceDir, "add", "fix.txt")
+			runGit(t, workspaceDir, "commit", "-m", "trivial fix", "--no-verify")
+			<-stallCh
+			return &agent.TryResult{Completed: false, Summary: "stalled"}, nil
+		},
+	}
+
+	r := NewRunner(s, Config{
+		WorkspaceDir:     workspaceDir,
+		DataDir:          t.TempDir(),
+		AgentMixSpecs:    []string{"cc:1"},
+		TargetIterations: 1,
+		RetryBudget:      1,
+	}, map[string]agent.Executor{"claude": exec})
+
+	r.stallControllerFactory = func(string) reliability.StallController {
+		triggered := false
+		return &fakeStallController{
+			check: func(context.Context) (bool, error) {
+				if triggered {
+					return false, nil
+				}
+				triggered = true
+				close(stallCh)
+				return true, nil
+			},
+		}
+	}
+
+	oldInterval := stallCheckInterval
+	stallCheckInterval = time.Millisecond
+	defer func() { stallCheckInterval = oldInterval }()
+
+	success, _, _, _, _, _, err := r.runOne(
+		context.Background(),
+		&store.RelayRecord{ID: 1, TargetIterations: 1},
+		0,
+		agent.ResolvedAgent{Harness: "claude"},
+		runTask{Name: "verify task", Prompt: "check correctness", Assignee: "verify", LapID: "lap-1", IsLapsBacked: true, LapsRemaining: 1},
+		nil,
+		nil,
+		false,
+		false,
+		nil,
+		nil,
+		io.Discard,
+	)
+	if err != nil {
+		t.Fatalf("runOne error = %v", err)
+	}
+	if success {
+		t.Fatal("expected failure for stalled VERIFY run despite committed files")
+	}
+}
+
+func TestStallRecovery_ImplementationRoleRecovers(t *testing.T) {
+	workspaceDir := t.TempDir()
+	rallyDir := filepath.Join(workspaceDir, ".rally")
+	os.MkdirAll(rallyDir, 0o755)
+	initRepo(t, workspaceDir)
+
+	s := newTestStore(t, rallyDir)
+	stallCh := make(chan struct{})
+	exec := &funcExecutor{
+		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+			os.WriteFile(filepath.Join(workspaceDir, "impl.txt"), []byte("implementation"), 0o644)
+			runGit(t, workspaceDir, "add", "impl.txt")
+			runGit(t, workspaceDir, "commit", "-m", "implementation work", "--no-verify")
+			<-stallCh
+			return &agent.TryResult{Completed: false, Summary: "stalled"}, nil
+		},
+	}
+
+	r := NewRunner(s, Config{
+		WorkspaceDir:     workspaceDir,
+		DataDir:          t.TempDir(),
+		AgentMixSpecs:    []string{"cc:1"},
+		TargetIterations: 1,
+		RetryBudget:      1,
+	}, map[string]agent.Executor{"claude": exec})
+
+	r.stallControllerFactory = func(string) reliability.StallController {
+		triggered := false
+		return &fakeStallController{
+			check: func(context.Context) (bool, error) {
+				if triggered {
+					return false, nil
+				}
+				triggered = true
+				close(stallCh)
+				return true, nil
+			},
+		}
+	}
+
+	oldInterval := stallCheckInterval
+	stallCheckInterval = time.Millisecond
+	defer func() { stallCheckInterval = oldInterval }()
+
+	success, _, _, _, _, _, err := r.runOne(
+		context.Background(),
+		&store.RelayRecord{ID: 1, TargetIterations: 1},
+		0,
+		agent.ResolvedAgent{Harness: "claude"},
+		runTask{Name: "senior task", Prompt: "implement feature", Assignee: "senior", LapID: "lap-1", IsLapsBacked: true, LapsRemaining: 1},
+		nil,
+		nil,
+		false,
+		false,
+		nil,
+		nil,
+		io.Discard,
+	)
+	if err != nil {
+		t.Fatalf("runOne error = %v", err)
+	}
+	if !success {
+		t.Fatal("expected stall recovery success for SENIOR run with committed files")
+	}
+}
+
+func TestStallRecovery_VerifyStalledWithCommits_StaysFailed(t *testing.T) {
+	workspaceDir := t.TempDir()
+	rallyDir := filepath.Join(workspaceDir, ".rally")
+	os.MkdirAll(rallyDir, 0o755)
+	initRepo(t, workspaceDir)
+
+	s := newTestStore(t, rallyDir)
+	freezeCh := make(chan struct{})
+	exec := &funcExecutor{
+		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+			// Create a file so there are changes to auto-commit
+			f, _ := os.Create(filepath.Join(workspaceDir, "verify-fix.txt"))
+			f.WriteString("trivial fix")
+			f.Close()
+			<-freezeCh
+			return &agent.TryResult{Completed: false, Summary: "stalled"}, nil
+		},
+	}
+
+	r := NewRunner(s, Config{
+		WorkspaceDir:     workspaceDir,
+		DataDir:          t.TempDir(),
+		AgentMixSpecs:    []string{"cc:1"},
+		TargetIterations: 1,
+		RetryBudget:      1, // only 1 attempt
+	}, map[string]agent.Executor{"claude": exec})
+
+	controllerCount := 0
+	r.stallControllerFactory = func(logPath string) reliability.StallController {
+		controllerCount++
+		if controllerCount == 1 {
+			triggered := false
+			return &fakeStallController{
+				check: func(context.Context) (bool, error) {
+					if triggered {
+						return false, nil
+					}
+					triggered = true
+					close(freezeCh)
+					return true, nil
+				},
+			}
+		}
+		return &fakeStallController{}
+	}
+
+	oldInterval := stallCheckInterval
+	stallCheckInterval = time.Millisecond
+	defer func() { stallCheckInterval = oldInterval }()
+
+	success, _, _, _, _, _, err := r.runOne(
+		context.Background(),
+		&store.RelayRecord{ID: 1, TargetIterations: 1},
+		0,
+		agent.ResolvedAgent{Harness: "claude"},
+		runTask{Name: "verify run", Prompt: "verify test", Assignee: "verify"},
+		nil,
+		nil,
+		false,
+		false,
+		nil,
+		nil,
+		io.Discard,
+	)
+	if err != nil {
+		t.Fatalf("runOne error = %v", err)
+	}
+	if success {
+		t.Fatal("expected runOne to fail for stalled VERIFY even with commits")
+	}
+
+	tries := s.AllTries()
+	if len(tries) != 1 {
+		t.Fatalf("expected 1 try, got %d", len(tries))
+	}
+	if tries[0].Completed {
+		t.Fatal("stalled VERIFY try should not be auto-completed")
+	}
+	if tries[0].CommitHash == "" {
+		t.Fatal("expected auto-commit hash to be present")
+	}
+}
+
+func TestStallRecovery_ImplementationStalledWithCommits_Recovers(t *testing.T) {
+	workspaceDir := t.TempDir()
+	rallyDir := filepath.Join(workspaceDir, ".rally")
+	os.MkdirAll(rallyDir, 0o755)
+	initRepo(t, workspaceDir)
+
+	s := newTestStore(t, rallyDir)
+	freezeCh := make(chan struct{})
+	exec := &funcExecutor{
+		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+			f, _ := os.Create(filepath.Join(workspaceDir, "impl-fix.txt"))
+			f.WriteString("implementation fix")
+			f.Close()
+			<-freezeCh
+			return &agent.TryResult{Completed: false, Summary: "stalled"}, nil
+		},
+	}
+
+	r := NewRunner(s, Config{
+		WorkspaceDir:     workspaceDir,
+		DataDir:          t.TempDir(),
+		AgentMixSpecs:    []string{"cc:1"},
+		TargetIterations: 1,
+		RetryBudget:      1,
+	}, map[string]agent.Executor{"claude": exec})
+
+	controllerCount := 0
+	r.stallControllerFactory = func(logPath string) reliability.StallController {
+		controllerCount++
+		if controllerCount == 1 {
+			triggered := false
+			return &fakeStallController{
+				check: func(context.Context) (bool, error) {
+					if triggered {
+						return false, nil
+					}
+					triggered = true
+					close(freezeCh)
+					return true, nil
+				},
+			}
+		}
+		return &fakeStallController{}
+	}
+
+	oldInterval := stallCheckInterval
+	stallCheckInterval = time.Millisecond
+	defer func() { stallCheckInterval = oldInterval }()
+
+	success, _, _, _, _, _, err := r.runOne(
+		context.Background(),
+		&store.RelayRecord{ID: 1, TargetIterations: 1},
+		0,
+		agent.ResolvedAgent{Harness: "claude"},
+		runTask{Name: "impl run", Prompt: "impl test", Assignee: "senior"},
+		nil,
+		nil,
+		false,
+		false,
+		nil,
+		nil,
+		io.Discard,
+	)
+	if err != nil {
+		t.Fatalf("runOne error = %v", err)
+	}
+	if !success {
+		t.Fatal("expected runOne to succeed for stalled implementation with commits")
+	}
+
+	tries := s.AllTries()
+	if len(tries) != 1 {
+		t.Fatalf("expected 1 try, got %d", len(tries))
+	}
+	if !tries[0].Completed {
+		t.Fatal("stalled implementation try with commits should be auto-completed")
+	}
+	if tries[0].CommitHash == "" {
+		t.Fatal("expected auto-commit hash to be present")
+	}
+}

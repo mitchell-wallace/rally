@@ -50,8 +50,8 @@
 
 ## 7. Role-aware stall-recovery
 
-- [ ] 7.1 Gate the "files committed → success" stall-recovery in `internal/relay/runner.go` on role: VERIFY is excluded (a stalled VERIFY try is never auto-accepted on the basis of commits); implementation roles keep current behavior
-- [ ] 7.2 Tests: stalled VERIFY (even with a committed trivial fix) stays a retry-eligible failure; stalled implementation try with commits still recovers
+- [x] 7.1 Gate the "files committed → success" stall-recovery in `internal/relay/runner.go` on role: VERIFY is excluded (a stalled VERIFY try is never auto-accepted on the basis of commits); implementation roles keep current behavior
+- [x] 7.2 Tests: stalled VERIFY (even with a committed trivial fix) stays a retry-eligible failure; stalled implementation try with commits still recovers
 
 ## 8. Bounded prompt context
 

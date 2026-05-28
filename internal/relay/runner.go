@@ -925,10 +925,15 @@ attemptLoop:
 		// already committed or created files (autoCommit ran), treat the try as
 		// successful. This handles agents (e.g. opencode TUI) that complete the
 		// task then idle in an interactive loop until the stall detector kills them.
+		// VERIFY runs are excluded: a trivial commit is not evidence verification happened.
 		if failed && stallMarked && commitHash != "" && !lapPinMismatch {
-			failed = false
-			success = true
-			fmt.Fprintf(log, "relay %d run %d attempt %d stall recovery: files committed, treating as success\n", relay.ID, runIndex+1, attempt)
+			if strings.EqualFold(task.Assignee, "verify") {
+				fmt.Fprintf(log, "relay %d run %d attempt %d stall recovery: files committed but assignee is %s, not treating as success\n", relay.ID, runIndex+1, attempt, task.Assignee)
+			} else {
+				failed = false
+				success = true
+				fmt.Fprintf(log, "relay %d run %d attempt %d stall recovery: files committed, treating as success\n", relay.ID, runIndex+1, attempt)
+			}
 		}
 
 		// Error classification and strategy dispatch.
