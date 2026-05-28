@@ -219,6 +219,9 @@ func runRelay(cmd *cobra.Command, args []string) error {
 		if len(relays) > 0 && relays[0].EndedAt == "" {
 			_ = relay.CompleteRelay(s, relays[0].ID)
 		}
+		if err := s.ResetAgentStatus(); err != nil {
+			return fmt.Errorf("reset agent status: %w", err)
+		}
 	}
 
 	// Resume check: if --resume not passed and incomplete relay exists, prompt

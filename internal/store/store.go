@@ -2,6 +2,7 @@ package store
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 	"sort"
 )
@@ -67,6 +68,16 @@ func (s *Store) AppendRelay(r RelayRecord) error {
 			return fmt.Errorf("reload cache after truncate: %w", err)
 		}
 		s.cache = c
+	}
+	return nil
+}
+
+// ResetAgentStatus removes all agent status history to start fresh.
+func (s *Store) ResetAgentStatus() error {
+	path := filepath.Join(s.dir, "agent_status.jsonl")
+	s.cache.AgentStatus = nil
+	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+		return err
 	}
 	return nil
 }

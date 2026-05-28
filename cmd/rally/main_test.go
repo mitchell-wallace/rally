@@ -219,3 +219,44 @@ func TestRunInitRoles_InstallsRoutesAndRoleInstructions(t *testing.T) {
 		}
 	}
 }
+
+func TestRunRelayNewResetsAgentStatus(t *testing.T) {
+	workspaceDir := t.TempDir()
+	rallyDir := filepath.Join(workspaceDir, ".rally")
+	os.MkdirAll(rallyDir, 0o755)
+	if err := exec.Command("git", "init", workspaceDir).Run(); err != nil {
+		t.Fatalf("git init: %v", err)
+	}
+	writeTestConfig(t, workspaceDir, "schema_version = 2\n")
+
+	s, err := store.New(rallyDir)
+	if err != nil {
+		t.Fatalf("failed to init store: %v", err)
+	}
+
+	resilience := relay.NewResilience(s)
+	key := relay.ResilienceKey{Harness: "test", Model: "model"}
+	if err := resilience.FreezeAgent(key, 1); err != nil {
+		t.Fatalf("freeze agent: %v", err)
+	}
+	st, _ := resilience.GetState(key)
+	if st != relay.StateFrozen {
+		t.Fatalf("expected agent frozen, got %v", st)
+	}
+
+	origWd, _ := os.Getwd()
+	os.Chdir(workspaceDir)
+	defer os.Chdir(origWd)
+
+	cmd := startCmd
+	// Set iterations=0 so it stops immediately
+	cmd.SetArgs([]string{"--new", "--agent", "test:model", "--iterations", "0"})
+	cmd.Execute()
+
+	st2, _ := resilience.GetState(key)
+	if st2 == relay.StateFrozen {
+		t.Fatalf("expected agent to NOT be frozen after --new, got %v", st2)
+	}
+}
+
+
