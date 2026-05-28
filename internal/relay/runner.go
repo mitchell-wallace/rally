@@ -409,6 +409,7 @@ func (r *Runner) Run(ctx context.Context) error {
 			consumedMsg,
 			relayMsg,
 			selection.HourlyRetry,
+			selection.Probation,
 			func() {
 				selection.Scheduler.OnAgentFailed(selection.Entry, "freeze", true)
 			},
