@@ -20,12 +20,18 @@ func TestHourlyRetryBudgetHonored(t *testing.T) {
 
 	s := newTestStore(t, rallyDir)
 
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
 	callCount := 0
 	execExecutor := &funcExecutor{
-		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+		fn: func(ctxRun context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
 			callCount++
 			if opts.LogPath != "" {
 				_ = os.WriteFile(opts.LogPath, []byte("argument list too long\n"), 0o644)
+			}
+			if callCount >= 3 {
+				cancel() // exit the relay loop
 			}
 			return &agent.TryResult{Completed: false, Summary: "infra fail"}, nil
 		},
@@ -59,8 +65,6 @@ func TestHourlyRetryBudgetHonored(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
 	_ = r.Run(ctx)
 
 	if callCount != 3 {
