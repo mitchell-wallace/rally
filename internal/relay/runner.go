@@ -3,6 +3,7 @@ package relay
 import (
 	"bufio"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -580,7 +581,7 @@ func (r *Runner) runOne(
 ) (bool, bool, bool, string, error) {
 	// Initialize run-state for this run.
 	runID := fmt.Sprintf("relay-%d-run-%d", relay.ID, runIndex+1)
-	_ = progress.SaveRunState(r.cfg.WorkspaceDir, &progress.RunState{RunID: runID, HandoffState: 0, RecordedLaps: []string{}})
+	_ = progress.SaveRunState(r.cfg.WorkspaceDir, newProgressRunState(runID, task.LapID))
 
 	inbox := ""
 	if consumedMsg != nil {
@@ -638,7 +639,7 @@ attemptLoop:
 				}
 			} else {
 				sessionID = ""
-				_ = progress.SaveRunState(r.cfg.WorkspaceDir, &progress.RunState{RunID: runID, HandoffState: 0, RecordedLaps: []string{}})
+				_ = progress.SaveRunState(r.cfg.WorkspaceDir, newProgressRunState(runID, task.LapID))
 			}
 		}
 
@@ -840,10 +841,18 @@ attemptLoop:
 
 		runStateAfter, _ := progress.LoadRunState(r.cfg.WorkspaceDir)
 		recordedLaps := []string{}
+		lapsAttempted := []store.LapAttempt{}
 		handoffState := 0
 		if runStateAfter != nil {
 			recordedLaps = append(recordedLaps, runStateAfter.RecordedLaps...)
+			lapsAttempted = append(lapsAttempted, storeLapAttempts(runStateAfter.LapsAttempted)...)
 			handoffState = runStateAfter.HandoffState
+		}
+		if task.IsLapsBacked {
+			recordedLaps = mergeStrings(recordedLaps, progressLapsCompletedForRun(r.cfg.WorkspaceDir, runID))
+			if len(lapsAttempted) == 0 {
+				lapsAttempted = hookAuditLapAttempts(r.cfg.WorkspaceDir, startedAt, endedAt, task.LapID)
+			}
 		}
 
 		// Compute failed before rendering the footer so the displayed result
@@ -883,18 +892,27 @@ attemptLoop:
 				fmt.Fprintf(log, "relay %d run %d attempt %d laps-marker-as-text: agent wrote %q in summary but did not invoke the shell command (no hook fired, tool_calls=%d). Likely a model/harness output-vs-tool-call mismatch.\n", relay.ID, runIndex+1, attempt, markerAsText, result.ToolCalls)
 			}
 		}
+		lapPinMismatch := false
+		if task.IsLapsBacked {
+			if reason, mismatch := validatePinnedLap(task.LapID, recordedLaps); mismatch {
+				failed = true
+				failReason = reason
+				lapPinMismatch = true
+				fmt.Fprintf(log, "relay %d run %d attempt %d lap pin mismatch: pinned_lap=%q consumed_laps=%v reason=%s\n", relay.ID, runIndex+1, attempt, task.LapID, recordedLaps, reason)
+			}
+		}
 		// Stall recovery: if the stall detector killed the process but the agent had
 		// already committed or created files (autoCommit ran), treat the try as
 		// successful. This handles agents (e.g. opencode TUI) that complete the
 		// task then idle in an interactive loop until the stall detector kills them.
-		if failed && stallMarked && commitHash != "" {
+		if failed && stallMarked && commitHash != "" && !lapPinMismatch {
 			failed = false
 			success = true
 			fmt.Fprintf(log, "relay %d run %d attempt %d stall recovery: files committed, treating as success\n", relay.ID, runIndex+1, attempt)
 		}
 
 		// Error classification and strategy dispatch.
-		if failed {
+		if failed && !lapPinMismatch {
 			logLines := readLastNLines(tryLogPath, 50)
 			decision := reliability.ClassifyError(logLines)
 			if decision.Reason != "unknown error" && markerAsText == "" {
@@ -955,6 +973,7 @@ attemptLoop:
 			LapID:         task.LapID,
 			LapAssignee:   task.Assignee,
 			RecordedLaps:  recordedLaps,
+			LapsAttempted: lapsAttempted,
 		}
 		if result != nil {
 			tryRecord.Summary = result.Summary
@@ -968,8 +987,8 @@ attemptLoop:
 		if execErr != nil && tryRecord.Summary == "" {
 			tryRecord.Summary = execErr.Error()
 		}
-		fmt.Fprintf(log, "relay %d run %d attempt %d result: completed=%v fail_reason=%q runtime=%s files_changed=%d tool_calls=%d commit=%q lap_id=%q assignee=%q recorded_laps=%v handoff_state=%d\n",
-			relay.ID, runIndex+1, attempt, !failed, failReason, runtime, filesChangedCount, tryRecord.ToolCalls, shortHash, task.LapID, task.Assignee, recordedLaps, handoffState)
+		fmt.Fprintf(log, "relay %d run %d attempt %d result: completed=%v fail_reason=%q runtime=%s files_changed=%d tool_calls=%d commit=%q lap_id=%q assignee=%q recorded_laps=%v laps_attempted=%v handoff_state=%d\n",
+			relay.ID, runIndex+1, attempt, !failed, failReason, runtime, filesChangedCount, tryRecord.ToolCalls, shortHash, task.LapID, task.Assignee, recordedLaps, lapsAttempted, handoffState)
 		if err := r.store.AppendTry(tryRecord); err != nil {
 			return false, false, false, "", err
 		}
@@ -1009,6 +1028,9 @@ attemptLoop:
 		}
 
 		if r.skipFlag.Load() {
+			break attemptLoop
+		}
+		if lapPinMismatch {
 			break attemptLoop
 		}
 

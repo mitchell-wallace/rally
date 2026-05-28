@@ -20,7 +20,14 @@ type TryRecord struct {
 	LapID         string   `json:"lap_id,omitempty"`
 	LapAssignee   string   `json:"lap_assignee,omitempty"`
 	RecordedLaps  []string `json:"recorded_laps,omitempty"`
+	LapsAttempted []LapAttempt `json:"laps_attempted,omitempty"`
 	ToolCalls     int      `json:"tool_calls,omitempty"`
+}
+
+// LapAttempt records a laps completion or handoff command observed during a try.
+type LapAttempt struct {
+	LapID     string `json:"lap_id"`
+	Timestamp string `json:"timestamp"`
 }
 
 // MessageRecord represents an inbox message that can be consumed by a run.
