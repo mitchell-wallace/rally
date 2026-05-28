@@ -774,7 +774,7 @@ func TestRunOneFreezeRetryResumesAndRecovers(t *testing.T) {
 
 	freezeCalls := 0
 	recoveredCalls := 0
-	success, addressed, interrupted, _, err := r.runOne(
+	success, addressed, interrupted, _, _, _, err := r.runOne(
 		context.Background(),
 		&store.RelayRecord{ID: 1, TargetIterations: 1},
 		0,
@@ -3419,7 +3419,7 @@ func TestE2E_LivenessProbeClearsFreezeFlag(t *testing.T) {
 		TargetIterations: 1,
 		RetryBudget:      3,
 		LivenessProbe:    true,
-		StallThreshold:  50 * time.Millisecond,
+		StallThreshold:   50 * time.Millisecond,
 	}, map[string]agent.Executor{"codex": exec})
 
 	r.stallControllerFactory = func(string) reliability.StallController {

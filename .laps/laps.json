@@ -96,10 +96,10 @@
       "title": "Implement lap-ID pinning and attempted-lap recording",
       "description": "## Context\nOpenSpec change: `harden-relay-run-lifecycle` — tasks 1.1–1.5.\nThe primary state-integrity guard: prevent phantom and multi-lap completions.\n\n## Outcome\n- `internal/relay/runner.go` / `RunState` (or equivalent): pin the assigned lap ID at run start. On finalization (`laps wrapup` / run end), compare recorded-completed laps against the pinned ID.\n- Mismatch → fail the run with `wrong_lap_consumed` (different lap) or `multi_lap_consumed` (\u003e1 lap completed), and do NOT advance the queue.\n- `internal/store/records.go` `TryRecord`: add `laps_attempted` field — a list of `{lap_id, timestamp}` recording every lap completion attempt.\n- Tests: phantom-completion rejection (completed lap ≠ pinned lap), multi-lap rejection (\u003e1 lap completed), normal single-lap pass-through, attempted-lap recording on try records.\n\n## Design\n- The pinning check is detection+containment, not prevention. The external laps queue may already be mutated by the time rally detects the mismatch. The important thing is that rally does NOT silently proceed.\n- Log the pinned and consumed lap IDs on mismatch for manual/VERIFY recovery.\n- `laps_attempted` is appended to for every `laps done`/`laps handoff` call observed, not just successful ones.\n\n## Acceptance\n- `go build ./...` passes\n- `go test ./internal/relay/... -run TestLapPin -v` passes\n- Tests cover: wrong-lap rejection, multi-lap rejection, normal pass-through, attempted-lap field populated\n- Mark off tasks 1.1–1.5 in the change tasks.md",
       "assignee": "senior",
-      "isDone": false,
+      "isDone": true,
       "createdAt": "2026-05-27T08:43:54.62447544Z",
-      "updatedAt": "2026-05-27T08:43:54.62447544Z",
-      "completedAt": null
+      "updatedAt": "2026-05-28T09:04:49.920717695Z",
+      "completedAt": "2026-05-28T09:04:49.920717695Z"
     },
     {
       "id": "rall-924a",

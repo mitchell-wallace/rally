@@ -3,7 +3,6 @@ package relay
 import (
 	"bufio"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -33,7 +32,7 @@ type Config struct {
 	RouteSpecs               map[string][]string
 	UseOverrideRoute         bool
 	TargetIterations         int
-	StallThreshold            time.Duration
+	StallThreshold           time.Duration
 	LivenessProbe            bool
 	RetryBudget              int
 	RunHooksOnAutoCommit     bool
@@ -62,7 +61,7 @@ type Runner struct {
 	fallbackWarned            bool
 
 	stallControllerFactory func(logPath string) reliability.StallController
-	sleepFunc               func(time.Duration)
+	sleepFunc              func(time.Duration)
 }
 
 var headPullLap = func(ctx context.Context, workspaceDir string) (laps.Lap, error) {
@@ -84,6 +83,7 @@ func NewRunner(s *store.Store, cfg Config, executors map[string]agent.Executor) 
 var stallCheckInterval = monitor.TickInterval
 
 const builtInDefaultFallback = "Continue the relay run. Review the current state of the codebase and continue making progress on the project."
+const incompleteRetryGuidance = "The last run was incomplete. Check any current git changes, finish anything not done, verify correctness, commit when good, then run `laps done`."
 
 // waitOutcome enumerates how a waitWithCountdown call ended.
 type waitOutcome int
@@ -401,7 +401,7 @@ func (r *Runner) Run(ctx context.Context) error {
 			}
 		}
 
-		success, addressed, interrupted, failReason, err := r.runOne(
+		success, addressed, interrupted, failReason, failureClass, infraFailures, err := r.runOne(
 			ctx,
 			relay,
 			runIndex,
@@ -460,14 +460,14 @@ func (r *Runner) Run(ctx context.Context) error {
 				if err := resilience.UnpauseAgent(KeyFromAgent(selection.Agent), relay.ID); err != nil {
 					return err
 				}
-			} else {
+			} else if failureClass == reliability.FailureInfra && infraFailures > 1 {
 				selection.Scheduler.OnAgentFailed(selection.Entry, "retry-budget-exhausted", false)
 				if err := resilience.RecordHourlyFailure(KeyFromAgent(selection.Agent), relay.ID); err != nil {
 					return err
 				}
 			}
 		} else {
-			if !success {
+			if !success && failureClass == reliability.FailureInfra && infraFailures > 1 {
 				selection.Scheduler.OnAgentFailed(selection.Entry, "retry-budget-exhausted", false)
 				if err := resilience.PauseAgent(KeyFromAgent(selection.Agent), relay.ID); err != nil {
 					return err
@@ -578,7 +578,7 @@ func (r *Runner) runOne(
 	onStall func(),
 	onStallRecovered func(),
 	log io.Writer,
-) (bool, bool, bool, string, error) {
+) (bool, bool, bool, string, reliability.FailureClass, int, error) {
 	// Initialize run-state for this run.
 	runID := fmt.Sprintf("relay-%d-run-%d", relay.ID, runIndex+1)
 	_ = progress.SaveRunState(r.cfg.WorkspaceDir, newProgressRunState(runID, task.LapID))
@@ -603,10 +603,13 @@ func (r *Runner) runOne(
 	var sessionID string
 	success := false
 	failReason := ""
+	failureClass := reliability.FailureAgent
+	infraFailures := 0
+	lastAttemptIncomplete := false
 	stallMarked := false
 	roleInstructions, err := r.resolveRoleInstructions(task.Assignee)
 	if err != nil {
-		return false, false, false, "", err
+		return false, false, false, "", failureClass, infraFailures, err
 	}
 
 	exec := r.executors[picked.Harness]
@@ -624,10 +627,10 @@ func (r *Runner) runOne(
 attemptLoop:
 	for attempt := 1; attempt <= maxAttempts; attempt++ {
 		if ctx.Err() != nil {
-			return false, false, false, "", ctx.Err()
+			return false, false, false, "", failureClass, infraFailures, ctx.Err()
 		}
 		if r.stopFlag.Load() {
-			return false, false, true, "", nil
+			return false, false, true, "", failureClass, infraFailures, nil
 		}
 
 		if attempt > 1 {
@@ -659,11 +662,18 @@ attemptLoop:
 			ResumeSessionID:  sessionID,
 			WorkspaceDir:     r.cfg.WorkspaceDir,
 		}
+		if lastAttemptIncomplete {
+			if opts.TaskPrompt != "" {
+				opts.TaskPrompt += "\n\n" + incompleteRetryGuidance
+			} else {
+				opts.TaskPrompt = incompleteRetryGuidance
+			}
+		}
 		prompt := agent.BuildPrompt(opts)
 
 		taskPath := filepath.Join(r.cfg.WorkspaceDir, ".rally", "current_task.md")
 		if err := os.WriteFile(taskPath, []byte(prompt), 0o644); err != nil {
-			return false, false, false, "", fmt.Errorf("write current_task.md: %w", err)
+			return false, false, false, "", failureClass, infraFailures, fmt.Errorf("write current_task.md: %w", err)
 		}
 
 		tryLogPath := filepath.Join(r.cfg.DataDir, "tries", repoKey(r.cfg.WorkspaceDir), fmt.Sprintf("try-%d.log", r.store.NextTryID()))
@@ -808,37 +818,6 @@ attemptLoop:
 
 		headAfter, _ := r.headHash()
 
-		commitHash := ""
-		if headBefore != "" && headAfter != "" && headBefore != headAfter {
-			commitHash = headAfter
-		} else {
-			dirty, _ := gitx.IsWorkspaceDirty(r.cfg.WorkspaceDir)
-			if dirty {
-				hash, commitErr := r.autoCommit(runIndex, picked.Harness, attempt)
-				if commitErr != nil {
-					fmt.Fprintf(log, "relay %d run %d attempt %d auto-commit warning: %v\n", relay.ID, runIndex+1, attempt, commitErr)
-				} else {
-					commitHash = hash
-				}
-			}
-		}
-
-		runtime := endedAt.Sub(startedAt)
-		filesChangedList := r.filesChangedList(result, headBefore, headAfter, commitHash)
-		filesChangedCount := len(filesChangedList)
-		shortHash := ""
-		commitTitle := ""
-		if len(commitHash) >= 7 {
-			shortHash = commitHash[:7]
-			cmd := osexec.Command("git", "log", "-1", "--pretty=%s", commitHash)
-			cmd.Dir = r.cfg.WorkspaceDir
-			if out, err := cmd.Output(); err == nil {
-				commitTitle = strings.TrimSpace(string(out))
-			}
-		} else if commitHash != "" {
-			shortHash = commitHash
-		}
-
 		runStateAfter, _ := progress.LoadRunState(r.cfg.WorkspaceDir)
 		recordedLaps := []string{}
 		lapsAttempted := []store.LapAttempt{}
@@ -855,11 +834,51 @@ attemptLoop:
 			}
 		}
 
+		runtime := endedAt.Sub(startedAt)
+		commitHash := ""
+		preCommitFilesChanged := r.filesChangedList(result, headBefore, headAfter, "")
+		dirtyBeforeAutoCommit, _ := gitx.IsWorkspaceDirty(r.cfg.WorkspaceDir)
+		finalized := !task.IsLapsBacked || len(recordedLaps) > 0 || handoffState != 0
+		incomplete := task.IsLapsBacked && dirtyBeforeAutoCommit && len(preCommitFilesChanged) > 0 && !finalized
+		if headBefore != "" && headAfter != "" && headBefore != headAfter {
+			commitHash = headAfter
+		} else if dirtyBeforeAutoCommit && !incomplete {
+			hash, commitErr := r.autoCommit(runIndex, picked.Harness, attempt)
+			if commitErr != nil {
+				fmt.Fprintf(log, "relay %d run %d attempt %d auto-commit warning: %v\n", relay.ID, runIndex+1, attempt, commitErr)
+			} else {
+				commitHash = hash
+			}
+		}
+
+		filesChangedList := preCommitFilesChanged
+		if commitHash != "" {
+			filesChangedList = r.filesChangedList(result, headBefore, headAfter, commitHash)
+		}
+		filesChangedCount := len(filesChangedList)
+		shortHash := ""
+		commitTitle := ""
+		if len(commitHash) >= 7 {
+			shortHash = commitHash[:7]
+			cmd := osexec.Command("git", "log", "-1", "--pretty=%s", commitHash)
+			cmd.Dir = r.cfg.WorkspaceDir
+			if out, err := cmd.Output(); err == nil {
+				commitTitle = strings.TrimSpace(string(out))
+			}
+		} else if commitHash != "" {
+			shortHash = commitHash
+		}
+
 		// Compute failed before rendering the footer so the displayed result
 		// matches what gets recorded in the try record.
 		failed := false
 		failReason = ""
-		if execErr != nil {
+		attemptFailureClass := reliability.FailureAgent
+		if incomplete {
+			failed = true
+			failReason = "incomplete run"
+			attemptFailureClass = reliability.FailureIncomplete
+		} else if execErr != nil {
 			failed = true
 			failReason = "harness error"
 		} else if result == nil || !result.Completed {
@@ -914,7 +933,12 @@ attemptLoop:
 		// Error classification and strategy dispatch.
 		if failed && !lapPinMismatch {
 			logLines := readLastNLines(tryLogPath, 50)
-			decision := reliability.ClassifyError(logLines)
+			decision := reliability.ClassifyError(logLines, &reliability.ClassifyContext{HasFileChanges: incomplete, Finalized: finalized})
+			attemptFailureClass = decision.FailureClass
+			failureClass = decision.FailureClass
+			if decision.FailureClass == reliability.FailureInfra {
+				infraFailures++
+			}
 			if decision.Reason != "unknown error" && markerAsText == "" {
 				failReason = decision.Reason
 			}
@@ -939,6 +963,7 @@ attemptLoop:
 				}
 			}
 		}
+		lastAttemptIncomplete = failed && attemptFailureClass == reliability.FailureIncomplete
 
 		footer := style.RenderFooter(style.FooterOptions{
 			Passed:       !failed,
@@ -990,15 +1015,15 @@ attemptLoop:
 		fmt.Fprintf(log, "relay %d run %d attempt %d result: completed=%v fail_reason=%q runtime=%s files_changed=%d tool_calls=%d commit=%q lap_id=%q assignee=%q recorded_laps=%v laps_attempted=%v handoff_state=%d\n",
 			relay.ID, runIndex+1, attempt, !failed, failReason, runtime, filesChangedCount, tryRecord.ToolCalls, shortHash, task.LapID, task.Assignee, recordedLaps, lapsAttempted, handoffState)
 		if err := r.store.AppendTry(tryRecord); err != nil {
-			return false, false, false, "", err
+			return false, false, false, "", failureClass, infraFailures, err
 		}
 
 		if actionTaken {
 			if r.stopFlag.Load() {
-				return false, false, true, "", nil
+				return false, false, true, "", failureClass, infraFailures, nil
 			}
 			if r.skipFlag.Load() {
-				return false, false, false, "", nil
+				return false, false, false, "", failureClass, infraFailures, nil
 			}
 			fmt.Println("Paused — press Enter to resume")
 			bufio.NewReader(os.Stdin).ReadString('\n')
@@ -1057,7 +1082,7 @@ attemptLoop:
 	if lastResult != nil && lastResult.MessageAddressed != nil {
 		addressed = *lastResult.MessageAddressed
 	}
-	return success, addressed, false, failReason, nil
+	return success, addressed, false, failReason, failureClass, infraFailures, nil
 }
 
 func (r *Runner) newStallController(tryLogPath string, exec agent.Executor) reliability.StallController {
@@ -1256,6 +1281,81 @@ func nonEmptyLines(s string) []string {
 		}
 	}
 	return out
+}
+
+func newProgressRunState(runID, lapID string) *progress.RunState {
+	return &progress.RunState{RunID: runID, PinnedLapID: lapID, RecordedLaps: []string{}}
+}
+
+func storeLapAttempts(in []progress.LapAttempt) []store.LapAttempt {
+	out := make([]store.LapAttempt, 0, len(in))
+	for _, attempt := range in {
+		out = append(out, store.LapAttempt{LapID: attempt.LapID, Timestamp: attempt.Timestamp})
+	}
+	return out
+}
+
+func mergeStrings(a, b []string) []string {
+	seen := make(map[string]bool, len(a)+len(b))
+	out := make([]string, 0, len(a)+len(b))
+	for _, value := range append(a, b...) {
+		if value == "" || seen[value] {
+			continue
+		}
+		seen[value] = true
+		out = append(out, value)
+	}
+	return out
+}
+
+func progressLapsCompletedForRun(workspaceDir, runID string) []string {
+	pl, err := progress.LoadProgress(workspaceDir)
+	if err != nil {
+		return nil
+	}
+	var out []string
+	for _, entry := range pl.RecentRuns {
+		if entry.RunID != runID {
+			continue
+		}
+		switch lapsCompleted := entry.LapsCompleted.(type) {
+		case string:
+			if lapsCompleted != "" && lapsCompleted != "none" {
+				out = append(out, lapsCompleted)
+			}
+		case []string:
+			out = append(out, lapsCompleted...)
+		case []interface{}:
+			for _, value := range lapsCompleted {
+				if s, ok := value.(string); ok && s != "" {
+					out = append(out, s)
+				}
+			}
+		}
+	}
+	return out
+}
+
+func hookAuditLapAttempts(workspaceDir string, startedAt, endedAt time.Time, fallbackLapID string) []store.LapAttempt {
+	_ = workspaceDir
+	_ = startedAt
+	_ = endedAt
+	_ = fallbackLapID
+	return nil
+}
+
+func validatePinnedLap(pinnedLapID string, recordedLaps []string) (string, bool) {
+	if pinnedLapID == "" || len(recordedLaps) == 0 {
+		return "", false
+	}
+	unique := mergeStrings(nil, recordedLaps)
+	if len(unique) > 1 {
+		return "multi_lap_consumed", true
+	}
+	if unique[0] != pinnedLapID {
+		return "wrong_lap_consumed", true
+	}
+	return "", false
 }
 
 // detectLapsMarkerInText returns "laps done" / "laps handoff" when the agent's
