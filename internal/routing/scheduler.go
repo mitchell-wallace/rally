@@ -2,7 +2,6 @@ package routing
 
 import (
 	"fmt"
-	"strings"
 	"sync"
 )
 
@@ -281,16 +280,6 @@ func cloneEntryState(entry *EntryState) *EntryState {
 	}
 	clone := *entry
 	return &clone
-}
-
-func failureBenchesEntry(reason string) bool {
-	reason = strings.ToLower(reason)
-	return strings.Contains(reason, "freeze") ||
-		strings.Contains(reason, "frozen") ||
-		strings.Contains(reason, "rate limit") ||
-		strings.Contains(reason, "rate-limit") ||
-		strings.Contains(reason, "pause") ||
-		strings.Contains(reason, "paused")
 }
 
 func resetEntryState(entry *EntryState) {
