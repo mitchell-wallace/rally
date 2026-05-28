@@ -46,10 +46,10 @@
       "title": "VERIFY: per-harness-model keying refactor",
       "description": "## Context\nOpenSpec change: `harden-relay-run-lifecycle`. Verifying the ResilienceKey refactor (tasks 5.2, 5.3, 5.4). This was a wide refactor across ~10 method signatures and 20+ call sites — high risk.\n\n## Outcome\n- Confirm every resilience method signature takes `ResilienceKey`, not bare `string`\n- Confirm `AgentStatusEvent` has `model` field and `GetAgentStatus` filters on both `agent_type` and `model`\n- Confirm all callers in `runner.go` and `route_runtime.go` construct `ResilienceKey` correctly\n- `go build ./...` passes\n- All tests pass: `go test ./internal/relay/... ./internal/store/...`\n- Use `openspec-verify-change` skill focused on tasks 5.2, 5.3, 5.4\n- Report findings; create head laps for substantive gaps",
       "assignee": "verify",
-      "isDone": false,
+      "isDone": true,
       "createdAt": "2026-05-27T08:42:51.766393148Z",
-      "updatedAt": "2026-05-27T08:42:51.766393148Z",
-      "completedAt": null
+      "updatedAt": "2026-05-28T05:22:58.560669272Z",
+      "completedAt": "2026-05-28T05:22:58.560669272Z"
     },
     {
       "id": "rall-42e3",
