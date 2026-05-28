@@ -106,10 +106,10 @@
       "title": "Implement incomplete failure class behavior and failure cascade gating",
       "description": "## Context\nOpenSpec change: `harden-relay-run-lifecycle` — tasks 2.2–2.6, 5.5.\nThe incomplete class and \u003e1 infra threshold both modify how `runner.go` handles try outcomes. Bundled because they share the same code path.\n\n## Outcome\n- `internal/relay/runner.go`:\n  - When a try produces file changes (dirty working tree) but the agent did not finalize (no `laps done`/`laps handoff`): classify as incomplete.\n  - Suppress auto-commit for incomplete tries — leave changes uncommitted so the retry agent inherits them as partial progress.\n  - On retry after incomplete: inject prompt guidance: \"The last run was incomplete. Check any current git changes, finish anything not done, verify correctness, commit when good, then run `laps done`.\"\n  - Incomplete runs retry but do NOT call `PauseAgent`/`RecordHourlyFailure` (do not advance the resilience cascade).\n  - Only call `PauseAgent`/`RecordHourlyFailure` when \u003e1 attempt within a run is classified as infra-class. A single infra failure retries without escalation. Agent-class and incomplete failures stay retry-eligible but do not escalate.\n- Tests:\n  - Incomplete run leaves changes uncommitted\n  - Retry agent gets incomplete guidance in prompt\n  - Incomplete does not count toward pause/freeze cascade\n  - \u003e1 infra failure increments cascade\n  - Single infra failure does not increment cascade\n  - Agent error and incomplete do not increment cascade\n\n## Acceptance\n- `go build ./...` passes\n- `go test ./internal/relay/... -run TestIncomplete -v` and `go test ./internal/relay/... -run TestFailureCascade -v` pass\n- Mark off tasks 2.2, 2.3, 2.4, 2.5, 2.6, 5.5 in the change tasks.md",
       "assignee": "senior",
-      "isDone": false,
+      "isDone": true,
       "createdAt": "2026-05-27T08:44:11.649209415Z",
-      "updatedAt": "2026-05-27T08:44:11.649209415Z",
-      "completedAt": null
+      "updatedAt": "2026-05-28T09:41:19.148768804Z",
+      "completedAt": "2026-05-28T09:41:19.148768804Z"
     },
     {
       "id": "rall-2109",
