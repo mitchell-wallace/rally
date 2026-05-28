@@ -43,6 +43,9 @@ type Config struct {
 	Resolver                 Resolver
 	LapsInstructionsFile     string
 	FallbackInstructionsFile string
+	RecentTryCount           int
+	RecentTryCharLimit       int
+	RecentContextCharLimit   int
 }
 
 type Runner struct {
@@ -565,6 +568,26 @@ func (r *Runner) prepareExecutorForSelection(relayID, runIndex int, selection ro
 	}
 }
 
+func buildRecentContext(tries []store.TryRecord, perSummaryLimit, overallLimit int) string {
+	var buf strings.Builder
+	for _, t := range tries {
+		summary := t.Summary
+		if perSummaryLimit > 0 && len(summary) > perSummaryLimit {
+			headSize := perSummaryLimit / 2
+			tailSize := perSummaryLimit - headSize
+			summary = summary[:headSize] + "... [truncated] ..." + summary[len(summary)-tailSize:]
+		}
+		fmt.Fprintf(&buf, "Run %d (%s): completed=%v summary=%s\n", t.RunID, t.AgentType, t.Completed, summary)
+	}
+	if overallLimit > 0 && buf.Len() > overallLimit {
+		result := buf.String()
+		headSize := overallLimit / 2
+		tailSize := overallLimit - headSize
+		return result[:headSize] + "... [truncated] ..." + result[len(result)-tailSize:]
+	}
+	return buf.String()
+}
+
 func (r *Runner) runOne(
 	ctx context.Context,
 	relay *store.RelayRecord,
@@ -592,11 +615,12 @@ func (r *Runner) runOne(
 		relayMessage = relayMsg.Body
 	}
 
-	recentTries := r.store.RecentTries(5)
-	var recentContext strings.Builder
-	for _, t := range recentTries {
-		fmt.Fprintf(&recentContext, "Run %d (%s): completed=%v summary=%s\n", t.RunID, t.AgentType, t.Completed, t.Summary)
+	recentTryCount := r.cfg.RecentTryCount
+	if recentTryCount <= 0 {
+		recentTryCount = 5
 	}
+	recentTries := r.store.RecentTries(recentTryCount)
+	recentContext := buildRecentContext(recentTries, r.cfg.RecentTryCharLimit, r.cfg.RecentContextCharLimit)
 
 	var previousSummary string
 	var lastResult *agent.TryResult
@@ -657,7 +681,7 @@ attemptLoop:
 			InboxMessage:     inbox,
 			RelayMessage:     relayMessage,
 			PreviousSummary:  previousSummary,
-			RecentTryContext: recentContext.String(),
+			RecentTryContext: recentContext,
 			LapsEnabled:      r.cfg.LapsEnabled,
 			ResumeSessionID:  sessionID,
 			WorkspaceDir:     r.cfg.WorkspaceDir,

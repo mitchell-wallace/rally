@@ -4180,6 +4180,7 @@ func TestStallRecovery_VerifyRoleExcluded(t *testing.T) {
 	rallyDir := filepath.Join(workspaceDir, ".rally")
 	os.MkdirAll(rallyDir, 0o755)
 	initRepo(t, workspaceDir)
+	runGit(t, workspaceDir, "commit", "--allow-empty", "-m", "initial", "--no-verify")
 
 	s := newTestStore(t, rallyDir)
 	stallCh := make(chan struct{})
@@ -4246,6 +4247,7 @@ func TestStallRecovery_ImplementationRoleRecovers(t *testing.T) {
 	rallyDir := filepath.Join(workspaceDir, ".rally")
 	os.MkdirAll(rallyDir, 0o755)
 	initRepo(t, workspaceDir)
+	runGit(t, workspaceDir, "commit", "--allow-empty", "-m", "initial", "--no-verify")
 
 	s := newTestStore(t, rallyDir)
 	stallCh := make(chan struct{})
@@ -4469,5 +4471,78 @@ func TestStallRecovery_ImplementationStalledWithCommits_Recovers(t *testing.T) {
 	}
 	if tries[0].CommitHash == "" {
 		t.Fatal("expected auto-commit hash to be present")
+	}
+}
+
+func TestPromptBudget_PerSummaryTruncation(t *testing.T) {
+	longSummary := strings.Repeat("x", 500)
+	tries := []store.TryRecord{
+		{RunID: 1, AgentType: "claude", Completed: false, Summary: longSummary},
+	}
+	result := buildRecentContext(tries, 100, 0)
+	if !strings.Contains(result, "... [truncated] ...") {
+		t.Fatal("expected truncation marker in output")
+	}
+	if len(result) >= 500 {
+		t.Fatalf("expected output shorter than full summary, got %d chars", len(result))
+	}
+	headSize := 100 / 2
+	tailSize := 100 - headSize
+	if !strings.Contains(result, longSummary[:headSize]) {
+		t.Fatal("expected head of summary preserved")
+	}
+	if !strings.Contains(result, longSummary[len(longSummary)-tailSize:]) {
+		t.Fatal("expected tail of summary preserved")
+	}
+}
+
+func TestPromptBudget_ShortSummariesPassThrough(t *testing.T) {
+	tries := []store.TryRecord{
+		{RunID: 1, AgentType: "claude", Completed: true, Summary: "short"},
+		{RunID: 2, AgentType: "opencode", Completed: false, Summary: "also short"},
+	}
+	result := buildRecentContext(tries, 1000, 0)
+	if strings.Contains(result, "... [truncated] ...") {
+		t.Fatal("short summaries should not be truncated")
+	}
+	if !strings.Contains(result, "summary=short") {
+		t.Fatal("expected first summary present")
+	}
+	if !strings.Contains(result, "summary=also short") {
+		t.Fatal("expected second summary present")
+	}
+}
+
+func TestPromptBudget_CountHonored(t *testing.T) {
+	var tries []store.TryRecord
+	for i := 1; i <= 3; i++ {
+		tries = append(tries, store.TryRecord{RunID: i, AgentType: "claude", Completed: true, Summary: fmt.Sprintf("try %d", i)})
+	}
+	result := buildRecentContext(tries, 0, 0)
+	for i := 1; i <= 3; i++ {
+		if !strings.Contains(result, fmt.Sprintf("try %d", i)) {
+			t.Fatalf("expected try %d in output", i)
+		}
+	}
+}
+
+func TestPromptBudget_OverallLimit(t *testing.T) {
+	tries := []store.TryRecord{
+		{RunID: 1, AgentType: "claude", Completed: false, Summary: strings.Repeat("a", 200)},
+		{RunID: 2, AgentType: "claude", Completed: false, Summary: strings.Repeat("b", 200)},
+	}
+	result := buildRecentContext(tries, 0, 200)
+	if !strings.Contains(result, "... [truncated] ...") {
+		t.Fatal("expected overall truncation marker")
+	}
+	if len(result) > 250 {
+		t.Fatalf("expected output near 200 chars, got %d", len(result))
+	}
+	headSize := 200 / 2
+	if !strings.HasPrefix(result[:headSize], "Run 1") {
+		t.Fatal("expected head of overall context to start with first try")
+	}
+	if !strings.Contains(result[len(result)-headSize:], strings.Repeat("b", 10)) {
+		t.Fatal("expected tail of overall context to contain second summary")
 	}
 }

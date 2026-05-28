@@ -189,6 +189,9 @@ func runRelay(cmd *cobra.Command, args []string) error {
 		LapsEnabled:              lapsEnabled,
 		LapsInstructionsFile:     cfg.Laps.InstructionsFile,
 		FallbackInstructionsFile: cfg.Fallback.InstructionsFile,
+		RecentTryCount:           cfg.Reliability.RecentTryCount,
+		RecentTryCharLimit:       cfg.Reliability.RecentTryCharLimit,
+		RecentContextCharLimit:   cfg.Reliability.RecentContextCharLimit,
 	}
 
 	runnerCfg.Resolver = func(spec string) (agent.ResolvedAgent, error) {

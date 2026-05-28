@@ -55,9 +55,9 @@
 
 ## 8. Bounded prompt context
 
-- [ ] 8.1 Add config under `[reliability]` in config.toml: `recent_try_count` (default 5), `recent_try_char_limit` (per-summary), `recent_context_char_limit` (overall)
-- [ ] 8.2 Apply count + char budget with head/tail truncation where `recentContext` is built (`internal/relay/runner.go:~581`)
-- [ ] 8.3 Tests: verbose summaries truncated; count honored; budgets enforced
+- [x] 8.1 Add config under `[reliability]` in config.toml: `recent_try_count` (default 5), `recent_try_char_limit` (per-summary), `recent_context_char_limit` (overall)
+- [x] 8.2 Apply count + char budget with head/tail truncation where `recentContext` is built (`internal/relay/runner.go:~581`)
+- [x] 8.3 Tests: verbose summaries truncated; count honored; budgets enforced
 
 ## 9. Naming disambiguation (clarity refactor)
 

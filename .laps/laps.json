@@ -2,6 +2,26 @@
   "version": 1,
   "tasks": [
     {
+      "id": "work-7b4a",
+      "title": "Add default values for RecentTryCharLimit and RecentContextCharLimit in config_v2.go",
+      "description": "In config_v2.go, add sensible defaults (e.g., per-summary 2000 chars, overall 8000 chars) alongside the existing RecentTryCount default",
+      "assignee": "JUNIOR",
+      "isDone": false,
+      "createdAt": "2026-05-28T10:54:50.062656186Z",
+      "updatedAt": "2026-05-28T10:54:50.062656186Z",
+      "completedAt": null
+    },
+    {
+      "id": "work-ad48",
+      "title": "Add tests for bounded prompt context (task 8.3)",
+      "description": "Write tests for buildRecentContext: per-summary truncation with head/tail, overall budget truncation, count honored, zero-limit passthrough",
+      "assignee": "JUNIOR",
+      "isDone": false,
+      "createdAt": "2026-05-28T10:54:44.100339575Z",
+      "updatedAt": "2026-05-28T10:54:44.100339575Z",
+      "completedAt": null
+    },
+    {
       "id": "work-1b9b",
       "title": "Fix probation incomplete promotion",
       "description": "Probation runs should promote back to active on incomplete results. internal/relay/runner.go currently keys that branch on failReason == \"incomplete run\", but runOne rewrites the fail reason to the classified string before returning. Switch this to explicit incomplete/failure-class handling and add an end-to-end test for probation incomplete -\u003e active.",
@@ -176,20 +196,20 @@
       "title": "Add bounded prompt context with configurable budgets",
       "description": "## Context\nOpenSpec change: `harden-relay-run-lifecycle` — tasks 8.1–8.3.\nThe assembled prompt can grow unbounded because recent-try summaries are concatenated in full. This lap adds budgets.\n\n## Outcome\n- Config: add `recent_try_count` (default 5), `recent_try_char_limit` (per-summary char limit), `recent_context_char_limit` (overall char limit) under `[reliability]` in config.toml schema.\n- `internal/relay/runner.go` (around line ~581 where `recentContext` is built): apply count + per-summary + overall character budgets. Truncation strategy: head/tail (keep first N and last N chars of each summary, with \"... [truncated] ...\" marker).\n- Tests:\n  - Verbose summaries truncated to per-summary limit\n  - Count of recent tries honored (default 5)\n  - Overall budget enforced\n  - Short summaries pass through unchanged\n\n## Files \u0026 scope\n- `internal/relay/runner.go` — prompt assembly section\n- Rally config struct (wherever `[reliability]` is parsed) — add fields\n- Tests in `runner_test.go`\n\n## Acceptance\n- `go build ./...` passes\n- `go test ./internal/relay/... -run TestPromptBudget -v` passes\n- Mark off tasks 8.1, 8.2, 8.3 in the change tasks.md",
       "assignee": "junior",
-      "isDone": false,
+      "isDone": true,
       "createdAt": "2026-05-27T08:45:01.279868298Z",
-      "updatedAt": "2026-05-27T08:45:01.279868298Z",
-      "completedAt": null
+      "updatedAt": "2026-05-28T10:52:06.684805204Z",
+      "completedAt": "2026-05-28T10:52:06.684805204Z"
     },
     {
       "id": "rall-49aa",
       "title": "VERIFY: role-aware stall-recovery and bounded prompt",
       "description": "## Context\nOpenSpec change: `harden-relay-run-lifecycle`. Verifying tasks 7.1–7.2 (role-aware stall-recovery) and 8.1–8.3 (bounded prompt context).\n\n## Outcome\n- Confirm stall-recovery is role-gated: a stalled VERIFY try is never auto-accepted on committed files (stays a retry-eligible failure, retries/resumes); implementation roles keep files-committed recovery\n- Confirm prompt context is bounded: count, per-summary, and overall budgets enforced\n- `go build ./...` and `go test ./...` pass\n- Use `openspec-verify-change` skill focused on tasks 7.1–7.2, 8.1–8.3\n- Report findings; create head laps for substantive gaps",
       "assignee": "verify",
-      "isDone": false,
+      "isDone": true,
       "createdAt": "2026-05-27T08:45:10.544225718Z",
-      "updatedAt": "2026-05-27T08:45:10.544225718Z",
-      "completedAt": null
+      "updatedAt": "2026-05-28T10:54:08.397601819Z",
+      "completedAt": "2026-05-28T10:54:08.397601819Z"
     },
     {
       "id": "rall-184a",
