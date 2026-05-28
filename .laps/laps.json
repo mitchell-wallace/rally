@@ -76,10 +76,10 @@
       "title": "Tests for probation state machine",
       "description": "## Context\nOpenSpec change: `harden-relay-run-lifecycle` — task 3.8.\nThe probation state machine is the highest-risk piece of this change. This dedicated lap ensures thorough test coverage.\n\n## Outcome\n- Dedicated test file or section in `internal/relay/resilience_test.go` (create if needed) covering:\n  - Frozen state decays to probation after `FreezeDuration` window\n  - Probation one-shot enforcement in `syncRecoverySignals` (unbench → immediately re-bench)\n  - Probation success → promoted to active\n  - Probation incomplete → promoted to active (incomplete is progress, not availability)\n  - Probation failure → re-frozen with fresh timestamp (decay window restarts)\n  - All agents frozen: relay ends pass but freeze remains decayable for future starts\n  - Window truncation at 500 events preserves freeze timestamps via synthesized summary events\n  - `getState` is pure (no side effects, no event writes)\n  - Probation event persisted exactly once per transition (not duplicated on re-evaluation)\n\n## Design\n- Use time-control (mock clock / `NowFunc`) to test freeze decay without real waits.\n- Test the `syncRecoverySignals` scheduler interaction by checking entry state before/after.\n- Integration-style tests that cover the full `runOne` → probation → promote/re-freeze flow are ideal.\n\n## Acceptance\n- `go test ./internal/relay/... -run TestProbation -v` passes\n- `go test ./internal/store/... -run TestWindow -v` covers truncation\n- All existing tests still pass\n- Mark off task 3.8 in the change tasks.md",
       "assignee": "senior",
-      "isDone": false,
+      "isDone": true,
       "createdAt": "2026-05-27T08:43:28.261349764Z",
-      "updatedAt": "2026-05-27T08:43:28.261349764Z",
-      "completedAt": null
+      "updatedAt": "2026-05-28T08:43:18.705831403Z",
+      "completedAt": "2026-05-28T08:43:18.705831403Z"
     },
     {
       "id": "rall-a731",

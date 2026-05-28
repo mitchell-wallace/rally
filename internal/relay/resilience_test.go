@@ -685,3 +685,137 @@ func TestResilience_SelectActiveAgent_AllFrozenButDecayable(t *testing.T) {
 		t.Fatalf("expected claude (first in cycle) to be selected for probation, got %s", selected.Harness)
 	}
 }
+
+// TestResilience_ProbationSuccess_PromotesToActive seeds a frozen-then-decayed
+// agent, then exercises the success path (UnpauseAgent) used by runOne when a
+// probation run completes. After the call the state must be active so the
+// agent re-enters the normal rotation.
+func TestResilience_ProbationSuccess_PromotesToActive(t *testing.T) {
+	s := newResilienceTestStore(t)
+	now := time.Now()
+	frozenAt := now.Add(-6 * time.Hour)
+	r := &Resilience{
+		Store:                     s,
+		PauseDuration:             time.Hour,
+		FreezeDuration:            5 * time.Hour,
+		HourlyRetriesBeforeFreeze: 5,
+		NowFunc:                   func() time.Time { return now },
+	}
+	k := key("claude", "sonnet")
+
+	if err := s.AppendAgentStatus(store.AgentStatusEvent{
+		AgentType: k.Harness,
+		Model:     k.Model,
+		EventType: "frozen",
+		Timestamp: frozenAt.UTC().Format(time.RFC3339),
+		RelayID:   1,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	st, _ := r.getState(k)
+	if st != StateProbation {
+		t.Fatalf("setup: expected probation, got %s", st)
+	}
+
+	if err := r.UnpauseAgent(k, 1); err != nil {
+		t.Fatal(err)
+	}
+
+	st, _ = r.getState(k)
+	if st != StateActive {
+		t.Fatalf("expected active after probation success, got %s", st)
+	}
+}
+
+// TestResilience_ProbationIncomplete_PromotesToActive mirrors the success case
+// — incomplete runs take the same UnpauseAgent path in runOne and must
+// transition the agent back to active so it can keep contributing.
+func TestResilience_ProbationIncomplete_PromotesToActive(t *testing.T) {
+	s := newResilienceTestStore(t)
+	now := time.Now()
+	frozenAt := now.Add(-6 * time.Hour)
+	r := &Resilience{
+		Store:                     s,
+		PauseDuration:             time.Hour,
+		FreezeDuration:            5 * time.Hour,
+		HourlyRetriesBeforeFreeze: 5,
+		NowFunc:                   func() time.Time { return now },
+	}
+	k := key("opencode", "kimi")
+
+	if err := s.AppendAgentStatus(store.AgentStatusEvent{
+		AgentType: k.Harness,
+		Model:     k.Model,
+		EventType: "frozen",
+		Timestamp: frozenAt.UTC().Format(time.RFC3339),
+		RelayID:   1,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := r.UnpauseAgent(k, 1); err != nil {
+		t.Fatal(err)
+	}
+
+	st, _ := r.getState(k)
+	if st != StateActive {
+		t.Fatalf("expected active after probation incomplete, got %s", st)
+	}
+}
+
+// TestResilience_ProbationFailure_ReFreezesWithFreshTimestamp verifies that a
+// probation run that fails (agent- or infra-class) takes the FreezeAgent
+// branch in runOne, writing a new frozen event whose timestamp restarts the
+// freeze-decay window.
+func TestResilience_ProbationFailure_ReFreezesWithFreshTimestamp(t *testing.T) {
+	s := newResilienceTestStore(t)
+	originalFrozenAt := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	now := originalFrozenAt.Add(6 * time.Hour)
+	r := &Resilience{
+		Store:                     s,
+		PauseDuration:             time.Hour,
+		FreezeDuration:            5 * time.Hour,
+		HourlyRetriesBeforeFreeze: 5,
+		NowFunc:                   func() time.Time { return now },
+	}
+	k := key("codex", "gpt-5")
+
+	if err := s.AppendAgentStatus(store.AgentStatusEvent{
+		AgentType: k.Harness,
+		Model:     k.Model,
+		EventType: "frozen",
+		Timestamp: originalFrozenAt.UTC().Format(time.RFC3339),
+		RelayID:   1,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	st, _ := r.getState(k)
+	if st != StateProbation {
+		t.Fatalf("setup: expected probation, got %s", st)
+	}
+
+	if err := r.FreezeAgent(k, 1); err != nil {
+		t.Fatal(err)
+	}
+
+	st, since := r.getState(k)
+	if st != StateFrozen {
+		t.Fatalf("expected frozen after probation failure, got %s", st)
+	}
+	if !since.After(originalFrozenAt) {
+		t.Fatalf("expected fresh freeze timestamp newer than original %v, got %v", originalFrozenAt, since)
+	}
+
+	events := s.GetAgentStatus(k.Harness, k.Model)
+	frozenCount := 0
+	for _, e := range events {
+		if e.EventType == "frozen" {
+			frozenCount++
+		}
+	}
+	if frozenCount != 2 {
+		t.Fatalf("expected 2 frozen events (original + re-freeze), got %d", frozenCount)
+	}
+}

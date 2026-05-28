@@ -478,9 +478,13 @@ func TestRouteRuntime_ProbationOneShotEnforcement(t *testing.T) {
 		t.Fatal("expected probation event to be persisted")
 	}
 
-	sel2 := mustNextRouteSelection(t, rt, resilience, "")
-	if !sel2.Probation {
-		t.Fatal("expected probation selection on second sync (entry benched but still selectable)")
+	// Without runOne resolving the state, a second sync must re-bench the
+	// entry so it cannot be re-selected. With a single-entry route, that
+	// means scheduler.Next() reports no selectable entries and the runtime
+	// returns a routeSelectionError (the entry is exhausted+benched, not
+	// strictly frozen, so AllFrozen reflects "no paused agent to wait on").
+	if _, err := rt.next(runTask{}, resilience); err == nil {
+		t.Fatal("expected error on second sync (probation entry re-benched), got selection")
 	}
 
 	probationCount := 0

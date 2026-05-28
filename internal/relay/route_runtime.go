@@ -247,19 +247,21 @@ func (r *routeRuntime) syncRecoverySignals(scheduler *routing.Scheduler, resilie
 			}
 		case StateProbation:
 			// Probation is the freeze-decay window: a frozen agent has aged
-			// past FreezeDuration and is granted exactly one one-shot
-			// recovery attempt per probation cycle. The first time we
-			// observe the frozen→probation transition, persist the
-			// probation event and unbench the entry so Next() can pick it.
-			// The one-shot is enforced by the resilience state machine,
-			// not the scheduler: runOne writes an active or frozen event
-			// when the probation run resolves, and the next sync reflects
-			// that new state back into the scheduler. While state remains
-			// probation (no resolution yet), the entry stays selectable —
-			// re-benching here would deadlock single-entry routes.
+			// past FreezeDuration and is granted exactly one tentative
+			// recovery attempt per probation cycle. The one-shot is split
+			// across two sync calls. On the first sync (no probation event
+			// yet) we persist the event and unbench the entry so Next() can
+			// pick it for the probation run. On any subsequent sync where
+			// the state is still probation (e.g. the prior run didn't
+			// resolve cleanly via UnpauseAgent/FreezeAgent), the entry is
+			// re-benched so it cannot be selected again until the state
+			// transitions. runOne is responsible for writing the active or
+			// frozen event that ends the probation cycle.
 			if !r.hasProbationEventForCurrentFreeze(resilience, key) {
 				_ = resilience.persistProbationEvent(key)
 				scheduler.ResetEntry(state)
+			} else if !(state.Benched && state.Exhausted) {
+				scheduler.OnAgentFailed(state, "probation", true)
 			}
 		case StateFrozen:
 			if !(state.Benched && state.Exhausted) {
