@@ -202,7 +202,7 @@ func TestAgentStatusReplay(t *testing.T) {
 	_ = store.AppendAgentStatus(AgentStatusEvent{AgentType: "claude", EventType: "paused", Timestamp: "t2"})
 	_ = store.AppendAgentStatus(AgentStatusEvent{AgentType: "codex", EventType: "active", Timestamp: "t3"})
 
-	claudeEvents := store.GetAgentStatus("claude")
+	claudeEvents := store.GetAgentStatus("claude", "")
 	if len(claudeEvents) != 2 {
 		t.Fatalf("expected 2 claude events, got %d", len(claudeEvents))
 	}
@@ -210,7 +210,7 @@ func TestAgentStatusReplay(t *testing.T) {
 		t.Fatalf("unexpected claude events: %v", claudeEvents)
 	}
 
-	codexEvents := store.GetAgentStatus("codex")
+	codexEvents := store.GetAgentStatus("codex", "")
 	if len(codexEvents) != 1 || codexEvents[0].EventType != "active" {
 		t.Fatalf("unexpected codex events: %v", codexEvents)
 	}
@@ -220,7 +220,7 @@ func TestAgentStatusReplay(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(store2.GetAgentStatus("claude")) != 2 {
+	if len(store2.GetAgentStatus("claude", "")) != 2 {
 		t.Fatal("claude events not persisted")
 	}
 }
@@ -552,7 +552,7 @@ func TestAgentStatusPersistsAcrossRelays(t *testing.T) {
 	_ = store2.AppendAgentStatus(AgentStatusEvent{AgentType: "claude", EventType: "unfrozen", Timestamp: time.Now().Format(time.RFC3339)})
 
 	store3, _ := NewStore(rallyDir)
-	events := store3.GetAgentStatus("claude")
+	events := store3.GetAgentStatus("claude", "")
 	if len(events) != 2 {
 		t.Fatalf("expected 2 events across reloads, got %d", len(events))
 	}

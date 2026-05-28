@@ -188,7 +188,7 @@ func (r *routeRuntime) next(task runTask, resilience *Resilience) (routeSelectio
 		return routeSelection{}, err
 	}
 
-	st, since := resilience.getState(picked.Harness)
+	st, since := resilience.getState(KeyFromAgent(picked))
 	hourlyRetry := st == StatePaused && !resilience.NowFunc().Before(since.Add(resilience.PauseDuration))
 
 	var previousAgent *agent.ResolvedAgent
@@ -229,7 +229,8 @@ func (r *routeRuntime) syncRecoverySignals(scheduler *routing.Scheduler, resilie
 			continue
 		}
 
-		status, since := resilience.getState(resolved.Harness)
+		key := KeyFromAgent(resolved)
+		status, since := resilience.getState(key)
 		switch status {
 		case StateActive:
 			if state.Benched {
@@ -252,19 +253,20 @@ func (r *routeRuntime) syncRecoverySignals(scheduler *routing.Scheduler, resilie
 func (r *routeRuntime) selectionWaitError(scheduler *routing.Scheduler, resilience *Resilience) error {
 	var minWait time.Duration
 	waitSet := false
-	seenHarnesses := map[string]struct{}{}
+	seenKeys := map[ResilienceKey]struct{}{}
 
 	for _, state := range scheduler.EntryStates() {
 		resolved, err := resolveAgentSpec(state.Entry.Spec, nil)
 		if err != nil {
 			continue
 		}
-		if _, ok := seenHarnesses[resolved.Harness]; ok {
+		key := KeyFromAgent(resolved)
+		if _, ok := seenKeys[key]; ok {
 			continue
 		}
-		seenHarnesses[resolved.Harness] = struct{}{}
+		seenKeys[key] = struct{}{}
 
-		status, since := resilience.getState(resolved.Harness)
+		status, since := resilience.getState(key)
 		if status != StatePaused {
 			continue
 		}
@@ -296,7 +298,7 @@ func (r *routeRuntime) selectionWaitError(scheduler *routing.Scheduler, resilien
 // back to active state. Used when the user hits skip during a frozen-wait to
 // retry immediately rather than serving out the pause window.
 func (r *routeRuntime) forceUnpauseAll(resilience *Resilience, relayID int) (int, error) {
-	seen := map[string]struct{}{}
+	seen := map[ResilienceKey]struct{}{}
 	unpaused := 0
 	for _, scheduler := range r.schedulers {
 		for _, state := range scheduler.EntryStates() {
@@ -304,15 +306,16 @@ func (r *routeRuntime) forceUnpauseAll(resilience *Resilience, relayID int) (int
 			if err != nil {
 				continue
 			}
-			if _, ok := seen[resolved.Harness]; ok {
+			key := KeyFromAgent(resolved)
+			if _, ok := seen[key]; ok {
 				continue
 			}
-			seen[resolved.Harness] = struct{}{}
-			status, _ := resilience.getState(resolved.Harness)
+			seen[key] = struct{}{}
+			status, _ := resilience.getState(key)
 			if status != StatePaused {
 				continue
 			}
-			if err := resilience.UnpauseAgent(resolved.Harness, relayID); err != nil {
+			if err := resilience.UnpauseAgent(key, relayID); err != nil {
 				return unpaused, err
 			}
 			unpaused++

@@ -53,6 +53,7 @@ type RelayRecord struct {
 // AgentStatusEvent tracks pause/freeze/unfreeze/active events for an agent type.
 type AgentStatusEvent struct {
 	AgentType string `json:"agent_type"`
+	Model     string `json:"model,omitempty"`
 	EventType string `json:"event_type"` // paused, unfrozen, frozen, active
 	Timestamp string `json:"timestamp"`
 	RelayID   int    `json:"relay_id,omitempty"`

@@ -64,7 +64,7 @@ func TestRouteRuntime_CanonicalScenario1_NoQuotasRunUntilFailure(t *testing.T) {
 		t.Fatalf("pick 2 = %q, want claude:opus-4.7", got)
 	}
 
-	if err := resilience.PauseAgent("claude", 1); err != nil {
+	if err := resilience.PauseAgent(ResilienceKey{Harness: "claude", Model: "opus-4.7"}, 1); err != nil {
 		t.Fatalf("PauseAgent(claude) error = %v", err)
 	}
 
@@ -78,7 +78,7 @@ func TestRouteRuntime_CanonicalScenario1_NoQuotasRunUntilFailure(t *testing.T) {
 		t.Fatalf("pick 4 = %q, want codex:gpt-5.5", got)
 	}
 
-	if err := resilience.PauseAgent("codex", 1); err != nil {
+	if err := resilience.PauseAgent(ResilienceKey{Harness: "codex", Model: "gpt-5.5"}, 1); err != nil {
 		t.Fatalf("PauseAgent(codex) error = %v", err)
 	}
 
@@ -87,10 +87,10 @@ func TestRouteRuntime_CanonicalScenario1_NoQuotasRunUntilFailure(t *testing.T) {
 		t.Fatalf("pick 5 = %q, want opencode:opencode-go/kimi-k2.6", got)
 	}
 
-	if err := resilience.PauseAgent("opencode", 1); err != nil {
+	if err := resilience.PauseAgent(ResilienceKey{Harness: "opencode", Model: "opencode-go/kimi-k2.6"}, 1); err != nil {
 		t.Fatalf("PauseAgent(opencode) error = %v", err)
 	}
-	if err := resilience.UnpauseAgent("claude", 1); err != nil {
+	if err := resilience.UnpauseAgent(ResilienceKey{Harness: "claude", Model: "opus-4.7"}, 1); err != nil {
 		t.Fatalf("UnpauseAgent(claude) error = %v", err)
 	}
 
@@ -121,7 +121,7 @@ func TestRouteRuntime_CanonicalScenario2_MixedQuotaThenNoQuotaFallback(t *testin
 		}
 	}
 
-	if err := resilience.PauseAgent("opencode", 1); err != nil {
+	if err := resilience.PauseAgent(ResilienceKey{Harness: "opencode", Model: "opencode-go/kimi-k2.6"}, 1); err != nil {
 		t.Fatalf("PauseAgent(opencode) error = %v", err)
 	}
 
@@ -206,7 +206,7 @@ func TestRouteRuntime_CanonicalScenario6_OverrideRoleReferenceAdvancesDefaultCur
 		t.Fatalf("pick 1 = %q, want fancy override", got)
 	}
 
-	if err := resilience.PauseAgent("opencode", 1); err != nil {
+	if err := resilience.PauseAgent(ResilienceKey{Harness: "opencode", Model: "opencode-go/fancy-new-model"}, 1); err != nil {
 		t.Fatalf("PauseAgent(opencode) error = %v", err)
 	}
 
@@ -215,7 +215,7 @@ func TestRouteRuntime_CanonicalScenario6_OverrideRoleReferenceAdvancesDefaultCur
 		t.Fatalf("pick 2 = %q, want first default entry", got)
 	}
 
-	if err := resilience.UnpauseAgent("opencode", 1); err != nil {
+	if err := resilience.UnpauseAgent(ResilienceKey{Harness: "opencode", Model: "opencode-go/fancy-new-model"}, 1); err != nil {
 		t.Fatalf("UnpauseAgent(opencode) error = %v", err)
 	}
 
@@ -224,7 +224,7 @@ func TestRouteRuntime_CanonicalScenario6_OverrideRoleReferenceAdvancesDefaultCur
 		t.Fatalf("pick 3 = %q, want fancy override", got)
 	}
 
-	if err := resilience.PauseAgent("opencode", 1); err != nil {
+	if err := resilience.PauseAgent(ResilienceKey{Harness: "opencode", Model: "opencode-go/fancy-new-model"}, 1); err != nil {
 		t.Fatalf("PauseAgent(opencode) error = %v", err)
 	}
 
@@ -257,7 +257,7 @@ func TestRouteRuntime_CanonicalScenario7_RangeQuotaWaitsWhenAllOthersPaused(t *t
 		}
 	}
 
-	if err := resilience.PauseAgent("claude", 1); err != nil {
+	if err := resilience.PauseAgent(ResilienceKey{Harness: "claude", Model: "opus-4.7"}, 1); err != nil {
 		t.Fatalf("PauseAgent(claude) error = %v", err)
 	}
 
@@ -274,7 +274,7 @@ func TestRouteRuntime_CanonicalScenario7_RangeQuotaWaitsWhenAllOthersPaused(t *t
 		}
 	}
 
-	if err := resilience.PauseAgent("codex", 1); err != nil {
+	if err := resilience.PauseAgent(ResilienceKey{Harness: "codex", Model: "gpt-5.5"}, 1); err != nil {
 		t.Fatalf("PauseAgent(codex) error = %v", err)
 	}
 
@@ -316,10 +316,10 @@ func TestRouteRuntime_ForceUnpauseAll(t *testing.T) {
 		"default": {"claude:opus-4.7:1", "codex:gpt-5.5:1", "opencode:opencode-go/kimi-k2.6:1"},
 	}, false)
 
-	if err := resilience.PauseAgent("claude", 1); err != nil {
+	if err := resilience.PauseAgent(ResilienceKey{Harness: "claude", Model: "opus-4.7"}, 1); err != nil {
 		t.Fatalf("PauseAgent(claude): %v", err)
 	}
-	if err := resilience.PauseAgent("codex", 1); err != nil {
+	if err := resilience.PauseAgent(ResilienceKey{Harness: "codex", Model: "gpt-5.5"}, 1); err != nil {
 		t.Fatalf("PauseAgent(codex): %v", err)
 	}
 
@@ -331,10 +331,11 @@ func TestRouteRuntime_ForceUnpauseAll(t *testing.T) {
 		t.Errorf("unpaused count = %d, want 2", unpaused)
 	}
 
-	for _, h := range []string{"claude", "codex", "opencode"} {
-		st, _ := resilience.getState(h)
+	for _, spec := range []string{"claude:opus-4.7", "codex:gpt-5.5", "opencode:opencode-go/kimi-k2.6"} {
+		parts := strings.SplitN(spec, ":", 2)
+		st, _ := resilience.getState(ResilienceKey{Harness: parts[0], Model: parts[1]})
 		if st != StateActive {
-			t.Errorf("state(%s) = %s, want active", h, st)
+			t.Errorf("state(%s) = %s, want active", spec, st)
 		}
 	}
 
@@ -380,7 +381,7 @@ func TestRouteRuntime_PausedExpiryResetsExhaustedEntry(t *testing.T) {
 	first.Entry.Exhausted = true
 	first.Entry.Benched = false
 
-	if err := resilience.PauseAgent("claude", 1); err != nil {
+	if err := resilience.PauseAgent(ResilienceKey{Harness: "claude", Model: "opus-4.7"}, 1); err != nil {
 		t.Fatalf("PauseAgent(claude) error = %v", err)
 	}
 

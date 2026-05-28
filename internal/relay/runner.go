@@ -444,19 +444,19 @@ func (r *Runner) Run(ctx context.Context) error {
 
 		if selection.HourlyRetry {
 			if success {
-				if err := resilience.UnpauseAgent(selection.Agent.Harness, relay.ID); err != nil {
+				if err := resilience.UnpauseAgent(KeyFromAgent(selection.Agent), relay.ID); err != nil {
 					return err
 				}
 			} else {
 				selection.Scheduler.OnAgentFailed(selection.Entry, "retry-budget-exhausted", false)
-				if err := resilience.RecordHourlyFailure(selection.Agent.Harness, relay.ID); err != nil {
+				if err := resilience.RecordHourlyFailure(KeyFromAgent(selection.Agent), relay.ID); err != nil {
 					return err
 				}
 			}
 		} else {
 			if !success {
 				selection.Scheduler.OnAgentFailed(selection.Entry, "retry-budget-exhausted", false)
-				if err := resilience.PauseAgent(selection.Agent.Harness, relay.ID); err != nil {
+				if err := resilience.PauseAgent(KeyFromAgent(selection.Agent), relay.ID); err != nil {
 					return err
 				}
 			}
