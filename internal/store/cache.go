@@ -16,7 +16,7 @@ type Cache struct {
 	RelayIndex   map[int]int // id -> index in Relays
 }
 
-// LoadCache reads all JSONL files from rallyDir into a new Cache.
+// LoadCache reads all JSONL files from rallyDir/state into a new Cache.
 func LoadCache(rallyDir string) (*Cache, error) {
 	c := &Cache{
 		MessageIndex: make(map[int]int),
@@ -24,7 +24,9 @@ func LoadCache(rallyDir string) (*Cache, error) {
 		RelayIndex:   make(map[int]int),
 	}
 
-	tries, err := readJSONL[TryRecord](filepath.Join(rallyDir, "tries.jsonl"))
+	stateDir := filepath.Join(rallyDir, "state")
+
+	tries, err := readJSONL[TryRecord](filepath.Join(stateDir, "tries.jsonl"))
 	if err != nil {
 		return nil, fmt.Errorf("load tries: %w", err)
 	}
@@ -33,7 +35,7 @@ func LoadCache(rallyDir string) (*Cache, error) {
 		c.TryIndex[t.ID] = i
 	}
 
-	msgs, err := readJSONL[MessageRecord](filepath.Join(rallyDir, "messages.jsonl"))
+	msgs, err := readJSONL[MessageRecord](filepath.Join(stateDir, "messages.jsonl"))
 	if err != nil {
 		return nil, fmt.Errorf("load messages: %w", err)
 	}
@@ -42,7 +44,7 @@ func LoadCache(rallyDir string) (*Cache, error) {
 		c.MessageIndex[m.ID] = i
 	}
 
-	relays, err := readJSONL[RelayRecord](filepath.Join(rallyDir, "relays.jsonl"))
+	relays, err := readJSONL[RelayRecord](filepath.Join(stateDir, "relays.jsonl"))
 	if err != nil {
 		return nil, fmt.Errorf("load relays: %w", err)
 	}
@@ -51,7 +53,7 @@ func LoadCache(rallyDir string) (*Cache, error) {
 		c.RelayIndex[r.ID] = i
 	}
 
-	status, err := readJSONL[AgentStatusEvent](filepath.Join(rallyDir, "agent_status.jsonl"))
+	status, err := readJSONL[AgentStatusEvent](filepath.Join(stateDir, "agent_status.jsonl"))
 	if err != nil {
 		return nil, fmt.Errorf("load agent_status: %w", err)
 	}

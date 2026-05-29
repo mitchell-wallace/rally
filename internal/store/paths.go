@@ -11,6 +11,10 @@ func RallyDir(workspaceDir string) string {
 	return filepath.Join(workspaceDir, rallyDirName)
 }
 
+func StateDir(workspaceDir string) string {
+	return filepath.Join(workspaceDir, rallyDirName, "state")
+}
+
 func RelaysDir(workspaceDir string) string {
 	return filepath.Join(workspaceDir, rallyDirName, "relays")
 }
@@ -20,11 +24,11 @@ func AgentsDir(workspaceDir string) string {
 }
 
 func CurrentTaskPath(workspaceDir string) string {
-	return filepath.Join(workspaceDir, rallyDirName, "current_task.md")
+	return filepath.Join(workspaceDir, rallyDirName, "state", "current_task.md")
 }
 
 func RunStatePath(workspaceDir string) string {
-	return filepath.Join(workspaceDir, rallyDirName, "run-state.json")
+	return filepath.Join(workspaceDir, rallyDirName, "state", "run-state.json")
 }
 
 func ProgressPath(workspaceDir string) string {
@@ -40,7 +44,7 @@ func InstructionsPath(workspaceDir string) string {
 }
 
 func HookAuditPath(workspaceDir string) string {
-	return filepath.Join(workspaceDir, rallyDirName, "hook-audit.jsonl")
+	return filepath.Join(workspaceDir, rallyDirName, "state", "hook-audit.jsonl")
 }
 
 func RelayLogPath(workspaceDir string, relayID int) string {

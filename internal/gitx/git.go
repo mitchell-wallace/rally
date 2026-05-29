@@ -61,7 +61,7 @@ func IsGitDirty(dir string) (bool, error) {
 }
 
 // IsWorkspaceDirty checks if there are user-agent workspace changes,
-// excluding Rally's own operational files (.rally/*.jsonl, .rally/current_task.md).
+// excluding Rally's own operational files under .rally/.
 func IsWorkspaceDirty(dir string) (bool, error) {
 	out, err := GitOutput(dir, "status", "--porcelain")
 	if err != nil {
@@ -73,15 +73,6 @@ func IsWorkspaceDirty(dir string) (bool, error) {
 		if line == "" {
 			continue
 		}
-		// Skip Rally's own files
-		if strings.HasPrefix(line, "M .rally/") || strings.HasPrefix(line, "A .rally/") ||
-			strings.HasPrefix(line, "D .rally/") || strings.HasPrefix(line, "R .rally/") {
-			continue
-		}
-		if strings.HasSuffix(line, ".rally/current_task.md") || strings.HasSuffix(line, ".rally/relays/") {
-			continue
-		}
-		// Check if the file path is under .rally/
 		parts := strings.SplitN(line, " ", 2)
 		if len(parts) == 2 {
 			path := parts[1]
@@ -94,14 +85,14 @@ func IsWorkspaceDirty(dir string) (bool, error) {
 	return false, nil
 }
 
-// CommitRallyState commits Rally's operational state files.
+// CommitRallyState commits Rally's non-state operational files (config, instructions, etc).
+// State files under .rally/state/ are gitignored and never committed.
 func CommitRallyState(dir string) error {
 	_, inGit, err := GitRepoRoot(dir)
 	if err != nil || !inGit {
 		return nil
 	}
 
-	// Check if there are Rally files to commit
 	out, err := GitOutput(dir, "status", "--porcelain", ".rally/")
 	if err != nil {
 		return err
@@ -110,13 +101,12 @@ func CommitRallyState(dir string) error {
 		return nil
 	}
 
-	if _, err := GitOutput(dir, "add", ".rally/*.jsonl"); err != nil {
+	if _, err := GitOutput(dir, "add", ".rally/"); err != nil {
 		return err
 	}
 
 	args := append(GitUserFallbackConfig(dir), "commit", "--no-verify", "-m", "rally: update state")
 	if _, err := GitOutput(dir, args...); err != nil {
-		// If nothing to commit, that's okay
 		if strings.Contains(string(out), "nothing to commit") {
 			return nil
 		}

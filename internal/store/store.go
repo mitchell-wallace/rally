@@ -8,16 +8,15 @@ import (
 )
 
 const (
-	triesWindowSize       = 200
-	relaysWindowSize      = 50
 	agentStatusWindowSize = 500
 	messagesWindowSize    = 200
 )
 
 // Store provides unified read/write access to Rally's JSONL-backed storage.
 type Store struct {
-	dir   string
-	cache *Cache
+	dir      string
+	stateDir string
+	cache    *Cache
 }
 
 // NewStore creates a Store and loads all JSONL data into memory.
@@ -26,55 +25,40 @@ func NewStore(dir string) (*Store, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Store{dir: dir, cache: cache}, nil
+	return &Store{dir: dir, stateDir: filepath.Join(dir, "state"), cache: cache}, nil
 }
 
 // AppendTry appends a try record to JSONL and the cache.
 func (s *Store) AppendTry(t TryRecord) error {
-	path := filepath.Join(s.dir, "tries.jsonl")
+	if err := os.MkdirAll(s.stateDir, 0o755); err != nil {
+		return err
+	}
+	path := filepath.Join(s.stateDir, "tries.jsonl")
 	if err := appendJSONL(path, t); err != nil {
 		return err
 	}
 	s.cache.Tries = append(s.cache.Tries, t)
 	s.cache.TryIndex[t.ID] = len(s.cache.Tries) - 1
-	if len(s.cache.Tries) > triesWindowSize {
-		if err := commitThenTruncate(path, triesWindowSize); err != nil {
-			return fmt.Errorf("truncate tries: %w", err)
-		}
-		// Reload cache after truncation
-		c, err := LoadCache(s.dir)
-		if err != nil {
-			return fmt.Errorf("reload cache after truncate: %w", err)
-		}
-		s.cache = c
-	}
 	return nil
 }
 
 // AppendRelay appends a relay record to JSONL and the cache.
 func (s *Store) AppendRelay(r RelayRecord) error {
-	path := filepath.Join(s.dir, "relays.jsonl")
+	if err := os.MkdirAll(s.stateDir, 0o755); err != nil {
+		return err
+	}
+	path := filepath.Join(s.stateDir, "relays.jsonl")
 	if err := appendJSONL(path, r); err != nil {
 		return err
 	}
 	s.cache.Relays = append(s.cache.Relays, r)
 	s.cache.RelayIndex[r.ID] = len(s.cache.Relays) - 1
-	if len(s.cache.Relays) > relaysWindowSize {
-		if err := commitThenTruncate(path, relaysWindowSize); err != nil {
-			return fmt.Errorf("truncate relays: %w", err)
-		}
-		c, err := LoadCache(s.dir)
-		if err != nil {
-			return fmt.Errorf("reload cache after truncate: %w", err)
-		}
-		s.cache = c
-	}
 	return nil
 }
 
 // ResetAgentStatus removes all agent status history to start fresh.
 func (s *Store) ResetAgentStatus() error {
-	path := filepath.Join(s.dir, "agent_status.jsonl")
+	path := filepath.Join(s.stateDir, "agent_status.jsonl")
 	s.cache.AgentStatus = nil
 	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
 		return err
@@ -84,7 +68,10 @@ func (s *Store) ResetAgentStatus() error {
 
 // AppendAgentStatus appends an agent status event to JSONL and the cache.
 func (s *Store) AppendAgentStatus(e AgentStatusEvent) error {
-	path := filepath.Join(s.dir, "agent_status.jsonl")
+	if err := os.MkdirAll(s.stateDir, 0o755); err != nil {
+		return err
+	}
+	path := filepath.Join(s.stateDir, "agent_status.jsonl")
 	if err := appendJSONL(path, e); err != nil {
 		return err
 	}
@@ -152,7 +139,7 @@ func (s *Store) truncateAgentStatus(path string) error {
 
 	kept := append(summaries, retained...)
 
-	if err := commitThenTruncateWithContent(path, kept); err != nil {
+	if err := rewriteJSONL(path, kept); err != nil {
 		return err
 	}
 
@@ -172,13 +159,15 @@ func (s *Store) AddMessage(m MessageRecord) error {
 		m.Position = maxPos + 1
 	}
 
-	path := filepath.Join(s.dir, "messages.jsonl")
+	if err := os.MkdirAll(s.stateDir, 0o755); err != nil {
+		return err
+	}
+	path := filepath.Join(s.stateDir, "messages.jsonl")
 	if err := appendJSONL(path, m); err != nil {
 		return err
 	}
 	s.cache.Messages = append(s.cache.Messages, m)
 	s.cache.MessageIndex[m.ID] = len(s.cache.Messages) - 1
-	// Pending messages are exempt from windowing.
 	return nil
 }
 
@@ -191,12 +180,11 @@ func (s *Store) UpdateMessage(m MessageRecord) error {
 	s.cache.Messages[idx] = m
 	s.cache.MessageIndex[m.ID] = idx
 
-	path := filepath.Join(s.dir, "messages.jsonl")
+	path := filepath.Join(s.stateDir, "messages.jsonl")
 	if err := rewriteJSONL(path, s.cache.Messages); err != nil {
 		return err
 	}
 
-	// Window messages only when resolved/cancelled; pending exempt.
 	if m.Status == "addressed" || m.Status == "cancelled" {
 		if err := s.maybeTruncateMessages(); err != nil {
 			return fmt.Errorf("truncate messages: %w", err)
@@ -218,21 +206,18 @@ func (s *Store) maybeTruncateMessages() error {
 		return nil
 	}
 
-	path := filepath.Join(s.dir, "messages.jsonl")
+	path := filepath.Join(s.stateDir, "messages.jsonl")
 
-	// Determine which non-pending messages to keep (the most recent ones).
 	keepCount := 0
 	for i := len(s.cache.Messages) - 1; i >= 0; i-- {
 		if s.cache.Messages[i].Status != "pending" {
 			keepCount++
 			if keepCount >= messagesWindowSize {
-				// All messages before this index that are non-pending should be dropped.
 				break
 			}
 		}
 	}
 
-	// Build new slice preserving order: pending + recent non-pending.
 	var kept []MessageRecord
 	dropThreshold := -1
 	if keepCount >= messagesWindowSize {
@@ -254,17 +239,14 @@ func (s *Store) maybeTruncateMessages() error {
 		} else if dropThreshold >= 0 && i >= dropThreshold {
 			kept = append(kept, m)
 		} else if dropThreshold < 0 {
-			// Not enough non-pending to trigger drop, keep all (shouldn't happen here).
 			kept = append(kept, m)
 		}
 	}
 
-	// Archive the full file, write the exact kept set, then commit the result.
-	if err := commitThenTruncateWithContent(path, kept); err != nil {
+	if err := rewriteJSONL(path, kept); err != nil {
 		return err
 	}
 
-	// Rebuild cache
 	c, err := LoadCache(s.dir)
 	if err != nil {
 		return fmt.Errorf("reload cache after message truncate: %w", err)
@@ -444,21 +426,11 @@ func (s *Store) UpdateRelay(r RelayRecord) error {
 	}
 	s.cache.Relays[idx] = r
 
-	path := filepath.Join(s.dir, "relays.jsonl")
+	path := filepath.Join(s.stateDir, "relays.jsonl")
 	if err := rewriteJSONL(path, s.cache.Relays); err != nil {
 		return err
 	}
 
-	if len(s.cache.Relays) > relaysWindowSize {
-		if err := commitThenTruncate(path, relaysWindowSize); err != nil {
-			return fmt.Errorf("truncate relays: %w", err)
-		}
-		c, err := LoadCache(s.dir)
-		if err != nil {
-			return fmt.Errorf("reload cache after truncate: %w", err)
-		}
-		s.cache = c
-	}
 	return nil
 }
 
