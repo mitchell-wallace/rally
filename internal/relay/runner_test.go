@@ -4713,6 +4713,60 @@ func TestLapPinMultiLapRejectionInRunOne(t *testing.T) {
 	}
 }
 
+func TestLapPinMismatchClearsFailureClass(t *testing.T) {
+	workspaceDir := t.TempDir()
+	rallyDir := filepath.Join(workspaceDir, ".rally")
+	os.MkdirAll(rallyDir, 0o755)
+	initRepo(t, workspaceDir)
+	runGit(t, workspaceDir, "commit", "--allow-empty", "-m", "initial", "--no-verify")
+
+	s := newTestStore(t, rallyDir)
+	callCount := 0
+	exec := &funcExecutor{
+		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+			callCount++
+			if opts.LogPath != "" {
+				_ = os.WriteFile(opts.LogPath, []byte("fork/exec failed\n"), 0o644)
+			}
+			if callCount >= 3 {
+				rs, _ := progress.LoadRunState(workspaceDir)
+				rs.RecordedLaps = []string{"wrong-lap"}
+				progress.SaveRunState(workspaceDir, rs)
+			}
+			return &agent.TryResult{Completed: false, Summary: "failed"}, nil
+		},
+	}
+
+	r := NewRunner(s, Config{
+		WorkspaceDir:     workspaceDir,
+		DataDir:          t.TempDir(),
+		AgentMixSpecs:    []string{"op:dsf"},
+		TargetIterations: 1,
+		RetryBudget:      3,
+		LapsEnabled:      true,
+		Resolver:         cheapTestResolver,
+	}, map[string]agent.Executor{"opencode": exec})
+
+	_, _, _, _, failureClass, _, _ := r.runOne(
+		context.Background(),
+		&store.RelayRecord{ID: 1, TargetIterations: 1},
+		0,
+		agent.ResolvedAgent{Harness: "opencode", Model: cheapTestModel},
+		runTask{Name: "pinned task", Prompt: "do work", Assignee: "senior", LapID: "lap-1", IsLapsBacked: true, LapsRemaining: 1},
+		nil,
+		nil,
+		false,
+		false,
+		nil,
+		nil,
+		io.Discard,
+	)
+
+	if failureClass != reliability.FailureAgent {
+		t.Fatalf("failureClass = %v, want FailureAgent", failureClass)
+	}
+}
+
 func TestLapPinNormalPassThroughInRunOne(t *testing.T) {
 	workspaceDir := t.TempDir()
 	rallyDir := filepath.Join(workspaceDir, ".rally")

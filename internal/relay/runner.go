@@ -942,6 +942,7 @@ attemptLoop:
 				failed = true
 				failReason = reason
 				lapPinMismatch = true
+				failureClass = reliability.FailureAgent
 				fmt.Fprintf(log, "relay %d run %d attempt %d lap pin mismatch: pinned_lap=%q consumed_laps=%v reason=%s\n", relay.ID, runIndex+1, attempt, task.LapID, recordedLaps, reason)
 			}
 		}
