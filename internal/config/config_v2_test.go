@@ -6,11 +6,13 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/mitchell-wallace/rally/internal/store"
 )
 
 func writeConfig(t *testing.T, dir, content string) {
 	t.Helper()
-	rallyDir := filepath.Join(dir, ".rally")
+	rallyDir := store.RallyDir(dir)
 	if err := os.MkdirAll(rallyDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -371,7 +373,7 @@ instructions_file = ".rally/fallback_instructions.md"
 
 func TestSaveV2_WritesNewShapeOnly(t *testing.T) {
 	dir := t.TempDir()
-	rallyDir := filepath.Join(dir, ".rally")
+	rallyDir := store.RallyDir(dir)
 	if err := os.MkdirAll(rallyDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -417,7 +419,7 @@ func TestSaveV2_WritesNewShapeOnly(t *testing.T) {
 
 func TestSaveV2_NoRootLevelModelFields(t *testing.T) {
 	dir := t.TempDir()
-	rallyDir := filepath.Join(dir, ".rally")
+	rallyDir := store.RallyDir(dir)
 	if err := os.MkdirAll(rallyDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -454,7 +456,7 @@ func TestSaveV2_NoRootLevelModelFields(t *testing.T) {
 
 func TestSaveV2_PreservesHarnesses(t *testing.T) {
 	dir := t.TempDir()
-	rallyDir := filepath.Join(dir, ".rally")
+	rallyDir := store.RallyDir(dir)
 	if err := os.MkdirAll(rallyDir, 0o755); err != nil {
 		t.Fatal(err)
 	}

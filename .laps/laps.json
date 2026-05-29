@@ -16,10 +16,10 @@
       "title": "Centralise .rally/ path construction behind helpers",
       "description": "Context: OpenSpec change tidy-rally-runtime-data-storage (specs/store, design Decision 1). Paths are built ad-hoc with filepath.Join(..., \".rally\", ...) across packages. This lap establishes the path contract that every later lap builds on; no behavior change yet.\n\nOutcome: A single set of helpers (e.g. store.RallyDir, store.StateDir(workspaceDir), store.SummaryPath) own all .rally/ path building, and existing call sites use them. Files still resolve to their current locations (the move happens in the next lap).\n\nFiles \u0026 scope: internal/store/{store,cache}.go, internal/progress/ (store.go, runstate.go), internal/cli/hooks.go, internal/relay/runner.go (current_task.md at ~698). Add helpers in internal/store (or a small paths file) and route joins through them.\n\nDesign: Keep helpers dependency-light so laps/other packages need not import heavy deps. Do not yet introduce state/ — just funnel the joins so the relocation lap is a one-line change per helper.\n\nAcceptance: `go build ./...` and `go test ./...` pass; grep shows no remaining ad-hoc `\".rally\"` joins outside the helpers.",
       "assignee": "SENIOR",
-      "isDone": false,
+      "isDone": true,
       "createdAt": "2026-05-26T12:42:23.189855868Z",
-      "updatedAt": "2026-05-26T12:42:23.189855868Z",
-      "completedAt": null
+      "updatedAt": "2026-05-29T06:31:16.580655922Z",
+      "completedAt": "2026-05-29T06:31:16.580655922Z"
     },
     {
       "id": "rall-35d6",

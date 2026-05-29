@@ -7,6 +7,8 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+
+	"github.com/mitchell-wallace/rally/internal/store"
 )
 
 func TestRepoKey_Format(t *testing.T) {
@@ -75,7 +77,7 @@ func TestRepoKey_LogPathScoping(t *testing.T) {
 
 func TestPruneRepoRelayLogs(t *testing.T) {
 	tmp := t.TempDir()
-	relaysDir := filepath.Join(tmp, ".rally", "relays")
+	relaysDir := store.RelaysDir(tmp)
 	if err := os.MkdirAll(relaysDir, 0o755); err != nil {
 		t.Fatal(err)
 	}

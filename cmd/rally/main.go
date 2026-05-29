@@ -87,7 +87,7 @@ func runRelay(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	rallyDir := filepath.Join(workspaceDir, ".rally")
+	rallyDir := store.RallyDir(workspaceDir)
 	cfg, err := config.LoadV2(workspaceDir)
 	if err != nil {
 		return fmt.Errorf("load config: %w", err)
@@ -344,7 +344,7 @@ func runInit(cmd *cobra.Command, args []string) error {
 	}
 
 	// 2. Create .rally/ directory
-	rallyDir := filepath.Join(workspaceDir, ".rally")
+	rallyDir := store.RallyDir(workspaceDir)
 	if err := os.MkdirAll(rallyDir, 0o755); err != nil {
 		return err
 	}
@@ -454,7 +454,7 @@ func runInstructionsEdit(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	path := filepath.Join(workspaceDir, ".rally", "instructions.md")
+	path := store.InstructionsPath(workspaceDir)
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err
 	}
@@ -480,7 +480,7 @@ func runInstructionsShow(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	path := filepath.Join(workspaceDir, ".rally", "instructions.md")
+	path := store.InstructionsPath(workspaceDir)
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {

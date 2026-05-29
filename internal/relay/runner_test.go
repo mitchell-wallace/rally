@@ -251,7 +251,7 @@ func TestWaitWithCountdownElapses(t *testing.T) {
 
 func TestInstructionsPassedToExecutor(t *testing.T) {
 	workspaceDir := t.TempDir()
-	rallyDir := filepath.Join(workspaceDir, ".rally")
+	rallyDir := store.RallyDir(workspaceDir)
 	os.MkdirAll(rallyDir, 0o755)
 	initRepo(t, workspaceDir)
 
@@ -295,7 +295,7 @@ func TestInstructionsPassedToExecutor(t *testing.T) {
 
 func TestLapsHeadTaskPassedToExecutor(t *testing.T) {
 	workspaceDir := t.TempDir()
-	rallyDir := filepath.Join(workspaceDir, ".rally")
+	rallyDir := store.RallyDir(workspaceDir)
 	os.MkdirAll(rallyDir, 0o755)
 	initRepo(t, workspaceDir)
 
@@ -358,7 +358,7 @@ func TestLapsHeadTaskPassedToExecutor(t *testing.T) {
 
 func TestAgentCyclingDeterminism(t *testing.T) {
 	workspaceDir := t.TempDir()
-	rallyDir := filepath.Join(workspaceDir, ".rally")
+	rallyDir := store.RallyDir(workspaceDir)
 	os.MkdirAll(rallyDir, 0o755)
 	initRepo(t, workspaceDir)
 
@@ -402,7 +402,7 @@ func TestAgentCyclingDeterminism(t *testing.T) {
 
 func TestRunnerSameHarnessAdvanceUsesRotateModel(t *testing.T) {
 	workspaceDir := t.TempDir()
-	rallyDir := filepath.Join(workspaceDir, ".rally")
+	rallyDir := store.RallyDir(workspaceDir)
 	os.MkdirAll(rallyDir, 0o755)
 	initRepo(t, workspaceDir)
 
@@ -444,7 +444,7 @@ func TestRunnerSameHarnessAdvanceUsesRotateModel(t *testing.T) {
 
 func TestRunnerCrossHarnessAdvanceDoesNotRotate(t *testing.T) {
 	workspaceDir := t.TempDir()
-	rallyDir := filepath.Join(workspaceDir, ".rally")
+	rallyDir := store.RallyDir(workspaceDir)
 	os.MkdirAll(rallyDir, 0o755)
 	initRepo(t, workspaceDir)
 
@@ -492,7 +492,7 @@ func TestRunnerCrossHarnessAdvanceDoesNotRotate(t *testing.T) {
 
 func TestRunnerRotateModelErrorFallsBackToExecution(t *testing.T) {
 	workspaceDir := t.TempDir()
-	rallyDir := filepath.Join(workspaceDir, ".rally")
+	rallyDir := store.RallyDir(workspaceDir)
 	os.MkdirAll(rallyDir, 0o755)
 	initRepo(t, workspaceDir)
 
@@ -533,7 +533,7 @@ func TestRunnerRotateModelErrorFallsBackToExecution(t *testing.T) {
 		t.Fatalf("executed models = %v, want %v", got, want)
 	}
 
-	logData, err := os.ReadFile(filepath.Join(workspaceDir, ".rally", "relays", "relay-1.log"))
+	logData, err := os.ReadFile(store.RelayLogPath(workspaceDir, 1))
 	if err != nil {
 		t.Fatalf("read relay log: %v", err)
 	}
@@ -584,10 +584,10 @@ func TestFilesChangedListFallsBackToDirtyFiles(t *testing.T) {
 	// Dirty the workspace without committing. Mix in a .rally/ file that
 	// should be filtered out of the result.
 	os.WriteFile(filepath.Join(workspaceDir, "user.txt"), []byte("user change\n"), 0o644)
-	if err := os.MkdirAll(filepath.Join(workspaceDir, ".rally"), 0o755); err != nil {
+	if err := os.MkdirAll(store.RallyDir(workspaceDir), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	os.WriteFile(filepath.Join(workspaceDir, ".rally", "run-state.json"), []byte("{}"), 0o644)
+	os.WriteFile(store.RunStatePath(workspaceDir), []byte("{}"), 0o644)
 
 	r := &Runner{cfg: Config{WorkspaceDir: workspaceDir}}
 	got := r.filesChangedList(nil, "", "", "")
@@ -621,7 +621,7 @@ func TestDetectLapsMarkerInText(t *testing.T) {
 
 func TestRetryWithinRun(t *testing.T) {
 	workspaceDir := t.TempDir()
-	rallyDir := filepath.Join(workspaceDir, ".rally")
+	rallyDir := store.RallyDir(workspaceDir)
 	os.MkdirAll(rallyDir, 0o755)
 	initRepo(t, workspaceDir)
 
@@ -676,7 +676,7 @@ func TestRetryWithinRun(t *testing.T) {
 
 func TestResumeRetryPassesSessionID(t *testing.T) {
 	workspaceDir := t.TempDir()
-	rallyDir := filepath.Join(workspaceDir, ".rally")
+	rallyDir := store.RallyDir(workspaceDir)
 	os.MkdirAll(rallyDir, 0o755)
 	initRepo(t, workspaceDir)
 
@@ -729,7 +729,7 @@ func TestResumeRetryPassesSessionID(t *testing.T) {
 
 func TestRunOneFreezeRetryResumesAndRecovers(t *testing.T) {
 	workspaceDir := t.TempDir()
-	rallyDir := filepath.Join(workspaceDir, ".rally")
+	rallyDir := store.RallyDir(workspaceDir)
 	os.MkdirAll(rallyDir, 0o755)
 	initRepo(t, workspaceDir)
 
@@ -863,7 +863,7 @@ func TestResumeRetryPreservesRunState(t *testing.T) {
 	defer func() { headPullLap = oldHeadPull }()
 
 	workspaceDir := t.TempDir()
-	rallyDir := filepath.Join(workspaceDir, ".rally")
+	rallyDir := store.RallyDir(workspaceDir)
 	os.MkdirAll(rallyDir, 0o755)
 	initRepo(t, workspaceDir)
 
@@ -919,7 +919,7 @@ func TestFreshStartRetryClearsRunState(t *testing.T) {
 	defer func() { headPullLap = oldHeadPull }()
 
 	workspaceDir := t.TempDir()
-	rallyDir := filepath.Join(workspaceDir, ".rally")
+	rallyDir := store.RallyDir(workspaceDir)
 	os.MkdirAll(rallyDir, 0o755)
 	initRepo(t, workspaceDir)
 
@@ -977,7 +977,7 @@ func TestResumeRetryMidHandoffPreservesFlag(t *testing.T) {
 	defer func() { headPullLap = oldHeadPull }()
 
 	workspaceDir := t.TempDir()
-	rallyDir := filepath.Join(workspaceDir, ".rally")
+	rallyDir := store.RallyDir(workspaceDir)
 	os.MkdirAll(rallyDir, 0o755)
 	initRepo(t, workspaceDir)
 
@@ -1038,7 +1038,7 @@ func TestFreshStartRetryMidHandoffClearsFlag(t *testing.T) {
 	defer func() { headPullLap = oldHeadPull }()
 
 	workspaceDir := t.TempDir()
-	rallyDir := filepath.Join(workspaceDir, ".rally")
+	rallyDir := store.RallyDir(workspaceDir)
 	os.MkdirAll(rallyDir, 0o755)
 	initRepo(t, workspaceDir)
 
@@ -1095,7 +1095,7 @@ func TestFreshStartRetryMidHandoffClearsFlag(t *testing.T) {
 
 func TestFailureCascadeMultipleInfraIncrements(t *testing.T) {
 	workspaceDir := t.TempDir()
-	rallyDir := filepath.Join(workspaceDir, ".rally")
+	rallyDir := store.RallyDir(workspaceDir)
 	os.MkdirAll(rallyDir, 0o755)
 	initRepo(t, workspaceDir)
 
@@ -1157,7 +1157,7 @@ func TestIncompleteRunLeavesChangesUncommitted(t *testing.T) {
 	defer func() { headPullLap = oldHeadPull }()
 
 	workspaceDir := t.TempDir()
-	rallyDir := filepath.Join(workspaceDir, ".rally")
+	rallyDir := store.RallyDir(workspaceDir)
 	os.MkdirAll(rallyDir, 0o755)
 	initRepo(t, workspaceDir)
 
@@ -1210,7 +1210,7 @@ func TestIncompleteRetryPromptGuidance(t *testing.T) {
 	defer func() { headPullLap = oldHeadPull }()
 
 	workspaceDir := t.TempDir()
-	rallyDir := filepath.Join(workspaceDir, ".rally")
+	rallyDir := store.RallyDir(workspaceDir)
 	os.MkdirAll(rallyDir, 0o755)
 	initRepo(t, workspaceDir)
 
@@ -1260,7 +1260,7 @@ func TestIncompleteDoesNotCountTowardFailureCascade(t *testing.T) {
 	defer func() { headPullLap = oldHeadPull }()
 
 	workspaceDir := t.TempDir()
-	rallyDir := filepath.Join(workspaceDir, ".rally")
+	rallyDir := store.RallyDir(workspaceDir)
 	os.MkdirAll(rallyDir, 0o755)
 	initRepo(t, workspaceDir)
 
@@ -1290,7 +1290,7 @@ func TestIncompleteDoesNotCountTowardFailureCascade(t *testing.T) {
 
 func TestFailureCascadeSingleInfraDoesNotIncrement(t *testing.T) {
 	workspaceDir := t.TempDir()
-	rallyDir := filepath.Join(workspaceDir, ".rally")
+	rallyDir := store.RallyDir(workspaceDir)
 	os.MkdirAll(rallyDir, 0o755)
 	initRepo(t, workspaceDir)
 
@@ -1321,7 +1321,7 @@ func TestFailureCascadeSingleInfraDoesNotIncrement(t *testing.T) {
 
 func TestFailureCascadeAgentErrorDoesNotIncrement(t *testing.T) {
 	workspaceDir := t.TempDir()
-	rallyDir := filepath.Join(workspaceDir, ".rally")
+	rallyDir := store.RallyDir(workspaceDir)
 	os.MkdirAll(rallyDir, 0o755)
 	initRepo(t, workspaceDir)
 
@@ -1363,7 +1363,7 @@ func countAgentStatusEvents(s *store.Store, eventTypes ...string) int {
 
 func TestGracefulStop(t *testing.T) {
 	workspaceDir := t.TempDir()
-	rallyDir := filepath.Join(workspaceDir, ".rally")
+	rallyDir := store.RallyDir(workspaceDir)
 	os.MkdirAll(rallyDir, 0o755)
 	initRepo(t, workspaceDir)
 
@@ -1420,7 +1420,7 @@ func TestGracefulStop(t *testing.T) {
 
 func TestMessageConsumptionPerRun(t *testing.T) {
 	workspaceDir := t.TempDir()
-	rallyDir := filepath.Join(workspaceDir, ".rally")
+	rallyDir := store.RallyDir(workspaceDir)
 	os.MkdirAll(rallyDir, 0o755)
 	initRepo(t, workspaceDir)
 
@@ -1475,7 +1475,7 @@ func TestMessageConsumptionPerRun(t *testing.T) {
 
 func TestCommitHashTracking_AgentCommitted(t *testing.T) {
 	workspaceDir := t.TempDir()
-	rallyDir := filepath.Join(workspaceDir, ".rally")
+	rallyDir := store.RallyDir(workspaceDir)
 	os.MkdirAll(rallyDir, 0o755)
 	initRepo(t, workspaceDir)
 
@@ -1516,7 +1516,7 @@ func TestCommitHashTracking_AgentCommitted(t *testing.T) {
 
 func TestCommitHashTracking_AutoCommitted(t *testing.T) {
 	workspaceDir := t.TempDir()
-	rallyDir := filepath.Join(workspaceDir, ".rally")
+	rallyDir := store.RallyDir(workspaceDir)
 	os.MkdirAll(rallyDir, 0o755)
 	initRepo(t, workspaceDir)
 
@@ -1557,7 +1557,7 @@ func TestCommitHashTracking_AutoCommitted(t *testing.T) {
 
 func TestCommitHashTracking_NoChanges(t *testing.T) {
 	workspaceDir := t.TempDir()
-	rallyDir := filepath.Join(workspaceDir, ".rally")
+	rallyDir := store.RallyDir(workspaceDir)
 	os.MkdirAll(rallyDir, 0o755)
 	initRepo(t, workspaceDir)
 
@@ -1601,7 +1601,7 @@ func TestCommitHashTracking_NoChanges(t *testing.T) {
 
 func TestRelayScopedMessageIncludedInAllRuns(t *testing.T) {
 	workspaceDir := t.TempDir()
-	rallyDir := filepath.Join(workspaceDir, ".rally")
+	rallyDir := store.RallyDir(workspaceDir)
 	os.MkdirAll(rallyDir, 0o755)
 	initRepo(t, workspaceDir)
 
@@ -1645,7 +1645,7 @@ func TestRelayScopedMessageIncludedInAllRuns(t *testing.T) {
 
 func TestRelayScopedMessageAddressed(t *testing.T) {
 	workspaceDir := t.TempDir()
-	rallyDir := filepath.Join(workspaceDir, ".rally")
+	rallyDir := store.RallyDir(workspaceDir)
 	os.MkdirAll(rallyDir, 0o755)
 	initRepo(t, workspaceDir)
 
@@ -1700,7 +1700,7 @@ func TestRelayScopedMessageAddressed(t *testing.T) {
 
 func TestCombinedRelayAndRunScopedMessages(t *testing.T) {
 	workspaceDir := t.TempDir()
-	rallyDir := filepath.Join(workspaceDir, ".rally")
+	rallyDir := store.RallyDir(workspaceDir)
 	os.MkdirAll(rallyDir, 0o755)
 	initRepo(t, workspaceDir)
 
@@ -1778,7 +1778,7 @@ func TestCombinedRelayAndRunScopedMessages(t *testing.T) {
 
 func TestFreezeCascade(t *testing.T) {
 	workspaceDir := t.TempDir()
-	rallyDir := filepath.Join(workspaceDir, ".rally")
+	rallyDir := store.RallyDir(workspaceDir)
 	os.MkdirAll(rallyDir, 0o755)
 	initRepo(t, workspaceDir)
 
@@ -1856,7 +1856,7 @@ func TestFreezeCascade(t *testing.T) {
 
 func TestAgentUnfreeze(t *testing.T) {
 	workspaceDir := t.TempDir()
-	rallyDir := filepath.Join(workspaceDir, ".rally")
+	rallyDir := store.RallyDir(workspaceDir)
 	os.MkdirAll(rallyDir, 0o755)
 
 	s := newTestStore(t, rallyDir)
@@ -1883,7 +1883,7 @@ func TestAgentUnfreeze(t *testing.T) {
 
 func TestFailedRunDoesNotCountIteration(t *testing.T) {
 	workspaceDir := t.TempDir()
-	rallyDir := filepath.Join(workspaceDir, ".rally")
+	rallyDir := store.RallyDir(workspaceDir)
 	os.MkdirAll(rallyDir, 0o755)
 	initRepo(t, workspaceDir)
 
@@ -1931,7 +1931,7 @@ func TestFailedRunDoesNotCountIteration(t *testing.T) {
 
 func TestHourlyRetryWithOtherAgentActive(t *testing.T) {
 	workspaceDir := t.TempDir()
-	rallyDir := filepath.Join(workspaceDir, ".rally")
+	rallyDir := store.RallyDir(workspaceDir)
 	os.MkdirAll(rallyDir, 0o755)
 
 	s := newTestStore(t, rallyDir)
@@ -1974,7 +1974,7 @@ func TestHourlyRetryWithOtherAgentActive(t *testing.T) {
 
 func TestAllAgentsFrozenEndsRelay(t *testing.T) {
 	workspaceDir := t.TempDir()
-	rallyDir := filepath.Join(workspaceDir, ".rally")
+	rallyDir := store.RallyDir(workspaceDir)
 	os.MkdirAll(rallyDir, 0o755)
 
 	s := newTestStore(t, rallyDir)
@@ -2009,7 +2009,7 @@ func TestStubEntryOnIncompleteRun(t *testing.T) {
 	defer func() { headPullLap = oldHeadPull }()
 
 	workspaceDir := t.TempDir()
-	rallyDir := filepath.Join(workspaceDir, ".rally")
+	rallyDir := store.RallyDir(workspaceDir)
 	os.MkdirAll(rallyDir, 0o755)
 	initRepo(t, workspaceDir)
 
@@ -2216,7 +2216,7 @@ func TestResumeRoundTripWithRealResolver(t *testing.T) {
 
 func TestPerHarnessModelPauseIsolation(t *testing.T) {
 	workspaceDir := t.TempDir()
-	rallyDir := filepath.Join(workspaceDir, ".rally")
+	rallyDir := store.RallyDir(workspaceDir)
 	os.MkdirAll(rallyDir, 0o755)
 
 	s := newTestStore(t, rallyDir)
@@ -2342,7 +2342,7 @@ func TestParseAgentMixAllFormsCombined(t *testing.T) {
 
 func TestLapsInstructionsFileUsed(t *testing.T) {
 	workspaceDir := t.TempDir()
-	rallyDir := filepath.Join(workspaceDir, ".rally")
+	rallyDir := store.RallyDir(workspaceDir)
 	os.MkdirAll(rallyDir, 0o755)
 	initRepo(t, workspaceDir)
 
@@ -2389,7 +2389,7 @@ func TestLapsInstructionsFileUsed(t *testing.T) {
 
 func TestLapsInstructionsFileFallsBackToDefault(t *testing.T) {
 	workspaceDir := t.TempDir()
-	rallyDir := filepath.Join(workspaceDir, ".rally")
+	rallyDir := store.RallyDir(workspaceDir)
 	os.MkdirAll(rallyDir, 0o755)
 	initRepo(t, workspaceDir)
 
@@ -2433,7 +2433,7 @@ func TestLapsInstructionsFileFallsBackToDefault(t *testing.T) {
 
 func TestLapsInstructionsNotUsedInNoBackendMode(t *testing.T) {
 	workspaceDir := t.TempDir()
-	rallyDir := filepath.Join(workspaceDir, ".rally")
+	rallyDir := store.RallyDir(workspaceDir)
 	os.MkdirAll(rallyDir, 0o755)
 	initRepo(t, workspaceDir)
 
@@ -2475,7 +2475,7 @@ func TestLapsInstructionsNotUsedInNoBackendMode(t *testing.T) {
 
 func TestLapsInstructionsUnconfiguredUsesDefault(t *testing.T) {
 	workspaceDir := t.TempDir()
-	rallyDir := filepath.Join(workspaceDir, ".rally")
+	rallyDir := store.RallyDir(workspaceDir)
 	os.MkdirAll(rallyDir, 0o755)
 	initRepo(t, workspaceDir)
 
@@ -2518,7 +2518,7 @@ func TestLapsInstructionsUnconfiguredUsesDefault(t *testing.T) {
 
 func TestRoleInstructionsLoadedForAssignee(t *testing.T) {
 	workspaceDir := t.TempDir()
-	rallyDir := filepath.Join(workspaceDir, ".rally")
+	rallyDir := store.RallyDir(workspaceDir)
 	agentsDir := filepath.Join(rallyDir, "agents")
 	if err := os.MkdirAll(agentsDir, 0o755); err != nil {
 		t.Fatal(err)
@@ -2567,7 +2567,7 @@ func TestRoleInstructionsLoadedForAssignee(t *testing.T) {
 
 func TestRoleInstructionsMissingFileIsSilent(t *testing.T) {
 	workspaceDir := t.TempDir()
-	rallyDir := filepath.Join(workspaceDir, ".rally")
+	rallyDir := store.RallyDir(workspaceDir)
 	if err := os.MkdirAll(rallyDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -2612,7 +2612,7 @@ func TestRoleInstructionsMissingFileIsSilent(t *testing.T) {
 
 func TestRoleInstructionsSkippedInNoBackendMode(t *testing.T) {
 	workspaceDir := t.TempDir()
-	rallyDir := filepath.Join(workspaceDir, ".rally")
+	rallyDir := store.RallyDir(workspaceDir)
 	agentsDir := filepath.Join(rallyDir, "agents")
 	if err := os.MkdirAll(agentsDir, 0o755); err != nil {
 		t.Fatal(err)
@@ -2656,7 +2656,7 @@ func TestRoleInstructionsSkippedInNoBackendMode(t *testing.T) {
 
 func TestFallbackInstructionsUsedInNoBackendMode(t *testing.T) {
 	workspaceDir := t.TempDir()
-	rallyDir := filepath.Join(workspaceDir, ".rally")
+	rallyDir := store.RallyDir(workspaceDir)
 	os.MkdirAll(rallyDir, 0o755)
 	initRepo(t, workspaceDir)
 
@@ -2696,7 +2696,7 @@ func TestFallbackInstructionsUsedInNoBackendMode(t *testing.T) {
 
 func TestFallbackInstructionsIgnoredWhenCLIPromptProvided(t *testing.T) {
 	workspaceDir := t.TempDir()
-	rallyDir := filepath.Join(workspaceDir, ".rally")
+	rallyDir := store.RallyDir(workspaceDir)
 	os.MkdirAll(rallyDir, 0o755)
 	initRepo(t, workspaceDir)
 
@@ -2741,7 +2741,7 @@ func TestFallbackInstructionsIgnoredInLapsMode(t *testing.T) {
 	defer func() { headPullLap = oldHeadPull }()
 
 	workspaceDir := t.TempDir()
-	rallyDir := filepath.Join(workspaceDir, ".rally")
+	rallyDir := store.RallyDir(workspaceDir)
 	os.MkdirAll(rallyDir, 0o755)
 	initRepo(t, workspaceDir)
 
@@ -2782,7 +2782,7 @@ func TestFallbackInstructionsIgnoredInLapsMode(t *testing.T) {
 
 func TestFallbackInstructionsMissingFileUsesBuiltInDefault(t *testing.T) {
 	workspaceDir := t.TempDir()
-	rallyDir := filepath.Join(workspaceDir, ".rally")
+	rallyDir := store.RallyDir(workspaceDir)
 	os.MkdirAll(rallyDir, 0o755)
 	initRepo(t, workspaceDir)
 
@@ -2819,7 +2819,7 @@ func TestFallbackInstructionsMissingFileUsesBuiltInDefault(t *testing.T) {
 
 func TestFallbackInstructionsUnconfiguredUsesBuiltInDefault(t *testing.T) {
 	workspaceDir := t.TempDir()
-	rallyDir := filepath.Join(workspaceDir, ".rally")
+	rallyDir := store.RallyDir(workspaceDir)
 	os.MkdirAll(rallyDir, 0o755)
 	initRepo(t, workspaceDir)
 
@@ -2855,7 +2855,7 @@ func TestFallbackInstructionsUnconfiguredUsesBuiltInDefault(t *testing.T) {
 
 func TestRunnerRouteIntegration_AssigneesQuotasFreezeAndRoleFiles(t *testing.T) {
 	workspaceDir := t.TempDir()
-	rallyDir := filepath.Join(workspaceDir, ".rally")
+	rallyDir := store.RallyDir(workspaceDir)
 	agentsDir := filepath.Join(rallyDir, "agents")
 	if err := os.MkdirAll(agentsDir, 0o755); err != nil {
 		t.Fatal(err)
@@ -2983,7 +2983,7 @@ func TestRunnerRouteIntegration_AssigneesQuotasFreezeAndRoleFiles(t *testing.T) 
 
 func TestRunnerNoBackendUsesDefaultRouteAndFallbackPrompt(t *testing.T) {
 	workspaceDir := t.TempDir()
-	rallyDir := filepath.Join(workspaceDir, ".rally")
+	rallyDir := store.RallyDir(workspaceDir)
 	os.MkdirAll(rallyDir, 0o755)
 	initRepo(t, workspaceDir)
 
@@ -3074,7 +3074,7 @@ func TestBuildRecentContext_OverallTruncation(t *testing.T) {
 
 func TestE2E_FullConfig_NamedModelsAndFallback(t *testing.T) {
 	workspaceDir := t.TempDir()
-	rallyDir := filepath.Join(workspaceDir, ".rally")
+	rallyDir := store.RallyDir(workspaceDir)
 	os.MkdirAll(rallyDir, 0o755)
 	initRepo(t, workspaceDir)
 
@@ -3160,7 +3160,7 @@ instructions_file = %q
 
 func TestE2E_UserDefinedHarness_ModelFlagSet(t *testing.T) {
 	workspaceDir := t.TempDir()
-	rallyDir := filepath.Join(workspaceDir, ".rally")
+	rallyDir := store.RallyDir(workspaceDir)
 	os.MkdirAll(rallyDir, 0o755)
 	initRepo(t, workspaceDir)
 
@@ -3213,7 +3213,7 @@ func TestE2E_UserDefinedHarness_ModelFlagSet(t *testing.T) {
 
 func TestE2E_UserDefinedHarness_BareAliasNoModel(t *testing.T) {
 	workspaceDir := t.TempDir()
-	rallyDir := filepath.Join(workspaceDir, ".rally")
+	rallyDir := store.RallyDir(workspaceDir)
 	os.MkdirAll(rallyDir, 0o755)
 	initRepo(t, workspaceDir)
 
@@ -3263,7 +3263,7 @@ func TestE2E_UserDefinedHarness_BareAliasNoModel(t *testing.T) {
 
 func TestE2E_UserDefinedHarness_ModelFlagEmpty(t *testing.T) {
 	workspaceDir := t.TempDir()
-	rallyDir := filepath.Join(workspaceDir, ".rally")
+	rallyDir := store.RallyDir(workspaceDir)
 	os.MkdirAll(rallyDir, 0o755)
 	initRepo(t, workspaceDir)
 
@@ -3316,7 +3316,7 @@ func TestE2E_UserDefinedHarness_ModelFlagEmpty(t *testing.T) {
 
 func TestE2E_UserDefinedHarness_ModelFlagUnset_InfoNote(t *testing.T) {
 	workspaceDir := t.TempDir()
-	rallyDir := filepath.Join(workspaceDir, ".rally")
+	rallyDir := store.RallyDir(workspaceDir)
 	os.MkdirAll(rallyDir, 0o755)
 	initRepo(t, workspaceDir)
 
@@ -3365,7 +3365,7 @@ func TestE2E_UserDefinedHarness_ModelFlagUnset_InfoNote(t *testing.T) {
 
 func TestE2E_BackwardsCompat_RootModelFields(t *testing.T) {
 	workspaceDir := t.TempDir()
-	rallyDir := filepath.Join(workspaceDir, ".rally")
+	rallyDir := store.RallyDir(workspaceDir)
 	os.MkdirAll(rallyDir, 0o755)
 	initRepo(t, workspaceDir)
 
@@ -3435,7 +3435,7 @@ run_hooks_on_autocommit = true
 
 func TestE2E_DefaultsSection_NoDeprecation(t *testing.T) {
 	workspaceDir := t.TempDir()
-	rallyDir := filepath.Join(workspaceDir, ".rally")
+	rallyDir := store.RallyDir(workspaceDir)
 	os.MkdirAll(rallyDir, 0o755)
 	initRepo(t, workspaceDir)
 
@@ -3509,7 +3509,7 @@ mix = "cc"
 
 func TestE2E_CheapRotationOpencodeGLMToKimi(t *testing.T) {
 	workspaceDir := t.TempDir()
-	rallyDir := filepath.Join(workspaceDir, ".rally")
+	rallyDir := store.RallyDir(workspaceDir)
 	os.MkdirAll(rallyDir, 0o755)
 	initRepo(t, workspaceDir)
 
@@ -3551,7 +3551,7 @@ func TestE2E_CheapRotationOpencodeGLMToKimi(t *testing.T) {
 
 func TestE2E_ClaudeRateLimitWaitAndResume(t *testing.T) {
 	workspaceDir := t.TempDir()
-	rallyDir := filepath.Join(workspaceDir, ".rally")
+	rallyDir := store.RallyDir(workspaceDir)
 	os.MkdirAll(rallyDir, 0o755)
 	initRepo(t, workspaceDir)
 
@@ -3607,7 +3607,7 @@ func TestE2E_ClaudeRateLimitWaitAndResume(t *testing.T) {
 
 func TestE2E_SimulatedFreezeGracefulKillResumeRecovery(t *testing.T) {
 	workspaceDir := t.TempDir()
-	rallyDir := filepath.Join(workspaceDir, ".rally")
+	rallyDir := store.RallyDir(workspaceDir)
 	os.MkdirAll(rallyDir, 0o755)
 	initRepo(t, workspaceDir)
 
@@ -3678,7 +3678,7 @@ func TestE2E_SimulatedFreezeGracefulKillResumeRecovery(t *testing.T) {
 
 func TestE2E_LivenessProbeClearsFreezeFlag(t *testing.T) {
 	workspaceDir := t.TempDir()
-	rallyDir := filepath.Join(workspaceDir, ".rally")
+	rallyDir := store.RallyDir(workspaceDir)
 	os.MkdirAll(rallyDir, 0o755)
 	initRepo(t, workspaceDir)
 
@@ -3748,7 +3748,7 @@ func TestE2E_LivenessProbeClearsFreezeFlag(t *testing.T) {
 
 func TestE2E_LivenessProbeFailureConfirmsFreeze(t *testing.T) {
 	workspaceDir := t.TempDir()
-	rallyDir := filepath.Join(workspaceDir, ".rally")
+	rallyDir := store.RallyDir(workspaceDir)
 	os.MkdirAll(rallyDir, 0o755)
 	initRepo(t, workspaceDir)
 
@@ -3874,7 +3874,7 @@ func TestE2E_ErrorPatternStrategies(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			workspaceDir := t.TempDir()
-			rallyDir := filepath.Join(workspaceDir, ".rally")
+			rallyDir := store.RallyDir(workspaceDir)
 			os.MkdirAll(rallyDir, 0o755)
 			initRepo(t, workspaceDir)
 
@@ -3927,7 +3927,7 @@ func TestE2E_ErrorPatternStrategies(t *testing.T) {
 
 func TestE2E_ErrorPatternRotateAdvancesRoute(t *testing.T) {
 	workspaceDir := t.TempDir()
-	rallyDir := filepath.Join(workspaceDir, ".rally")
+	rallyDir := store.RallyDir(workspaceDir)
 	os.MkdirAll(rallyDir, 0o755)
 	initRepo(t, workspaceDir)
 
@@ -3984,7 +3984,7 @@ func TestE2E_ErrorPatternRotateAdvancesRoute(t *testing.T) {
 
 func TestE2E_RunStateClearedAtRelayStart(t *testing.T) {
 	workspaceDir := t.TempDir()
-	rallyDir := filepath.Join(workspaceDir, ".rally")
+	rallyDir := store.RallyDir(workspaceDir)
 	os.MkdirAll(rallyDir, 0o755)
 	initRepo(t, workspaceDir)
 
@@ -4031,7 +4031,7 @@ func TestE2E_RunStateClearedAtRelayStart(t *testing.T) {
 
 func TestE2E_WindowsFreezeDisabledRetryBudgetExhaustion(t *testing.T) {
 	workspaceDir := t.TempDir()
-	rallyDir := filepath.Join(workspaceDir, ".rally")
+	rallyDir := store.RallyDir(workspaceDir)
 	os.MkdirAll(rallyDir, 0o755)
 	initRepo(t, workspaceDir)
 
@@ -4137,7 +4137,7 @@ func TestProbationIncompletePromotesToActive(t *testing.T) {
 	defer func() { headPullLap = oldHeadPull }()
 
 	workspaceDir := t.TempDir()
-	rallyDir := filepath.Join(workspaceDir, ".rally")
+	rallyDir := store.RallyDir(workspaceDir)
 	os.MkdirAll(rallyDir, 0o755)
 	initRepo(t, workspaceDir)
 
@@ -4231,7 +4231,7 @@ func TestProbationIncompletePromotesToActive(t *testing.T) {
 
 func TestStallRecovery_VerifyRoleExcluded(t *testing.T) {
 	workspaceDir := t.TempDir()
-	rallyDir := filepath.Join(workspaceDir, ".rally")
+	rallyDir := store.RallyDir(workspaceDir)
 	os.MkdirAll(rallyDir, 0o755)
 	initRepo(t, workspaceDir)
 	runGit(t, workspaceDir, "commit", "--allow-empty", "-m", "initial", "--no-verify")
@@ -4298,7 +4298,7 @@ func TestStallRecovery_VerifyRoleExcluded(t *testing.T) {
 
 func TestStallRecovery_ImplementationRoleRecovers(t *testing.T) {
 	workspaceDir := t.TempDir()
-	rallyDir := filepath.Join(workspaceDir, ".rally")
+	rallyDir := store.RallyDir(workspaceDir)
 	os.MkdirAll(rallyDir, 0o755)
 	initRepo(t, workspaceDir)
 	runGit(t, workspaceDir, "commit", "--allow-empty", "-m", "initial", "--no-verify")
@@ -4365,7 +4365,7 @@ func TestStallRecovery_ImplementationRoleRecovers(t *testing.T) {
 
 func TestStallRecovery_VerifyStalledWithCommits_StaysFailed(t *testing.T) {
 	workspaceDir := t.TempDir()
-	rallyDir := filepath.Join(workspaceDir, ".rally")
+	rallyDir := store.RallyDir(workspaceDir)
 	os.MkdirAll(rallyDir, 0o755)
 	initRepo(t, workspaceDir)
 
@@ -4448,7 +4448,7 @@ func TestStallRecovery_VerifyStalledWithCommits_StaysFailed(t *testing.T) {
 
 func TestStallRecovery_ImplementationStalledWithCommits_Recovers(t *testing.T) {
 	workspaceDir := t.TempDir()
-	rallyDir := filepath.Join(workspaceDir, ".rally")
+	rallyDir := store.RallyDir(workspaceDir)
 	os.MkdirAll(rallyDir, 0o755)
 	initRepo(t, workspaceDir)
 
@@ -4655,7 +4655,7 @@ func TestLapPinValidation_DuplicateSameLap(t *testing.T) {
 
 func TestLapPinRejectionInRunOne(t *testing.T) {
 	workspaceDir := t.TempDir()
-	rallyDir := filepath.Join(workspaceDir, ".rally")
+	rallyDir := store.RallyDir(workspaceDir)
 	os.MkdirAll(rallyDir, 0o755)
 	initRepo(t, workspaceDir)
 	runGit(t, workspaceDir, "commit", "--allow-empty", "-m", "initial", "--no-verify")
@@ -4712,7 +4712,7 @@ func TestLapPinRejectionInRunOne(t *testing.T) {
 
 func TestLapPinMultiLapRejectionInRunOne(t *testing.T) {
 	workspaceDir := t.TempDir()
-	rallyDir := filepath.Join(workspaceDir, ".rally")
+	rallyDir := store.RallyDir(workspaceDir)
 	os.MkdirAll(rallyDir, 0o755)
 	initRepo(t, workspaceDir)
 	runGit(t, workspaceDir, "commit", "--allow-empty", "-m", "initial", "--no-verify")
@@ -4769,7 +4769,7 @@ func TestLapPinMultiLapRejectionInRunOne(t *testing.T) {
 
 func TestLapPinMismatchClearsFailureClass(t *testing.T) {
 	workspaceDir := t.TempDir()
-	rallyDir := filepath.Join(workspaceDir, ".rally")
+	rallyDir := store.RallyDir(workspaceDir)
 	os.MkdirAll(rallyDir, 0o755)
 	initRepo(t, workspaceDir)
 	runGit(t, workspaceDir, "commit", "--allow-empty", "-m", "initial", "--no-verify")
@@ -4823,7 +4823,7 @@ func TestLapPinMismatchClearsFailureClass(t *testing.T) {
 
 func TestLapPinNormalPassThroughInRunOne(t *testing.T) {
 	workspaceDir := t.TempDir()
-	rallyDir := filepath.Join(workspaceDir, ".rally")
+	rallyDir := store.RallyDir(workspaceDir)
 	os.MkdirAll(rallyDir, 0o755)
 	initRepo(t, workspaceDir)
 	runGit(t, workspaceDir, "commit", "--allow-empty", "-m", "initial", "--no-verify")
@@ -4889,7 +4889,7 @@ func TestLapPinNormalPassThroughInRunOne(t *testing.T) {
 
 func TestLapAttemptRecordedInTryRecord(t *testing.T) {
 	workspaceDir := t.TempDir()
-	rallyDir := filepath.Join(workspaceDir, ".rally")
+	rallyDir := store.RallyDir(workspaceDir)
 	os.MkdirAll(rallyDir, 0o755)
 	initRepo(t, workspaceDir)
 	runGit(t, workspaceDir, "commit", "--allow-empty", "-m", "initial", "--no-verify")

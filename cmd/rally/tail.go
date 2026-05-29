@@ -26,7 +26,7 @@ func runTail(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	rallyDir := filepath.Join(workspaceDir, ".rally")
+	rallyDir := store.RallyDir(workspaceDir)
 	if _, err := os.Stat(filepath.Join(rallyDir, "tries.jsonl")); os.IsNotExist(err) {
 		return fmt.Errorf("no tries recorded in this workspace")
 	}

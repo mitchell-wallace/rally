@@ -1,6 +1,10 @@
 package app
 
-import "path/filepath"
+import (
+	"path/filepath"
+
+	"github.com/mitchell-wallace/rally/internal/store"
+)
 
 const (
 	BinaryName          = "rally"
@@ -27,7 +31,7 @@ func ContainerDataDir(containerName string) string {
 }
 
 func RepoProgressPath(workspaceDir string) string {
-	return filepath.Join(workspaceDir, DefaultRepoProgress)
+	return store.ProgressPath(workspaceDir)
 }
 
 func ContainerEnv(containerName string) map[string]string {

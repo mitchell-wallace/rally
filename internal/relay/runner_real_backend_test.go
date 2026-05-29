@@ -53,7 +53,7 @@ func setupRealWorkspace(t *testing.T) (workspaceDir, rallyDir, dataDir string) {
 	}
 	testutil.RunCommand(t, workspaceDir, "git", "add", ".")
 	testutil.RunCommand(t, workspaceDir, "git", "commit", "-m", "init")
-	rallyDir = filepath.Join(workspaceDir, ".rally")
+	rallyDir = store.RallyDir(workspaceDir)
 	if err := os.MkdirAll(rallyDir, 0o755); err != nil {
 		t.Fatalf("mkdir .rally: %v", err)
 	}

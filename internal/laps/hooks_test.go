@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/mitchell-wallace/rally/internal/store"
 )
 
 func TestInstallHooksFirstInstall(t *testing.T) {
@@ -305,7 +307,7 @@ func TestWrapupHookScriptRoutesToComplete(t *testing.T) {
 	defer os.Chdir(origWD)
 
 	// Create state file with handoff_state=0.
-	rallyDir := filepath.Join(tmp, ".rally")
+	rallyDir := store.RallyDir(tmp)
 	if err := os.MkdirAll(rallyDir, 0o755); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}
@@ -362,7 +364,7 @@ func TestWrapupHookScriptRoutesToHandoff(t *testing.T) {
 	defer os.Chdir(origWD)
 
 	// Create state file with handoff_state=1.
-	rallyDir := filepath.Join(tmp, ".rally")
+	rallyDir := store.RallyDir(tmp)
 	if err := os.MkdirAll(rallyDir, 0o755); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}

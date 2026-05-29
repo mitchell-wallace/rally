@@ -14,6 +14,7 @@ import (
 	toml "github.com/pelletier/go-toml/v2"
 
 	"github.com/mitchell-wallace/rally/internal/agent"
+	"github.com/mitchell-wallace/rally/internal/store"
 )
 
 const ExpectedSchemaVersion = 2
@@ -137,7 +138,7 @@ type rawConfig struct {
 }
 
 func V2Path(workspaceDir string) string {
-	return filepath.Join(workspaceDir, ".rally", "config.toml")
+	return store.ConfigPath(workspaceDir)
 }
 
 func LoadV2(workspaceDir string) (V2Config, error) {

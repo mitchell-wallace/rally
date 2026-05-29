@@ -15,7 +15,7 @@ import (
 
 func writeTestConfig(t *testing.T, dir, content string) {
 	t.Helper()
-	rallyDir := filepath.Join(dir, ".rally")
+	rallyDir := store.RallyDir(dir)
 	if err := os.MkdirAll(rallyDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -27,7 +27,7 @@ func writeTestConfig(t *testing.T, dir, content string) {
 func TestRunRelayLoadsInstructions(t *testing.T) {
 	tmp := t.TempDir()
 
-	rallyDir := filepath.Join(tmp, ".rally")
+	rallyDir := store.RallyDir(tmp)
 	if err := os.MkdirAll(rallyDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -98,7 +98,7 @@ func TestRunInit_WritesNewShapeConfig(t *testing.T) {
 		t.Fatalf("runInit failed: %v", err)
 	}
 
-	configPath := filepath.Join(tmp, ".rally", "config.toml")
+	configPath := store.ConfigPath(tmp)
 	data, err := os.ReadFile(configPath)
 	if err != nil {
 		t.Fatalf("failed to read config: %v", err)
@@ -212,7 +212,7 @@ func TestRunInitRoles_InstallsRoutesAndRoleInstructions(t *testing.T) {
 	}
 
 	for _, role := range []string{"junior", "senior", "ui", "verify"} {
-		path := filepath.Join(tmp, ".rally", "agents", role+".md")
+		path := filepath.Join(store.AgentsDir(tmp), role+".md")
 		data, err := os.ReadFile(path)
 		if err != nil {
 			t.Fatalf("read %s instructions: %v", role, err)
@@ -225,7 +225,7 @@ func TestRunInitRoles_InstallsRoutesAndRoleInstructions(t *testing.T) {
 
 func TestRunRelayNewResetsAgentStatus(t *testing.T) {
 	workspaceDir := t.TempDir()
-	rallyDir := filepath.Join(workspaceDir, ".rally")
+	rallyDir := store.RallyDir(workspaceDir)
 	os.MkdirAll(rallyDir, 0o755)
 	if err := exec.Command("git", "init", workspaceDir).Run(); err != nil {
 		t.Fatalf("git init: %v", err)

@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"gopkg.in/yaml.v3"
+
+	"github.com/mitchell-wallace/rally/internal/store"
 )
 
 // ProgressLog is the top-level structure for .rally/progress.yaml.
@@ -35,7 +37,7 @@ type HandoffEntry struct {
 
 // ProgressPath returns the path to progress.yaml for a workspace.
 func ProgressPath(workspaceDir string) string {
-	return filepath.Join(workspaceDir, ".rally", "progress.yaml")
+	return store.ProgressPath(workspaceDir)
 }
 
 // LoadProgress reads the progress log. If it does not exist, a fresh log with

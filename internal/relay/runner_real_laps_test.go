@@ -8,12 +8,13 @@ import (
 	"testing"
 
 	"github.com/mitchell-wallace/rally/internal/agent"
+	"github.com/mitchell-wallace/rally/internal/store"
 	"github.com/mitchell-wallace/rally/internal/testutil"
 )
 
 func TestRunnerUsesRealLapsHeadTask(t *testing.T) {
 	workspaceDir := testutil.SetupLapsFixtureProject(t)
-	rallyDir := filepath.Join(workspaceDir, ".rally")
+	rallyDir := store.RallyDir(workspaceDir)
 	if err := os.MkdirAll(rallyDir, 0o755); err != nil {
 		t.Fatalf("mkdir .rally: %v", err)
 	}

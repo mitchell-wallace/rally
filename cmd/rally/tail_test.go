@@ -14,7 +14,7 @@ import (
 
 func TestTailLatest(t *testing.T) {
 	dir := t.TempDir()
-	rallyDir := filepath.Join(dir, ".rally")
+	rallyDir := store.RallyDir(dir)
 	os.MkdirAll(rallyDir, 0o755)
 	initGitRepoForTail(t, dir)
 
@@ -54,7 +54,7 @@ func TestTailLatest(t *testing.T) {
 
 func TestTailTryNValid(t *testing.T) {
 	dir := t.TempDir()
-	rallyDir := filepath.Join(dir, ".rally")
+	rallyDir := store.RallyDir(dir)
 	os.MkdirAll(rallyDir, 0o755)
 	initGitRepoForTail(t, dir)
 
@@ -104,7 +104,7 @@ func TestTailTryNValid(t *testing.T) {
 
 func TestTailTryNInvalid(t *testing.T) {
 	dir := t.TempDir()
-	rallyDir := filepath.Join(dir, ".rally")
+	rallyDir := store.RallyDir(dir)
 	os.MkdirAll(rallyDir, 0o755)
 	initGitRepoForTail(t, dir)
 
@@ -129,7 +129,7 @@ func TestTailTryNInvalid(t *testing.T) {
 
 func TestTailEmptyTries(t *testing.T) {
 	dir := t.TempDir()
-	rallyDir := filepath.Join(dir, ".rally")
+	rallyDir := store.RallyDir(dir)
 	os.MkdirAll(rallyDir, 0o755)
 	initGitRepoForTail(t, dir)
 
@@ -193,7 +193,7 @@ func TestTailMultiRepoSharedDataDir(t *testing.T) {
 	mkRepo := func(name, body string) (string, store.TryRecord) {
 		repoDir := filepath.Join(t.TempDir(), name)
 		os.MkdirAll(repoDir, 0o755)
-		rallyDir := filepath.Join(repoDir, ".rally")
+		rallyDir := store.RallyDir(repoDir)
 		os.MkdirAll(rallyDir, 0o755)
 		initGitRepoForTail(t, repoDir)
 
@@ -225,7 +225,7 @@ func TestTailMultiRepoSharedDataDir(t *testing.T) {
 
 	readVia := func(repoDir string, expected string) {
 		t.Helper()
-		s, err := store.NewStore(filepath.Join(repoDir, ".rally"))
+		s, err := store.NewStore(store.RallyDir(repoDir))
 		if err != nil {
 			t.Fatal(err)
 		}

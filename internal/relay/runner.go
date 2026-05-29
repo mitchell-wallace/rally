@@ -695,7 +695,7 @@ attemptLoop:
 		}
 		prompt := agent.BuildPrompt(opts)
 
-		taskPath := filepath.Join(r.cfg.WorkspaceDir, ".rally", "current_task.md")
+		taskPath := store.CurrentTaskPath(r.cfg.WorkspaceDir)
 		if err := os.WriteFile(taskPath, []byte(prompt), 0o644); err != nil {
 			return false, false, false, "", failureClass, infraFailures, fmt.Errorf("write current_task.md: %w", err)
 		}

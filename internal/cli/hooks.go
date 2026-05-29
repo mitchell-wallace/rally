@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/mitchell-wallace/rally/internal/laps"
+	"github.com/mitchell-wallace/rally/internal/store"
 	"github.com/spf13/cobra"
 )
 
@@ -87,7 +88,7 @@ func newHooksLogsCmd() *cobra.Command {
 				return err
 			}
 			tail, _ := cmd.Flags().GetInt("tail")
-			auditPath := filepath.Join(wsDir, ".rally", "hook-audit.jsonl")
+			auditPath := store.HookAuditPath(wsDir)
 			f, err := os.Open(auditPath)
 			if err != nil {
 				if os.IsNotExist(err) {

@@ -11,6 +11,8 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+
+	"github.com/mitchell-wallace/rally/internal/store"
 )
 
 var nonAlphanumRe = regexp.MustCompile(`[^a-z0-9]+`)
@@ -76,11 +78,11 @@ func relayLogPath(dataDir, workspaceDir string, relayID int) string {
 }
 
 func repoRelayLogPath(workspaceDir string, relayID int) string {
-	return filepath.Join(workspaceDir, ".rally", "relays", fmt.Sprintf("relay-%d.log", relayID))
+	return store.RelayLogPath(workspaceDir, relayID)
 }
 
 func PruneRepoRelayLogs(workspaceDir string, keep int) error {
-	dir := filepath.Join(workspaceDir, ".rally", "relays")
+	dir := store.RelaysDir(workspaceDir)
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {

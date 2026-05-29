@@ -2,13 +2,14 @@ package progress
 
 import (
 	"os"
-	"path/filepath"
 	"testing"
+
+	"github.com/mitchell-wallace/rally/internal/store"
 )
 
 func TestRunStatePath(t *testing.T) {
 	got := RunStatePath("/tmp/ws")
-	want := filepath.Join("/tmp", "ws", ".rally", "run-state.json")
+	want := store.RunStatePath("/tmp/ws")
 	if got != want {
 		t.Errorf("RunStatePath() = %q, want %q", got, want)
 	}

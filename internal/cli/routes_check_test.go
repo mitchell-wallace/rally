@@ -6,11 +6,13 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/mitchell-wallace/rally/internal/store"
 )
 
 func writeRoutesConfig(t *testing.T, workspaceDir, content string) {
 	t.Helper()
-	rallyDir := filepath.Join(workspaceDir, ".rally")
+	rallyDir := store.RallyDir(workspaceDir)
 	if err := os.MkdirAll(rallyDir, 0o755); err != nil {
 		t.Fatalf("mkdir .rally: %v", err)
 	}

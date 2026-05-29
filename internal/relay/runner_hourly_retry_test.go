@@ -14,7 +14,7 @@ import (
 
 func TestHourlyRetryBudgetHonored(t *testing.T) {
 	workspaceDir := t.TempDir()
-	rallyDir := filepath.Join(workspaceDir, ".rally")
+	rallyDir := store.RallyDir(workspaceDir)
 	os.MkdirAll(rallyDir, 0o755)
 	initRepo(t, workspaceDir)
 
@@ -74,7 +74,7 @@ func TestHourlyRetryBudgetHonored(t *testing.T) {
 
 func TestHourlyRetryTransientFailureDoesNotBurnFreezeLife(t *testing.T) {
 	workspaceDir := t.TempDir()
-	rallyDir := filepath.Join(workspaceDir, ".rally")
+	rallyDir := store.RallyDir(workspaceDir)
 	os.MkdirAll(rallyDir, 0o755)
 	initRepo(t, workspaceDir)
 

@@ -12,7 +12,7 @@ import (
 func setupTempStore(t *testing.T) (string, *Store) {
 	t.Helper()
 	dir := t.TempDir()
-	rallyDir := filepath.Join(dir, ".rally")
+	rallyDir := RallyDir(dir)
 	if err := os.MkdirAll(rallyDir, 0755); err != nil {
 		t.Fatal(err)
 	}

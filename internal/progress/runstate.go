@@ -6,6 +6,8 @@ import (
 	"os"
 	"path/filepath"
 	"time"
+
+	"github.com/mitchell-wallace/rally/internal/store"
 )
 
 // RunState tracks the current run's mutable state in .rally/run-state.json.
@@ -26,7 +28,7 @@ type LapAttempt struct {
 
 // RunStatePath returns the path to run-state.json for a workspace.
 func RunStatePath(workspaceDir string) string {
-	return filepath.Join(workspaceDir, ".rally", "run-state.json")
+	return store.RunStatePath(workspaceDir)
 }
 
 // LoadRunState reads the run-state file. If it does not exist, a fresh

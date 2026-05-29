@@ -1,16 +1,17 @@
 package progress
 
 import (
-	"path/filepath"
 	"strings"
 	"testing"
 
 	"gopkg.in/yaml.v3"
+
+	"github.com/mitchell-wallace/rally/internal/store"
 )
 
 func TestProgressPath(t *testing.T) {
 	got := ProgressPath("/tmp/ws")
-	want := filepath.Join("/tmp", "ws", ".rally", "progress.yaml")
+	want := store.ProgressPath("/tmp/ws")
 	if got != want {
 		t.Errorf("ProgressPath() = %q, want %q", got, want)
 	}

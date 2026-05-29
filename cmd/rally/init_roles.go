@@ -7,6 +7,7 @@ import (
 
 	"github.com/mitchell-wallace/rally/internal/agent"
 	"github.com/mitchell-wallace/rally/internal/config"
+	"github.com/mitchell-wallace/rally/internal/store"
 	"github.com/spf13/cobra"
 )
 
@@ -145,7 +146,7 @@ func runInitRoles(cmd *cobra.Command, args []string) error {
 		fmt.Println(".rally/config.toml already has role routing defaults.")
 	}
 
-	agentsDir := filepath.Join(workspaceDir, ".rally", "agents")
+	agentsDir := store.AgentsDir(workspaceDir)
 	if err := os.MkdirAll(agentsDir, 0o755); err != nil {
 		return err
 	}
