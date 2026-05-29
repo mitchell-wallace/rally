@@ -1971,10 +1971,10 @@ func TestAllAgentsFrozenEndsRelay(t *testing.T) {
 	s := newTestStore(t, rallyDir)
 	resilience := NewResilience(s)
 
-	if err := resilience.FreezeAgent(ResilienceKey{Harness: "claude"}, 1); err != nil {
+	if err := resilience.FreezeAgent(ResilienceKey{Harness: "claude"}, 1, "test freeze"); err != nil {
 		t.Fatalf("FreezeAgent claude failed: %v", err)
 	}
-	if err := resilience.FreezeAgent(ResilienceKey{Harness: "codex"}, 1); err != nil {
+	if err := resilience.FreezeAgent(ResilienceKey{Harness: "codex"}, 1, "test freeze"); err != nil {
 		t.Fatalf("FreezeAgent codex failed: %v", err)
 	}
 

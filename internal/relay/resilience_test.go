@@ -179,7 +179,7 @@ func TestResilience_FreezeAgent_WritesFrozenEvent(t *testing.T) {
 	r := testResilience(s, now)
 	k := key("codex", "")
 
-	if err := r.FreezeAgent(k, 1); err != nil {
+	if err := r.FreezeAgent(k, 1, "test freeze"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -203,10 +203,10 @@ func TestResilience_FreezeAgent_NoOpWhenAlreadyFrozen(t *testing.T) {
 	r := testResilience(s, now)
 	k := key("codex", "")
 
-	if err := r.FreezeAgent(k, 1); err != nil {
+	if err := r.FreezeAgent(k, 1, "test freeze"); err != nil {
 		t.Fatal(err)
 	}
-	if err := r.FreezeAgent(k, 2); err != nil {
+	if err := r.FreezeAgent(k, 2, "test freeze"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -230,7 +230,7 @@ func TestResilience_StateTransition_PausedToFrozen(t *testing.T) {
 		t.Fatalf("expected paused, got %s", st)
 	}
 
-	if err := r.FreezeAgent(k, 1); err != nil {
+	if err := r.FreezeAgent(k, 1, "test freeze"); err != nil {
 		t.Fatal(err)
 	}
 	st, _ = r.GetState(k)
@@ -245,7 +245,7 @@ func TestResilience_StateTransition_FrozenStaysFrozen(t *testing.T) {
 	r := testResilience(s, now)
 	k := key("claude", "")
 
-	if err := r.FreezeAgent(k, 1); err != nil {
+	if err := r.FreezeAgent(k, 1, "test freeze"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -370,7 +370,7 @@ func TestResilience_SelectActiveAgent_SkipsPausedAndFrozen(t *testing.T) {
 	if err := r.PauseAgent(claudeKey, 1); err != nil {
 		t.Fatal(err)
 	}
-	if err := r.FreezeAgent(codexKey, 1); err != nil {
+	if err := r.FreezeAgent(codexKey, 1, "test freeze"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -448,10 +448,10 @@ func TestResilience_SelectActiveAgent_AllFrozenError(t *testing.T) {
 	claudeKey := key("claude", "")
 	codexKey := key("codex", "")
 
-	if err := r.FreezeAgent(claudeKey, 1); err != nil {
+	if err := r.FreezeAgent(claudeKey, 1, "test freeze"); err != nil {
 		t.Fatal(err)
 	}
-	if err := r.FreezeAgent(codexKey, 1); err != nil {
+	if err := r.FreezeAgent(codexKey, 1, "test freeze"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -796,7 +796,7 @@ func TestResilience_ProbationFailure_ReFreezesWithFreshTimestamp(t *testing.T) {
 		t.Fatalf("setup: expected probation, got %s", st)
 	}
 
-	if err := r.FreezeAgent(k, 1); err != nil {
+	if err := r.FreezeAgent(k, 1, "test freeze"); err != nil {
 		t.Fatal(err)
 	}
 

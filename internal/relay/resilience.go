@@ -202,12 +202,12 @@ func (r *Resilience) RecordHourlyFailure(key ResilienceKey, relayID int) error {
 		}
 	}
 	if retryFailedCount >= r.HourlyRetriesBeforeFreeze {
-		return r.FreezeAgent(key, relayID)
+		return r.FreezeAgent(key, relayID, "hourly retry threshold reached")
 	}
 	return nil
 }
 
-func (r *Resilience) FreezeAgent(key ResilienceKey, relayID int) error {
+func (r *Resilience) FreezeAgent(key ResilienceKey, relayID int, reason string) error {
 	st, _ := r.GetState(key)
 	if st == StateFrozen {
 		return nil
@@ -218,7 +218,7 @@ func (r *Resilience) FreezeAgent(key ResilienceKey, relayID int) error {
 		EventType: "frozen",
 		Timestamp: r.NowFunc().UTC().Format(time.RFC3339),
 		RelayID:   relayID,
-		Reason:    "5 hourly retries failed",
+		Reason:    reason,
 	})
 }
 

@@ -160,7 +160,7 @@ func TestResetAgentStatus_ClearsAllStates(t *testing.T) {
 	frozenKey := ResilienceKey{Harness: "claude", Model: "opus"}
 	pausedKey := ResilienceKey{Harness: "opencode", Model: cheapTestModel}
 
-	if err := resilience.FreezeAgent(frozenKey, 1); err != nil {
+	if err := resilience.FreezeAgent(frozenKey, 1, "test freeze"); err != nil {
 		t.Fatalf("FreezeAgent: %v", err)
 	}
 	if err := resilience.PauseAgent(pausedKey, 1); err != nil {

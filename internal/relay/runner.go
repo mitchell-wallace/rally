@@ -456,7 +456,7 @@ func (r *Runner) Run(ctx context.Context) error {
 					return err
 				}
 			} else {
-				if err := resilience.FreezeAgent(KeyFromAgent(selection.Agent), relay.ID); err != nil {
+				if err := resilience.FreezeAgent(KeyFromAgent(selection.Agent), relay.ID, "probation run failed"); err != nil {
 					return err
 				}
 			}
