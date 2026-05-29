@@ -853,9 +853,6 @@ attemptLoop:
 		}
 		if task.IsLapsBacked {
 			recordedLaps = mergeStrings(recordedLaps, progressLapsCompletedForRun(r.cfg.WorkspaceDir, runID))
-			if len(lapsAttempted) == 0 {
-				lapsAttempted = hookAuditLapAttempts(r.cfg.WorkspaceDir, startedAt, endedAt, task.LapID)
-			}
 		}
 
 		runtime := endedAt.Sub(startedAt)
@@ -1365,14 +1362,6 @@ func progressLapsCompletedForRun(workspaceDir, runID string) []string {
 		}
 	}
 	return out
-}
-
-func hookAuditLapAttempts(workspaceDir string, startedAt, endedAt time.Time, fallbackLapID string) []store.LapAttempt {
-	_ = workspaceDir
-	_ = startedAt
-	_ = endedAt
-	_ = fallbackLapID
-	return nil
 }
 
 func validatePinnedLap(pinnedLapID string, recordedLaps []string) (string, bool) {
