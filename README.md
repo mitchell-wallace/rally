@@ -512,9 +512,24 @@ Rally is built around a few focused internal packages:
 
 ## Development
 
+We use `just` as a command runner for local development.
+
+To list all available commands:
+```sh
+just
+```
+
+Common recipes include:
+- `just build`: Build the `rally` binary into `bin/`.
+- `just test`: Run the full test suite.
+- `just check`: Check code formatting (`gofmt`) and run static analysis (`go vet`).
+- `just fmt`: Automatically format all Go files.
+- `just run <args>`: Compile and run the `rally` CLI with arguments.
+- `just setup-hooks`: Configure the local Git hooks path.
+
 ### Running tests
 
-To run all unit and integration tests locally:
+If you don't have `just` installed, you can run tests directly with Go:
 
 ```sh
 go test -count=1 ./...
@@ -525,12 +540,15 @@ go test -count=1 ./...
 To catch formatting, vet, and test failures before they reach CI, enable the included Git hooks:
 
 ```sh
-./scripts/setup-hooks.sh
+just setup-hooks
 ```
+(Alternatively, run `./scripts/setup-hooks.sh` directly.)
 
 This configures:
-- **pre-commit**: Runs `go vet ./...` and `gofmt -l .` check.
-- **pre-push**: Runs `go test -count=1 ./...` to ensure all tests pass before pushing.
+- **pre-commit**: Runs `just check` (vet + formatting) before staging a commit.
+- **pre-push**: Runs `just test` before pushing to remote.
+
+These hooks automatically delegate to `just` if it is installed, falling back to raw `go` commands otherwise.
 
 ## Release notes
 
