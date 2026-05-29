@@ -10,7 +10,7 @@ import (
 	"github.com/mitchell-wallace/rally/internal/store"
 )
 
-// RunState tracks the current run's mutable state in .rally/run-state.json.
+// RunState tracks the current run's mutable state in .rally/state/run-state.json.
 type RunState struct {
 	RunID         string       `json:"run_id"`
 	HandoffState  int          `json:"handoff_state"`

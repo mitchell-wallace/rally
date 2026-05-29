@@ -2,7 +2,6 @@ package store
 
 import (
 	"os"
-	"os/exec"
 	"path/filepath"
 	"sort"
 	"testing"
@@ -15,22 +14,6 @@ func setupTempStore(t *testing.T) (string, *Store) {
 	rallyDir := RallyDir(dir)
 	if err := os.MkdirAll(rallyDir, 0755); err != nil {
 		t.Fatal(err)
-	}
-	// Init a git repo so commit-then-truncate works.
-	cmd := exec.Command("git", "init")
-	cmd.Dir = dir
-	if out, err := cmd.CombinedOutput(); err != nil {
-		t.Fatalf("git init: %v\n%s", err, out)
-	}
-	cmd = exec.Command("git", "config", "user.email", "test@test.com")
-	cmd.Dir = dir
-	if out, err := cmd.CombinedOutput(); err != nil {
-		t.Fatalf("git config email: %v\n%s", err, out)
-	}
-	cmd = exec.Command("git", "config", "user.name", "Test")
-	cmd.Dir = dir
-	if out, err := cmd.CombinedOutput(); err != nil {
-		t.Fatalf("git config name: %v\n%s", err, out)
 	}
 
 	store, err := NewStore(rallyDir)
@@ -111,47 +94,6 @@ func TestCacheReload(t *testing.T) {
 	}
 	if store2.GetRelay(1) == nil {
 		t.Fatal("GetRelay(1) returned nil")
-	}
-}
-
-func TestCommitThenTruncate(t *testing.T) {
-	rallyDir, _ := setupTempStore(t)
-	path := filepath.Join(rallyDir, "tries.jsonl")
-
-	// Write more records than window
-	for i := 1; i <= triesWindowSize+5; i++ {
-		if err := appendJSONL(path, TryRecord{ID: i}); err != nil {
-			t.Fatal(err)
-		}
-	}
-
-	if err := commitThenTruncate(path, triesWindowSize); err != nil {
-		t.Fatal(err)
-	}
-
-	read, err := readJSONL[TryRecord](path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(read) != triesWindowSize {
-		t.Fatalf("expected %d records after truncate, got %d", triesWindowSize, len(read))
-	}
-	// Should keep the most recent records
-	if read[0].ID != 6 {
-		t.Fatalf("expected first kept ID to be 6, got %d", read[0].ID)
-	}
-	if read[len(read)-1].ID != triesWindowSize+5 {
-		t.Fatalf("expected last kept ID to be %d, got %d", triesWindowSize+5, read[len(read)-1].ID)
-	}
-
-	// Verify git commits exist
-	cmd := exec.Command("git", "-C", filepath.Dir(path), "log", "--oneline")
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("git log: %v\n%s", err, out)
-	}
-	if len(out) == 0 {
-		t.Fatal("expected git commits")
 	}
 }
 
@@ -288,7 +230,7 @@ func TestPendingMessageExemption(t *testing.T) {
 	}
 
 	// Verify file was truncated for resolved messages
-	read, err := readJSONL[MessageRecord](filepath.Join(rallyDir, "messages.jsonl"))
+	read, err := readJSONL[MessageRecord](filepath.Join(rallyDir, "state", "messages.jsonl"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -363,30 +305,32 @@ func TestRecentTriesAndRelays(t *testing.T) {
 func TestStoreWindowing(t *testing.T) {
 	rallyDir, store := setupTempStore(t)
 
-	// Tries window
-	for i := 1; i <= triesWindowSize+5; i++ {
+	// Tries are append-only and never windowed.
+	tryCount := 505
+	for i := 1; i <= tryCount; i++ {
 		if err := store.AppendTry(TryRecord{ID: i}); err != nil {
 			t.Fatal(err)
 		}
 	}
-	if len(store.cache.Tries) != triesWindowSize {
-		t.Fatalf("expected %d tries after window, got %d", triesWindowSize, len(store.cache.Tries))
+	if len(store.cache.Tries) != tryCount {
+		t.Fatalf("expected %d tries, got %d", tryCount, len(store.cache.Tries))
 	}
-	if store.GetTry(1) != nil {
-		t.Fatal("old try should have been truncated")
+	if store.GetTry(1) == nil {
+		t.Fatal("old try should not have been truncated")
 	}
-	if store.GetTry(triesWindowSize+5) == nil {
+	if store.GetTry(tryCount) == nil {
 		t.Fatal("newest try should exist")
 	}
 
-	// Relays window
-	for i := 1; i <= relaysWindowSize+3; i++ {
+	// Relays are append-only and never windowed.
+	relayCount := 53
+	for i := 1; i <= relayCount; i++ {
 		if err := store.AppendRelay(RelayRecord{ID: i}); err != nil {
 			t.Fatal(err)
 		}
 	}
-	if len(store.cache.Relays) != relaysWindowSize {
-		t.Fatalf("expected %d relays after window, got %d", relaysWindowSize, len(store.cache.Relays))
+	if len(store.cache.Relays) != relayCount {
+		t.Fatalf("expected %d relays, got %d", relayCount, len(store.cache.Relays))
 	}
 
 	// Agent status window
@@ -400,9 +344,9 @@ func TestStoreWindowing(t *testing.T) {
 	}
 
 	// Verify files on disk
-	read, _ := readJSONL[TryRecord](filepath.Join(rallyDir, "tries.jsonl"))
-	if len(read) != triesWindowSize {
-		t.Fatalf("tries file has %d records, expected %d", len(read), triesWindowSize)
+	read, _ := readJSONL[TryRecord](filepath.Join(rallyDir, "state", "tries.jsonl"))
+	if len(read) != tryCount {
+		t.Fatalf("tries file has %d records, expected %d", len(read), tryCount)
 	}
 }
 
@@ -489,30 +433,6 @@ func TestRelayScopedMessages_Empty(t *testing.T) {
 	relayMsgs = store2.RelayScopedMessages()
 	if len(relayMsgs) != 0 {
 		t.Fatalf("expected 0 relay-scoped messages after reload, got %d", len(relayMsgs))
-	}
-}
-
-func TestCommitThenTruncateNoGitRepo(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "tries.jsonl")
-
-	for i := 1; i <= 10; i++ {
-		if err := appendJSONL(path, TryRecord{ID: i}); err != nil {
-			t.Fatal(err)
-		}
-	}
-
-	// Should not error even though not in a git repo
-	if err := commitThenTruncate(path, 5); err != nil {
-		t.Fatal(err)
-	}
-
-	read, err := readJSONL[TryRecord](path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(read) != 5 {
-		t.Fatalf("expected 5 records, got %d", len(read))
 	}
 }
 

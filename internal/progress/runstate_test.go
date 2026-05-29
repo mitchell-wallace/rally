@@ -13,6 +13,9 @@ func TestRunStatePath(t *testing.T) {
 	if got != want {
 		t.Errorf("RunStatePath() = %q, want %q", got, want)
 	}
+	if got != "/tmp/ws/.rally/state/run-state.json" {
+		t.Errorf("RunStatePath() = %q, want state path", got)
+	}
 }
 
 func TestLoadRunStateMissingFile(t *testing.T) {

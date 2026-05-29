@@ -696,6 +696,9 @@ attemptLoop:
 		prompt := agent.BuildPrompt(opts)
 
 		taskPath := store.CurrentTaskPath(r.cfg.WorkspaceDir)
+		if err := os.MkdirAll(filepath.Dir(taskPath), 0o755); err != nil {
+			return false, false, false, "", failureClass, infraFailures, fmt.Errorf("create current_task.md dir: %w", err)
+		}
 		if err := os.WriteFile(taskPath, []byte(prompt), 0o644); err != nil {
 			return false, false, false, "", failureClass, infraFailures, fmt.Errorf("write current_task.md: %w", err)
 		}

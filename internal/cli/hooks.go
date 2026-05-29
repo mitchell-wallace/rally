@@ -15,7 +15,7 @@ import (
 
 // NewHooksCmd returns the `rally hooks` command group. It surfaces the laps
 // hooks that rally installs into .laps/hooks.json and the audit trail those
-// hooks write to .rally/hook-audit.jsonl.
+// hooks write to .rally/state/hook-audit.jsonl.
 func NewHooksCmd() *cobra.Command {
 	hooksCmd := &cobra.Command{
 		Use:   "hooks",
@@ -24,7 +24,7 @@ func NewHooksCmd() *cobra.Command {
 
 Rally wires three scripts into .laps/hooks.json (laps-done, laps-handoff,
 laps-wrapup). Each fires when an agent uses the corresponding ` + "`laps`" + ` command;
-the script writes an entry to .rally/hook-audit.jsonl so missed or extra
+the script writes an entry to .rally/state/hook-audit.jsonl so missed or extra
 hook firings are visible after the fact.`,
 	}
 
@@ -81,7 +81,7 @@ func newHooksListCmd() *cobra.Command {
 func newHooksLogsCmd() *cobra.Command {
 	c := &cobra.Command{
 		Use:   "logs",
-		Short: "Print recent rally hook audit entries from .rally/hook-audit.jsonl",
+		Short: "Print recent rally hook audit entries from .rally/state/hook-audit.jsonl",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			wsDir, err := resolveWorkspaceDir()
 			if err != nil {
@@ -92,7 +92,7 @@ func newHooksLogsCmd() *cobra.Command {
 			f, err := os.Open(auditPath)
 			if err != nil {
 				if os.IsNotExist(err) {
-					fmt.Fprintln(cmd.OutOrStdout(), "No hook audit log yet (.rally/hook-audit.jsonl).")
+					fmt.Fprintln(cmd.OutOrStdout(), "No hook audit log yet (.rally/state/hook-audit.jsonl).")
 					return nil
 				}
 				return fmt.Errorf("open audit log: %w", err)
@@ -147,7 +147,7 @@ under .laps/hooks/rally/ and registers them in .laps/hooks.json:
   • laps-wrapup-hook.sh  — fires before ` + "`laps wrapup`" + `. Routes the wrapup
                            to rally so progress and follow-up laps are saved.
 
-Every firing appends a JSONL record to .rally/hook-audit.jsonl with the
+Every firing appends a JSONL record to .rally/state/hook-audit.jsonl with the
 timestamp, hook name, and pid. Use ` + "`rally hooks logs`" + ` to inspect that
 audit trail (` + "`-n`" + ` for tail size). Use ` + "`rally hooks list`" + ` to see what is
 currently registered in hooks.json.

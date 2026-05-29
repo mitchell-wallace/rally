@@ -81,10 +81,9 @@ func initRepo(t *testing.T, dir string) {
 	runGit(t, dir, "init")
 	runGit(t, dir, "config", "user.name", "Rally Test")
 	runGit(t, dir, "config", "user.email", "rally@example.com")
-	// Exclude only rally's ephemeral files from git status.
-	// Rally's JSONL state files are now committed as durable git-backed state.
+	// Exclude rally's local machine state from git status.
 	excludePath := filepath.Join(dir, ".git", "info", "exclude")
-	os.WriteFile(excludePath, []byte(".rally/current_task.md\n.rally/relays/\n"), 0o644)
+	os.WriteFile(excludePath, []byte(".rally/state/\n.rally/relays/\n"), 0o644)
 }
 
 func newTestStore(t *testing.T, dir string) *store.Store {

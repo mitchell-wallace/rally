@@ -184,7 +184,7 @@ func TestFollowFileGrowing(t *testing.T) {
 // TestTailMultiRepoSharedDataDir verifies that two repos sharing one data dir
 // can each `rally tail --try N` against their own try logs. Try log files are
 // written under <dataDir>/tries/<repoKey>/try-N.log; each workspace's
-// .rally/tries.jsonl stores the absolute LogPath, so tail in each workspace
+// .rally/state/tries.jsonl stores the absolute LogPath, so tail in each workspace
 // picks up only its own try regardless of try-id collisions.
 func TestTailMultiRepoSharedDataDir(t *testing.T) {
 	sharedDataDir := t.TempDir()

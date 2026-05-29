@@ -26,10 +26,10 @@
       "title": "Move machine data into .rally/state/; local windowing; gitignore+README templates",
       "description": "Context: OpenSpec change tidy-rally-runtime-data-storage (specs/store MODIFIED, design Decisions 1-2). Builds on the path helpers. BREAKING: machine data leaves the top level and is no longer git-tracked.\n\nOutcome: tries/relays/agent_status/messages.jsonl, hook-audit.jsonl, run-state.json, and current_task.md all resolve under .rally/state/. The .rally/.gitignore template is a single `state/` line. Windowing truncates in place locally (no git commit). README template describes the new layout and drops the false git-tracked-JSONL claim.\n\nFiles \u0026 scope: internal/store/{store,cache,window}.go (state/ paths + truncation), internal/progress/runstate.go, internal/cli/hooks.go, internal/relay/runner.go, internal/gitx/git.go (CommitRallyState + IsWorkspaceDirty), cmd/rally/main.go (gitignore template ~355 + README template ~398).\n\nDesign: Replace commit-then-truncate-to-git: append-only log files (tries.jsonl, relays.jsonl) are never pruned — they grow unbounded. agent_status.jsonl (500 events) and messages.jsonl (200 resolved; pending exempt) use in-place truncation with conservative limits. No git operations in the windowing path. Migration of EXISTING files is a later lap — here just make new writes land in state/ and create the dir on write.\n\nAcceptance: `go build ./...`; fresh `rally init` in a temp dir produces .rally/.gitignore containing only `state/` and writes records under .rally/state/; existing store tests updated to new paths pass.",
       "assignee": "SENIOR",
-      "isDone": false,
+      "isDone": true,
       "createdAt": "2026-05-26T12:42:23.194523217Z",
-      "updatedAt": "2026-05-26T12:42:23.194523217Z",
-      "completedAt": null
+      "updatedAt": "2026-05-29T06:45:43.869985029Z",
+      "completedAt": "2026-05-29T06:45:43.869985029Z"
     },
     {
       "id": "rall-92d3",

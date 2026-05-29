@@ -182,7 +182,7 @@ func runRelay(cmd *cobra.Command, args []string) error {
 		RouteSpecs:               cfg.Routes,
 		UseOverrideRoute:         usedOverride,
 		TargetIterations:         iterations,
-		StallThreshold:          cfg.Reliability.StallThreshold(),
+		StallThreshold:           cfg.Reliability.StallThreshold(),
 		LivenessProbe:            cfg.Reliability.LivenessProbe,
 		RetryBudget:              cfg.Reliability.RetryBudget,
 		RunHooksOnAutoCommit:     cfg.RunHooksOnAutoCommit,
@@ -352,7 +352,7 @@ func runInit(cmd *cobra.Command, args []string) error {
 	// 3. Create .rally/.gitignore
 	gitignorePath := filepath.Join(rallyDir, ".gitignore")
 	if _, err := os.Stat(gitignorePath); os.IsNotExist(err) {
-		content := "current_task.md\nrelays/\nrun-state.json\n"
+		content := "state/\n"
 		if err := os.WriteFile(gitignorePath, []byte(content), 0o644); err != nil {
 			return err
 		}
@@ -397,23 +397,31 @@ antigravity_model = ""
 	if _, err := os.Stat(readmePath); os.IsNotExist(err) {
 		content := `# Rally Data Directory
 
-This directory contains rally's operational data. You can access this data
-directly to understand the project's history and current state.
+This directory contains rally's workspace configuration and local runtime data.
 
-## JSONL Data Files (source of truth, git-tracked)
-- ` + "`tries.jsonl`" + ` — One line per agent execution attempt
-- ` + "`messages.jsonl`" + ` — Inbox messages for agents
-- ` + "`relays.jsonl`" + ` — Relay session records
-- ` + "`agent_status.jsonl`" + ` — Agent pause/freeze state history
+## Tracked Files
+- ` + "`config.toml`" + ` — Agent model configuration and runtime settings
+- ` + "`agents/`" + ` — Role instruction files
+- ` + "`README.md`" + ` — This guide
+- ` + "`summary.jsonl`" + ` — Append-only run summary digest, when enabled by the current workflow
+
+## Local State
+
+Machine-managed runtime records live under ` + "`.rally/state/`" + `. That directory is gitignored and not shared through repository history.
+
+- ` + "`state/tries.jsonl`" + ` — One line per agent execution attempt
+- ` + "`state/messages.jsonl`" + ` — Inbox messages for agents
+- ` + "`state/relays.jsonl`" + ` — Relay session records
+- ` + "`state/agent_status.jsonl`" + ` — Agent pause/freeze state history
+- ` + "`state/hook-audit.jsonl`" + ` — Laps hook audit trail
+- ` + "`state/run-state.json`" + ` — Current run handoff and lap recording state
+- ` + "`state/current_task.md`" + ` — Most recent assembled prompt
 
 ## Quick Reference for Agents
-- View recent tries (last 10): ` + "`tail -10 .rally/tries.jsonl | jq .`" + `
-- View pending messages: ` + "`cat .rally/messages.jsonl | jq 'select(.status==\\\"pending\\\")'`" + `
-- View current relay status: ` + "`tail -1 .rally/relays.jsonl | jq .`" + `
-- Counts: ` + "`wc -l .rally/*.jsonl`" + `
-
-## Config
-- ` + "`config.toml`" + ` — Agent model configuration and runtime settings
+- View recent tries (last 10): ` + "`tail -10 .rally/state/tries.jsonl | jq .`" + `
+- View pending messages: ` + "`cat .rally/state/messages.jsonl | jq 'select(.status==\\\"pending\\\")'`" + `
+- View current relay status: ` + "`tail -1 .rally/state/relays.jsonl | jq .`" + `
+- Counts: ` + "`wc -l .rally/state/*.jsonl`" + `
 `
 		if err := os.WriteFile(readmePath, []byte(content), 0o644); err != nil {
 			return err

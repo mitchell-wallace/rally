@@ -134,6 +134,40 @@ func TestRunInit_WritesNewShapeConfig(t *testing.T) {
 	if cfg.Defaults.Iterations != 5 {
 		t.Errorf("Defaults.Iterations = %d, want 5", cfg.Defaults.Iterations)
 	}
+
+	gitignore, err := os.ReadFile(filepath.Join(store.RallyDir(tmp), ".gitignore"))
+	if err != nil {
+		t.Fatalf("failed to read .rally/.gitignore: %v", err)
+	}
+	if string(gitignore) != "state/\n" {
+		t.Fatalf(".rally/.gitignore = %q, want %q", string(gitignore), "state/\n")
+	}
+
+	readme, err := os.ReadFile(filepath.Join(store.RallyDir(tmp), "README.md"))
+	if err != nil {
+		t.Fatalf("failed to read .rally/README.md: %v", err)
+	}
+	readmeText := string(readme)
+	if !strings.Contains(readmeText, ".rally/state/") {
+		t.Fatal("README missing .rally/state/ layout")
+	}
+	if strings.Contains(readmeText, "git-tracked") {
+		t.Fatal("README still claims JSONL state is git-tracked")
+	}
+
+	s, err := store.NewStore(store.RallyDir(tmp))
+	if err != nil {
+		t.Fatalf("NewStore after init failed: %v", err)
+	}
+	if err := s.AppendTry(store.TryRecord{ID: 1, AgentType: "codex"}); err != nil {
+		t.Fatalf("AppendTry after init failed: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(store.StateDir(tmp), "tries.jsonl")); err != nil {
+		t.Fatalf("expected try record under .rally/state/: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(store.RallyDir(tmp), "tries.jsonl")); !os.IsNotExist(err) {
+		t.Fatalf("top-level tries.jsonl should not exist, stat err=%v", err)
+	}
 }
 
 func TestRunInit_DoesNotOverwriteExistingConfig(t *testing.T) {
@@ -261,5 +295,3 @@ func TestRunRelayNewResetsAgentStatus(t *testing.T) {
 		t.Fatalf("expected agent to NOT be frozen after --new, got %v", st2)
 	}
 }
-
-

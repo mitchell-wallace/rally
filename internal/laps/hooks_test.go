@@ -239,6 +239,12 @@ func TestDoneHookScript(t *testing.T) {
 	if !strings.Contains(string(logData), "--record-lap") || !strings.Contains(string(logData), "lap-123") {
 		t.Errorf("expected rally progress --record-lap lap-123 in log, got %q", string(logData))
 	}
+	if _, err := os.Stat(store.HookAuditPath(tmp)); err != nil {
+		t.Fatalf("expected audit log under .rally/state/: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(store.RallyDir(tmp), "hook-audit.jsonl")); !os.IsNotExist(err) {
+		t.Fatalf("top-level hook-audit.jsonl should not exist, stat err=%v", err)
+	}
 
 	// Verify passback message.
 	output := string(out)
@@ -307,12 +313,12 @@ func TestWrapupHookScriptRoutesToComplete(t *testing.T) {
 	defer os.Chdir(origWD)
 
 	// Create state file with handoff_state=0.
-	rallyDir := store.RallyDir(tmp)
-	if err := os.MkdirAll(rallyDir, 0o755); err != nil {
+	stateDir := store.StateDir(tmp)
+	if err := os.MkdirAll(stateDir, 0o755); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}
 	state := `{"run_id":"run-1","handoff_state":0,"recorded_laps":[]}`
-	os.WriteFile(filepath.Join(rallyDir, "run-state.json"), []byte(state), 0o644)
+	os.WriteFile(store.RunStatePath(tmp), []byte(state), 0o644)
 
 	mockDir := filepath.Join(tmp, "mockbin")
 	if err := os.MkdirAll(mockDir, 0o755); err != nil {
@@ -364,12 +370,12 @@ func TestWrapupHookScriptRoutesToHandoff(t *testing.T) {
 	defer os.Chdir(origWD)
 
 	// Create state file with handoff_state=1.
-	rallyDir := store.RallyDir(tmp)
-	if err := os.MkdirAll(rallyDir, 0o755); err != nil {
+	stateDir := store.StateDir(tmp)
+	if err := os.MkdirAll(stateDir, 0o755); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}
 	state := `{"run_id":"run-1","handoff_state":1,"recorded_laps":[]}`
-	os.WriteFile(filepath.Join(rallyDir, "run-state.json"), []byte(state), 0o644)
+	os.WriteFile(store.RunStatePath(tmp), []byte(state), 0o644)
 
 	mockDir := filepath.Join(tmp, "mockbin")
 	if err := os.MkdirAll(mockDir, 0o755); err != nil {
@@ -409,7 +415,7 @@ func TestWrapupHookScriptRoutesToHandoff(t *testing.T) {
 	}
 
 	// Verify state was reset to 0.
-	stateData, err := os.ReadFile(filepath.Join(rallyDir, "run-state.json"))
+	stateData, err := os.ReadFile(store.RunStatePath(tmp))
 	if err != nil {
 		t.Fatalf("read state file: %v", err)
 	}
