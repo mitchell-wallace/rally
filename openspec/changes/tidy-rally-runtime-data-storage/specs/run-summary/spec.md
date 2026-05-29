@@ -14,3 +14,7 @@ The system SHALL maintain a human- and machine-readable run digest at `.rally/su
 #### Scenario: progress.yaml no longer written
 - **WHEN** any run is finalized after this change
 - **THEN** the system SHALL write only to `summary.jsonl` and SHALL NOT create or update `progress.yaml`
+
+#### Scenario: Existing progress.yaml left untouched
+- **WHEN** a legacy `.rally/progress.yaml` exists from a prior Rally version
+- **THEN** the system SHALL leave it as-is; its contents are NOT migrated into `summary.jsonl`

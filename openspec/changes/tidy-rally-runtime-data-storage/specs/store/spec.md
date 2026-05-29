@@ -16,19 +16,23 @@ The system SHALL persist machine-managed state as JSONL files inside the `.rally
 - **THEN** the tracked data files SHALL be limited to `summary.jsonl` (plus `config.toml`, `agents/`, and `README.md`); the `state/` JSONL records SHALL NOT be committed
 
 ### Requirement: Record windowing
-The system SHALL maintain per-type maximum record counts: 200 for tries, 50 for relays, 500 for agent status events, and 200 for resolved messages. Messages SHALL only be windowed when resolved (consumed + addressed) or cancelled — pending messages are never truncated. The agent status window (500) and its truncation semantics (synthesizing a summary event to preserve effective frozen/probation state) are defined by `harden-relay-run-lifecycle`; this change relocates the file and preserves those semantics rather than re-specifying them.
+Append-only log files (`tries.jsonl`, `relays.jsonl`) SHALL NOT be pruned — they grow unbounded locally. Read-oriented state files SHALL maintain per-type maximum record counts: 500 for agent status events and 200 for resolved messages. Messages SHALL only be windowed when resolved (consumed + addressed) or cancelled — pending messages are never truncated. The agent status window (500) and its truncation semantics (synthesizing a summary event to preserve effective frozen/probation state) are defined by `harden-relay-run-lifecycle`; this change relocates the file and preserves those semantics rather than re-specifying them.
 
-#### Scenario: Window exceeded triggers local truncate
-- **WHEN** a JSONL file under `.rally/state/` exceeds its window limit after an append
+#### Scenario: Window exceeded triggers local truncate (state files only)
+- **WHEN** an `agent_status.jsonl` or `messages.jsonl` file under `.rally/state/` exceeds its window limit after an append
 - **THEN** the system SHALL truncate the file in place to retain only the most recent N records, without committing to git
+
+#### Scenario: Append-only log files never truncated
+- **WHEN** `tries.jsonl` or `relays.jsonl` grows beyond any size
+- **THEN** the system SHALL NOT truncate or prune those files; they SHALL grow unbounded
 
 #### Scenario: Pending messages exempt from windowing
 - **WHEN** the message window limit is checked
 - **THEN** only resolved (consumed + addressed) and cancelled messages SHALL count toward the window limit; pending messages SHALL never be truncated
 
 #### Scenario: Durable history available via telemetry
-- **WHEN** records are truncated from a JSONL file
-- **THEN** the truncated records SHALL NOT be recoverable from git history; durable retention of try/relay history SHALL instead be provided by the telemetry sink when enabled
+- **WHEN** records are truncated from agent_status or messages JSONL files
+- **THEN** the truncated records SHALL NOT be recoverable from git history; durable retention of try/relay history SHALL instead be provided by the unbounded local append-only files and the telemetry sink when enabled
 
 ## ADDED Requirements
 
@@ -44,18 +48,14 @@ The system SHALL persist, per try, the full ordered list of commits made during 
 - **THEN** `CommitHistory` SHALL contain that commit as a single-element list, and `CommitHash` SHALL be set to that commit, preserving existing behavior
 
 ### Requirement: Runtime data layout migration
-The system SHALL migrate a legacy `.rally/` directory to the new layout on initialization and idempotently on first write. Migration SHALL move flat machine-managed files (`tries.jsonl`, `messages.jsonl`, `relays.jsonl`, `agent_status.jsonl`, `hook-audit.jsonl`, `run-state.json`, `current_task.md`) into `.rally/state/`, convert `progress.yaml` into `summary.jsonl`, and remove the legacy `batches/` directory, the legacy top-level `relays/` log directory, and `config.toml.bak` if present (these are legacy artifacts that may not exist in all repos).
+The system SHALL migrate a legacy `.rally/` directory to the new layout on initialization (`runInit`). Migration SHALL move flat machine-managed files (`tries.jsonl`, `messages.jsonl`, `relays.jsonl`, `agent_status.jsonl`, `hook-audit.jsonl`, `run-state.json`, `current_task.md`) into `.rally/state/`, and remove the legacy `batches/` directory and the legacy top-level `relays/` log directory if present. Existing `progress.yaml` SHALL be left as-is (NOT converted to `summary.jsonl` — new writes go to `summary.jsonl` only). `config.toml.bak` is user-managed and SHALL NOT be touched.
 
 #### Scenario: Legacy flat files relocated
 - **WHEN** rally initializes a workspace containing flat `.rally/tries.jsonl` (and peers)
 - **THEN** the system SHALL move each file into `.rally/state/`, creating the directory if needed, without overwriting an existing target
 
-#### Scenario: progress.yaml converted to summary.jsonl
-- **WHEN** a legacy `.rally/progress.yaml` exists and no `.rally/summary.jsonl` is present
-- **THEN** the system SHALL emit one JSON line per `recent_runs` entry into `.rally/summary.jsonl` and only then remove `progress.yaml`
-
 #### Scenario: Legacy artifacts removed
-- **WHEN** migration runs and finds `.rally/batches/`, a legacy `.rally/relays/` log directory, or `.rally/config.toml.bak`
+- **WHEN** migration runs and finds `.rally/batches/` or a legacy `.rally/relays/` log directory
 - **THEN** the system SHALL remove them
 
 #### Scenario: Migration is idempotent

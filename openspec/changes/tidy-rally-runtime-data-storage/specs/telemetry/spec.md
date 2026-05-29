@@ -54,11 +54,11 @@ When enabled, the system SHALL record the assembled-prompt size for each try and
 - **THEN** it SHALL attribute byte counts to each prompt source so a dominant source can be identified
 
 ### Requirement: Telemetry tagging and correlation
-Every telemetry event SHALL be tagged with `relay_id`, `run_id`, `try_id`, `role`, `runner` (harness+model), `repo`, and `lap_ids` where applicable, so events are filterable and correlate with the local `summary.jsonl` digest.
+Every telemetry event SHALL be tagged with `relay_id`, `run_id`, `try_id`, `role`, `runner` (harness+model), `repo`, and `lap_id` where applicable, so events are filterable and correlate with the local `summary.jsonl` digest.
 
 #### Scenario: Events carry correlation tags
 - **WHEN** any telemetry event is emitted during a try
-- **THEN** it SHALL include the available `relay_id`, `run_id`, `try_id`, `role`, `runner`, `repo`, and `lap_ids` tags
+- **THEN** it SHALL include the available `relay_id`, `run_id`, `try_id`, `role`, `runner`, `repo`, and `lap_id` tags
 
 ### Requirement: Telemetry PII scrubbing
 The system SHALL apply a `before_send` scrubber that prevents large or sensitive payloads from being transmitted. The scrubber SHALL never send the contents of `current_task.md` or full agent transcripts; only summaries and metadata SHALL be sent.
