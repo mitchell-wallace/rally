@@ -96,12 +96,12 @@ mix = "cc cx"
 	}
 }
 
-func TestLoadV2_ReliabilityFreezeThreshold(t *testing.T) {
+func TestLoadV2_ReliabilityStallThreshold(t *testing.T) {
 	dir := t.TempDir()
 	writeConfig(t, dir, `schema_version = 2
 
 [reliability]
-freeze_threshold_secs = 90
+stall_threshold_secs = 90
 `)
 
 	cfg, err := LoadV2(dir)
@@ -109,11 +109,11 @@ freeze_threshold_secs = 90
 		t.Fatalf("LoadV2 failed: %v", err)
 	}
 
-	if got, want := cfg.Reliability.FreezeThresholdSecs, 90; got != want {
-		t.Fatalf("Reliability.FreezeThresholdSecs = %d, want %d", got, want)
+	if got, want := cfg.Reliability.StallThresholdSecs, 90; got != want {
+		t.Fatalf("Reliability.StallThresholdSecs = %d, want %d", got, want)
 	}
-	if got, want := cfg.Reliability.FreezeThreshold(), 90*time.Second; got != want {
-		t.Fatalf("Reliability.FreezeThreshold() = %v, want %v", got, want)
+	if got, want := cfg.Reliability.StallThreshold(), 90*time.Second; got != want {
+		t.Fatalf("Reliability.StallThreshold() = %v, want %v", got, want)
 	}
 }
 
@@ -145,8 +145,8 @@ func TestLoadV2_ReliabilityDefaults(t *testing.T) {
 		t.Fatalf("LoadV2 failed: %v", err)
 	}
 
-	if got, want := cfg.Reliability.FreezeThresholdSecs, 120; got != want {
-		t.Errorf("Default FreezeThresholdSecs = %d, want %d", got, want)
+	if got, want := cfg.Reliability.StallThresholdSecs, 120; got != want {
+		t.Errorf("Default StallThresholdSecs = %d, want %d", got, want)
 	}
 	if got, want := cfg.Reliability.RetryBudget, 5; got != want {
 		t.Errorf("Default RetryBudget = %d, want %d", got, want)
@@ -161,7 +161,7 @@ func TestLoadV2_ReliabilityOverrides(t *testing.T) {
 	writeConfig(t, dir, `schema_version = 2
 
 [reliability]
-freeze_threshold_secs = 120
+stall_threshold_secs = 120
 liveness_probe = true
 retry_budget = 10
 `)
@@ -171,8 +171,8 @@ retry_budget = 10
 		t.Fatalf("LoadV2 failed: %v", err)
 	}
 
-	if got, want := cfg.Reliability.FreezeThresholdSecs, 120; got != want {
-		t.Errorf("FreezeThresholdSecs = %d, want %d", got, want)
+	if got, want := cfg.Reliability.StallThresholdSecs, 120; got != want {
+		t.Errorf("StallThresholdSecs = %d, want %d", got, want)
 	}
 	if got, want := cfg.Reliability.RetryBudget, 10; got != want {
 		t.Errorf("RetryBudget = %d, want %d", got, want)

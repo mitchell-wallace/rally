@@ -71,7 +71,7 @@ type FallbackConfig struct {
 }
 
 type ReliabilityConfig struct {
-	FreezeThresholdSecs     int  `toml:"freeze_threshold_secs,omitempty"`
+	StallThresholdSecs      int  `toml:"stall_threshold_secs,omitempty"`
 	LivenessProbe           bool `toml:"liveness_probe,omitempty"`
 	RetryBudget             int  `toml:"retry_budget,omitempty"`
 	RecentTryCount          int  `toml:"recent_try_count,omitempty"`
@@ -79,9 +79,9 @@ type ReliabilityConfig struct {
 	RecentContextCharLimit  int  `toml:"recent_context_char_limit,omitempty"`
 }
 
-func (r ReliabilityConfig) FreezeThreshold() time.Duration {
-	if r.FreezeThresholdSecs > 0 {
-		return time.Duration(r.FreezeThresholdSecs) * time.Second
+func (r ReliabilityConfig) StallThreshold() time.Duration {
+	if r.StallThresholdSecs > 0 {
+		return time.Duration(r.StallThresholdSecs) * time.Second
 	}
 	return 0
 }
@@ -168,14 +168,14 @@ func LoadV2(workspaceDir string) (V2Config, error) {
 		Routes:               raw.Routes,
 	}
 
-	if cfg.Reliability.FreezeThresholdSecs == 0 {
+	if cfg.Reliability.StallThresholdSecs == 0 {
 		// 120s: opencode agents typically complete in 25-30s then hold the process
 		// open; connections drop to 0 around 120s of log silence, so 120s lets the
-		// freeze fire as soon as the connection check is satisfied. npm install
+		// stall fire as soon as the connection check is satisfied. npm install
 		// silence is ~35s max (well below 120s). The `DefaultStallThreshold`
 		// constant in the reliability package stays at 180s as a bare-code fallback
 		// when no config is loaded.
-		cfg.Reliability.FreezeThresholdSecs = 120
+		cfg.Reliability.StallThresholdSecs = 120
 	}
 	if cfg.Reliability.RetryBudget == 0 {
 		cfg.Reliability.RetryBudget = 5

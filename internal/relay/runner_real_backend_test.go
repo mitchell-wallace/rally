@@ -304,7 +304,7 @@ func TestRealBackend_CodexRelay(t *testing.T) {
 //   - When opencode is rate-limited or frozen, rally marks the agent paused
 //     (resilient execution) and the context cancellation exits cleanly
 //
-// Uses a short FreezeThreshold (60s) so the test terminates quickly when
+// Uses a short StallThreshold (60s) so the test terminates quickly when
 // opencode-go is rate-limited. The 3-minute context ensures ctx.Done() fires
 // well before the test framework's 5-minute panic threshold.
 func TestRealBackend_OpenCodeRelay(t *testing.T) {

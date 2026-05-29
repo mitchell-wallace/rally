@@ -182,7 +182,7 @@ func runRelay(cmd *cobra.Command, args []string) error {
 		RouteSpecs:               cfg.Routes,
 		UseOverrideRoute:         usedOverride,
 		TargetIterations:         iterations,
-		StallThreshold:          cfg.Reliability.FreezeThreshold(),
+		StallThreshold:          cfg.Reliability.StallThreshold(),
 		LivenessProbe:            cfg.Reliability.LivenessProbe,
 		RetryBudget:              cfg.Reliability.RetryBudget,
 		RunHooksOnAutoCommit:     cfg.RunHooksOnAutoCommit,
