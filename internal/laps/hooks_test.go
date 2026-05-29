@@ -142,6 +142,23 @@ func TestInstallHooksPreservesUserEntries(t *testing.T) {
 	}
 }
 
+func TestInstallHooksDoesNotCreateGitignore(t *testing.T) {
+	tmp := t.TempDir()
+	lapsDir := filepath.Join(tmp, ".laps")
+	if err := os.MkdirAll(lapsDir, 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+
+	_, err := InstallHooks(lapsDir)
+	if err != nil {
+		t.Fatalf("InstallHooks failed: %v", err)
+	}
+
+	if _, err := os.Stat(filepath.Join(lapsDir, ".gitignore")); !os.IsNotExist(err) {
+		t.Fatal("InstallHooks must not create .laps/.gitignore")
+	}
+}
+
 func TestInstallHooksUpdatesModifiedScript(t *testing.T) {
 	tmp := t.TempDir()
 	lapsDir := filepath.Join(tmp, ".laps")
