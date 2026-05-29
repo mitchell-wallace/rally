@@ -18,7 +18,7 @@
 
 ## 4. Replace `progress.yaml` with `summary.jsonl`
 
-- [ ] 4.1 Reimplement `internal/progress/store.go` as an append-only `summary.jsonl` writer, preserving the `RunEntry`/`HandoffEntry` shape and the `AppendRunEntry` signature. Remove the `ProgressLog` struct, `LoadProgress`, and `SaveProgress` functions. Update `internal/progress/cli.go` (which drives the `rally progress` command) to use the new JSONL-based API
+- [ ] 4.1 Reimplement `internal/progress/store.go` as an append-only `summary.jsonl` writer, preserving the `RunEntry`/`HandoffEntry` shape and the `AppendRunEntry` signature. Remove the `ProgressLog` struct, `LoadProgress`, and `SaveProgress` functions. Verify `internal/progress/cli.go` (which drives the `rally progress` command) still works — it calls `AppendRunEntry` whose signature is preserved, but check for any indirect dependency on removed functions
 - [ ] 4.2 Drop `history_window` trimming and remove YAML read/write paths
 - [ ] 4.3 Confirm `runner.go:1460` call site is unchanged and `summary.jsonl` is the only tracked top-level data file
 

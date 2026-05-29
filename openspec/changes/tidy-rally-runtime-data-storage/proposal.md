@@ -25,7 +25,7 @@ Rally's `.rally/` directory has accreted a flat pile of machine-churned files (`
 
 ## Impact
 
-- **Code**: `internal/store/{store,cache}.go` (paths → `state/`, drop git-commit windowing), `internal/progress/` (replace `store.go` YAML with `summary.jsonl` appender; relocate `runstate.go`; update `cli.go` which drives the `rally progress` command and depends on the changed APIs), `internal/cli/hooks.go` (hook-audit path), `internal/relay/runner.go` (current_task.md path at ~698; telemetry emit points at `AppendTry` ~1045 and `AppendRunEntry` ~1460), `cmd/rally/main.go` (gitignore template ~355, README template ~398, migration in `runInit` ~332, extend existing `update` command ~505, Sentry init+flush, min-laps-version check).
+- **Code**: `internal/store/{store,cache}.go` (paths → `state/`, drop git-commit windowing), `internal/progress/` (replace `store.go` YAML with `summary.jsonl` appender; relocate `runstate.go`; verify `cli.go` still works — it calls `AppendRunEntry` whose signature is preserved, but may need minor updates if `LoadProgress`/`SaveProgress` removal affects its codepath), `internal/cli/hooks.go` (hook-audit path), `internal/relay/runner.go` (current_task.md path at ~698; telemetry emit points at `AppendTry` ~1045 and `AppendRunEntry` ~1460), `cmd/rally/main.go` (gitignore template ~355, README template ~398, migration in `runInit` ~332, extend existing `update` command ~505, Sentry init+flush, min-laps-version check).
 - **New deps**: `github.com/getsentry/sentry-go`.
 - **New config**: `[telemetry] sentry_dsn` in `config.toml`; `SENTRY_DSN` / `RALLY_TELEMETRY` env vars.
 - **Distribution**: `install.sh` fetches/installs laps from https://github.com/mitchell-wallace/rally; existing `rally update` extended to upgrade laps too.
