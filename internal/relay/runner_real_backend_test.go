@@ -354,7 +354,10 @@ func TestRealBackend_OpenCodeRelay(t *testing.T) {
 	// frozen indefinitely. This verifies resilient execution handles the case.
 	lastTry := tries[len(tries)-1]
 	if !lastTry.Completed {
-		statusEvents := s.GetAgentStatus("opencode", "")
+		statusEvents, err := s.GetAgentStatus("opencode", "opencode-go/kimi-k2.6")
+		if err != nil {
+			t.Fatal(err)
+		}
 		paused := false
 		for _, ev := range statusEvents {
 			if ev.EventType == "paused" {
@@ -468,7 +471,10 @@ func TestRealBackend_ResilienceRetryBudget(t *testing.T) {
 	}
 
 	// Agent should be marked paused in agent_status.jsonl.
-	statusEvents := s.GetAgentStatus("claude", "")
+	statusEvents, err := s.GetAgentStatus("claude", "default")
+	if err != nil {
+		t.Fatal(err)
+	}
 	paused := false
 	for _, ev := range statusEvents {
 		if ev.EventType == "paused" {

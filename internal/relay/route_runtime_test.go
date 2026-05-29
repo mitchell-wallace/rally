@@ -466,7 +466,10 @@ func TestRouteRuntime_ProbationOneShotEnforcement(t *testing.T) {
 		t.Fatal("expected probation selection on first sync")
 	}
 
-	events := resilience.Store.GetAgentStatus(k.Harness, k.Model)
+	events, err := resilience.Store.GetAgentStatus(k.Harness, k.Model)
+	if err != nil {
+		t.Fatal(err)
+	}
 	foundProbation := false
 	for _, e := range events {
 		if e.EventType == "probation" {
@@ -488,7 +491,10 @@ func TestRouteRuntime_ProbationOneShotEnforcement(t *testing.T) {
 	}
 
 	probationCount := 0
-	events = resilience.Store.GetAgentStatus(k.Harness, k.Model)
+	events, err = resilience.Store.GetAgentStatus(k.Harness, k.Model)
+	if err != nil {
+		t.Fatal(err)
+	}
 	for _, e := range events {
 		if e.EventType == "probation" {
 			probationCount++

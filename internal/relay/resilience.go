@@ -57,7 +57,10 @@ func NewResilience(s *store.Store) *Resilience {
 }
 
 func (r *Resilience) GetState(key ResilienceKey) (AgentState, time.Time) {
-	events := r.Store.GetAgentStatus(key.Harness, key.Model)
+	events, err := r.Store.GetAgentStatus(key.Harness, key.Model)
+	if err != nil {
+		return StateActive, time.Time{}
+	}
 	var state AgentState = StateActive
 	var since time.Time
 	for _, e := range events {
@@ -190,7 +193,10 @@ func (r *Resilience) RecordHourlyFailure(key ResilienceKey, relayID int) error {
 		return err
 	}
 
-	events := r.Store.GetAgentStatus(key.Harness, key.Model)
+	events, err := r.Store.GetAgentStatus(key.Harness, key.Model)
+	if err != nil {
+		return err
+	}
 	retryFailedCount := 0
 	for i := len(events) - 1; i >= 0; i-- {
 		e := events[i]

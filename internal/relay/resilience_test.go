@@ -38,7 +38,7 @@ func key(harness, model string) ResilienceKey {
 func TestResilience_GetState_ActiveByDefault(t *testing.T) {
 	s := newResilienceTestStore(t)
 	r := testResilience(s, time.Now())
-	st, _ := r.GetState(key("claude", ""))
+	st, _ := r.GetState(key("claude", "test"))
 	if st != StateActive {
 		t.Fatalf("expected StateActive for agent with no events, got %s", st)
 	}
@@ -106,7 +106,10 @@ func TestResilience_PauseAgent_WritesPausedEvent(t *testing.T) {
 		t.Fatalf("expected StatePaused after PauseAgent, got %s", st)
 	}
 
-	events := s.GetAgentStatus(k.Harness, k.Model)
+	events, err := s.GetAgentStatus(k.Harness, k.Model)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if len(events) != 1 {
 		t.Fatalf("expected 1 event, got %d", len(events))
 	}
@@ -119,7 +122,7 @@ func TestResilience_PauseAgent_NoOpWhenAlreadyPaused(t *testing.T) {
 	s := newResilienceTestStore(t)
 	now := time.Now()
 	r := testResilience(s, now)
-	k := key("claude", "")
+	k := key("claude", "test")
 
 	if err := r.PauseAgent(k, 1); err != nil {
 		t.Fatal(err)
@@ -128,7 +131,10 @@ func TestResilience_PauseAgent_NoOpWhenAlreadyPaused(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	events := s.GetAgentStatus(k.Harness, k.Model)
+	events, err := s.GetAgentStatus(k.Harness, k.Model)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if len(events) != 1 {
 		t.Fatalf("expected 1 event (no-op on second pause), got %d", len(events))
 	}
@@ -161,13 +167,16 @@ func TestResilience_UnpauseAgent_NoOpWhenActive(t *testing.T) {
 	s := newResilienceTestStore(t)
 	now := time.Now()
 	r := testResilience(s, now)
-	k := key("claude", "")
+	k := key("claude", "test")
 
 	if err := r.UnpauseAgent(k, 1); err != nil {
 		t.Fatal(err)
 	}
 
-	events := s.GetAgentStatus(k.Harness, k.Model)
+	events, err := s.GetAgentStatus(k.Harness, k.Model)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if len(events) != 0 {
 		t.Fatalf("expected 0 events (no-op when already active), got %d", len(events))
 	}
@@ -177,7 +186,7 @@ func TestResilience_FreezeAgent_WritesFrozenEvent(t *testing.T) {
 	s := newResilienceTestStore(t)
 	now := time.Now()
 	r := testResilience(s, now)
-	k := key("codex", "")
+	k := key("codex", "test")
 
 	if err := r.FreezeAgent(k, 1, "test freeze"); err != nil {
 		t.Fatal(err)
@@ -188,7 +197,10 @@ func TestResilience_FreezeAgent_WritesFrozenEvent(t *testing.T) {
 		t.Fatalf("expected StateFrozen after FreezeAgent, got %s", st)
 	}
 
-	events := s.GetAgentStatus(k.Harness, k.Model)
+	events, err := s.GetAgentStatus(k.Harness, k.Model)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if len(events) != 1 {
 		t.Fatalf("expected 1 event, got %d", len(events))
 	}
@@ -201,7 +213,7 @@ func TestResilience_FreezeAgent_NoOpWhenAlreadyFrozen(t *testing.T) {
 	s := newResilienceTestStore(t)
 	now := time.Now()
 	r := testResilience(s, now)
-	k := key("codex", "")
+	k := key("codex", "test")
 
 	if err := r.FreezeAgent(k, 1, "test freeze"); err != nil {
 		t.Fatal(err)
@@ -210,7 +222,10 @@ func TestResilience_FreezeAgent_NoOpWhenAlreadyFrozen(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	events := s.GetAgentStatus(k.Harness, k.Model)
+	events, err := s.GetAgentStatus(k.Harness, k.Model)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if len(events) != 1 {
 		t.Fatalf("expected 1 event (no-op on second freeze), got %d", len(events))
 	}
@@ -243,7 +258,7 @@ func TestResilience_StateTransition_FrozenStaysFrozen(t *testing.T) {
 	s := newResilienceTestStore(t)
 	now := time.Now()
 	r := testResilience(s, now)
-	k := key("claude", "")
+	k := key("claude", "test")
 
 	if err := r.FreezeAgent(k, 1, "test freeze"); err != nil {
 		t.Fatal(err)
@@ -328,7 +343,7 @@ func TestResilience_RecordHourlyFailure_CountBreaksAtFrozenBoundary(t *testing.T
 	now := time.Now()
 	r := testResilience(s, now)
 	r.HourlyRetriesBeforeFreeze = 3
-	k := key("codex", "")
+	k := key("codex", "test")
 
 	if err := s.AppendAgentStatus(store.AgentStatusEvent{
 		AgentType: k.Harness,
@@ -364,8 +379,8 @@ func TestResilience_SelectActiveAgent_SkipsPausedAndFrozen(t *testing.T) {
 	now := time.Now()
 	r := testResilience(s, now)
 
-	claudeKey := key("claude", "")
-	codexKey := key("codex", "")
+	claudeKey := key("claude", "test")
+	codexKey := key("codex", "test")
 
 	if err := r.PauseAgent(claudeKey, 1); err != nil {
 		t.Fatal(err)
@@ -376,9 +391,9 @@ func TestResilience_SelectActiveAgent_SkipsPausedAndFrozen(t *testing.T) {
 
 	mix := AgentMix{
 		Cycle: []agent.ResolvedAgent{
-			{Harness: "claude"},
-			{Harness: "codex"},
-			{Harness: "gemini"},
+			{Harness: "claude", Model: "test"},
+			{Harness: "codex", Model: "test"},
+			{Harness: "gemini", Model: "test"},
 		},
 	}
 
@@ -404,8 +419,8 @@ func TestResilience_SelectActiveAgent_CyclesThroughActive(t *testing.T) {
 
 	mix := AgentMix{
 		Cycle: []agent.ResolvedAgent{
-			{Harness: "claude"},
-			{Harness: "codex"},
+			{Harness: "claude", Model: "test"},
+			{Harness: "codex", Model: "test"},
 		},
 	}
 
@@ -445,8 +460,8 @@ func TestResilience_SelectActiveAgent_AllFrozenError(t *testing.T) {
 	now := time.Now()
 	r := testResilience(s, now)
 
-	claudeKey := key("claude", "")
-	codexKey := key("codex", "")
+	claudeKey := key("claude", "test")
+	codexKey := key("codex", "test")
 
 	if err := r.FreezeAgent(claudeKey, 1, "test freeze"); err != nil {
 		t.Fatal(err)
@@ -457,8 +472,8 @@ func TestResilience_SelectActiveAgent_AllFrozenError(t *testing.T) {
 
 	mix := AgentMix{
 		Cycle: []agent.ResolvedAgent{
-			{Harness: "claude"},
-			{Harness: "codex"},
+			{Harness: "claude", Model: "test"},
+			{Harness: "codex", Model: "test"},
 		},
 	}
 
@@ -525,7 +540,7 @@ func TestResilience_SelectActiveAgent_PausedNotExpired_SkipsAgent(t *testing.T) 
 	mix := AgentMix{
 		Cycle: []agent.ResolvedAgent{
 			{Harness: "claude", Model: "sonnet"},
-			{Harness: "codex"},
+			{Harness: "codex", Model: "test"},
 		},
 	}
 
@@ -648,8 +663,8 @@ func TestResilience_SelectActiveAgent_AllFrozenButDecayable(t *testing.T) {
 		NowFunc:                   func() time.Time { return now },
 	}
 
-	claudeKey := key("claude", "")
-	codexKey := key("codex", "")
+	claudeKey := key("claude", "test")
+	codexKey := key("codex", "test")
 
 	if err := s.AppendAgentStatus(store.AgentStatusEvent{
 		AgentType: claudeKey.Harness,
@@ -672,8 +687,8 @@ func TestResilience_SelectActiveAgent_AllFrozenButDecayable(t *testing.T) {
 
 	mix := AgentMix{
 		Cycle: []agent.ResolvedAgent{
-			{Harness: "claude"},
-			{Harness: "codex"},
+			{Harness: "claude", Model: "test"},
+			{Harness: "codex", Model: "test"},
 		},
 	}
 
@@ -808,7 +823,10 @@ func TestResilience_ProbationFailure_ReFreezesWithFreshTimestamp(t *testing.T) {
 		t.Fatalf("expected fresh freeze timestamp newer than original %v, got %v", originalFrozenAt, since)
 	}
 
-	events := s.GetAgentStatus(k.Harness, k.Model)
+	events, err := s.GetAgentStatus(k.Harness, k.Model)
+	if err != nil {
+		t.Fatal(err)
+	}
 	frozenCount := 0
 	for _, e := range events {
 		if e.EventType == "frozen" {

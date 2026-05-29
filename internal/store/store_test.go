@@ -198,11 +198,14 @@ func TestMessageInPlaceUpdate(t *testing.T) {
 func TestAgentStatusReplay(t *testing.T) {
 	rallyDir, store := setupTempStore(t)
 
-	_ = store.AppendAgentStatus(AgentStatusEvent{AgentType: "claude", EventType: "active", Timestamp: "t1"})
-	_ = store.AppendAgentStatus(AgentStatusEvent{AgentType: "claude", EventType: "paused", Timestamp: "t2"})
-	_ = store.AppendAgentStatus(AgentStatusEvent{AgentType: "codex", EventType: "active", Timestamp: "t3"})
+	_ = store.AppendAgentStatus(AgentStatusEvent{AgentType: "claude", Model: "test-model", EventType: "active", Timestamp: "t1"})
+	_ = store.AppendAgentStatus(AgentStatusEvent{AgentType: "claude", Model: "test-model", EventType: "paused", Timestamp: "t2"})
+	_ = store.AppendAgentStatus(AgentStatusEvent{AgentType: "codex", Model: "test-model", EventType: "active", Timestamp: "t3"})
 
-	claudeEvents := store.GetAgentStatus("claude", "")
+	claudeEvents, err := store.GetAgentStatus("claude", "test-model")
+	if err != nil {
+		t.Fatal(err)
+	}
 	if len(claudeEvents) != 2 {
 		t.Fatalf("expected 2 claude events, got %d", len(claudeEvents))
 	}
@@ -210,7 +213,10 @@ func TestAgentStatusReplay(t *testing.T) {
 		t.Fatalf("unexpected claude events: %v", claudeEvents)
 	}
 
-	codexEvents := store.GetAgentStatus("codex", "")
+	codexEvents, err := store.GetAgentStatus("codex", "test-model")
+	if err != nil {
+		t.Fatal(err)
+	}
 	if len(codexEvents) != 1 || codexEvents[0].EventType != "active" {
 		t.Fatalf("unexpected codex events: %v", codexEvents)
 	}
@@ -220,7 +226,11 @@ func TestAgentStatusReplay(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(store2.GetAgentStatus("claude", "")) != 2 {
+	events, err := store2.GetAgentStatus("claude", "test-model")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(events) != 2 {
 		t.Fatal("claude events not persisted")
 	}
 }
@@ -546,13 +556,16 @@ func TestAgentStatusPersistsAcrossRelays(t *testing.T) {
 	rallyDir, _ := setupTempStore(t)
 
 	store1, _ := NewStore(rallyDir)
-	_ = store1.AppendAgentStatus(AgentStatusEvent{AgentType: "claude", EventType: "paused", Timestamp: time.Now().Format(time.RFC3339)})
+	_ = store1.AppendAgentStatus(AgentStatusEvent{AgentType: "claude", Model: "test-model", EventType: "paused", Timestamp: time.Now().Format(time.RFC3339)})
 
 	store2, _ := NewStore(rallyDir)
-	_ = store2.AppendAgentStatus(AgentStatusEvent{AgentType: "claude", EventType: "unfrozen", Timestamp: time.Now().Format(time.RFC3339)})
+	_ = store2.AppendAgentStatus(AgentStatusEvent{AgentType: "claude", Model: "test-model", EventType: "unfrozen", Timestamp: time.Now().Format(time.RFC3339)})
 
 	store3, _ := NewStore(rallyDir)
-	events := store3.GetAgentStatus("claude", "")
+	events, err := store3.GetAgentStatus("claude", "test-model")
+	if err != nil {
+		t.Fatal(err)
+	}
 	if len(events) != 2 {
 		t.Fatalf("expected 2 events across reloads, got %d", len(events))
 	}
@@ -580,7 +593,10 @@ func TestAgentStatusTruncationPreservesFreezeTimestamps(t *testing.T) {
 		})
 	}
 
-	events := store.GetAgentStatus("claude", "sonnet")
+	events, err := store.GetAgentStatus("claude", "sonnet")
+	if err != nil {
+		t.Fatal(err)
+	}
 	if len(events) == 0 {
 		t.Fatal("expected frozen event to be preserved after truncation")
 	}
@@ -621,7 +637,10 @@ func TestAgentStatusTruncationPreservesProbationTimestamps(t *testing.T) {
 		})
 	}
 
-	events := store.GetAgentStatus("opencode", "gemini")
+	events, err := store.GetAgentStatus("opencode", "gemini")
+	if err != nil {
+		t.Fatal(err)
+	}
 	if len(events) == 0 {
 		t.Fatal("expected probation event to be preserved after truncation")
 	}

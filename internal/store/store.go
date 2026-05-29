@@ -356,20 +356,21 @@ func (s *Store) ConsumedRunScopedMessageForRun(runID int) *MessageRecord {
 }
 
 // GetAgentStatus returns all status events for a given agent type and model.
-// When model is non-empty, events are filtered on both agent_type and model.
-// When model is empty, only agent_type is matched (backward compatible).
-func (s *Store) GetAgentStatus(agentType string, model string) []AgentStatusEvent {
+func (s *Store) GetAgentStatus(agentType string, model string) ([]AgentStatusEvent, error) {
+	if model == "" {
+		return nil, fmt.Errorf("GetAgentStatus: model is required")
+	}
 	var out []AgentStatusEvent
 	for _, e := range s.cache.AgentStatus {
 		if e.AgentType != agentType {
 			continue
 		}
-		if model != "" && e.Model != model {
+		if e.Model != model {
 			continue
 		}
 		out = append(out, e)
 	}
-	return out
+	return out, nil
 }
 
 // RecentTries returns the last n tries. If a relayID is provided and > 0, only tries

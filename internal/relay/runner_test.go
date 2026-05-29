@@ -1133,7 +1133,10 @@ func TestFailureCascadeMultipleInfraIncrements(t *testing.T) {
 		t.Fatalf("got %d tries, want at least 3", len(tries))
 	}
 
-	status := s.GetAgentStatus("opencode", cheapTestModel)
+	status, err := s.GetAgentStatus("opencode", cheapTestModel)
+	if err != nil {
+		t.Fatal(err)
+	}
 	foundPause := false
 	for _, e := range status {
 		if e.EventType == "paused" {
@@ -1835,7 +1838,10 @@ func TestFreezeCascade(t *testing.T) {
 	}
 
 	// Verify a "frozen" event was recorded
-	events := s.GetAgentStatus("opencode", cheapTestModel)
+	events, err := s.GetAgentStatus("opencode", cheapTestModel)
+	if err != nil {
+		t.Fatal(err)
+	}
 	foundFrozen := false
 	for _, e := range events {
 		if e.EventType == "frozen" {
@@ -1856,20 +1862,20 @@ func TestAgentUnfreeze(t *testing.T) {
 	s := newTestStore(t, rallyDir)
 	resilience := NewResilience(s)
 
-	if err := resilience.PauseAgent(ResilienceKey{Harness: "claude"}, 1); err != nil {
+	if err := resilience.PauseAgent(ResilienceKey{Harness: "claude", Model: "test"}, 1); err != nil {
 		t.Fatalf("PauseAgent failed: %v", err)
 	}
 
-	st, _ := resilience.GetState(ResilienceKey{Harness: "claude"})
+	st, _ := resilience.GetState(ResilienceKey{Harness: "claude", Model: "test"})
 	if st != StatePaused {
 		t.Fatalf("expected StatePaused after pause, got %s", st)
 	}
 
-	if err := resilience.UnpauseAgent(ResilienceKey{Harness: "claude"}, 1); err != nil {
+	if err := resilience.UnpauseAgent(ResilienceKey{Harness: "claude", Model: "test"}, 1); err != nil {
 		t.Fatalf("UnpauseAgent failed: %v", err)
 	}
 
-	st, _ = resilience.GetState(ResilienceKey{Harness: "claude"})
+	st, _ = resilience.GetState(ResilienceKey{Harness: "claude", Model: "test"})
 	if st != StateActive {
 		t.Fatalf("expected StateActive after unpause, got %s", st)
 	}
@@ -1937,15 +1943,18 @@ func TestHourlyRetryWithOtherAgentActive(t *testing.T) {
 		NowFunc:       func() time.Time { return baseTime },
 	}
 
-	if err := resilience.PauseAgent(ResilienceKey{Harness: "claude"}, 1); err != nil {
+	if err := resilience.PauseAgent(ResilienceKey{Harness: "claude", Model: "test"}, 1); err != nil {
 		t.Fatalf("PauseAgent failed: %v", err)
 	}
 
 	resilience.NowFunc = func() time.Time { return baseTime.Add(2 * time.Hour) }
 
-	mix, err := ParseAgentMix([]string{"cc:2", "cx:1"}, Resolver(testResolver))
-	if err != nil {
-		t.Fatalf("ParseAgentMix failed: %v", err)
+	mix := AgentMix{
+		Cycle: []agent.ResolvedAgent{
+			{Harness: "claude", Model: "test"},
+			{Harness: "claude", Model: "test"},
+			{Harness: "codex", Model: "test"},
+		},
 	}
 
 	picked, nextRunIndex, isHourlyRetry, err := resilience.SelectActiveAgent(mix, 0)
@@ -1971,19 +1980,21 @@ func TestAllAgentsFrozenEndsRelay(t *testing.T) {
 	s := newTestStore(t, rallyDir)
 	resilience := NewResilience(s)
 
-	if err := resilience.FreezeAgent(ResilienceKey{Harness: "claude"}, 1, "test freeze"); err != nil {
+	if err := resilience.FreezeAgent(ResilienceKey{Harness: "claude", Model: "test"}, 1, "test freeze"); err != nil {
 		t.Fatalf("FreezeAgent claude failed: %v", err)
 	}
-	if err := resilience.FreezeAgent(ResilienceKey{Harness: "codex"}, 1, "test freeze"); err != nil {
+	if err := resilience.FreezeAgent(ResilienceKey{Harness: "codex", Model: "test"}, 1, "test freeze"); err != nil {
 		t.Fatalf("FreezeAgent codex failed: %v", err)
 	}
 
-	mix, err := ParseAgentMix([]string{"cc:1", "cx:1"}, Resolver(testResolver))
-	if err != nil {
-		t.Fatalf("ParseAgentMix failed: %v", err)
+	mix := AgentMix{
+		Cycle: []agent.ResolvedAgent{
+			{Harness: "claude", Model: "test"},
+			{Harness: "codex", Model: "test"},
+		},
 	}
 
-	_, _, _, err = resilience.SelectActiveAgent(mix, 0)
+	_, _, _, err := resilience.SelectActiveAgent(mix, 0)
 	if err == nil {
 		t.Fatal("expected error from SelectActiveAgent")
 	}
@@ -4023,7 +4034,10 @@ func TestE2E_WindowsFreezeDisabledRetryBudgetExhaustion(t *testing.T) {
 	deadline := time.After(2 * time.Second)
 	for {
 		tries := s.AllTries()
-		status := s.GetAgentStatus("opencode", cheapTestModel)
+		status, err := s.GetAgentStatus("opencode", cheapTestModel)
+		if err != nil {
+			t.Fatal(err)
+		}
 		foundPause := false
 		for _, e := range status {
 			if e.EventType == "paused" {
@@ -4051,7 +4065,10 @@ func TestE2E_WindowsFreezeDisabledRetryBudgetExhaustion(t *testing.T) {
 	if len(tries) != 2 {
 		t.Fatalf("expected 2 tries (retry budget exhausted), got %d", len(tries))
 	}
-	status := s.GetAgentStatus("opencode", cheapTestModel)
+	status, err := s.GetAgentStatus("opencode", cheapTestModel)
+	if err != nil {
+		t.Fatal(err)
+	}
 	foundPause := false
 	for _, e := range status {
 		if e.EventType == "paused" {
@@ -4165,7 +4182,10 @@ func TestProbationIncompletePromotesToActive(t *testing.T) {
 
 	// Verify that no frozen event was written after the probation run
 	// (an "active"/"unfrozen" event should appear instead of another "frozen").
-	events := s.GetAgentStatus("opencode", cheapTestModel)
+	events, err := s.GetAgentStatus("opencode", cheapTestModel)
+	if err != nil {
+		t.Fatal(err)
+	}
 	lastEventType := ""
 	for _, e := range events {
 		lastEventType = e.EventType

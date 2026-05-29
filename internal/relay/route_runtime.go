@@ -276,7 +276,10 @@ func (r *routeRuntime) syncRecoverySignals(scheduler *routing.Scheduler, resilie
 // this key. Used by syncRecoverySignals so the probation event is persisted
 // exactly once per freeze cycle.
 func (r *routeRuntime) hasProbationEventForCurrentFreeze(resilience *Resilience, key ResilienceKey) bool {
-	events := resilience.Store.GetAgentStatus(key.Harness, key.Model)
+	events, err := resilience.Store.GetAgentStatus(key.Harness, key.Model)
+	if err != nil {
+		return false
+	}
 	for i := len(events) - 1; i >= 0; i-- {
 		switch events[i].EventType {
 		case "probation":
