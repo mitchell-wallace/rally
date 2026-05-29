@@ -38,9 +38,9 @@ When enabled, the system SHALL emit a structured log event per try, model a rela
 - **WHEN** a try fails with an agent-class failure that remains retry-eligible
 - **THEN** the sink SHALL record it as a span/log only and SHALL NOT capture an Issue
 
-#### Scenario: Runner fallback recorded as recovery
+#### Scenario: Runner fallback recorded as common event
 - **WHEN** the routing scheduler rotates a lane to the next runner entry after the current entry becomes unavailable
-- **THEN** the sink SHALL record the rotation as a recovery span/breadcrumb and SHALL NOT capture it as an Issue (rotating to a backup runner is a healthy recovery, not an alert)
+- **THEN** the sink SHALL record the rotation as a common recovery log event and SHALL NOT capture it as an Issue (rotating to a backup runner is a healthy recovery, not an alert)
 
 ### Requirement: Prompt-size observability
 When enabled, the system SHALL record the assembled-prompt size for each try and a breakdown of how much each source contributes (e.g. recent-try context, previous summary, project instructions, role instructions, task prompt, inbox/relay messages), so runaway prompt growth is detectable without reading transcripts.
