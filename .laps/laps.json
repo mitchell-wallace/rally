@@ -2,6 +2,16 @@
   "version": 1,
   "tasks": [
     {
+      "id": "work-93aa",
+      "title": "Fix rally tail after state relocation",
+      "description": "Update cmd/rally/tail.go to read the relocated tries index under .rally/state/ (or rely on store.NewStore consistently) instead of probing top-level .rally/tries.jsonl, and add command-level coverage so the relocation is exercised end-to-end.",
+      "assignee": "senior",
+      "isDone": true,
+      "createdAt": "2026-05-29T06:49:12.96260908Z",
+      "updatedAt": "2026-05-29T06:49:33.855758719Z",
+      "completedAt": "2026-05-29T06:49:33.855758719Z"
+    },
+    {
       "id": "rall-2ce5",
       "title": "Add .laps/.gitignore regression test",
       "description": "Context: OpenSpec change tidy-rally-runtime-data-storage (specs/tooling-distribution). The stray .laps/.gitignore was already removed and laps.json already tracked as of commit 33d288e. This lap adds a regression test to prevent recurrence.\n\nOutcome: A regression test proves rally never writes a .laps/.gitignore. Grep confirms no code path creates one.\n\nFiles \u0026 scope: Add a test near laps.InstallHooks (internal, in the rally repo) asserting no .gitignore is created under .laps/. Do not touch .laps/hooks.json or the hooks/ dir.\n\nAcceptance: New test passes; grep confirms no code path writes a .laps/.gitignore.",
