@@ -13,10 +13,10 @@ import (
 )
 
 const (
-	DefaultFreezeThreshold  = 180 * time.Second
-	DefaultFreezeTick       = 5 * time.Second
-	defaultKillDrain        = 5 * time.Second
-	defaultKillPoll         = 100 * time.Millisecond
+	DefaultFreezeThreshold = 180 * time.Second
+	DefaultFreezeTick      = 5 * time.Second
+	defaultKillDrain       = 5 * time.Second
+	defaultKillPoll        = 100 * time.Millisecond
 	// NetworkSilentThreshold is how long an agent may hold open TCP connections
 	// without any syscall I/O (rchar+wchar) before it is declared frozen.
 	// This catches rate-limited agents that keep a connection alive but send no data.
@@ -39,13 +39,13 @@ type Assessment struct {
 }
 
 type Detector struct {
-	threshold          time.Duration
-	platform           string
-	lastIOBytes        uint64
-	lastIOChange       time.Time
-	lastSyscallBytes   uint64
-	lastSyscallChange  time.Time
-	initialized        bool
+	threshold         time.Duration
+	platform          string
+	lastIOBytes       uint64
+	lastIOChange      time.Time
+	lastSyscallBytes  uint64
+	lastSyscallChange time.Time
+	initialized       bool
 }
 
 func NewDetector(threshold time.Duration) *Detector {

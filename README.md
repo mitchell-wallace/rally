@@ -510,7 +510,30 @@ Rally is built around a few focused internal packages:
 - `cmd/rally` — Cobra CLI: `relay`, `init`, `tail`, `routes`, `update`,
   `version`, `instructions`.
 
+## Development
+
+### Running tests
+
+To run all unit and integration tests locally:
+
+```sh
+go test -count=1 ./...
+```
+
+### Git hooks
+
+To catch formatting, vet, and test failures before they reach CI, enable the included Git hooks:
+
+```sh
+./scripts/setup-hooks.sh
+```
+
+This configures:
+- **pre-commit**: Runs `go vet ./...` and `gofmt -l .` check.
+- **pre-push**: Runs `go test -count=1 ./...` to ensure all tests pass before pushing.
+
 ## Release notes
+
 
 Recent highlights — see GitHub Releases for the full history.
 

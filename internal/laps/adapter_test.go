@@ -16,29 +16,29 @@ func TestParseLapOutput(t *testing.T) {
 		wantErr bool
 	}{
 		{
-			name:    "simple",
-			input:   "Title\n\nDescription\n",
-			want:    Lap{Title: "Title", Description: "Description"},
+			name:  "simple",
+			input: "Title\n\nDescription\n",
+			want:  Lap{Title: "Title", Description: "Description"},
 		},
 		{
-			name:    "with assignee",
-			input:   "Title\nAssignee: alice\n\nDescription\n",
-			want:    Lap{Title: "Title", Description: "Description", Assignee: "alice"},
+			name:  "with assignee",
+			input: "Title\nAssignee: alice\n\nDescription\n",
+			want:  Lap{Title: "Title", Description: "Description", Assignee: "alice"},
 		},
 		{
-			name:    "multiline description",
-			input:   "Title\n\nLine 1\nLine 2\n",
-			want:    Lap{Title: "Title", Description: "Line 1\nLine 2"},
+			name:  "multiline description",
+			input: "Title\n\nLine 1\nLine 2\n",
+			want:  Lap{Title: "Title", Description: "Line 1\nLine 2"},
 		},
 		{
-			name:    "empty description",
-			input:   "Title\n\n\n",
-			want:    Lap{Title: "Title", Description: ""},
+			name:  "empty description",
+			input: "Title\n\n\n",
+			want:  Lap{Title: "Title", Description: ""},
 		},
 		{
-			name:    "empty description with assignee",
-			input:   "Title\nAssignee: bob\n\n\n",
-			want:    Lap{Title: "Title", Description: "", Assignee: "bob"},
+			name:  "empty description with assignee",
+			input: "Title\nAssignee: bob\n\n\n",
+			want:  Lap{Title: "Title", Description: "", Assignee: "bob"},
 		},
 		{
 			name:    "too short",

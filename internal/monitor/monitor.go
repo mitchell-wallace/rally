@@ -290,10 +290,10 @@ func ReadSyscallBytes(pids []int) (uint64, error) {
 
 // NetworkMonitor tracks network state and produces warnings.
 type NetworkMonitor struct {
-	pids              []int
-	lastConnTime      time.Time
-	lastSyscallTime   time.Time
-	lastSyscallBytes  uint64
+	pids             []int
+	lastConnTime     time.Time
+	lastSyscallTime  time.Time
+	lastSyscallBytes uint64
 }
 
 // NewNetworkMonitor creates a NetworkMonitor for the given PIDs.

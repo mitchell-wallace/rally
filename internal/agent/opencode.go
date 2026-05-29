@@ -22,9 +22,9 @@ type opencodeJSONEvent struct {
 	} `json:"part"`
 }
 
-func (o *OpenCodeExecutor) ResumeSupported() bool                { return true }
-func (o *OpenCodeExecutor) RotateSupported() bool                { return true }
-func (o *OpenCodeExecutor) LivenessProbeSupported() bool         { return false }
+func (o *OpenCodeExecutor) ResumeSupported() bool        { return true }
+func (o *OpenCodeExecutor) RotateSupported() bool        { return true }
+func (o *OpenCodeExecutor) LivenessProbeSupported() bool { return false }
 func (o *OpenCodeExecutor) RotateModel(newModel string) error {
 	o.Model = newModel
 	return nil

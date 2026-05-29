@@ -17,9 +17,9 @@ type FixtureExecutor struct {
 	Dir        string
 }
 
-func (f *FixtureExecutor) ResumeSupported() bool                { return false }
-func (f *FixtureExecutor) RotateSupported() bool                { return false }
-func (f *FixtureExecutor) LivenessProbeSupported() bool         { return false }
+func (f *FixtureExecutor) ResumeSupported() bool        { return false }
+func (f *FixtureExecutor) RotateSupported() bool        { return false }
+func (f *FixtureExecutor) LivenessProbeSupported() bool { return false }
 func (f *FixtureExecutor) RotateModel(string) error {
 	return fmt.Errorf("rotate not supported by fixture adapter")
 }

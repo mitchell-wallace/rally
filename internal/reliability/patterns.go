@@ -39,13 +39,17 @@ var ErrorPatterns = []Pattern{
 		Strategy: StrategyRotate,
 	},
 	{
-		Name:     "gemini-cli exit 1",
-		Match:    func(lines []string) bool { return containsSubstring(lines, "exit status 1") && containsSubstring(lines, "gemini-cli") },
+		Name: "gemini-cli exit 1",
+		Match: func(lines []string) bool {
+			return containsSubstring(lines, "exit status 1") && containsSubstring(lines, "gemini-cli")
+		},
 		Strategy: StrategyResume,
 	},
 	{
-		Name:     "claude rate-limit interrupt",
-		Match:    func(lines []string) bool { return containsSubstring(lines, "rate-limit") || containsSubstring(lines, "429 Too Many Requests") },
+		Name: "claude rate-limit interrupt",
+		Match: func(lines []string) bool {
+			return containsSubstring(lines, "rate-limit") || containsSubstring(lines, "429 Too Many Requests")
+		},
 		Strategy: StrategyWaitResume,
 		Extract: func(lines []string) time.Duration {
 			for _, line := range lines {
@@ -59,8 +63,10 @@ var ErrorPatterns = []Pattern{
 		},
 	},
 	{
-		Name:     "codex completion despite limit warning",
-		Match:    func(lines []string) bool { return containsSubstring(lines, "limit warning") && containsSubstring(lines, "completion") },
+		Name: "codex completion despite limit warning",
+		Match: func(lines []string) bool {
+			return containsSubstring(lines, "limit warning") && containsSubstring(lines, "completion")
+		},
 		Strategy: StrategyNoOp,
 	},
 }

@@ -42,7 +42,7 @@ func readJSONL[T any](path string) ([]T, error) {
 
 	var records []T
 	scanner := bufio.NewScanner(f)
-	
+
 	// Increase maximum token size to 10MB for large JSON payloads.
 	const maxCapacity = 10 * 1024 * 1024
 	buf := make([]byte, bufio.MaxScanTokenSize)
@@ -72,7 +72,7 @@ func rewriteJSONL[T any](path string, records []T) error {
 	if err != nil {
 		return fmt.Errorf("create %s: %w", tmpPath, err)
 	}
-	
+
 	var writeErr error
 	for _, rec := range records {
 		data, err := json.Marshal(rec)

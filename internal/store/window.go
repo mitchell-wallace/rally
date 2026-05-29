@@ -38,7 +38,7 @@ func commitThenTruncate(path string, windowSize int) error {
 	if err != nil {
 		return fmt.Errorf("create %s: %w", tmpPath, err)
 	}
-	
+
 	var writeErr error
 	for i, line := range lines {
 		if i > 0 {

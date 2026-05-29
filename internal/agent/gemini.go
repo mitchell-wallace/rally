@@ -27,9 +27,9 @@ type geminiStats struct {
 	} `json:"tools"`
 }
 
-func (g *GeminiExecutor) ResumeSupported() bool                { return true }
-func (g *GeminiExecutor) RotateSupported() bool                { return false }
-func (g *GeminiExecutor) LivenessProbeSupported() bool         { return false }
+func (g *GeminiExecutor) ResumeSupported() bool        { return true }
+func (g *GeminiExecutor) RotateSupported() bool        { return false }
+func (g *GeminiExecutor) LivenessProbeSupported() bool { return false }
 func (g *GeminiExecutor) RotateModel(string) error {
 	return fmt.Errorf("rotate not supported by gemini adapter")
 }

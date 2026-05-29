@@ -53,16 +53,16 @@ func subSeparator() string {
 
 // HeaderOptions carries parameters for rendering a run header.
 type HeaderOptions struct {
-	RunIndex      int
-	TotalRuns     int
-	AgentName     string
-	Attempt       int
-	StartTime     time.Time
-	IsLapsBacked  bool
-	LapTitle      string
-	LapsStarted   int
-	LapsTotal     int
-	Model         string
+	RunIndex     int
+	TotalRuns    int
+	AgentName    string
+	Attempt      int
+	StartTime    time.Time
+	IsLapsBacked bool
+	LapTitle     string
+	LapsStarted  int
+	LapsTotal    int
+	Model        string
 }
 
 // RenderHeader renders a try header with separator lines, agent name, run index,

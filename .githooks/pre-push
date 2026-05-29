@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+# Pre-push hook to run full test suite before code is pushed to remote.
+set -euo pipefail
+
+echo "==> Running pre-push checks..."
+
+# Run go test on the entire project
+echo "==> Running tests: go test -count=1 ./..."
+if ! go test -count=1 ./...; then
+    echo "❌ Tests failed! Push aborted." >&2
+    exit 1
+fi
+
+echo "✅ All checks passed! Pushing code..."

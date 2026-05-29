@@ -36,6 +36,7 @@ are not yet renamed on disk.
        steers in-attempt retry strategy, not the freeze counter. (= QA R4)
      - C1 hourly retries >1: `maxAttempts=1` on the hourly retry burns a freeze
        life on a single transient blip. (= QA "too timid" H3)
+    State: **DONE**
 
 2. **tidy-rally-runtime-data-storage**
    `.rally/state/` relocation, `summary.jsonl`, opt-in Sentry, laps bundling.
