@@ -3038,6 +3038,40 @@ func writeRelayScript(t *testing.T, dir, name, scriptContent string) string {
 	return p
 }
 
+func TestBuildRecentContext_PerSummaryTruncation(t *testing.T) {
+	longSummary := strings.Repeat("abcdefghij", 20)
+
+	tries := []store.TryRecord{
+		{RunID: 1, AgentType: "claude", Completed: true, Summary: longSummary},
+		{RunID: 2, AgentType: "codex", Completed: false, Summary: longSummary},
+	}
+
+	result := buildRecentContext(tries, 50, 0)
+	for _, tr := range tries {
+		if !strings.Contains(result, fmt.Sprintf("Run %d (%s)", tr.RunID, tr.AgentType)) {
+			t.Errorf("expected mention of run %d", tr.RunID)
+		}
+	}
+	if !strings.Contains(result, "... [truncated] ...") {
+		t.Errorf("expected per-summary truncation marker in result: %q", result)
+	}
+}
+
+func TestBuildRecentContext_OverallTruncation(t *testing.T) {
+	mediumSummary := strings.Repeat("x", 200)
+	tries := []store.TryRecord{}
+	for i := 1; i <= 20; i++ {
+		tries = append(tries, store.TryRecord{
+			RunID: i, AgentType: "claude", Completed: true, Summary: mediumSummary,
+		})
+	}
+
+	result := buildRecentContext(tries, 0, 500)
+	if !strings.Contains(result, "... [truncated] ...") {
+		t.Errorf("expected overall truncation marker in result: %q", result)
+	}
+}
+
 func TestE2E_FullConfig_NamedModelsAndFallback(t *testing.T) {
 	workspaceDir := t.TempDir()
 	rallyDir := filepath.Join(workspaceDir, ".rally")
