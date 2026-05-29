@@ -292,7 +292,7 @@ func TestScheduler_Scenario7_RangeQuotaUnderCascadingFreezes(t *testing.T) {
 	}
 }
 
-func TestScheduler_AllExhaustedForceWait(t *testing.T) {
+func TestScheduler_AllBenchedForceWait(t *testing.T) {
 	entries := parseEntriesOrDie(t, []string{
 		"claude:opus-4.7:1",
 		"codex:gpt-5.5:1",
@@ -521,5 +521,71 @@ func TestScheduler_OnAgentRecovered_DoesNotClearRetryBudgetExhaustion(t *testing
 	}
 	if opus.Benched {
 		t.Error("opus should remain unbenched after recovery no-op")
+	}
+}
+
+func TestScheduler_AllExhausted(t *testing.T) {
+	entries := parseEntriesOrDie(t, []string{
+		"claude:opus-4.7:1",
+		"codex:gpt-5.5:1",
+	})
+	s := NewScheduler(entries)
+
+	if s.AllExhausted() {
+		t.Error("AllExhausted should be false when entries are fresh")
+	}
+
+	opus := mustNext(t, s)
+	s.OnAgentFailed(opus, "retry budget", false)
+	if s.AllExhausted() {
+		t.Error("AllExhausted should be false when only one entry is exhausted")
+	}
+
+	gpt := mustNext(t, s)
+	s.OnAgentFailed(gpt, "retry budget", false)
+	if !s.AllExhausted() {
+		t.Error("AllExhausted should be true when all entries have Exhausted=true")
+	}
+
+	entriesStates := s.EntryStates()
+	entriesStates[0].Exhausted = false
+	if s.AllExhausted() {
+		t.Error("AllExhausted should be false when one entry has Exhausted=false")
+	}
+}
+
+func TestScheduler_AllBenchedOrExhausted(t *testing.T) {
+	entries := parseEntriesOrDie(t, []string{
+		"claude:opus-4.7:1",
+		"codex:gpt-5.5:1",
+	})
+	s := NewScheduler(entries)
+
+	if s.AllBenchedOrExhausted() {
+		t.Error("AllBenchedOrExhausted should be false when entries are fresh")
+	}
+
+	opus := mustNext(t, s)
+	s.OnAgentFailed(opus, "rate limit", true)
+
+	if s.AllBenchedOrExhausted() {
+		t.Error("AllBenchedOrExhausted should be false when only one entry is benched")
+	}
+
+	gpt := mustNext(t, s)
+	s.OnAgentFailed(gpt, "rate limit", true)
+
+	if !s.AllBenchedOrExhausted() {
+		t.Error("AllBenchedOrExhausted should be true when all entries are benched")
+	}
+
+	s.OnAgentRecovered(opus)
+	if s.AllBenchedOrExhausted() {
+		t.Error("AllBenchedOrExhausted should be false after recovering one entry")
+	}
+	s.OnAgentFailed(opus, "retry-budget-exhausted", false)
+
+	if !s.AllBenchedOrExhausted() {
+		t.Error("AllBenchedOrExhausted should be true with mix of benched and exhausted entries")
 	}
 }

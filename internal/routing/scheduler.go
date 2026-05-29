@@ -109,7 +109,7 @@ func (s *Scheduler) advanceLocked() (*EntryState, error) {
 	if ok {
 		return s.selectAtLocked(next), nil
 	}
-	if s.allEntriesUnavailableLocked() {
+	if s.allBenchedOrExhaustedLocked() {
 		return nil, fmt.Errorf("scheduler: all entries exhausted; waiting for recovery")
 	}
 
@@ -155,7 +155,7 @@ func (s *Scheduler) hasAlternativeLocked(exclude int) bool {
 	return false
 }
 
-func (s *Scheduler) allEntriesUnavailableLocked() bool {
+func (s *Scheduler) allBenchedOrExhaustedLocked() bool {
 	for _, entry := range s.entries {
 		if s.isSelectableLocked(entry) {
 			return false
@@ -226,7 +226,7 @@ func (s *Scheduler) ResetEntry(entry *EntryState) {
 	resetEntryState(entry)
 }
 
-func (s *Scheduler) AllExhausted() bool {
+func (s *Scheduler) AllBenched() bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -251,6 +251,28 @@ func (s *Scheduler) AllExhausted() bool {
 	}
 
 	return true
+}
+
+func (s *Scheduler) AllExhausted() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if len(s.entries) == 0 {
+		return true
+	}
+
+	for _, entry := range s.entries {
+		if !entry.Exhausted {
+			return false
+		}
+	}
+	return true
+}
+
+func (s *Scheduler) AllBenchedOrExhausted() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.allBenchedOrExhaustedLocked()
 }
 
 func (s *Scheduler) Pos() int {
