@@ -238,7 +238,7 @@ func TestRunRelayNewResetsAgentStatus(t *testing.T) {
 	}
 
 	resilience := relay.NewResilience(s)
-	key := relay.ResilienceKey{Harness: "gemini", Model: ""}
+	key := relay.ResilienceKey{Harness: "gemini", Model: "default"}
 	if err := resilience.FreezeAgent(key, 1, "test freeze"); err != nil {
 		t.Fatalf("freeze agent: %v", err)
 	}
