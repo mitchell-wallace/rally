@@ -36,6 +36,9 @@ If the environment is ambiguous (e.g. a mounted host directory inside a containe
 
 ## When To Use
 
+**Only use this skill when the user explicitly asks to phone a friend or delegate to another model/CLI.** For all other subagent needs, prefer your harness's native subagent tool (e.g. the Task tool in opencode).
+
+When explicitly requested:
 - You need an independent design, architecture, UI, testing, or code-review perspective.
 - You are stuck on a failure and want a second debugging hypothesis.
 - The user asks for another model or agent to contribute.
@@ -64,6 +67,7 @@ Do not delegate just to feel busy. Keep the local agent responsible for integrat
    - Use `ge`, not `gm`, for Gemini. Do not replace user-provided model slugs with older guesses.
 
 4. **Dispatch the call**
+   - **Timeouts:** agent CLIs can be slow. Use at least 20 minutes (1200000ms) for direct CLI calls. For `rally relay` shell commands that may run for hours, set timeout accordingly or omit it.
    - **Through Rally (preferred):**
      ```bash
      rally relay --new --iterations 1 --agent "<agent-or-route>" "<prompt>"

@@ -741,7 +741,7 @@ attemptLoop:
 		if stallThreshold <= 0 {
 			stallThreshold = reliability.DefaultStallThreshold
 		}
-		mon.SetFreezeThreshold(stallThreshold)
+		mon.SetStallThreshold(stallThreshold)
 
 		initialStatus, _ := mon.Tick()
 		// Skip empty/whitespace status to avoid an extra blank line below the
@@ -805,7 +805,7 @@ attemptLoop:
 				}
 				stallTriggered = true
 				stallMarked = true
-				mon.SetFrozen(true)
+				mon.SetStalled(true)
 				if onStall != nil {
 					onStall()
 				}
@@ -1074,7 +1074,7 @@ attemptLoop:
 		if !failed {
 			if stallMarked && onStallRecovered != nil {
 				onStallRecovered()
-				mon.SetFrozen(false)
+				mon.SetStalled(false)
 				mon.SetRecovered()
 				stallMarked = false
 			}

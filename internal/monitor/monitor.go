@@ -19,7 +19,7 @@ const TickInterval = 1 * time.Second
 // Indicators carries optional reliability fields for the status line.
 // Zero value means "nothing to show".
 type Indicators struct {
-	Reliability string // e.g. "❄ frozen", "⚠ slowing", "↻ recovered"
+	Reliability string // e.g. "❄ stalled", "⚠ slowing", "↻ recovered"
 }
 
 // RenderStatus formats a status line.
@@ -355,8 +355,8 @@ type Monitor struct {
 	cursorUpLines int
 
 	// Reliability state
-	freezeThreshold time.Duration // 0 = slowing detection disabled
-	frozen          bool
+	stallThreshold time.Duration // 0 = slowing detection disabled
+	stalled        bool
 	recovered       bool
 	recoveredTicks  int // counts steady ticks after recovery; clears indicator
 
@@ -438,9 +438,9 @@ func (m *Monitor) Tick() (string, error) {
 func (m *Monitor) computeIndicators(lastActivity time.Duration) Indicators {
 	var ind Indicators
 
-	// Reliability indicator priority: frozen > recovered > slowing
-	if m.frozen {
-		ind.Reliability = "❄ frozen"
+	// Reliability indicator priority: stalled > recovered > slowing
+	if m.stalled {
+		ind.Reliability = "❄ stalled"
 	} else if m.recovered {
 		m.recoveredTicks++
 		if m.recoveredTicks > 1 {
@@ -450,8 +450,8 @@ func (m *Monitor) computeIndicators(lastActivity time.Duration) Indicators {
 		} else {
 			ind.Reliability = "↻ recovered"
 		}
-	} else if m.freezeThreshold > 0 && lastActivity >= 0 {
-		slowingAt := time.Duration(float64(m.freezeThreshold) * 0.6)
+	} else if m.stallThreshold > 0 && lastActivity >= 0 {
+		slowingAt := time.Duration(float64(m.stallThreshold) * 0.6)
 		if lastActivity >= slowingAt {
 			ind.Reliability = "⚠ slowing"
 		}
@@ -502,21 +502,21 @@ func (m *Monitor) SetProcessGroupID(pgid int) {
 	m.mu.Unlock()
 }
 
-// SetFreezeThreshold enables the "slowing" indicator at ≥60% of threshold.
-func (m *Monitor) SetFreezeThreshold(d time.Duration) {
+// SetStallThreshold enables the "slowing" indicator at ≥60% of threshold.
+func (m *Monitor) SetStallThreshold(d time.Duration) {
 	m.mu.Lock()
-	m.freezeThreshold = d
+	m.stallThreshold = d
 	m.mu.Unlock()
 }
 
-// SetFrozen marks the active try as frozen.
-func (m *Monitor) SetFrozen(v bool) {
+// SetStalled marks the active try as stalled.
+func (m *Monitor) SetStalled(v bool) {
 	m.mu.Lock()
-	m.frozen = v
+	m.stalled = v
 	m.mu.Unlock()
 }
 
-// SetRecovered marks a freeze-driven resume as recovered.  The indicator is
+// SetRecovered marks a stall-driven resume as recovered.  The indicator is
 // shown for one steady-state tick, then cleared automatically.
 func (m *Monitor) SetRecovered() {
 	m.mu.Lock()
