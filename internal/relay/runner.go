@@ -619,7 +619,7 @@ func (r *Runner) runOne(
 	if recentTryCount <= 0 {
 		recentTryCount = 5
 	}
-	recentTries := r.store.RecentTries(recentTryCount)
+	recentTries := r.store.RecentTries(recentTryCount, relay.ID)
 	recentContext := buildRecentContext(recentTries, r.cfg.RecentTryCharLimit, r.cfg.RecentContextCharLimit)
 
 	var previousSummary string

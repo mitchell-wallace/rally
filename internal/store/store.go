@@ -372,17 +372,31 @@ func (s *Store) GetAgentStatus(agentType string, model string) []AgentStatusEven
 	return out
 }
 
-// RecentTries returns the last n tries.
-func (s *Store) RecentTries(n int) []TryRecord {
+// RecentTries returns the last n tries. If a relayID is provided and > 0, only tries
+// matching that relay are returned.
+func (s *Store) RecentTries(n int, relayID ...int) []TryRecord {
 	if n <= 0 {
 		return nil
 	}
-	start := len(s.cache.Tries) - n
+
+	tries := s.cache.Tries
+	if len(relayID) > 0 && relayID[0] > 0 {
+		rid := relayID[0]
+		var filtered []TryRecord
+		for _, t := range tries {
+			if t.RelayID == rid {
+				filtered = append(filtered, t)
+			}
+		}
+		tries = filtered
+	}
+
+	start := len(tries) - n
 	if start < 0 {
 		start = 0
 	}
-	out := make([]TryRecord, len(s.cache.Tries)-start)
-	copy(out, s.cache.Tries[start:])
+	out := make([]TryRecord, len(tries)-start)
+	copy(out, tries[start:])
 	return out
 }
 
