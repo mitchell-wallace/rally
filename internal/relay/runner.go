@@ -415,7 +415,7 @@ func (r *Runner) Run(ctx context.Context) error {
 			selection.HourlyRetry,
 			selection.Probation,
 			func() {
-				selection.Scheduler.OnAgentFailed(selection.Entry, "freeze", true)
+				selection.Scheduler.OnAgentFailed(selection.Entry, "stall", true)
 			},
 			func() {
 				selection.Scheduler.OnAgentRecovered(selection.Entry)
