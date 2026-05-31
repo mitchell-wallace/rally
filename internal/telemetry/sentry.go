@@ -28,6 +28,14 @@ func NewSentrySink(dsn string) (*SentrySink, error) {
 		AttachStacktrace: true,
 		// EnableTracing enables performance monitoring (spans/transactions).
 		EnableTracing: true,
+		// before_send scrubber: never ships current_task.md contents or full
+		// transcripts, only summaries and metadata.
+		BeforeSend: func(event *sentry.Event, _ *sentry.EventHint) *sentry.Event {
+			return scrubEvent(event)
+		},
+		BeforeSendTransaction: func(event *sentry.Event, _ *sentry.EventHint) *sentry.Event {
+			return scrubEvent(event)
+		},
 	})
 	if err != nil {
 		return nil, err

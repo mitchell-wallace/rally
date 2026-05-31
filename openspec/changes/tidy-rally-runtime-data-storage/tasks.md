@@ -38,12 +38,12 @@
 - [ ] 6.2 Define a `telemetry.Sink` interface with a default no-op implementation
 - [ ] 6.3 Implement the Sentry sink: activate only with a configured DSN; honor `[telemetry] sentry_dsn`, `SENTRY_DSN` (overrides config), and `RALLY_TELEMETRY=0` kill switch
 - [ ] 6.4 Add `[telemetry] sentry_dsn` to the config struct and template. Three changes needed: add `Telemetry TelemetryConfig` field to `V2Config` (`internal/config/config_v2.go:98`), add `Telemetry TelemetryConfig \`toml:"telemetry,omitempty"\`` to `rawConfig` (`config_v2.go:120`), and add `Telemetry: cfg.Telemetry` in the `rawConfig` literal in `SaveV2` (`config_v2.go:532`). Also update `cmd/rally/init_roles.go:140` config save path to preserve the section
-- [ ] 6.5 Emit per-try structured logs at `store.AppendTry` (`runner.go:1045`) and model relay/run/try as a trace+span hierarchy; tag every event with `relay_id`/`run_id`/`try_id`/`role`/`runner`/`repo`/`lap_id`
-- [ ] 6.6 Capture recognized failures (non-zero exit, panic, "agent exited without finalizing", `laps done`-as-text, lap-integrity violations) as Sentry Issues. Log route fallback (rotating to a backup runner) as a common recovery event, not an Issue
-- [ ] 6.7 Add a `before_send` scrubber that never ships `current_task.md` contents or full transcripts
+- [x] 6.5 Emit per-try structured logs at `store.AppendTry` (`runner.go:1045`) and model relay/run/try as a trace+span hierarchy; tag every event with `relay_id`/`run_id`/`try_id`/`role`/`runner`/`repo`/`lap_id`
+- [x] 6.6 Capture recognized failures (non-zero exit, panic, "agent exited without finalizing", `laps done`-as-text, lap-integrity violations) as Sentry Issues. Log route fallback (rotating to a backup runner) as a common recovery event, not an Issue
+- [x] 6.7 Add a `before_send` scrubber that never ships `current_task.md` contents or full transcripts
 - [ ] 6.8 Init the sink once in `cmd/rally/main.go` and `defer sentry.Flush(2s)` before exit (no-op/bounded when disabled or offline)
-- [ ] 6.9 Add assembled-prompt size + per-source byte breakdown (recent-context, previous-summary, instructions, role, task, inbox/relay) to the per-try structured log
-- [ ] 6.10 Gate Issue capture on operator-worthy failures: infra-class failures (consume the landed `harden-relay-run-lifecycle` classification) and relay stalls (pass ends all-frozen); agent-class retries emit spans/logs only, no Issue
+- [x] 6.9 Add assembled-prompt size + per-source byte breakdown (recent-context, previous-summary, instructions, role, task, inbox/relay) to the per-try structured log
+- [x] 6.10 Gate Issue capture on operator-worthy failures: infra-class failures (consume the landed `harden-relay-run-lifecycle` classification) and relay stalls (pass ends all-frozen); agent-class retries emit spans/logs only, no Issue
 
 ## 7. Bundle laps alongside rally
 

@@ -29,11 +29,17 @@ import (
 
 var Version = "dev"
 
+// activeTelemetry holds the process-wide telemetry sink initialised in main.
+// It defaults to a no-op so any command that runs before/without init still
+// has a safe sink. The relay runner reads it via SetTelemetry.
+var activeTelemetry telemetry.Sink = telemetry.NoopSink{}
+
 func main() {
 	flushUpdateNotice := startBackgroundUpdateCheck(os.Args[1:], os.Stderr)
 
 	// Init telemetry — no-op when no DSN or RALLY_TELEMETRY=0.
-	_, flushTelemetry := telemetry.Init(loadTelemetryConfig())
+	sink, flushTelemetry := telemetry.Init(loadTelemetryConfig())
+	activeTelemetry = sink
 	defer flushTelemetry()
 
 	if err := rootCmd.Execute(); err != nil {
@@ -309,6 +315,7 @@ func runRelay(cmd *cobra.Command, args []string) error {
 	}
 
 	r := relay.NewRunner(s, runnerCfg, executors)
+	r.SetTelemetry(activeTelemetry)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

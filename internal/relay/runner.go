@@ -23,6 +23,7 @@ import (
 	"github.com/mitchell-wallace/rally/internal/reliability"
 	"github.com/mitchell-wallace/rally/internal/store"
 	"github.com/mitchell-wallace/rally/internal/style"
+	"github.com/mitchell-wallace/rally/internal/telemetry"
 )
 
 type Config struct {
@@ -65,6 +66,29 @@ type Runner struct {
 
 	stallControllerFactory func(logPath string) reliability.StallController
 	sleepFunc              func(time.Duration)
+
+	telemetry telemetry.Sink
+}
+
+// SetTelemetry wires a telemetry sink into the runner. When unset, telemetry
+// calls route to a no-op sink (see tel).
+func (r *Runner) SetTelemetry(sink telemetry.Sink) {
+	r.telemetry = sink
+}
+
+// tel returns the active telemetry sink, defaulting to a no-op so call sites
+// never need a nil check.
+func (r *Runner) tel() telemetry.Sink {
+	if r.telemetry == nil {
+		return telemetry.NoopSink{}
+	}
+	return r.telemetry
+}
+
+func applyTags(span telemetry.Span, tags map[string]string) {
+	for k, v := range tags {
+		span.SetTag(k, v)
+	}
 }
 
 var headPullLap = func(ctx context.Context, workspaceDir string) (laps.Lap, error) {
@@ -252,7 +276,7 @@ func (r *Runner) RequestStop() {
 
 func (r *Runner) Run(ctx context.Context) error {
 	// Clear any stale run-state from a previous interrupted relay.
-	_ = r.maybeWriteStubAndClearState("")
+	_, _ = r.maybeWriteStubAndClearState("")
 
 	relay, resumed, err := ResumeRelay(r.store)
 	if err != nil {
@@ -299,6 +323,11 @@ func (r *Runner) Run(ctx context.Context) error {
 
 	fmt.Fprintf(log, "relay %d started (target %d iterations, mix: %s)\n", relay.ID, relay.TargetIterations, relay.AgentMix)
 	r.relayStart = time.Now()
+
+	// Model the relay as a trace transaction; runs and tries are child spans.
+	ctx, relaySpan := r.tel().StartSpan(ctx, "relay", fmt.Sprintf("relay-%d", relay.ID))
+	applyTags(relaySpan, telemetry.Tags(telemetry.EventInfo{RelayID: relay.ID, Repo: repoKey(r.cfg.WorkspaceDir)}))
+	defer relaySpan.Finish()
 
 	resilience := r.resilience
 	if resilience == nil {
@@ -351,6 +380,10 @@ func (r *Runner) Run(ctx context.Context) error {
 			if errors.As(err, &routeErr) {
 				if routeErr.AllFrozen {
 					fmt.Fprintf(log, "relay %d failed: all agents frozen\n", relay.ID)
+					// A relay ending with every agent type frozen is a lockout
+					// that warrants operator attention — capture it as an Issue.
+					r.tel().CaptureFailure(ctx, fmt.Sprintf("relay %d stalled: all agents frozen", relay.ID),
+						telemetry.Tags(telemetry.EventInfo{RelayID: relay.ID, Repo: repoKey(r.cfg.WorkspaceDir)}))
 					_ = CompleteRelay(r.store, relay.ID)
 					return fmt.Errorf("relay failed: all agents frozen")
 				}
@@ -383,6 +416,37 @@ func (r *Runner) Run(ctx context.Context) error {
 		// Consume run-scoped message at start of each run
 		// First check if there's an already-consumed message from a failed run
 		runID := runIndex + 1
+
+		runTags := telemetry.Tags(telemetry.EventInfo{
+			RelayID: relay.ID,
+			RunID:   runID,
+			Role:    task.Assignee,
+			Harness: selection.Agent.Harness,
+			Model:   selection.Agent.Model,
+			Repo:    repoKey(r.cfg.WorkspaceDir),
+			LapID:   task.LapID,
+		})
+		runCtx, runSpan := r.tel().StartSpan(ctx, "run", fmt.Sprintf("relay-%d-run-%d", relay.ID, runID))
+		applyTags(runSpan, runTags)
+
+		// Rotating to a backup runner is a healthy recovery, not an alert — log
+		// it as a common event, never an Issue.
+		if selection.PreviousAgent != nil &&
+			(selection.PreviousAgent.Harness != selection.Agent.Harness ||
+				selection.PreviousAgent.Model != selection.Agent.Model) {
+			from := telemetry.RunnerLabel(selection.PreviousAgent.Harness, selection.PreviousAgent.Model)
+			to := telemetry.RunnerLabel(selection.Agent.Harness, selection.Agent.Model)
+			fmt.Fprintf(log, "relay %d run %d route fallback: rotated %s -> %s\n", relay.ID, runID, from, to)
+			r.tel().EmitTryLog(runCtx, map[string]interface{}{
+				"event":       "route_fallback",
+				"relay_id":    relay.ID,
+				"run_id":      runID,
+				"from_runner": from,
+				"to_runner":   to,
+				"role":        task.Assignee,
+				"repo":        repoKey(r.cfg.WorkspaceDir),
+			})
+		}
 		var consumedMsg *store.MessageRecord
 		if existingMsg := r.store.ConsumedRunScopedMessageForRun(runID); existingMsg != nil {
 			// Reuse the message from the failed run
@@ -404,7 +468,7 @@ func (r *Runner) Run(ctx context.Context) error {
 		}
 
 		success, addressed, interrupted, _, failureClass, infraFailures, err := r.runOne(
-			ctx,
+			runCtx,
 			relay,
 			runIndex,
 			selection.Agent,
@@ -421,6 +485,7 @@ func (r *Runner) Run(ctx context.Context) error {
 			},
 			log,
 		)
+		runSpan.Finish()
 		if err != nil {
 			fmt.Fprintf(log, "relay %d run %d error: %v\n", relay.ID, runIndex+1, err)
 			return err
@@ -668,6 +733,11 @@ attemptLoop:
 				_ = progress.SaveRunState(r.cfg.WorkspaceDir, newProgressRunState(runID, task.LapID))
 			}
 		}
+
+		// Each try (attempt) is a child span of the run. NextTryID peeks the
+		// id this attempt's record will be assigned at AppendTry below.
+		tryID := r.store.NextTryID()
+		tryCtx, trySpan := r.tel().StartSpan(ctx, "try", fmt.Sprintf("relay-%d-run-%d-try-%d", relay.ID, runIndex+1, tryID))
 
 		opts := agent.RunOptions{
 			Persona:          picked.Harness,
@@ -1044,6 +1114,64 @@ attemptLoop:
 		}
 		fmt.Fprintf(log, "relay %d run %d attempt %d result: completed=%v fail_reason=%q runtime=%s files_changed=%d tool_calls=%d commit=%q lap_id=%q assignee=%q recorded_laps=%v laps_attempted=%v handoff_state=%d\n",
 			relay.ID, runIndex+1, attempt, !failed, failReason, runtime, filesChangedCount, tryRecord.ToolCalls, shortHash, task.LapID, task.Assignee, recordedLaps, lapsAttempted, handoffState)
+
+		// Telemetry: per-try structured log + trace span tags. Only summaries
+		// and byte sizes are emitted — never current_task.md contents or the
+		// transcript (the scrubber is defense-in-depth on top of this).
+		tryTags := telemetry.Tags(telemetry.EventInfo{
+			RelayID: relay.ID,
+			RunID:   runIndex + 1,
+			TryID:   tryRecord.ID,
+			Role:    task.Assignee,
+			Harness: picked.Harness,
+			Model:   picked.Model,
+			Repo:    repoKey(r.cfg.WorkspaceDir),
+			LapID:   task.LapID,
+		})
+		applyTags(trySpan, tryTags)
+		trySpan.SetData("completed", !failed)
+		trySpan.SetData("fail_reason", failReason)
+		r.tel().EmitTryLog(tryCtx, map[string]interface{}{
+			"event":                          "try",
+			"relay_id":                       relay.ID,
+			"run_id":                         runIndex + 1,
+			"try_id":                         tryRecord.ID,
+			"attempt":                        attempt,
+			"role":                           task.Assignee,
+			"runner":                         telemetry.RunnerLabel(picked.Harness, picked.Model),
+			"repo":                           repoKey(r.cfg.WorkspaceDir),
+			"lap_id":                         task.LapID,
+			"completed":                      !failed,
+			"fail_reason":                    failReason,
+			"failure_class":                  string(failureClass),
+			"runtime_ms":                     runtime.Milliseconds(),
+			"files_changed":                  filesChangedCount,
+			"tool_calls":                     tryRecord.ToolCalls,
+			"prompt_bytes":                   len(prompt),
+			"prompt_recent_context_bytes":    len(opts.RecentTryContext),
+			"prompt_previous_summary_bytes":  len(opts.PreviousSummary),
+			"prompt_instructions_bytes":      len(opts.Instructions),
+			"prompt_role_instructions_bytes": len(opts.RoleInstructions),
+			"prompt_task_bytes":              len(opts.TaskPrompt),
+			"prompt_inbox_bytes":             len(opts.InboxMessage),
+			"prompt_relay_message_bytes":     len(opts.RelayMessage),
+		})
+
+		// Capture operator-worthy failures as Sentry Issues. Ordinary
+		// agent-class retries (recoverable agent errors, short no-ops) stay
+		// spans/logs only to avoid alert noise.
+		if failed {
+			issueWorthy := failureClass == reliability.FailureInfra ||
+				execErr != nil ||
+				markerAsText != "" ||
+				lapPinMismatch ||
+				strings.Contains(strings.ToLower(failReason), "panic")
+			if issueWorthy {
+				r.tel().CaptureFailure(tryCtx, fmt.Sprintf("relay %d run %d try %d failed: %s", relay.ID, runIndex+1, tryRecord.ID, failReason), tryTags)
+			}
+		}
+		trySpan.Finish()
+
 		if err := r.store.AppendTry(tryRecord); err != nil {
 			return false, false, false, "", failureClass, infraFailures, err
 		}
@@ -1106,7 +1234,21 @@ attemptLoop:
 	if lastResult != nil {
 		stubSummary = lastResult.Summary
 	}
-	_ = r.maybeWriteStubAndClearState(stubSummary)
+	wroteUnfinalized, _ := r.maybeWriteStubAndClearState(stubSummary)
+	if wroteUnfinalized && !success {
+		// "agent exited without finalizing" is an operator-worthy recognized
+		// failure — the agent process ended without `laps done`/`laps handoff`.
+		r.tel().CaptureFailure(ctx, fmt.Sprintf("relay %d run %d: agent exited without finalizing", relay.ID, runIndex+1),
+			telemetry.Tags(telemetry.EventInfo{
+				RelayID: relay.ID,
+				RunID:   runIndex + 1,
+				Role:    task.Assignee,
+				Harness: picked.Harness,
+				Model:   picked.Model,
+				Repo:    repoKey(r.cfg.WorkspaceDir),
+				LapID:   task.LapID,
+			}))
+	}
 
 	addressed := false
 	if lastResult != nil && lastResult.MessageAddressed != nil {
@@ -1429,15 +1571,20 @@ func truncate(s string, n int) string {
 	return s[:n]
 }
 
-func (r *Runner) maybeWriteStubAndClearState(lastOutput string) error {
+// maybeWriteStubAndClearState writes a stub progress entry when the agent left
+// run-state on disk (i.e. it never finalized via `laps done`/`laps handoff`).
+// It returns wroteUnfinalized=true only when it had to synthesise the default
+// "(agent exited without finalizing)" summary, so the caller can surface that
+// recognized failure to telemetry.
+func (r *Runner) maybeWriteStubAndClearState(lastOutput string) (bool, error) {
 	rs, err := progress.LoadRunState(r.cfg.WorkspaceDir)
 	if err != nil {
-		return err
+		return false, err
 	}
 	// If no run-state file exists, LoadRunState returns a fresh empty state.
 	// We only write a stub if the file actually existed on disk.
 	if _, err := os.Stat(progress.RunStatePath(r.cfg.WorkspaceDir)); os.IsNotExist(err) {
-		return nil
+		return false, nil
 	}
 
 	var lapsCompleted interface{}
@@ -1450,8 +1597,10 @@ func (r *Runner) maybeWriteStubAndClearState(lastOutput string) error {
 	}
 
 	summary := lastOutput
+	wroteUnfinalized := false
 	if summary == "" {
 		summary = "(agent exited without finalizing)"
+		wroteUnfinalized = true
 	}
 
 	entry := progress.RunEntry{
@@ -1461,5 +1610,5 @@ func (r *Runner) maybeWriteStubAndClearState(lastOutput string) error {
 	}
 	_ = progress.AppendRunEntry(r.cfg.WorkspaceDir, entry)
 	_ = progress.ClearRunState(r.cfg.WorkspaceDir)
-	return nil
+	return wroteUnfinalized, nil
 }
