@@ -83,7 +83,7 @@ func initRepo(t *testing.T, dir string) {
 	runGit(t, dir, "config", "user.email", "rally@example.com")
 	// Exclude rally's local machine state from git status.
 	excludePath := filepath.Join(dir, ".git", "info", "exclude")
-	os.WriteFile(excludePath, []byte(".rally/state/\n.rally/relays/\n"), 0o644)
+	os.WriteFile(excludePath, []byte(".rally/state/\n"), 0o644)
 }
 
 func newTestStore(t *testing.T, dir string) *store.Store {
@@ -532,12 +532,54 @@ func TestRunnerRotateModelErrorFallsBackToExecution(t *testing.T) {
 		t.Fatalf("executed models = %v, want %v", got, want)
 	}
 
-	logData, err := os.ReadFile(store.RelayLogPath(workspaceDir, 1))
+	logData, err := os.ReadFile(relayLogPath(dataDir, workspaceDir, 1))
 	if err != nil {
 		t.Fatalf("read relay log: %v", err)
 	}
 	if !strings.Contains(string(logData), "rotate fallback for opencode: rotate failed") {
 		t.Fatalf("relay log = %q, want rotate fallback message", string(logData))
+	}
+}
+
+func TestRunnerDoesNotCreateRepoRelayLogDir(t *testing.T) {
+	workspaceDir := t.TempDir()
+	rallyDir := store.RallyDir(workspaceDir)
+	if err := os.MkdirAll(rallyDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(rallyDir, ".gitignore"), []byte("state/\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	initRepo(t, workspaceDir)
+
+	s := newTestStore(t, rallyDir)
+	dataDir := t.TempDir()
+	exec := &funcExecutor{
+		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+			if err := os.WriteFile(filepath.Join(workspaceDir, "change.txt"), []byte("ok\n"), 0o644); err != nil {
+				return nil, err
+			}
+			return &agent.TryResult{Completed: true, Summary: "ok"}, nil
+		},
+	}
+
+	r := NewRunner(s, Config{
+		WorkspaceDir:     workspaceDir,
+		DataDir:          dataDir,
+		RouteSpecs:       map[string][]string{"default": {"op:model:1"}},
+		TargetIterations: 1,
+		Resolver:         testResolver,
+		TaskPrompt:       "no repo relay logs",
+	}, map[string]agent.Executor{"opencode": exec})
+
+	if err := r.Run(context.Background()); err != nil {
+		t.Fatalf("run failed: %v", err)
+	}
+	if _, err := os.Stat(relayLogPath(dataDir, workspaceDir, 1)); err != nil {
+		t.Fatalf("expected data-dir relay log: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(rallyDir, "relays")); !os.IsNotExist(err) {
+		t.Fatalf(".rally/relays should not be created when .rally/.gitignore only ignores state/, stat err=%v", err)
 	}
 }
 

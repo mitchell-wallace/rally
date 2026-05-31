@@ -71,9 +71,8 @@ Each iteration of `rally start` does this:
    and stderr to a try log.
 5. **Auto-commit** any dirty workspace changes once the try finishes
    (uses `--no-verify` by default — see `run_hooks_on_autocommit`).
-6. **Record the try** in `.rally/tries.jsonl` and append filtered output to
-   the relay log in `~/.local/share/rally/relays/` (mirrored into
-   `.rally/relays/` for the most recent few).
+6. **Record the try** in `.rally/state/tries.jsonl` and append filtered
+   output to the relay log in `~/.local/share/rally/relays/`.
 
 If the agent stalls, Rally graceful-kills it, classifies the failure, and
 either retries via session resume or advances to the next route entry. See
@@ -471,11 +470,10 @@ Default data directory (override with `data_dir` in config):
 |-------------------------------------------------------|-----------------------------------------|
 | `~/.local/share/rally/relays/<repo>/relay-N.log`      | Full relay log per repo                 |
 | `~/.local/share/rally/tries/<repo>/try-N.log`         | Per-try transcript                      |
-| `.rally/relays/relay-N.log`                           | Recent relay logs mirrored into repo    |
 | `.rally/config.toml`                                  | Workspace config                        |
-| `.rally/tries.jsonl`                                  | Try records (read by `rally tail`)      |
-| `.rally/messages.jsonl`                               | Inbox messages                          |
-| `.rally/agent_status.jsonl`                           | Agent status events                     |
+| `.rally/state/tries.jsonl`                            | Try records (read by `rally tail`)      |
+| `.rally/state/messages.jsonl`                         | Inbox messages                          |
+| `.rally/state/agent_status.jsonl`                     | Agent status events                     |
 | `.rally/instructions.md`                              | Project instructions                    |
 | `.rally/agents/{ROLE}.md`                             | Role-specific instructions              |
 

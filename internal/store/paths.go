@@ -1,9 +1,6 @@
 package store
 
-import (
-	"fmt"
-	"path/filepath"
-)
+import "path/filepath"
 
 const rallyDirName = ".rally"
 
@@ -13,10 +10,6 @@ func RallyDir(workspaceDir string) string {
 
 func StateDir(workspaceDir string) string {
 	return filepath.Join(workspaceDir, rallyDirName, "state")
-}
-
-func RelaysDir(workspaceDir string) string {
-	return filepath.Join(workspaceDir, rallyDirName, "relays")
 }
 
 func AgentsDir(workspaceDir string) string {
@@ -45,8 +38,4 @@ func InstructionsPath(workspaceDir string) string {
 
 func HookAuditPath(workspaceDir string) string {
 	return filepath.Join(StateDir(workspaceDir), "hook-audit.jsonl")
-}
-
-func RelayLogPath(workspaceDir string, relayID int) string {
-	return filepath.Join(workspaceDir, rallyDirName, "relays", fmt.Sprintf("relay-%d.log", relayID))
 }

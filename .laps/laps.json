@@ -6,10 +6,10 @@
       "title": "Remove repo-local relay log churn from .rally/",
       "description": "The state relocation slice still writes relay logs to both dataDir/relays/... and .rally/relays/relay-*.log, but runInit now templates .rally/.gitignore as only state/. This reintroduces unignored machine churn under top-level .rally/, conflicting with the tidy-runtime-data layout. Update the runtime to stop creating .rally/relays/ (or relocate it under gitignored state if intentionally kept), remove obsolete pruning/helpers if appropriate, and add regression coverage that a relay run does not leave .rally/relays/ behind when .rally/.gitignore is just state/.",
       "assignee": "senior",
-      "isDone": false,
+      "isDone": true,
       "createdAt": "2026-05-31T05:06:55.631081724Z",
-      "updatedAt": "2026-05-31T05:06:55.631081724Z",
-      "completedAt": null
+      "updatedAt": "2026-05-31T05:15:53.8661242Z",
+      "completedAt": "2026-05-31T05:15:53.8661242Z"
     },
     {
       "id": "work-c2eb",

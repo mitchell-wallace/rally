@@ -239,15 +239,10 @@ The system SHALL support an inbox of messages that can be injected into runs. Th
 ### Requirement: Relay logging
 The system SHALL produce a human-readable relay log for each relay, capturing filtered output from all tries.
 
-#### Scenario: Dual-write relay logs
+#### Scenario: Data-dir relay logs
 - **WHEN** relay output is written
-- **THEN** the system SHALL write to both `~/.local/share/rally/relays/relay-N.log` (durable) and `.rally/relays/relay-N.log` (repo cache)
+- **THEN** the system SHALL write to `~/.local/share/rally/relays/<repo>/relay-N.log`
 
-#### Scenario: Repo cache pruning
-- **WHEN** the relay log cache in `.rally/relays/` exceeds 10 files
-- **THEN** the system SHALL prune the oldest logs to maintain the 10-file limit
-
-#### Scenario: Relay log cache is gitignored
-- **WHEN** the `.rally/` directory is configured
-- **THEN** `.rally/relays/` SHALL be excluded from git tracking
-
+#### Scenario: Relay log is not mirrored into the repo
+- **WHEN** a relay run writes log output
+- **THEN** the system SHALL NOT create `.rally/relays/`

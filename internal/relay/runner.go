@@ -294,7 +294,6 @@ func (r *Runner) Run(ctx context.Context) error {
 	}
 	r.log = log
 	defer func() {
-		_ = PruneRepoRelayLogs(r.cfg.WorkspaceDir, 10)
 		_ = log.Close()
 	}()
 
