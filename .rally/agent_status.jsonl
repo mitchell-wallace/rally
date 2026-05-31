@@ -1,0 +1,51 @@
+{"agent_type":"antigravity","event_type":"paused","timestamp":"2026-05-28T07:40:10Z","relay_id":3,"reason":"3 consecutive try failures"}
+{"agent_type":"claude","event_type":"paused","timestamp":"2026-05-28T07:40:20Z","relay_id":3,"reason":"3 consecutive try failures"}
+{"agent_type":"opencode","event_type":"paused","timestamp":"2026-05-28T08:01:30Z","relay_id":3,"reason":"3 consecutive try failures"}
+{"agent_type":"codex","event_type":"paused","timestamp":"2026-05-28T08:01:31Z","relay_id":3,"reason":"3 consecutive try failures"}
+{"agent_type":"antigravity","event_type":"retry_failed","timestamp":"2026-05-28T08:02:52Z","relay_id":5,"reason":"hourly retry failed"}
+{"agent_type":"claude","event_type":"retry_failed","timestamp":"2026-05-28T08:03:03Z","relay_id":5,"reason":"hourly retry failed"}
+{"agent_type":"antigravity","event_type":"retry_failed","timestamp":"2026-05-28T08:18:35Z","relay_id":2,"reason":"hourly retry failed"}
+{"agent_type":"opencode","event_type":"retry_failed","timestamp":"2026-05-28T08:34:43Z","relay_id":5,"reason":"hourly retry failed"}
+{"agent_type":"codex","event_type":"retry_failed","timestamp":"2026-05-28T08:34:43Z","relay_id":5,"reason":"hourly retry failed"}
+{"agent_type":"antigravity","event_type":"retry_failed","timestamp":"2026-05-28T08:40:16Z","relay_id":3,"reason":"hourly retry failed"}
+{"agent_type":"claude","event_type":"active","timestamp":"2026-05-28T08:43:29Z","relay_id":2,"reason":"hourly retry succeeded"}
+{"agent_type":"claude","event_type":"retry_failed","timestamp":"2026-05-28T08:46:45Z","relay_id":3,"reason":"hourly retry failed"}
+{"agent_type":"claude","event_type":"paused","timestamp":"2026-05-28T08:47:53Z","relay_id":2,"reason":"3 consecutive try failures"}
+{"agent_type":"opencode","event_type":"retry_failed","timestamp":"2026-05-28T08:47:53Z","relay_id":2,"reason":"hourly retry failed"}
+{"agent_type":"codex","event_type":"active","timestamp":"2026-05-28T08:53:24Z","relay_id":2,"reason":"hourly retry succeeded"}
+{"agent_type":"codex","event_type":"paused","timestamp":"2026-05-28T08:53:25Z","relay_id":2,"reason":"3 consecutive try failures"}
+{"agent_type":"opencode","event_type":"retry_failed","timestamp":"2026-05-28T09:01:31Z","relay_id":3,"reason":"hourly retry failed"}
+{"agent_type":"codex","event_type":"retry_failed","timestamp":"2026-05-28T09:01:31Z","relay_id":3,"reason":"hourly retry failed"}
+{"agent_type":"antigravity","event_type":"retry_failed","timestamp":"2026-05-28T09:02:52Z","relay_id":5,"reason":"hourly retry failed"}
+{"agent_type":"claude","event_type":"retry_failed","timestamp":"2026-05-28T09:03:03Z","relay_id":5,"reason":"hourly retry failed"}
+{"agent_type":"antigravity","event_type":"retry_failed","timestamp":"2026-05-28T09:18:40Z","relay_id":2,"reason":"hourly retry failed"}
+{"agent_type":"opencode","event_type":"retry_failed","timestamp":"2026-05-28T09:34:43Z","relay_id":5,"reason":"hourly retry failed"}
+{"agent_type":"codex","event_type":"retry_failed","timestamp":"2026-05-28T09:34:43Z","relay_id":5,"reason":"hourly retry failed"}
+{"agent_type":"antigravity","event_type":"retry_failed","timestamp":"2026-05-28T09:40:16Z","relay_id":3,"reason":"hourly retry failed"}
+{"agent_type":"gemini","event_type":"paused","timestamp":"2026-05-28T09:46:45Z","relay_id":3,"reason":"3 consecutive try failures"}
+{"agent_type":"opencode","event_type":"active","timestamp":"2026-05-28T10:22:05Z","relay_id":3,"reason":"hourly retry succeeded"}
+{"agent_type":"codex","event_type":"active","timestamp":"2026-05-28T10:28:40Z","relay_id":3,"reason":"hourly retry succeeded"}
+{"agent_type":"claude","event_type":"retry_failed","timestamp":"2026-05-28T10:28:42Z","relay_id":3,"reason":"hourly retry failed"}
+{"agent_type":"gemini","event_type":"paused","timestamp":"2026-05-28T10:34:17Z","relay_id":2,"reason":"3 consecutive try failures"}
+{"agent_type":"codex","event_type":"paused","timestamp":"2026-05-28T10:34:17Z","relay_id":3,"reason":"3 consecutive try failures"}
+{"agent_type":"gemini","event_type":"paused","timestamp":"2026-05-28T10:34:20Z","relay_id":5,"reason":"3 consecutive try failures"}
+{"agent_type":"antigravity","event_type":"active","timestamp":"2026-05-28T10:38:52Z","relay_id":2,"reason":"hourly retry succeeded"}
+{"agent_type":"antigravity","event_type":"active","timestamp":"2026-05-28T10:38:52Z","relay_id":5,"reason":"hourly retry succeeded"}
+{"agent_type":"antigravity","event_type":"paused","timestamp":"2026-05-28T10:39:15Z","relay_id":5,"reason":"3 consecutive try failures"}
+{"agent_type":"antigravity","event_type":"paused","timestamp":"2026-05-28T10:39:15Z","relay_id":2,"reason":"3 consecutive try failures"}
+{"agent_type":"claude","event_type":"retry_failed","timestamp":"2026-05-28T10:39:17Z","relay_id":5,"reason":"hourly retry failed"}
+{"agent_type":"claude","event_type":"retry_failed","timestamp":"2026-05-28T10:39:17Z","relay_id":2,"reason":"hourly retry failed"}
+{"agent_type":"opencode","event_type":"retry_failed","timestamp":"2026-05-28T10:44:50Z","relay_id":5,"reason":"hourly retry failed"}
+{"agent_type":"codex","event_type":"retry_failed","timestamp":"2026-05-28T10:44:50Z","relay_id":5,"reason":"hourly retry failed"}
+{"agent_type":"opencode","event_type":"active","timestamp":"2026-05-28T10:44:50Z","relay_id":2,"reason":"hourly retry succeeded"}
+{"agent_type":"antigravity","event_type":"retry_failed","timestamp":"2026-05-28T11:39:15Z","relay_id":5,"reason":"hourly retry failed"}
+{"agent_type":"claude","event_type":"retry_failed","timestamp":"2026-05-28T11:39:17Z","relay_id":5,"reason":"hourly retry failed"}
+{"agent_type":"codex","event_type":"retry_failed","timestamp":"2026-05-28T11:44:50Z","relay_id":5,"reason":"hourly retry failed"}
+{"agent_type":"opencode","event_type":"active","timestamp":"2026-05-28T11:47:54Z","relay_id":5,"reason":"hourly retry succeeded"}
+{"agent_type":"opencode","event_type":"paused","timestamp":"2026-05-29T06:36:48Z","relay_id":7,"reason":"3 consecutive try failures"}
+{"agent_type":"codex","event_type":"active","timestamp":"2026-05-29T06:45:59Z","relay_id":7,"reason":"hourly retry succeeded"}
+{"agent_type":"codex","event_type":"paused","timestamp":"2026-05-31T05:37:53Z","relay_id":8,"reason":"3 consecutive try failures"}
+{"agent_type":"opencode","event_type":"retry_failed","timestamp":"2026-05-31T05:37:55Z","relay_id":8,"reason":"hourly retry failed"}
+{"agent_type":"claude","event_type":"retry_failed","timestamp":"2026-05-31T05:37:56Z","relay_id":8,"reason":"hourly retry failed"}
+{"agent_type":"claude","event_type":"frozen","timestamp":"2026-05-31T05:37:56Z","relay_id":8,"reason":"5 hourly retries failed"}
+{"agent_type":"antigravity","event_type":"retry_failed","timestamp":"2026-05-31T05:38:27Z","relay_id":8,"reason":"hourly retry failed"}
