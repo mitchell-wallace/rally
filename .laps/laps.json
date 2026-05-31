@@ -2,6 +2,46 @@
   "version": 1,
   "tasks": [
     {
+      "id": "work-ee45",
+      "title": "Make rally state migration conflict-safe",
+      "description": "Rework `.rally` layout migration so an existing `.rally/state/*` target does not cause the legacy top-level file to be deleted blindly. Preserve or surface the conflict safely without data loss, keep the migration idempotent, and add tests for partially migrated workspaces where source and destination both exist with different contents.",
+      "assignee": "SENIOR",
+      "isDone": false,
+      "createdAt": "2026-05-31T10:36:57.187673253Z",
+      "updatedAt": "2026-05-31T10:38:40Z",
+      "completedAt": null
+    },
+    {
+      "id": "work-21f5",
+      "title": "Capture full CommitHistory per try",
+      "description": "Implement task 3.6/8.6 end-to-end in the runner, not just in Store.AppendTry. Persist the full ordered commit list produced during a try (manual + auto commits), keep CommitHash as the last element for backward compatibility, and add an integration-style runner test that proves multiple commits in one try survive into tries.jsonl in order.",
+      "assignee": "SENIOR",
+      "isDone": false,
+      "createdAt": "2026-05-31T10:36:53.327111264Z",
+      "updatedAt": "2026-05-31T10:36:53.327111264Z",
+      "completedAt": null
+    },
+    {
+      "id": "work-5bdb",
+      "title": "Fix bundled laps version detection",
+      "description": "Make bundled laps handling sibling-aware instead of PATH-only. `rally update` and the startup min-version warning should inspect the laps binary next to the current rally executable, falling back to PATH only when appropriate, so an unrelated PATH copy cannot cause the bundled companion to be skipped or misreported. Add tests covering missing or stale sibling laps with an up-to-date PATH copy.",
+      "assignee": "SENIOR",
+      "isDone": false,
+      "createdAt": "2026-05-31T10:36:48.851255197Z",
+      "updatedAt": "2026-05-31T10:36:48.851255197Z",
+      "completedAt": null
+    },
+    {
+      "id": "work-6d97",
+      "title": "Re-verify tidy runtime-data-storage follow-ups",
+      "description": "After the implementation follow-up laps land, rerun full VERIFY for tidy-rally-runtime-data-storage: inspect git diff against target, run go build ./..., go test ./..., openspec validate tidy-rally-runtime-data-storage --strict, and confirm migration conflict safety, bundled laps version/update behavior, and end-to-end CommitHistory capture.",
+      "assignee": "VERIFY",
+      "isDone": false,
+      "createdAt": "2026-05-31T10:36:43.850183373Z",
+      "updatedAt": "2026-05-31T10:36:43.850183373Z",
+      "completedAt": null
+    },
+    {
       "id": "work-7729",
       "title": "Fix migration conflict convergence for pre-existing state targets",
       "description": "Context: final VERIFY found internal/store/migration.go still returns early when .rally/state/\u003cfile\u003e already exists, leaving the legacy top-level source behind forever. internal/store/migration_test.go even calls this out in the NoOverwrite case without asserting a resolution. Outcome: make migration conflict handling intentional and regression-tested when both legacy and state files exist. Safe options: remove the legacy file when contents are redundant, or emit a clear marker/warning when they differ and automatic cleanup is unsafe. Acceptance: re-running migration on a partially migrated .rally no longer silently leaves stale top-level machine files without explanation; tests cover idempotency, no-overwrite, and the chosen conflict behavior.",
