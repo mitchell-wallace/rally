@@ -2,6 +2,26 @@
   "version": 1,
   "tasks": [
     {
+      "id": "work-c779",
+      "title": "Remove repo-local relay log churn from .rally/",
+      "description": "The state relocation slice still writes relay logs to both dataDir/relays/... and .rally/relays/relay-*.log, but runInit now templates .rally/.gitignore as only state/. This reintroduces unignored machine churn under top-level .rally/, conflicting with the tidy-runtime-data layout. Update the runtime to stop creating .rally/relays/ (or relocate it under gitignored state if intentionally kept), remove obsolete pruning/helpers if appropriate, and add regression coverage that a relay run does not leave .rally/relays/ behind when .rally/.gitignore is just state/.",
+      "assignee": "senior",
+      "isDone": false,
+      "createdAt": "2026-05-31T05:06:55.631081724Z",
+      "updatedAt": "2026-05-31T05:06:55.631081724Z",
+      "completedAt": null
+    },
+    {
+      "id": "work-c2eb",
+      "title": "Remove repo-local relay log churn from .rally/",
+      "description": "The state relocation slice still writes relay logs to both dataDir/relays/... and .rally/relays/relay-*.log, but runInit now templates .rally/.gitignore as only state/. This reintroduces unignored machine churn under top-level .rally/, conflicting with the tidy-runtime-data layout. Update the runtime to stop creating .rally/relays/ (or relocate it under gitignored state if intentionally kept), remove obsolete pruning/helpers if appropriate, and add regression coverage that a relay run does not leave .rally/relays/ behind when .rally/.gitignore is just state/.",
+      "assignee": "senior",
+      "isDone": true,
+      "createdAt": "2026-05-31T05:05:21.565527921Z",
+      "updatedAt": "2026-05-31T05:06:17.442941136Z",
+      "completedAt": "2026-05-31T05:06:17.442941136Z"
+    },
+    {
       "id": "work-93aa",
       "title": "Fix rally tail after state relocation",
       "description": "Update cmd/rally/tail.go to read the relocated tries index under .rally/state/ (or rely on store.NewStore consistently) instead of probing top-level .rally/tries.jsonl, and add command-level coverage so the relocation is exercised end-to-end.",
@@ -46,10 +66,10 @@
       "title": "VERIFY: gitignore fix, path helpers, state/ relocation",
       "description": "Use the openspec-verify-change skill against tidy-rally-runtime-data-storage, then focus the report on the work so far: the .laps/.gitignore regression test, centralised path helpers, and the .rally/state/ relocation with local windowing.\n\nBefore diffing: identify the intended merge target (ask the user, or infer from PR metadata/repo docs/branch config/recent history) and identify the first lap/try in this batch; treat earlier branch work as pre-existing baseline.\n\nChecks: `git diff \u003ctarget\u003e...HEAD` for the relocation; confirm no ad-hoc `\".rally\"` joins remain; confirm the gitignore template is just `state/`; confirm windowing no longer runs git; `go build ./...` and `go test ./...`. Report findings first. For substantive gaps, `laps add head` a focused fix lap rather than fixing it here (only tiny one-liners allowed). Do not rewrite git history.",
       "assignee": "VERIFY",
-      "isDone": false,
+      "isDone": true,
       "createdAt": "2026-05-26T12:42:23.199267996Z",
-      "updatedAt": "2026-05-26T12:42:23.199267996Z",
-      "completedAt": null
+      "updatedAt": "2026-05-31T05:06:44.341449596Z",
+      "completedAt": "2026-05-31T05:06:44.341449596Z"
     },
     {
       "id": "rall-7162",

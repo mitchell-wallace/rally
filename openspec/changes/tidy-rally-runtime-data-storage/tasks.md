@@ -2,12 +2,12 @@
 
 (Line numbers in this document are approximate and reflect the codebase as of May 2026; they may shift during implementation.)
 
-- [ ] 1.1 Grep the rally codebase as a one-time manual check to confirm no code generates a `.laps/.gitignore`; then add a permanent regression test asserting `laps.InstallHooks` never writes one (the stray `.laps/.gitignore` was already removed and `laps.json` already tracked as of commit `33d288e`)
+- [x] 1.1 Grep the rally codebase as a one-time manual check to confirm no code generates a `.laps/.gitignore`; then add a permanent regression test asserting `laps.InstallHooks` never writes one (the stray `.laps/.gitignore` was already removed and `laps.json` already tracked as of commit `33d288e`)
 
 ## 2. Centralise `.rally/` path construction
 
-- [ ] 2.1 Add path helpers (e.g. `store.RallyDir`, `store.StateDir(workspaceDir)`, `store.SummaryPath`) and route all `.rally/` path building through them
-- [ ] 2.2 Replace ad-hoc `filepath.Join(..., ".rally", ...)` in `internal/store/{store,cache}.go`, `internal/progress/`, `internal/cli/hooks.go`, and `internal/relay/runner.go` with the helpers
+- [x] 2.1 Add path helpers (e.g. `store.RallyDir`, `store.StateDir(workspaceDir)`, `store.SummaryPath`) and route all `.rally/` path building through them
+- [x] 2.2 Replace ad-hoc `filepath.Join(..., ".rally", ...)` in `internal/store/{store,cache}.go`, `internal/progress/`, `internal/cli/hooks.go`, and `internal/relay/runner.go` with the helpers
 
 ## 3. Move machine data into `.rally/state/`
 
