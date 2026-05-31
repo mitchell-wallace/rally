@@ -30,6 +30,12 @@ func NewStore(dir string) (*Store, error) {
 
 // AppendTry appends a try record to JSONL and the cache.
 func (s *Store) AppendTry(t TryRecord) error {
+	if len(t.CommitHistory) > 0 {
+		t.CommitHash = t.CommitHistory[len(t.CommitHistory)-1]
+	} else if t.CommitHash != "" {
+		t.CommitHistory = []string{t.CommitHash}
+	}
+
 	if err := os.MkdirAll(s.stateDir, 0o755); err != nil {
 		return err
 	}

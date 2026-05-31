@@ -195,10 +195,10 @@
       "title": "Tests: telemetry, prompt-size, commit history, distribution",
       "description": "Context: OpenSpec change tidy-rally-runtime-data-storage (tasks 8.4-8.7).\n\nOutcome: Tests covering (a) the telemetry sink: no-op without DSN, RALLY_TELEMETRY=0 kill switch, SENTRY_DSN-over-config precedence, required tags present on emitted events, before_send scrubber drops current_task.md, route fallback logged as common event not Issue; (b) prompt-size fields: total + per-source breakdown present on the try log, Issue criteria (infra failure + relay stall → Issue; agent-class retry → no Issue); (c) try commit history: multiple commits retained in order, single commit as one-element list, CommitHash backward compat set to last element; (d) distribution: `rally update` wiring and the min-version check warning vs silent paths.\n\nFiles \u0026 scope: *_test.go in internal/telemetry, internal/store, and cmd/rally. Use a fake/in-memory transport or a captured-event hook rather than real network calls.\n\nAcceptance: `go test ./internal/telemetry/... ./internal/store/... ./cmd/...` passes; a test asserts a current_task.md payload never survives before_send; a test asserts the version check warns on old laps and is silent on a compatible version; a test asserts CommitHistory ordering and CommitHash backward compat.",
       "assignee": "JUNIOR",
-      "isDone": false,
+      "isDone": true,
       "createdAt": "2026-05-26T12:42:23.274003812Z",
-      "updatedAt": "2026-05-26T12:42:23.274003812Z",
-      "completedAt": null
+      "updatedAt": "2026-05-31T08:34:32.459622587Z",
+      "completedAt": "2026-05-31T08:34:32.459622587Z"
     },
     {
       "id": "rall-fd2a",

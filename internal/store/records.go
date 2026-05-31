@@ -11,6 +11,7 @@ type TryRecord struct {
 	RemainingWork string   `json:"remaining_work"`
 	FilesChanged  []string `json:"files_changed"`
 	CommitHash    string   `json:"commit_hash"`
+	CommitHistory []string `json:"commit_history,omitempty"`
 	StartedAt     string   `json:"started_at"`
 	EndedAt       string   `json:"ended_at"`
 	AttemptNumber int      `json:"attempt_number"`
