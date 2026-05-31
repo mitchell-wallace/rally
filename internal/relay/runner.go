@@ -1575,9 +1575,9 @@ func truncate(s string, n int) string {
 
 // maybeWriteStubAndClearState writes a stub progress entry when the agent left
 // run-state on disk (i.e. it never finalized via `laps done`/`laps handoff`).
-// It returns wroteUnfinalized=true only when it had to synthesise the default
-// "(agent exited without finalizing)" summary, so the caller can surface that
-// recognized failure to telemetry.
+// It returns wroteUnfinalized=true whenever it had to synthesize that stub so
+// the caller can surface the recognized "agent exited without finalizing"
+// failure to telemetry even if the model produced a partial summary first.
 func (r *Runner) maybeWriteStubAndClearState(lastOutput string) (bool, error) {
 	rs, err := progress.LoadRunState(r.cfg.WorkspaceDir)
 	if err != nil {
@@ -1599,10 +1599,8 @@ func (r *Runner) maybeWriteStubAndClearState(lastOutput string) (bool, error) {
 	}
 
 	summary := lastOutput
-	wroteUnfinalized := false
 	if summary == "" {
 		summary = "(agent exited without finalizing)"
-		wroteUnfinalized = true
 	}
 
 	entry := progress.RunEntry{
@@ -1612,5 +1610,5 @@ func (r *Runner) maybeWriteStubAndClearState(lastOutput string) (bool, error) {
 	}
 	_ = progress.AppendRunEntry(r.cfg.WorkspaceDir, entry)
 	_ = progress.ClearRunState(r.cfg.WorkspaceDir)
-	return wroteUnfinalized, nil
+	return true, nil
 }
