@@ -4,6 +4,7 @@
 !/.rally/.gitignore
 !/.rally/README.md
 !/.rally/config.toml
+!/.rally/summary.jsonl
 !/.rally/agents/
 !/.rally/agents/*.md
 scratchpad.md

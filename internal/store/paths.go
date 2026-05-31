@@ -24,8 +24,12 @@ func RunStatePath(workspaceDir string) string {
 	return filepath.Join(StateDir(workspaceDir), "run-state.json")
 }
 
+func SummaryPath(workspaceDir string) string {
+	return filepath.Join(workspaceDir, rallyDirName, "summary.jsonl")
+}
+
 func ProgressPath(workspaceDir string) string {
-	return filepath.Join(workspaceDir, rallyDirName, "progress.yaml")
+	return SummaryPath(workspaceDir)
 }
 
 func ConfigPath(workspaceDir string) string {

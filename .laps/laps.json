@@ -76,10 +76,10 @@
       "title": "Replace progress.yaml with append-only summary.jsonl",
       "description": "Context: OpenSpec change tidy-rally-runtime-data-storage (specs/run-summary, design Decision 2). summary.jsonl becomes the sole tracked top-level data file.\\n\\nOutcome: internal/progress writes one JSON line per finalized run/handoff to .rally/summary.jsonl, preserving the RunEntry/HandoffEntry shape and the AppendRunEntry signature (so runner.go:1460 is untouched). progress.yaml is no longer written; history_window trimming and YAML read/write paths are removed. The ProgressLog struct, LoadProgress, and SaveProgress functions are removed. Update progressLapsCompletedForRun in runner.go:1339 to read from summary.jsonl. Verify internal/progress/cli.go (which drives the `rally progress` command) still works — it calls AppendRunEntry whose signature is preserved, and verify its `laps add head` subprocess interaction with the new summary path.\\n\\nFiles \\u0026 scope: internal/progress/store.go (reimplement as JSONL appender), internal/progress/cli.go (update to use new API), internal/relay/runner.go (progressLapsCompletedForRun ~1339). Do not change the AppendRunEntry call site in internal/relay/runner.go.\\n\\nDesign: Append-only, no rewrite/merge. Keep records small (summary text + ids + timestamps). RFC3339 updated_at. Existing progress.yaml is left as-is (not converted).\\n\\nAcceptance: `go build ./...`; finalizing a run appends a parseable JSON line to .rally/summary.jsonl; no progress.yaml is created; `tail -1 .rally/summary.jsonl | jq .` works.",
       "assignee": "SENIOR",
-      "isDone": false,
+      "isDone": true,
       "createdAt": "2026-05-26T12:42:23.205232171Z",
-      "updatedAt": "2026-05-26T12:42:23.205232171Z",
-      "completedAt": null
+      "updatedAt": "2026-05-31T05:26:22.135050903Z",
+      "completedAt": "2026-05-31T05:26:22.135050903Z"
     },
     {
       "id": "rall-1fdd",

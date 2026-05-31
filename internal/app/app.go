@@ -9,7 +9,7 @@ import (
 const (
 	BinaryName          = "rally"
 	ContainerDataRoot   = "/persist/agent/rally"
-	DefaultRepoProgress = ".rally/progress.yaml"
+	DefaultRepoProgress = ".rally/summary.jsonl"
 	EnvContainerName    = "RALLY_CONTAINER_NAME"
 	EnvDataDir          = "RALLY_DATA_DIR"
 	EnvRepoProgressPath = "RALLY_REPO_PROGRESS_PATH"
@@ -31,6 +31,8 @@ func ContainerDataDir(containerName string) string {
 }
 
 func RepoProgressPath(workspaceDir string) string {
+	// TODO: Rename RepoProgressPath and RALLY_REPO_PROGRESS_PATH after the
+	// progress.yaml compatibility terminology is no longer needed.
 	return store.ProgressPath(workspaceDir)
 }
 

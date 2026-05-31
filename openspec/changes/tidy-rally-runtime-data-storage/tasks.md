@@ -21,10 +21,10 @@
 
 ## 4. Replace `progress.yaml` with `summary.jsonl`
 
-- [ ] 4.1 Reimplement `internal/progress/store.go` as an append-only `summary.jsonl` writer, preserving the `RunEntry`/`HandoffEntry` shape and the `AppendRunEntry` signature. Remove the `ProgressLog` struct, `LoadProgress`, and `SaveProgress` functions. Add a `LoadSummaryEntries` function to parse `summary.jsonl`. Update `progressLapsCompletedForRun` in `runner.go:1339` to use `LoadSummaryEntries` instead of `LoadProgress`. Verify `internal/progress/cli.go` (which drives the `rally progress` command) still works — it calls `AppendRunEntry` whose signature is preserved, and verify its `laps add head` subprocess interaction with the new summary path. Note: `RunEntry.LapsCompleted` is `interface{}` — ensure JSONL round-trips correctly (handle `[]interface{}` unwrapping, as the existing YAML reader already does)
-- [ ] 4.2 Drop `history_window` trimming and remove YAML read/write paths
-- [ ] 4.3 Confirm `runner.go:1460` call site is unchanged and `summary.jsonl` is the only tracked top-level data file
-- [ ] 4.4 Update `internal/app/app.go`: change `DefaultRepoProgress` from `".rally/progress.yaml"` to `".rally/summary.jsonl"`. The function `RepoProgressPath` and env var `RALLY_REPO_PROGRESS_PATH` keep their names for now (rename deferred to a future cleanup — add a `// TODO:` comment noting the naming inconsistency)
+- [x] 4.1 Reimplement `internal/progress/store.go` as an append-only `summary.jsonl` writer, preserving the `RunEntry`/`HandoffEntry` shape and the `AppendRunEntry` signature. Remove the `ProgressLog` struct, `LoadProgress`, and `SaveProgress` functions. Add a `LoadSummaryEntries` function to parse `summary.jsonl`. Update `progressLapsCompletedForRun` in `runner.go:1339` to use `LoadSummaryEntries` instead of `LoadProgress`. Verify `internal/progress/cli.go` (which drives the `rally progress` command) still works — it calls `AppendRunEntry` whose signature is preserved, and verify its `laps add head` subprocess interaction with the new summary path. Note: `RunEntry.LapsCompleted` is `interface{}` — ensure JSONL round-trips correctly (handle `[]interface{}` unwrapping, as the existing YAML reader already does)
+- [x] 4.2 Drop `history_window` trimming and remove YAML read/write paths
+- [x] 4.3 Confirm `runner.go:1460` call site is unchanged and `summary.jsonl` is the only tracked top-level data file
+- [x] 4.4 Update `internal/app/app.go`: change `DefaultRepoProgress` from `".rally/progress.yaml"` to `".rally/summary.jsonl"`. The function `RepoProgressPath` and env var `RALLY_REPO_PROGRESS_PATH` keep their names for now (rename deferred to a future cleanup — add a `// TODO:` comment noting the naming inconsistency)
 
 ## 5. One-time migration (runInit only)
 
@@ -55,7 +55,7 @@
 
 - [ ] 8.1 Tests for the migration on a fixture `.rally/` (flat→state move, legacy dir cleanup, idempotency, no-overwrite, progress.yaml left untouched)
 - [x] 8.2 Tests for store/cache reading and writing under `.rally/state/` and for local-only truncation windowing (assert `tries.jsonl`/`relays.jsonl` are never truncated; `agent_status.jsonl`/`messages.jsonl` use conservative in-place limits)
-- [ ] 8.3 Tests for `summary.jsonl` append shape and that `progress.yaml` is never written. Update `runner_test.go:2045` to reference `summary.jsonl` instead of `progress.yaml`
+- [x] 8.3 Tests for `summary.jsonl` append shape and that `progress.yaml` is never written. Update `runner_test.go:2045` to reference `summary.jsonl` instead of `progress.yaml`
 - [ ] 8.4 Tests for the telemetry sink: no-op without DSN, kill switch, env-over-config precedence, tag presence, and scrubber dropping `current_task.md`
 - [ ] 8.5 Tests for prompt-size fields (total + per-source breakdown present on the try log) and Issue criteria (infra failure + relay stall → Issue; agent-class retry → no Issue; route fallback → common event, no Issue)
 - [ ] 8.6 Tests for try commit history (multiple commits retained in order; single commit as one-element list; `CommitHash` backward compat set to last element)

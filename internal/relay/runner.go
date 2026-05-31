@@ -1339,12 +1339,12 @@ func mergeStrings(a, b []string) []string {
 }
 
 func progressLapsCompletedForRun(workspaceDir, runID string) []string {
-	pl, err := progress.LoadProgress(workspaceDir)
+	entries, err := progress.LoadSummaryEntries(workspaceDir)
 	if err != nil {
 		return nil
 	}
 	var out []string
-	for _, entry := range pl.RecentRuns {
+	for _, entry := range entries {
 		if entry.RunID != runID {
 			continue
 		}

@@ -1,0 +1,1 @@
+{"run_id":"20260531-052630","summary":"Replaced progress.yaml writes with append-only summary.jsonl, updated summary loading in runner/app paths, and added JSONL regression coverage. Verification passed: go test ./..., go build ./..., strict OpenSpec validate, diff check, and temp jq acceptance.","updated_at":"2026-05-31T05:26:30Z","laps_completed":["rall-7162"]}

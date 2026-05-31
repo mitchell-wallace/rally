@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"strconv"
 	"strings"
 	"testing"
@@ -2078,26 +2079,57 @@ func TestStubEntryOnIncompleteRun(t *testing.T) {
 
 	_ = r.Run(context.Background())
 
-	pl, err := progress.LoadProgress(workspaceDir)
+	entries, err := progress.LoadSummaryEntries(workspaceDir)
 	if err != nil {
-		t.Fatalf("LoadProgress error: %v", err)
+		t.Fatalf("LoadSummaryEntries error: %v", err)
 	}
-	if len(pl.RecentRuns) == 0 {
-		t.Fatal("expected at least one stub entry in progress.yaml")
+	if len(entries) == 0 {
+		t.Fatal("expected at least one stub entry in summary.jsonl")
 	}
 	found := false
-	for _, entry := range pl.RecentRuns {
+	for _, entry := range entries {
 		if entry.Summary == "agent stopped early" {
 			found = true
 			break
 		}
 	}
 	if !found {
-		t.Errorf("expected a stub entry with summary 'agent stopped early', got %v", pl.RecentRuns)
+		t.Errorf("expected a stub entry with summary 'agent stopped early', got %v", entries)
 	}
 
 	if _, err := os.Stat(progress.RunStatePath(workspaceDir)); !os.IsNotExist(err) {
 		t.Fatal("expected run-state.json to be cleared")
+	}
+}
+
+func TestProgressLapsCompletedForRunReadsSummaryJSONL(t *testing.T) {
+	workspaceDir := t.TempDir()
+	if err := progress.AppendRunEntry(workspaceDir, progress.RunEntry{
+		RunID:         "run-1",
+		Summary:       "first",
+		LapsCompleted: []string{"lap-a", "lap-b"},
+	}); err != nil {
+		t.Fatalf("AppendRunEntry error: %v", err)
+	}
+	if err := progress.AppendRunEntry(workspaceDir, progress.RunEntry{
+		RunID:         "run-2",
+		Summary:       "other",
+		LapsCompleted: []string{"lap-c"},
+	}); err != nil {
+		t.Fatalf("AppendRunEntry error: %v", err)
+	}
+	if err := progress.AppendRunEntry(workspaceDir, progress.RunEntry{
+		RunID:         "run-1",
+		Summary:       "second",
+		LapsCompleted: "lap-d",
+	}); err != nil {
+		t.Fatalf("AppendRunEntry error: %v", err)
+	}
+
+	got := progressLapsCompletedForRun(workspaceDir, "run-1")
+	want := []string{"lap-a", "lap-b", "lap-d"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("progressLapsCompletedForRun() = %v, want %v", got, want)
 	}
 }
 
