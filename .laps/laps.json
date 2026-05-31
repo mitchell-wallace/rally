@@ -205,10 +205,10 @@
       "title": "Docs and rollout: README/AGENTS, skill refs, VERSION bump",
       "description": "Context: OpenSpec change tidy-rally-runtime-data-storage (tasks 9.1-9.3).\n\nOutcome: Docs reflect the new layout: AGENTS.md/README.md and skill references (test-driving-rally, post-relay-review including post-relay-review/references/prayer-app-2.md) that mention progress.yaml or flat .rally/*.jsonl paths now point to .rally/state/ + summary.jsonl. Telemetry opt-in is documented (DSN config, SENTRY_DSN, RALLY_TELEMETRY kill switch, what is/ is not sent) along with `rally update`. internal/buildinfo/VERSION is bumped per the release process in AGENTS.md (patch bump unless told otherwise).\n\nFiles \u0026 scope: README.md, AGENTS.md, .rally/README.md template (if not already done), .claude/skills/test-driving-rally/SKILL.md, .claude/skills/post-relay-review/SKILL.md, .claude/skills/post-relay-review/references/prayer-app-2.md, internal/buildinfo/VERSION.\n\nAcceptance: grep finds no stale progress.yaml / flat-jsonl path guidance; telemetry + update docs present; VERSION incremented.",
       "assignee": "JUNIOR",
-      "isDone": false,
+      "isDone": true,
       "createdAt": "2026-05-26T12:42:23.277983758Z",
-      "updatedAt": "2026-05-26T12:42:23.277983758Z",
-      "completedAt": null
+      "updatedAt": "2026-05-31T10:03:33.231072392Z",
+      "completedAt": "2026-05-31T10:03:33.231072392Z"
     },
     {
       "id": "rall-1bf0",
