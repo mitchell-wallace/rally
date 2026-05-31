@@ -1,1 +1,2 @@
 {"agent_type":"opencode","event_type":"paused","timestamp":"2026-05-31T06:29:26Z","relay_id":10,"reason":"3 consecutive try failures"}
+{"agent_type":"antigravity","event_type":"paused","timestamp":"2026-05-31T07:54:21Z","relay_id":12,"reason":"3 consecutive try failures"}
