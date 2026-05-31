@@ -2,6 +2,16 @@
   "version": 1,
   "tasks": [
     {
+      "id": "work-298a",
+      "title": "Converge migration with pre-existing state targets",
+      "description": "Context: VERIFY on tidy-rally-runtime-data-storage manually exercised a legacy .rally fixture where .rally/state/tries.jsonl already existed before runInit, while the legacy top-level .rally/tries.jsonl was still present. Current migration preserves the existing state file, but it leaves the legacy top-level file behind forever, so partially migrated repos never converge to the clean top-level .rally layout.\n\nOutcome: Define and implement explicit conflict semantics for MigrateRallyStateLayout when both legacy and state paths exist. Preferred: if the files are redundant, remove the legacy source after confirming the state target wins; if they differ and automatic cleanup is unsafe, emit an explicit marker/warning and cover that behavior in tests. Update migration tests so this scenario is asserted rather than silently accepted.\n\nAcceptance: running rally init twice on a fixture with both legacy and state files no longer silently leaves stale top-level machine files without explanation; tests cover the chosen conflict behavior along with existing no-overwrite and idempotency expectations.",
+      "assignee": "SENIOR",
+      "isDone": true,
+      "createdAt": "2026-05-31T06:35:19.377701944Z",
+      "updatedAt": "2026-05-31T06:35:29.572799368Z",
+      "completedAt": "2026-05-31T06:35:29.572799368Z"
+    },
+    {
       "id": "work-d47e",
       "title": "Harden migration conflict handling",
       "description": "Context: VERIFY on tidy-rally-runtime-data-storage exercised a legacy .rally/ fixture where  already existed before Rally workspace initialized., while legacy  was still present. Current behavior preserves the existing state target as intended, but it also leaves the legacy top-level file in place forever, so the migration does not fully converge to the clean  layout in this partially migrated state.\n\nOutcome: Decide and implement explicit conflict semantics for migration when both legacy and state paths exist. At minimum, make the behavior intentional and regression-tested. Preferred: converge safely (for example remove the legacy file when it is redundant, or emit a clear warning / marker when contents differ and automatic cleanup is unsafe).\n\nAcceptance: A fixture covering pre-existing state targets proves the chosen behavior; the top-level .rally/ layout no longer silently retains stale machine files in partially migrated repos without an explicit reason.",
@@ -125,7 +135,7 @@
       "title": "VERIFY: summary.jsonl and migration",
       "description": "Use the openspec-verify-change skill against tidy-rally-runtime-data-storage, then focus on the summary.jsonl replacement and the one-time migration (the highest-risk slice).\\n\\nBefore diffing: confirm the merge target with the user/PR/repo signals and the batch's first lap; earlier work is pre-existing baseline.\\n\\nChecks: build a fixture legacy .rally/ (flat jsonl + progress.yaml + batches/ + relays/) and run migration twice — verify correct moves, no-overwrite behavior, legacy dir cleanup, and full idempotency. Confirm progress.yaml is left untouched (not converted) and never re-created on subsequent runs. Confirm internal/progress/cli.go still works (AppendRunEntry signature preserved; laps add head subprocess with new summary path; progressLapsCompletedForRun reads from summary.jsonl). `go build ./...`. Report findings first; `laps add head` focused fixes for substantive gaps (tiny one-liners only here). Do not rewrite git history.",
       "assignee": "VERIFY",
-      "isDone": false,
+      "isDone": true,
       "createdAt": "2026-05-26T12:42:23.220578196Z",
       "updatedAt": "2026-05-26T12:42:23.220578196Z",
       "completedAt": null
@@ -135,7 +145,7 @@
       "title": "Telemetry sink scaffolding (Sentry, opt-in, flush)",
       "description": "Context: OpenSpec change tidy-rally-runtime-data-storage (specs/telemetry, design Decision 3). New external dependency and new pattern.\n\nOutcome: A telemetry.Sink interface with a default no-op impl and a Sentry-backed impl that activates ONLY when a DSN is configured. Config precedence: SENTRY_DSN env overrides [telemetry] sentry_dsn in config.toml; RALLY_TELEMETRY=0 force-disables. Sink is initialised once in cmd/rally/main.go with `defer sentry.Flush(2s)` before exit; flush is bounded so an unreachable network never hangs exit.\n\nFiles \u0026 scope: new internal/telemetry package; go.mod (add github.com/getsentry/sentry-go); config struct (V2Config + rawConfig + SaveV2 assignment in internal/config/config_v2.go); config.toml template (cmd/rally/main.go); cmd/rally/main.go init+flush. Ensure cmd/rally/init_roles.go preserves the [telemetry] section.\n\nDesign: Keep the Sink interface narrow (emit-try, relay/run/try spans, capture-failure) so an OTel impl could swap in later. No-op must be allocation-cheap and never touch the network. Do not wire emit points yet (next lap).\n\nAcceptance: `go build ./...` and `go test ./...` pass; with no DSN nothing is sent and there is no network access; RALLY_TELEMETRY=0 disables even when a DSN is present.",
       "assignee": "SENIOR",
-      "isDone": false,
+      "isDone": true,
       "createdAt": "2026-05-26T12:42:23.230241489Z",
       "updatedAt": "2026-05-26T12:42:23.230241489Z",
       "completedAt": null
