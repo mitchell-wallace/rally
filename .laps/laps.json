@@ -2,6 +2,36 @@
   "version": 1,
   "tasks": [
     {
+      "id": "work-7729",
+      "title": "Fix migration conflict convergence for pre-existing state targets",
+      "description": "Context: final VERIFY found internal/store/migration.go still returns early when .rally/state/\u003cfile\u003e already exists, leaving the legacy top-level source behind forever. internal/store/migration_test.go even calls this out in the NoOverwrite case without asserting a resolution. Outcome: make migration conflict handling intentional and regression-tested when both legacy and state files exist. Safe options: remove the legacy file when contents are redundant, or emit a clear marker/warning when they differ and automatic cleanup is unsafe. Acceptance: re-running migration on a partially migrated .rally no longer silently leaves stale top-level machine files without explanation; tests cover idempotency, no-overwrite, and the chosen conflict behavior.",
+      "assignee": "SENIOR",
+      "isDone": true,
+      "createdAt": "2026-05-31T10:10:12.419015488Z",
+      "updatedAt": "2026-05-31T10:10:41.704014244Z",
+      "completedAt": "2026-05-31T10:10:41.704014244Z"
+    },
+    {
+      "id": "work-02d6",
+      "title": "Complete telemetry/distribution regression coverage",
+      "description": "Context: final VERIFY found tasks 8.5 and 8.7 are still not fully satisfied. cmd/rally/telemetry_test.go only asserts prompt_bytes, prompt_task_bytes, one captured issue, and route_fallback non-Issue behavior; it does not cover the full per-source prompt breakdown, agent-class retry =\u003e no Issue, or distinguish infra/stall issue capture. There is also version-warning coverage in internal/laps/version_test.go, but no command-level test that rally update wiring upgrades or installs laps or reports laps failures non-fatally. Outcome: add focused regression tests for the missing 8.5 and 8.7 acceptance points and then mark only the truly completed task boxes in openspec/changes/tidy-rally-runtime-data-storage/tasks.md. Acceptance: targeted tests fail before the fix and pass after; go test ./cmd/rally ./internal/laps ./internal/telemetry ./internal/store passes.",
+      "assignee": "JUNIOR",
+      "isDone": false,
+      "createdAt": "2026-05-31T10:10:06.892444614Z",
+      "updatedAt": "2026-05-31T10:10:06.892444614Z",
+      "completedAt": null
+    },
+    {
+      "id": "work-8dab",
+      "title": "VERIFY: tidy runtime storage follow-up",
+      "description": "Re-run final verification for tidy-rally-runtime-data-storage after the queued follow-up laps land. Focus on migration conflict handling plus the missing telemetry/distribution regression coverage, then re-check go build ./..., go test ./..., openspec validate tidy-rally-runtime-data-storage --strict, tracked .rally contents, and git diff feat/harden-relay-run-lifecycle...HEAD.",
+      "assignee": "VERIFY",
+      "isDone": false,
+      "createdAt": "2026-05-31T10:10:00.716177229Z",
+      "updatedAt": "2026-05-31T10:10:00.716177229Z",
+      "completedAt": null
+    },
+    {
       "id": "work-298a",
       "title": "Converge migration with pre-existing state targets",
       "description": "Context: VERIFY on tidy-rally-runtime-data-storage manually exercised a legacy .rally fixture where .rally/state/tries.jsonl already existed before runInit, while the legacy top-level .rally/tries.jsonl was still present. Current migration preserves the existing state file, but it leaves the legacy top-level file behind forever, so partially migrated repos never converge to the clean top-level .rally layout.\n\nOutcome: Define and implement explicit conflict semantics for MigrateRallyStateLayout when both legacy and state paths exist. Preferred: if the files are redundant, remove the legacy source after confirming the state target wins; if they differ and automatic cleanup is unsafe, emit an explicit marker/warning and cover that behavior in tests. Update migration tests so this scenario is asserted rather than silently accepted.\n\nAcceptance: running rally init twice on a fixture with both legacy and state files no longer silently leaves stale top-level machine files without explanation; tests cover the chosen conflict behavior along with existing no-overwrite and idempotency expectations.",

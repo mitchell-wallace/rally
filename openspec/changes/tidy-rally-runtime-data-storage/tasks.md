@@ -57,9 +57,9 @@
 - [x] 8.2 Tests for store/cache reading and writing under `.rally/state/` and for local-only truncation windowing (assert `tries.jsonl`/`relays.jsonl` are never truncated; `agent_status.jsonl`/`messages.jsonl` use conservative in-place limits)
 - [x] 8.3 Tests for `summary.jsonl` append shape and that `progress.yaml` is never written. Update `runner_test.go:2045` to reference `summary.jsonl` instead of `progress.yaml`
 - [x] 8.4 Tests for the telemetry sink: no-op without DSN, kill switch, env-over-config precedence, tag presence, and scrubber dropping `current_task.md`
-- [ ] 8.5 Tests for prompt-size fields (total + per-source breakdown present on the try log) and Issue criteria (infra failure + relay stall → Issue; agent-class retry → no Issue; route fallback → common event, no Issue)
+- [x] 8.5 Tests for prompt-size fields (total + per-source breakdown present on the try log) and Issue criteria (infra failure + relay stall → Issue; agent-class retry → no Issue; route fallback → common event, no Issue)
 - [x] 8.6 Tests for try commit history (multiple commits retained in order; single commit as one-element list; `CommitHash` backward compat set to last element)
-- [ ] 8.7 Test that `rally update` and the min-version check behave correctly (warn vs silent)
+- [x] 8.7 Test that `rally update` and the min-version check behave correctly (warn vs silent)
 
 ## 9. Docs & rollout
 

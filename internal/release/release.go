@@ -232,7 +232,7 @@ func CheckForUpdateFrom(currentVersion, checkURL string) (string, error) {
 // release. currentVersion is the version already installed (empty when the
 // binary is absent, which forces an install). Returns the display-formatted old
 // and new versions and whether an install actually happened.
-func UpdateTool(t Tool, currentVersion, destination string) (string, string, bool, error) {
+var UpdateTool = func(t Tool, currentVersion, destination string) (string, string, bool, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
@@ -255,7 +255,7 @@ func UpdateTool(t Tool, currentVersion, destination string) (string, string, boo
 	return oldVersion, newVersion, true, nil
 }
 
-func UpdateCurrentBinary(currentVersion, destination string) (string, string, bool, error) {
+var UpdateCurrentBinary = func(currentVersion, destination string) (string, string, bool, error) {
 	return UpdateTool(Rally, currentVersion, destination)
 }
 

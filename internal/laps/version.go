@@ -16,7 +16,7 @@ var semverRe = regexp.MustCompile(`\d+\.\d+\.\d+`)
 // PATH. It tries `laps version` then `laps --version`, extracting the first
 // semver-looking token from the output. The boolean is false when laps is not
 // installed or its version cannot be determined.
-func InstalledVersion() (string, bool) {
+var InstalledVersion = func() (string, bool) {
 	path, err := exec.LookPath("laps")
 	if err != nil {
 		return "", false
