@@ -2,6 +2,35 @@
   "version": 1,
   "tasks": [
     {
+      "id": "work-d47e",
+      "title": "Harden migration conflict handling",
+      "description": "Context: VERIFY on tidy-rally-runtime-data-storage exercised a legacy .rally/ fixture where  already existed before Rally workspace initialized., while legacy  was still present. Current behavior preserves the existing state target as intended, but it also leaves the legacy top-level file in place forever, so the migration does not fully converge to the clean  layout in this partially migrated state.\n\nOutcome: Decide and implement explicit conflict semantics for migration when both legacy and state paths exist. At minimum, make the behavior intentional and regression-tested. Preferred: converge safely (for example remove the legacy file when it is redundant, or emit a clear warning / marker when contents differ and automatic cleanup is unsafe).\n\nAcceptance: A fixture covering pre-existing state targets proves the chosen behavior; the top-level .rally/ layout no longer silently retains stale machine files in partially migrated repos without an explicit reason.",
+      "assignee": "SENIOR",
+      "isDone": true,
+      "createdAt": "2026-05-31T06:27:15.389524639Z",
+      "updatedAt": "2026-05-31T06:28:01.142217947Z",
+      "completedAt": "2026-05-31T06:28:01.142217947Z"
+    },
+    {
+      "id": "work-71bf",
+      "title": "Add migration fixture tests",
+      "description": "Context: VERIFY on tidy-rally-runtime-data-storage found the highest-risk slice still lacks automated migration coverage (tasks 8.1 / spec store: Runtime data layout migration). Manual verification passed for the happy path, but there is no regression test locking in flat-\u003estate moves, legacy dir cleanup, no-overwrite behavior, idempotency, and progress.yaml untouched semantics.\n\nOutcome: Add table-style tests around runInit or store.MigrateRallyStateLayout using a fixture .rally/ with flat jsonl files, progress.yaml, batches/, relays/, and at least one pre-existing state target. Assert moved files land in .rally/state/, batches/ and relays/ are removed, existing state targets are not overwritten, rerunning migration is a no-op, and progress.yaml is preserved verbatim and never recreated by summary writes.\n\nAcceptance: go test ./cmd/rally ./internal/store ./internal/progress passes; tests fail if migration regresses on no-overwrite, legacy cleanup, or idempotency.",
+      "assignee": "JUNIOR",
+      "isDone": false,
+      "createdAt": "2026-05-31T06:26:58.99804999Z",
+      "updatedAt": "2026-05-31T06:26:58.99804999Z",
+      "completedAt": null
+    },
+    {
+      "id": "work-d97f",
+      "title": "Add migration regression coverage",
+      "description": "Add automated tests for the tidy-rally-runtime-data-storage migration slice. Cover a legacy .rally fixture with flat jsonl files + progress.yaml + batches/ + relays/, run rally init twice, and assert: flat files move into .rally/state/, existing state targets are never overwritten, legacy batches/ and relays/ are removed, progress.yaml is left untouched and not recreated, config.toml.bak is untouched, and the second run is a full no-op/idempotent snapshot match.",
+      "isDone": true,
+      "createdAt": "2026-05-31T06:19:06.770888007Z",
+      "updatedAt": "2026-05-31T06:19:28.80201371Z",
+      "completedAt": "2026-05-31T06:19:28.80201371Z"
+    },
+    {
       "id": "work-c779",
       "title": "Remove repo-local relay log churn from .rally/",
       "description": "The state relocation slice still writes relay logs to both dataDir/relays/... and .rally/relays/relay-*.log, but runInit now templates .rally/.gitignore as only state/. This reintroduces unignored machine churn under top-level .rally/, conflicting with the tidy-runtime-data layout. Update the runtime to stop creating .rally/relays/ (or relocate it under gitignored state if intentionally kept), remove obsolete pruning/helpers if appropriate, and add regression coverage that a relay run does not leave .rally/relays/ behind when .rally/.gitignore is just state/.",

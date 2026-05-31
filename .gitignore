@@ -7,6 +7,10 @@
 !/.rally/summary.jsonl
 !/.rally/agents/
 !/.rally/agents/*.md
+
+# temporary as otherwise causes error with rally 0.8.0
+!/.rally/agent_status.jsonl
+
 scratchpad.md
 
 /tmp/*
