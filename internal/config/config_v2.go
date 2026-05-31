@@ -96,6 +96,10 @@ type HarnessConfig struct {
 	TailStream     string            `toml:"tail_stream,omitempty"`
 }
 
+type TelemetryConfig struct {
+	SentryDSN string `toml:"sentry_dsn,omitempty"`
+}
+
 type V2Config struct {
 	ClaudeModel          string
 	CodexModel           string
@@ -113,6 +117,7 @@ type V2Config struct {
 	Reliability ReliabilityConfig
 	Harnesses   map[string]*HarnessConfig
 	Routes      map[string][]string
+	Telemetry   TelemetryConfig
 
 	DeprecationNotes []string
 	SchemaWarning    string
@@ -135,6 +140,7 @@ type rawConfig struct {
 	Reliability ReliabilityConfig         `toml:"reliability"`
 	Harnesses   map[string]*HarnessConfig `toml:"harness"`
 	Routes      map[string][]string       `toml:"routes"`
+	Telemetry   TelemetryConfig           `toml:"telemetry,omitempty"`
 }
 
 func V2Path(workspaceDir string) string {
@@ -167,6 +173,7 @@ func LoadV2(workspaceDir string) (V2Config, error) {
 		Reliability:          raw.Reliability,
 		Harnesses:            raw.Harnesses,
 		Routes:               raw.Routes,
+		Telemetry:            raw.Telemetry,
 	}
 
 	if cfg.Reliability.StallThresholdSecs == 0 {
@@ -530,6 +537,7 @@ func SaveV2(workspaceDir string, cfg V2Config) error {
 		Reliability: cfg.Reliability,
 		Harnesses:   cfg.Harnesses,
 		Routes:      cfg.Routes,
+		Telemetry:   cfg.Telemetry,
 	}
 
 	data, err := toml.Marshal(raw)

@@ -23,6 +23,7 @@ import (
 	"github.com/mitchell-wallace/rally/internal/release"
 	"github.com/mitchell-wallace/rally/internal/routing"
 	"github.com/mitchell-wallace/rally/internal/store"
+	"github.com/mitchell-wallace/rally/internal/telemetry"
 	"github.com/spf13/cobra"
 )
 
@@ -30,6 +31,11 @@ var Version = "dev"
 
 func main() {
 	flushUpdateNotice := startBackgroundUpdateCheck(os.Args[1:], os.Stderr)
+
+	// Init telemetry — no-op when no DSN or RALLY_TELEMETRY=0.
+	_, flushTelemetry := telemetry.Init(loadTelemetryConfig())
+	defer flushTelemetry()
+
 	if err := rootCmd.Execute(); err != nil {
 		flushUpdateNotice()
 		fmt.Fprintln(os.Stderr, err)
@@ -69,6 +75,23 @@ func resolveWorkspaceDir() (string, error) {
 		return root, nil
 	}
 	return wd, nil
+}
+
+// loadTelemetryConfig reads the workspace config and returns the telemetry
+// section. Returns a zero Config on any error — telemetry is best-effort
+// and must never prevent the CLI from starting.
+func loadTelemetryConfig() telemetry.Config {
+	wsDir, err := resolveWorkspaceDir()
+	if err != nil {
+		return telemetry.Config{}
+	}
+	cfg, err := config.LoadV2(wsDir)
+	if err != nil {
+		return telemetry.Config{}
+	}
+	return telemetry.Config{
+		SentryDSN: cfg.Telemetry.SentryDSN,
+	}
 }
 
 func runRelay(cmd *cobra.Command, args []string) error {
@@ -389,6 +412,9 @@ codex_model = ""
 gemini_model = ""
 opencode_model = ""
 antigravity_model = ""
+
+[telemetry]
+sentry_dsn = ""
 `
 		if err := os.WriteFile(configPath, []byte(content), 0o644); err != nil {
 			return err
