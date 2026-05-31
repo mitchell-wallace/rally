@@ -144,6 +144,38 @@ func TestTailEmptyTries(t *testing.T) {
 	}
 }
 
+func TestTailTargetReadsStateDir(t *testing.T) {
+	dir := t.TempDir()
+	rallyDir := store.RallyDir(dir)
+	os.MkdirAll(rallyDir, 0o755)
+	initGitRepoForTail(t, dir)
+
+	s, err := store.NewStore(rallyDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	logPath := filepath.Join(dir, "try1.log")
+	if err := os.WriteFile(logPath, []byte("state-backed\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.AppendTry(store.TryRecord{ID: 1, AgentType: "claude", LogPath: logPath}); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := os.Stat(filepath.Join(rallyDir, "tries.jsonl")); !os.IsNotExist(err) {
+		t.Fatalf("legacy top-level tries.jsonl should not exist, stat err=%v", err)
+	}
+
+	target, err := tailTarget(dir, 1)
+	if err != nil {
+		t.Fatalf("tailTarget should read tries from .rally/state, got error: %v", err)
+	}
+	if target.LogPath != logPath {
+		t.Fatalf("LogPath = %q, want %q", target.LogPath, logPath)
+	}
+}
+
 func TestFollowFileGrowing(t *testing.T) {
 	f := filepath.Join(t.TempDir(), "grow.log")
 	file, err := os.Create(f)
