@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"github.com/mitchell-wallace/rally/internal/store"
 )
 
 // Loader resolves per-role prompt fragments from .rally/agents/.
@@ -20,7 +22,7 @@ func (l Loader) Load(assignee string) (string, error) {
 		return "", nil
 	}
 
-	agentsDir := filepath.Join(l.WorkspaceDir, ".rally", "agents")
+	agentsDir := store.AgentsDir(l.WorkspaceDir)
 	entries, err := os.ReadDir(agentsDir)
 	if err != nil {
 		if os.IsNotExist(err) {

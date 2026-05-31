@@ -27,14 +27,14 @@ func TestE2E_LapsEnabledComplete(t *testing.T) {
 		t.Fatalf("Execute error: %v", err)
 	}
 
-	pl, err := LoadProgress(tmp)
+	entries, err := LoadSummaryEntries(tmp)
 	if err != nil {
-		t.Fatalf("LoadProgress error: %v", err)
+		t.Fatalf("LoadSummaryEntries error: %v", err)
 	}
-	if len(pl.RecentRuns) != 1 {
-		t.Fatalf("len(RecentRuns) = %d, want 1", len(pl.RecentRuns))
+	if len(entries) != 1 {
+		t.Fatalf("len(entries) = %d, want 1", len(entries))
 	}
-	entry := pl.RecentRuns[0]
+	entry := entries[0]
 	if entry.RunID != "run-1" {
 		t.Errorf("RunID = %q, want run-1", entry.RunID)
 	}
@@ -73,14 +73,14 @@ func TestE2E_LapsEnabledHandoff(t *testing.T) {
 		t.Fatalf("Execute error: %v", err)
 	}
 
-	pl, err := LoadProgress(tmp)
+	entries, err := LoadSummaryEntries(tmp)
 	if err != nil {
-		t.Fatalf("LoadProgress error: %v", err)
+		t.Fatalf("LoadSummaryEntries error: %v", err)
 	}
-	if len(pl.RecentRuns) != 1 {
-		t.Fatalf("len(RecentRuns) = %d, want 1", len(pl.RecentRuns))
+	if len(entries) != 1 {
+		t.Fatalf("len(entries) = %d, want 1", len(entries))
 	}
-	entry := pl.RecentRuns[0]
+	entry := entries[0]
 	if entry.RunID != "run-2" {
 		t.Errorf("RunID = %q, want run-2", entry.RunID)
 	}
@@ -121,15 +121,15 @@ func TestE2E_LapsEnabledStub(t *testing.T) {
 		t.Fatalf("AppendRunEntry error: %v", err)
 	}
 
-	pl, err := LoadProgress(tmp)
+	entries, err := LoadSummaryEntries(tmp)
 	if err != nil {
-		t.Fatalf("LoadProgress error: %v", err)
+		t.Fatalf("LoadSummaryEntries error: %v", err)
 	}
-	if len(pl.RecentRuns) != 1 {
-		t.Fatalf("len(RecentRuns) = %d, want 1", len(pl.RecentRuns))
+	if len(entries) != 1 {
+		t.Fatalf("len(entries) = %d, want 1", len(entries))
 	}
-	if pl.RecentRuns[0].Summary != "agent stopped" {
-		t.Errorf("Summary = %q, want agent stopped", pl.RecentRuns[0].Summary)
+	if entries[0].Summary != "agent stopped" {
+		t.Errorf("Summary = %q, want agent stopped", entries[0].Summary)
 	}
 }
 
@@ -146,14 +146,14 @@ func TestE2E_NoBackendComplete(t *testing.T) {
 		t.Fatalf("Execute error: %v", err)
 	}
 
-	pl, err := LoadProgress(tmp)
+	entries, err := LoadSummaryEntries(tmp)
 	if err != nil {
-		t.Fatalf("LoadProgress error: %v", err)
+		t.Fatalf("LoadSummaryEntries error: %v", err)
 	}
-	if len(pl.RecentRuns) != 1 {
-		t.Fatalf("len(RecentRuns) = %d, want 1", len(pl.RecentRuns))
+	if len(entries) != 1 {
+		t.Fatalf("len(entries) = %d, want 1", len(entries))
 	}
-	entry := pl.RecentRuns[0]
+	entry := entries[0]
 	if entry.Summary != "Did Y" {
 		t.Errorf("Summary = %q, want Did Y", entry.Summary)
 	}

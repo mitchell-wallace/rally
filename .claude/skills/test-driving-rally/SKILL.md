@@ -126,7 +126,7 @@ rally init
 rally relay --new --iterations 1 --agent cc "Create an empty file called smoke-test.txt"
 ```
 
-**Check**: exit 0, file exists, try record in `.rally/tries.jsonl` shows `"completed": true`.
+**Check**: exit 0, file exists, try record in `.rally/state/tries.jsonl` shows `"completed": true`.
 
 ### 2b. CLI monitor
 
@@ -235,7 +235,7 @@ Run `rally relay --new --agent mycode:kimi "Create file custom-test.txt"`. Check
 ### 2g. Resilient execution
 
 After a run exhausts its retry budget (e.g., codex CLI broken), check:
-- `.rally/agent_status.jsonl` contains a `"paused"` event for that agent
+- `.rally/state/agent_status.jsonl` contains a `"paused"` event for that agent
 - Subsequent relay attempts for that agent show "all agents paused, waiting Xm" in the relay log
 - `~/.local/share/rally/relays/relay-N.log` for confirmation
 
@@ -253,7 +253,7 @@ rally relay --resume --agent cc "..."  # should resume silently
 rally relay --new --agent cc "..."    # should close old, start new
 ```
 
-**Check**: Relay records in `.rally/relays.jsonl` — old relay gets `ended_at` set when `--new` is used.
+**Check**: Relay records in `.rally/state/relays.jsonl` — old relay gets `ended_at` set when `--new` is used.
 
 ### 2i. Weighted mix
 
@@ -270,7 +270,7 @@ rally relay --new --iterations 3 --agent "cc ge op" "Create a unique file per it
 ```
 
 Watch the header line cycle through `claude`, `gemini`, `opencode`. The
-`agent_type` field in `tries.jsonl` should also alternate. **Regression
+`agent_type` field in `state/tries.jsonl` should also alternate. **Regression
 note (fixed in 0.7.4)**: prior versions stuck on the first harness because
 the override path didn't inject a default quota for bare aliases.
 `TestRealBackend_MultiHarnessRoundRobin` guards this. If you see all
@@ -293,7 +293,7 @@ rally progress --summary "test done"
 rally progress --complete --summary "all done" --followup "check results"
 ```
 
-**Check**: `.rally/progress.yaml` updated with new entries.
+**Check**: `.rally/state/summary.jsonl` updated with new entries.
 
 ### 2m. Instructions command
 
@@ -320,12 +320,12 @@ Run and observe:
   - **Connected-frozen** (`connectedFrozen`): log silent ≥ threshold AND connections > 0 AND no syscall I/O (`rchar+wchar`) for 5 minutes. Catches rate-limited agents keeping a connection alive but sending no data.
 - On **non-Linux**: only log silence is checked; `❄ frozen` fires at threshold.
 
-The per-try netstat log at `.rally/data/tries/REPO/try-N.netstat.jsonl` records `{ts, log_silent_s, connections, io_bytes, syscall_bytes}` each tick. Typical baselines:
+The per-try netstat log at `~/.local/share/rally/tries/<repo>/try-N.netstat.jsonl` records `{ts, log_silent_s, connections, io_bytes, syscall_bytes}` each tick. Typical baselines:
 - Simple task (file creation): connections 2-6, syscall delta 2-5 MB total
 - npm install: connections 1-2 with massive syscall delta (400 MB–2 GB), sporadic "No I/O" warnings during download wait phases
 - Rate-limited idle: connections > 0, syscall bytes plateau (< 1 MB/min), log silent
 
-Check `.rally/relays/relay-N.log` for "freeze detected" vs no freeze.
+Check `~/.local/share/rally/relays/<repo>/relay-N.log` for "freeze detected" vs no freeze.
 
 ---
 
@@ -363,7 +363,7 @@ After testing, compile a concise report:
 - Weighted mix cc:2: ✓ (2 claude iterations completed)
 - Log scoping: ✓ (tries in data_dir/tries/REPOKEY/ per-workspace)
 - [N/M] header: ✓ (shows iteration-within-relay / target, e.g. [1/3])
-- Rally progress command: ✓ (progress.yaml updated)
+- Rally progress command: ✓ (summary.jsonl updated)
 
 ### Failed / Degraded
 - OpenCode rate-limited models: hang silently; `classicFrozen` fires ~130s after connections drop, agent paused (working as intended)

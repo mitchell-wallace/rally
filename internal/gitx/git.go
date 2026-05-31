@@ -4,7 +4,9 @@ package gitx
 import (
 	"errors"
 	"fmt"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 )
 
@@ -60,8 +62,8 @@ func IsGitDirty(dir string) (bool, error) {
 	return strings.TrimSpace(string(out)) != "", nil
 }
 
-// IsWorkspaceDirty checks if there are user-agent workspace changes,
-// excluding Rally's own operational files (.rally/*.jsonl, .rally/current_task.md).
+// IsWorkspaceDirty checks if there are user-agent workspace changes, excluding
+// Rally's own workspace metadata and gitignored local state under .rally/.
 func IsWorkspaceDirty(dir string) (bool, error) {
 	out, err := GitOutput(dir, "status", "--porcelain")
 	if err != nil {
@@ -73,15 +75,6 @@ func IsWorkspaceDirty(dir string) (bool, error) {
 		if line == "" {
 			continue
 		}
-		// Skip Rally's own files
-		if strings.HasPrefix(line, "M .rally/") || strings.HasPrefix(line, "A .rally/") ||
-			strings.HasPrefix(line, "D .rally/") || strings.HasPrefix(line, "R .rally/") {
-			continue
-		}
-		if strings.HasSuffix(line, ".rally/current_task.md") || strings.HasSuffix(line, ".rally/relays/") {
-			continue
-		}
-		// Check if the file path is under .rally/
 		parts := strings.SplitN(line, " ", 2)
 		if len(parts) == 2 {
 			path := parts[1]
@@ -94,14 +87,14 @@ func IsWorkspaceDirty(dir string) (bool, error) {
 	return false, nil
 }
 
-// CommitRallyState commits Rally's operational state files.
+// CommitRallyState commits Rally's non-state operational files (config, instructions, etc).
+// State files under .rally/state/ are gitignored and never committed.
 func CommitRallyState(dir string) error {
 	_, inGit, err := GitRepoRoot(dir)
 	if err != nil || !inGit {
 		return nil
 	}
 
-	// Check if there are Rally files to commit
 	out, err := GitOutput(dir, "status", "--porcelain", ".rally/")
 	if err != nil {
 		return err
@@ -110,17 +103,48 @@ func CommitRallyState(dir string) error {
 		return nil
 	}
 
-	if _, err := GitOutput(dir, "add", ".rally/*.jsonl"); err != nil {
-		return err
+	var existingTrackedPaths []string
+	for _, path := range rallyTrackedStatePaths {
+		if _, err := os.Stat(filepath.Join(dir, path)); err != nil {
+			if os.IsNotExist(err) {
+				continue
+			}
+			return err
+		}
+		existingTrackedPaths = append(existingTrackedPaths, path)
+		if _, err := GitOutput(dir, "add", path); err != nil {
+			return err
+		}
+	}
+	if len(existingTrackedPaths) == 0 {
+		return nil
 	}
 
-	args := append(GitUserFallbackConfig(dir), "commit", "--no-verify", "-m", "rally: update state")
-	if _, err := GitOutput(dir, args...); err != nil {
-		// If nothing to commit, that's okay
-		if strings.Contains(string(out), "nothing to commit") {
+	diffArgs := append([]string{"diff", "--cached", "--name-only", "--"}, existingTrackedPaths...)
+	cached, err := GitOutput(dir, diffArgs...)
+	if err != nil {
+		return err
+	}
+	if strings.TrimSpace(string(cached)) == "" {
+		return nil
+	}
+
+	args := append(GitUserFallbackConfig(dir), "commit", "--no-verify", "-m", "rally: update state", "--")
+	args = append(args, existingTrackedPaths...)
+	if commitOut, err := GitOutput(dir, args...); err != nil {
+		if strings.Contains(string(commitOut), "nothing to commit") || strings.Contains(string(commitOut), "no changes added") {
 			return nil
 		}
 		return err
 	}
 	return nil
+}
+
+var rallyTrackedStatePaths = []string{
+	".rally/.gitignore",
+	".rally/README.md",
+	".rally/config.toml",
+	".rally/instructions.md",
+	".rally/agents",
+	".rally/summary.jsonl",
 }

@@ -14,7 +14,7 @@ import (
 
 func TestTailLatest(t *testing.T) {
 	dir := t.TempDir()
-	rallyDir := filepath.Join(dir, ".rally")
+	rallyDir := store.RallyDir(dir)
 	os.MkdirAll(rallyDir, 0o755)
 	initGitRepoForTail(t, dir)
 
@@ -54,7 +54,7 @@ func TestTailLatest(t *testing.T) {
 
 func TestTailTryNValid(t *testing.T) {
 	dir := t.TempDir()
-	rallyDir := filepath.Join(dir, ".rally")
+	rallyDir := store.RallyDir(dir)
 	os.MkdirAll(rallyDir, 0o755)
 	initGitRepoForTail(t, dir)
 
@@ -104,7 +104,7 @@ func TestTailTryNValid(t *testing.T) {
 
 func TestTailTryNInvalid(t *testing.T) {
 	dir := t.TempDir()
-	rallyDir := filepath.Join(dir, ".rally")
+	rallyDir := store.RallyDir(dir)
 	os.MkdirAll(rallyDir, 0o755)
 	initGitRepoForTail(t, dir)
 
@@ -129,7 +129,7 @@ func TestTailTryNInvalid(t *testing.T) {
 
 func TestTailEmptyTries(t *testing.T) {
 	dir := t.TempDir()
-	rallyDir := filepath.Join(dir, ".rally")
+	rallyDir := store.RallyDir(dir)
 	os.MkdirAll(rallyDir, 0o755)
 	initGitRepoForTail(t, dir)
 
@@ -141,6 +141,38 @@ func TestTailEmptyTries(t *testing.T) {
 	// No tries appended
 	if _, err := os.Stat(filepath.Join(rallyDir, "tries.jsonl")); os.IsNotExist(err) {
 		// Expected for empty store
+	}
+}
+
+func TestTailTargetReadsStateDir(t *testing.T) {
+	dir := t.TempDir()
+	rallyDir := store.RallyDir(dir)
+	os.MkdirAll(rallyDir, 0o755)
+	initGitRepoForTail(t, dir)
+
+	s, err := store.NewStore(rallyDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	logPath := filepath.Join(dir, "try1.log")
+	if err := os.WriteFile(logPath, []byte("state-backed\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.AppendTry(store.TryRecord{ID: 1, AgentType: "claude", LogPath: logPath}); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := os.Stat(filepath.Join(rallyDir, "tries.jsonl")); !os.IsNotExist(err) {
+		t.Fatalf("legacy top-level tries.jsonl should not exist, stat err=%v", err)
+	}
+
+	target, err := tailTarget(dir, 1)
+	if err != nil {
+		t.Fatalf("tailTarget should read tries from .rally/state, got error: %v", err)
+	}
+	if target.LogPath != logPath {
+		t.Fatalf("LogPath = %q, want %q", target.LogPath, logPath)
 	}
 }
 
@@ -184,7 +216,7 @@ func TestFollowFileGrowing(t *testing.T) {
 // TestTailMultiRepoSharedDataDir verifies that two repos sharing one data dir
 // can each `rally tail --try N` against their own try logs. Try log files are
 // written under <dataDir>/tries/<repoKey>/try-N.log; each workspace's
-// .rally/tries.jsonl stores the absolute LogPath, so tail in each workspace
+// .rally/state/tries.jsonl stores the absolute LogPath, so tail in each workspace
 // picks up only its own try regardless of try-id collisions.
 func TestTailMultiRepoSharedDataDir(t *testing.T) {
 	sharedDataDir := t.TempDir()
@@ -193,7 +225,7 @@ func TestTailMultiRepoSharedDataDir(t *testing.T) {
 	mkRepo := func(name, body string) (string, store.TryRecord) {
 		repoDir := filepath.Join(t.TempDir(), name)
 		os.MkdirAll(repoDir, 0o755)
-		rallyDir := filepath.Join(repoDir, ".rally")
+		rallyDir := store.RallyDir(repoDir)
 		os.MkdirAll(rallyDir, 0o755)
 		initGitRepoForTail(t, repoDir)
 
@@ -225,7 +257,7 @@ func TestTailMultiRepoSharedDataDir(t *testing.T) {
 
 	readVia := func(repoDir string, expected string) {
 		t.Helper()
-		s, err := store.NewStore(filepath.Join(repoDir, ".rally"))
+		s, err := store.NewStore(store.RallyDir(repoDir))
 		if err != nil {
 			t.Fatal(err)
 		}

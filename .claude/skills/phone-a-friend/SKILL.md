@@ -1,6 +1,6 @@
 ---
 name: phone-a-friend
-description: Delegate bounded design, review, debugging, or implementation questions to another local agent CLI through Rally. Use when an agent needs an independent second opinion, model-specific critique, CLI-based delegation, or user-visible comparison between model outputs; includes Rally agent syntax, model notes, failure recording, and feedback calibration.
+description: Call another agent vlia cli as a real collaborator, use only when told explicitly to phone a friend, otherwise prefer your harness's native subagent tool.
 license: MIT
 metadata:
   author: rally
@@ -10,6 +10,8 @@ metadata:
 # Phone A Friend
 
 Use another agent as a real collaborator through CLI delegation. The friend should receive a bounded ask, enough context to be useful, and explicit rules about whether it may edit files.
+
+Delegate bounded design, review, debugging, or implementation questions to another local agent CLI through Rally. Use when an agent needs an independent second opinion, model-specific critique, CLI-based delegation, or user-visible comparison between model outputs; includes Rally agent syntax, model notes, failure recording, and feedback calibration.
 
 Two delegation channels:
 
@@ -34,6 +36,9 @@ If the environment is ambiguous (e.g. a mounted host directory inside a containe
 
 ## When To Use
 
+**Only use this skill when the user explicitly asks to phone a friend or delegate to another model/CLI.** For all other subagent needs, prefer your harness's native subagent tool (e.g. the Task tool in opencode).
+
+When explicitly requested:
 - You need an independent design, architecture, UI, testing, or code-review perspective.
 - You are stuck on a failure and want a second debugging hypothesis.
 - The user asks for another model or agent to contribute.
@@ -62,6 +67,7 @@ Do not delegate just to feel busy. Keep the local agent responsible for integrat
    - Use `ge`, not `gm`, for Gemini. Do not replace user-provided model slugs with older guesses.
 
 4. **Dispatch the call**
+   - **Timeouts:** agent CLIs can be slow. Use at least 20 minutes (1200000ms) for direct CLI calls. For `rally relay` shell commands that may run for hours, set timeout accordingly or omit it.
    - **Through Rally (preferred):**
      ```bash
      rally relay --new --iterations 1 --agent "<agent-or-route>" "<prompt>"
@@ -97,7 +103,7 @@ Do not delegate just to feel busy. Keep the local agent responsible for integrat
 
 If the friend stalls, rate-limits, or exits strangely:
 
-- Check `.rally/relays/relay-N.log`, `.rally/tries.jsonl`, `.rally/agent_status.jsonl`, and `rally tail`.
+- Check relay logs, `.rally/state/tries.jsonl`, `.rally/state/agent_status.jsonl`, and `rally tail`.
 - Classify whether this is auth, rate limit, freeze, bad model slug, bad custom harness config, or a genuine task failure.
 - If the failure signature is new or recurring, update `model-notes.md` with the exact symptom and recommended response.
 - Try a cheaper/faster model only when that still answers the original question. Otherwise report the degraded state.

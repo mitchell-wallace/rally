@@ -1,91 +1,115 @@
 package progress
 
 import (
+	"bufio"
+	"bytes"
+	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"time"
 
-	"gopkg.in/yaml.v3"
+	"github.com/mitchell-wallace/rally/internal/store"
 )
 
-// ProgressLog is the top-level structure for .rally/progress.yaml.
-type ProgressLog struct {
-	Version       int        `yaml:"version"`
-	UpdatedAt     string     `yaml:"updated_at"`
-	HistoryWindow int        `yaml:"history_window"`
-	RecentRuns    []RunEntry `yaml:"recent_runs"`
-}
-
-// RunEntry represents a single finalized run in the progress log.
+// RunEntry represents a single finalized run in the append-only summary log.
 type RunEntry struct {
-	RunID         string        `yaml:"run_id"`
-	Summary       string        `yaml:"summary"`
-	UpdatedAt     string        `yaml:"updated_at"`
-	LapsCompleted interface{}   `yaml:"laps_completed,omitempty"`
-	Handoff       *HandoffEntry `yaml:"handoff,omitempty"`
+	RunID         string        `json:"run_id"`
+	Summary       string        `json:"summary"`
+	UpdatedAt     string        `json:"updated_at"`
+	LapsCompleted interface{}   `json:"laps_completed,omitempty"`
+	Handoff       *HandoffEntry `json:"handoff,omitempty"`
 }
 
 // HandoffEntry contains handoff-specific metadata.
 type HandoffEntry struct {
-	Summary       string   `yaml:"summary"`
-	Followups     []string `yaml:"followups"`
-	CreatedLapIDs []string `yaml:"created_lap_ids"`
+	Summary       string   `json:"summary"`
+	Followups     []string `json:"followups"`
+	CreatedLapIDs []string `json:"created_lap_ids"`
 }
 
-// ProgressPath returns the path to progress.yaml for a workspace.
+// SummaryPath returns the path to summary.jsonl for a workspace.
+func SummaryPath(workspaceDir string) string {
+	return store.SummaryPath(workspaceDir)
+}
+
+// ProgressPath returns the current run-summary path. The name is retained for
+// callers that still use the old progress terminology.
 func ProgressPath(workspaceDir string) string {
-	return filepath.Join(workspaceDir, ".rally", "progress.yaml")
+	return SummaryPath(workspaceDir)
 }
 
-// LoadProgress reads the progress log. If it does not exist, a fresh log with
-// version 1, history_window 50 and an empty recent_runs slice is returned.
-func LoadProgress(workspaceDir string) (*ProgressLog, error) {
-	path := ProgressPath(workspaceDir)
-	data, err := os.ReadFile(path)
+// LoadSummaryEntries reads the append-only summary log. Missing files return an
+// empty slice. Blank lines are ignored so a manually edited trailing newline is
+// harmless.
+func LoadSummaryEntries(workspaceDir string) ([]RunEntry, error) {
+	path := SummaryPath(workspaceDir)
+	file, err := os.Open(path)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return &ProgressLog{
-				Version:       1,
-				UpdatedAt:     time.Now().UTC().Format(time.RFC3339),
-				HistoryWindow: 50,
-				RecentRuns:    []RunEntry{},
-			}, nil
+			return []RunEntry{}, nil
 		}
 		return nil, err
 	}
-	var pl ProgressLog
-	if err := yaml.Unmarshal(data, &pl); err != nil {
-		return nil, fmt.Errorf("parse progress.yaml: %w", err)
+	defer file.Close()
+
+	reader := bufio.NewReader(file)
+	var entries []RunEntry
+	lineNumber := 0
+	for {
+		line, err := reader.ReadBytes('\n')
+		if len(line) > 0 {
+			lineNumber++
+			if len(bytes.TrimSpace(line)) > 0 {
+				var entry RunEntry
+				if unmarshalErr := json.Unmarshal(line, &entry); unmarshalErr != nil {
+					return nil, fmt.Errorf("parse summary.jsonl line %d: %w", lineNumber, unmarshalErr)
+				}
+				entries = append(entries, entry)
+			}
+		}
+		if err == nil {
+			continue
+		}
+		if err == io.EOF {
+			break
+		}
+		return nil, err
 	}
-	return &pl, nil
+	return entries, nil
 }
 
-// SaveProgress writes the progress log as YAML.
-func SaveProgress(workspaceDir string, pl *ProgressLog) error {
-	path := ProgressPath(workspaceDir)
+// AppendRunEntry appends a finalized run or handoff summary as one JSON line.
+func AppendRunEntry(workspaceDir string, entry RunEntry) error {
+	path := SummaryPath(workspaceDir)
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err
 	}
-	data, err := yaml.Marshal(pl)
-	if err != nil {
-		return err
-	}
-	return os.WriteFile(path, data, 0o644)
-}
 
-// AppendRunEntry loads the progress log, appends the entry, updates
-// updated_at, trims recent_runs to history_window, and saves.
-func AppendRunEntry(workspaceDir string, entry RunEntry) error {
-	pl, err := LoadProgress(workspaceDir)
+	entry.UpdatedAt = time.Now().UTC().Format(time.RFC3339)
+	if entry.Handoff != nil {
+		if entry.Handoff.Followups == nil {
+			entry.Handoff.Followups = []string{}
+		}
+		if entry.Handoff.CreatedLapIDs == nil {
+			entry.Handoff.CreatedLapIDs = []string{}
+		}
+	}
+
+	data, err := json.Marshal(entry)
 	if err != nil {
 		return err
 	}
-	entry.UpdatedAt = time.Now().UTC().Format(time.RFC3339)
-	pl.RecentRuns = append(pl.RecentRuns, entry)
-	pl.UpdatedAt = entry.UpdatedAt
-	if len(pl.RecentRuns) > pl.HistoryWindow {
-		pl.RecentRuns = pl.RecentRuns[len(pl.RecentRuns)-pl.HistoryWindow:]
+	data = append(data, '\n')
+
+	file, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
+	if err != nil {
+		return err
 	}
-	return SaveProgress(workspaceDir, pl)
+	if _, err := file.Write(data); err != nil {
+		_ = file.Close()
+		return err
+	}
+	return file.Close()
 }

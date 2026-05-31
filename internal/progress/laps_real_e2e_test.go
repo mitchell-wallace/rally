@@ -68,14 +68,14 @@ func TestRealLapsDoneWrapupFlow(t *testing.T) {
 		t.Fatalf("expected progress recorded output, got %q", wrapupOutput)
 	}
 
-	pl, err := LoadProgress(workspaceDir)
+	entries, err := LoadSummaryEntries(workspaceDir)
 	if err != nil {
-		t.Fatalf("LoadProgress error: %v", err)
+		t.Fatalf("LoadSummaryEntries error: %v", err)
 	}
-	if len(pl.RecentRuns) != 1 {
-		t.Fatalf("len(RecentRuns) = %d, want 1", len(pl.RecentRuns))
+	if len(entries) != 1 {
+		t.Fatalf("len(entries) = %d, want 1", len(entries))
 	}
-	entry := pl.RecentRuns[0]
+	entry := entries[0]
 	if entry.RunID != "run-real-1" {
 		t.Errorf("RunID = %q, want run-real-1", entry.RunID)
 	}
@@ -131,14 +131,14 @@ func TestRealLapsHandoffWrapupCreatesHeadFollowup(t *testing.T) {
 		t.Fatalf("expected progress recorded output, got %q", wrapupOutput)
 	}
 
-	pl, err := LoadProgress(workspaceDir)
+	entries, err := LoadSummaryEntries(workspaceDir)
 	if err != nil {
-		t.Fatalf("LoadProgress error: %v", err)
+		t.Fatalf("LoadSummaryEntries error: %v", err)
 	}
-	if len(pl.RecentRuns) != 1 {
-		t.Fatalf("len(RecentRuns) = %d, want 1", len(pl.RecentRuns))
+	if len(entries) != 1 {
+		t.Fatalf("len(entries) = %d, want 1", len(entries))
 	}
-	entry := pl.RecentRuns[0]
+	entry := entries[0]
 	if entry.Handoff == nil {
 		t.Fatal("expected handoff entry to be present")
 	}

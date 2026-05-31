@@ -44,7 +44,7 @@ func TestScheduler_Scenario1_NoQuotas(t *testing.T) {
 		t.Errorf("second pick = %q, want opus (no quota)", st1.Entry.Spec)
 	}
 
-	s.OnAgentFailed(st0, "rate limit")
+	s.OnAgentFailed(st0, "rate limit", true)
 
 	st2 := mustNext(t, s)
 	if st2.Entry.Spec != "codex:gpt-5.5" {
@@ -55,7 +55,7 @@ func TestScheduler_Scenario1_NoQuotas(t *testing.T) {
 		t.Errorf("gpt no-quota stay = %q, want gpt", st3.Entry.Spec)
 	}
 
-	s.OnAgentFailed(st2, "error")
+	s.OnAgentFailed(st2, "error", false)
 
 	st4 := mustNext(t, s)
 	if st4.Entry.Spec != "opencode:opencode-go/kimi-k2.6" {
@@ -66,7 +66,7 @@ func TestScheduler_Scenario1_NoQuotas(t *testing.T) {
 		t.Errorf("kimi no-quota stay = %q, want kimi", st5.Entry.Spec)
 	}
 
-	s.OnAgentFailed(st4, "error")
+	s.OnAgentFailed(st4, "error", false)
 
 	s.OnAgentRecovered(st0)
 	st6 := mustNext(t, s)
@@ -140,7 +140,7 @@ func TestScheduler_Scenario2_MixedQuota(t *testing.T) {
 		t.Errorf("pick 6 = %q, want kimi (no quota, stays)", st.Entry.Spec)
 	}
 
-	s.OnAgentFailed(st, "error")
+	s.OnAgentFailed(st, "error", false)
 
 	st = mustNext(t, s)
 	if st.Entry.Spec != "claude:opus-4.7" {
@@ -160,7 +160,7 @@ func TestScheduler_FailureShortCircuitsQuota(t *testing.T) {
 		t.Fatalf("pick 1 = %q, want opus", st.Entry.Spec)
 	}
 
-	s.OnAgentFailed(st, "rate limit")
+	s.OnAgentFailed(st, "rate limit", true)
 
 	st = mustNext(t, s)
 	if st.Entry.Spec != "codex:gpt-5.5" {
@@ -180,19 +180,19 @@ func TestScheduler_ExhaustedSkippedWithinCycle(t *testing.T) {
 	if opus.Entry.Spec != "claude:opus-4.7" {
 		t.Fatalf("pick 1 = %q, want opus", opus.Entry.Spec)
 	}
-	s.OnAgentFailed(opus, "frozen")
+	s.OnAgentFailed(opus, "frozen", true)
 
 	gpt := mustNext(t, s)
 	if gpt.Entry.Spec != "codex:gpt-5.5" {
 		t.Fatalf("pick 2 = %q, want gpt", gpt.Entry.Spec)
 	}
-	s.OnAgentFailed(gpt, "frozen")
+	s.OnAgentFailed(gpt, "frozen", true)
 
 	kimi := mustNext(t, s)
 	if kimi.Entry.Spec != "opencode:opencode-go/kimi-k2.6" {
 		t.Fatalf("pick 3 = %q, want kimi", kimi.Entry.Spec)
 	}
-	s.OnAgentFailed(kimi, "frozen")
+	s.OnAgentFailed(kimi, "frozen", true)
 
 	_, err := s.Next()
 	if err == nil {
@@ -200,7 +200,7 @@ func TestScheduler_ExhaustedSkippedWithinCycle(t *testing.T) {
 	}
 }
 
-func TestScheduler_CycleWrapResetsQuotaCountersButKeepsFrozenEntriesSkipped(t *testing.T) {
+func TestScheduler_CycleWrapResetsQuotaCountersButKeepsBenchedEntriesSkipped(t *testing.T) {
 	entries := parseEntriesOrDie(t, []string{
 		"claude:opus-4.7:1",
 		"codex:gpt-5.5:1",
@@ -208,7 +208,7 @@ func TestScheduler_CycleWrapResetsQuotaCountersButKeepsFrozenEntriesSkipped(t *t
 	s := NewScheduler(entries)
 
 	opus := mustNext(t, s)
-	s.OnAgentFailed(opus, "freeze")
+	s.OnAgentFailed(opus, "freeze", true)
 
 	gpt := mustNext(t, s)
 	if gpt.Entry.Spec != "codex:gpt-5.5" {
@@ -257,19 +257,19 @@ func TestScheduler_Scenario7_RangeQuotaUnderCascadingFreezes(t *testing.T) {
 			gptState = es
 		}
 	}
-	s.OnAgentFailed(opusState, "rate limit freeze")
+	s.OnAgentFailed(opusState, "rate limit freeze", true)
 
-	// Cycle wrapped; opus frozen → skip, advance to gpt
+	// Cycle wrapped; opus benched → skip, advance to gpt
 	collect() // gpt 1 (cycle 2)
 	collect() // gpt 2
 	collect() // gpt 3 → quota met
 
 	collect() // kimi 1 (min reached, gpt available next cycle)
 
-	// Now freeze gpt too
-	s.OnAgentFailed(gptState, "rate limit freeze")
+	// Now bench gpt too
+	s.OnAgentFailed(gptState, "rate limit freeze", true)
 
-	// Opus and gpt both frozen → kimi can extend to max 5
+	// Opus and gpt both benched → kimi can extend to max 5
 	var st *EntryState
 	for i := 0; i < 4; i++ {
 		st = mustNext(t, s)
@@ -292,7 +292,7 @@ func TestScheduler_Scenario7_RangeQuotaUnderCascadingFreezes(t *testing.T) {
 	}
 }
 
-func TestScheduler_AllExhaustedForceWait(t *testing.T) {
+func TestScheduler_AllBenchedForceWait(t *testing.T) {
 	entries := parseEntriesOrDie(t, []string{
 		"claude:opus-4.7:1",
 		"codex:gpt-5.5:1",
@@ -300,10 +300,10 @@ func TestScheduler_AllExhaustedForceWait(t *testing.T) {
 	s := NewScheduler(entries)
 
 	st := mustNext(t, s)
-	s.OnAgentFailed(st, "error")
+	s.OnAgentFailed(st, "error", false)
 
 	st = mustNext(t, s)
-	s.OnAgentFailed(st, "error")
+	s.OnAgentFailed(st, "error", false)
 
 	_, err := s.Next()
 	if err == nil {
@@ -364,7 +364,7 @@ func TestScheduler_RangeQuotaExtendsWhenOthersExhausted(t *testing.T) {
 	if st.Entry.Spec != "claude:opus-4.7" {
 		t.Fatalf("pick 1 = %q, want opus", st.Entry.Spec)
 	}
-	s.OnAgentFailed(st, "frozen")
+	s.OnAgentFailed(st, "frozen", true)
 
 	// kimi runs min 2
 	st = mustNext(t, s)
@@ -407,7 +407,7 @@ func TestScheduler_AllNoQuotaRoute(t *testing.T) {
 		t.Errorf("no quota → stays on first: %q", st.Entry.Spec)
 	}
 
-	s.OnAgentFailed(st, "error")
+	s.OnAgentFailed(st, "error", false)
 	st = mustNext(t, s)
 	if st.Entry.Spec != "codex:gpt-5.5" {
 		t.Errorf("after fail: %q", st.Entry.Spec)
@@ -480,21 +480,21 @@ func TestScheduler_OnAgentRecovered(t *testing.T) {
 	s := NewScheduler(entries)
 
 	opus := mustNext(t, s)
-	s.OnAgentFailed(opus, "freeze")
+	s.OnAgentFailed(opus, "freeze", true)
 
 	if !opus.Exhausted {
 		t.Fatal("opus should be exhausted after failure")
 	}
-	if !opus.Frozen {
-		t.Fatal("opus should be frozen after detector-driven failure")
+	if !opus.Benched {
+		t.Fatal("opus should be benched after detector-driven failure")
 	}
 
 	s.OnAgentRecovered(opus)
 	if opus.Exhausted {
 		t.Error("opus should not be exhausted after recovery")
 	}
-	if opus.Frozen {
-		t.Error("opus should not be frozen after recovery")
+	if opus.Benched {
+		t.Error("opus should not be benched after recovery")
 	}
 }
 
@@ -506,20 +506,86 @@ func TestScheduler_OnAgentRecovered_DoesNotClearRetryBudgetExhaustion(t *testing
 	s := NewScheduler(entries)
 
 	opus := mustNext(t, s)
-	s.OnAgentFailed(opus, "retry-budget-exhausted")
+	s.OnAgentFailed(opus, "retry-budget-exhausted", false)
 
 	if !opus.Exhausted {
 		t.Fatal("opus should be exhausted after retry-budget exhaustion")
 	}
-	if opus.Frozen {
-		t.Fatal("opus should not be marked frozen for retry-budget exhaustion")
+	if opus.Benched {
+		t.Fatal("opus should not be marked benched for retry-budget exhaustion")
 	}
 
 	s.OnAgentRecovered(opus)
 	if !opus.Exhausted {
 		t.Error("opus exhaustion should not be cleared by recovery")
 	}
-	if opus.Frozen {
-		t.Error("opus should remain unfrozen after recovery no-op")
+	if opus.Benched {
+		t.Error("opus should remain unbenched after recovery no-op")
+	}
+}
+
+func TestScheduler_AllExhausted(t *testing.T) {
+	entries := parseEntriesOrDie(t, []string{
+		"claude:opus-4.7:1",
+		"codex:gpt-5.5:1",
+	})
+	s := NewScheduler(entries)
+
+	if s.AllExhausted() {
+		t.Error("AllExhausted should be false when entries are fresh")
+	}
+
+	opus := mustNext(t, s)
+	s.OnAgentFailed(opus, "retry budget", false)
+	if s.AllExhausted() {
+		t.Error("AllExhausted should be false when only one entry is exhausted")
+	}
+
+	gpt := mustNext(t, s)
+	s.OnAgentFailed(gpt, "retry budget", false)
+	if !s.AllExhausted() {
+		t.Error("AllExhausted should be true when all entries have Exhausted=true")
+	}
+
+	entriesStates := s.EntryStates()
+	entriesStates[0].Exhausted = false
+	if s.AllExhausted() {
+		t.Error("AllExhausted should be false when one entry has Exhausted=false")
+	}
+}
+
+func TestScheduler_AllBenchedOrExhausted(t *testing.T) {
+	entries := parseEntriesOrDie(t, []string{
+		"claude:opus-4.7:1",
+		"codex:gpt-5.5:1",
+	})
+	s := NewScheduler(entries)
+
+	if s.AllBenchedOrExhausted() {
+		t.Error("AllBenchedOrExhausted should be false when entries are fresh")
+	}
+
+	opus := mustNext(t, s)
+	s.OnAgentFailed(opus, "rate limit", true)
+
+	if s.AllBenchedOrExhausted() {
+		t.Error("AllBenchedOrExhausted should be false when only one entry is benched")
+	}
+
+	gpt := mustNext(t, s)
+	s.OnAgentFailed(gpt, "rate limit", true)
+
+	if !s.AllBenchedOrExhausted() {
+		t.Error("AllBenchedOrExhausted should be true when all entries are benched")
+	}
+
+	s.OnAgentRecovered(opus)
+	if s.AllBenchedOrExhausted() {
+		t.Error("AllBenchedOrExhausted should be false after recovering one entry")
+	}
+	s.OnAgentFailed(opus, "retry-budget-exhausted", false)
+
+	if !s.AllBenchedOrExhausted() {
+		t.Error("AllBenchedOrExhausted should be true with mix of benched and exhausted entries")
 	}
 }

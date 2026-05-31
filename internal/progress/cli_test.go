@@ -136,16 +136,19 @@ func TestProgressComplete(t *testing.T) {
 	if _, err := os.Stat(RunStatePath(tmp)); !os.IsNotExist(err) {
 		t.Fatal("expected run-state.json to be cleared")
 	}
+	if _, err := os.Stat(filepath.Join(tmp, ".rally", "progress.yaml")); !os.IsNotExist(err) {
+		t.Fatalf("expected progress.yaml not to be created, stat err = %v", err)
+	}
 
 	// Progress log should have an entry.
-	pl, err := LoadProgress(tmp)
+	entries, err := LoadSummaryEntries(tmp)
 	if err != nil {
-		t.Fatalf("LoadProgress error: %v", err)
+		t.Fatalf("LoadSummaryEntries error: %v", err)
 	}
-	if len(pl.RecentRuns) != 1 {
-		t.Fatalf("len(RecentRuns) = %d, want 1", len(pl.RecentRuns))
+	if len(entries) != 1 {
+		t.Fatalf("len(entries) = %d, want 1", len(entries))
 	}
-	entry := pl.RecentRuns[0]
+	entry := entries[0]
 	if entry.RunID != "run-99" {
 		t.Errorf("RunID = %q, want run-99", entry.RunID)
 	}
@@ -188,14 +191,14 @@ func TestProgressHandoff(t *testing.T) {
 		t.Fatal("expected run-state.json to be cleared")
 	}
 
-	pl, err := LoadProgress(tmp)
+	entries, err := LoadSummaryEntries(tmp)
 	if err != nil {
-		t.Fatalf("LoadProgress error: %v", err)
+		t.Fatalf("LoadSummaryEntries error: %v", err)
 	}
-	if len(pl.RecentRuns) != 1 {
-		t.Fatalf("len(RecentRuns) = %d, want 1", len(pl.RecentRuns))
+	if len(entries) != 1 {
+		t.Fatalf("len(entries) = %d, want 1", len(entries))
 	}
-	entry := pl.RecentRuns[0]
+	entry := entries[0]
 	if entry.RunID != "run-88" {
 		t.Errorf("RunID = %q, want run-88", entry.RunID)
 	}
@@ -233,14 +236,14 @@ func TestProgressWrapupNoHandoff(t *testing.T) {
 		t.Fatalf("Execute error: %v", err)
 	}
 
-	pl, err := LoadProgress(tmp)
+	entries, err := LoadSummaryEntries(tmp)
 	if err != nil {
-		t.Fatalf("LoadProgress error: %v", err)
+		t.Fatalf("LoadSummaryEntries error: %v", err)
 	}
-	if len(pl.RecentRuns) != 1 {
-		t.Fatalf("len(RecentRuns) = %d, want 1", len(pl.RecentRuns))
+	if len(entries) != 1 {
+		t.Fatalf("len(entries) = %d, want 1", len(entries))
 	}
-	entry := pl.RecentRuns[0]
+	entry := entries[0]
 	if entry.Handoff != nil {
 		t.Errorf("expected no Handoff for wrapup with handoff_state=0, got %+v", entry.Handoff)
 	}
@@ -272,14 +275,14 @@ func TestProgressWrapupWithHandoff(t *testing.T) {
 		t.Fatalf("Execute error: %v", err)
 	}
 
-	pl, err := LoadProgress(tmp)
+	entries, err := LoadSummaryEntries(tmp)
 	if err != nil {
-		t.Fatalf("LoadProgress error: %v", err)
+		t.Fatalf("LoadSummaryEntries error: %v", err)
 	}
-	if len(pl.RecentRuns) != 1 {
-		t.Fatalf("len(RecentRuns) = %d, want 1", len(pl.RecentRuns))
+	if len(entries) != 1 {
+		t.Fatalf("len(entries) = %d, want 1", len(entries))
 	}
-	entry := pl.RecentRuns[0]
+	entry := entries[0]
 	if entry.Handoff == nil {
 		t.Fatal("expected Handoff to be present")
 	}
@@ -332,14 +335,14 @@ func TestProgressPublicCompleteShorthand(t *testing.T) {
 		t.Fatalf("Execute error: %v", err)
 	}
 
-	pl, err := LoadProgress(tmp)
+	entries, err := LoadSummaryEntries(tmp)
 	if err != nil {
-		t.Fatalf("LoadProgress error: %v", err)
+		t.Fatalf("LoadSummaryEntries error: %v", err)
 	}
-	if len(pl.RecentRuns) != 1 {
-		t.Fatalf("len(RecentRuns) = %d, want 1", len(pl.RecentRuns))
+	if len(entries) != 1 {
+		t.Fatalf("len(entries) = %d, want 1", len(entries))
 	}
-	entry := pl.RecentRuns[0]
+	entry := entries[0]
 	if entry.Summary != "Did Y" {
 		t.Errorf("Summary = %q, want Did Y", entry.Summary)
 	}
@@ -362,14 +365,14 @@ func TestProgressCompleteGeneratesRunID(t *testing.T) {
 		t.Fatalf("Execute error: %v", err)
 	}
 
-	pl, err := LoadProgress(tmp)
+	entries, err := LoadSummaryEntries(tmp)
 	if err != nil {
-		t.Fatalf("LoadProgress error: %v", err)
+		t.Fatalf("LoadSummaryEntries error: %v", err)
 	}
-	if len(pl.RecentRuns) != 1 {
-		t.Fatalf("len(RecentRuns) = %d, want 1", len(pl.RecentRuns))
+	if len(entries) != 1 {
+		t.Fatalf("len(entries) = %d, want 1", len(entries))
 	}
-	if pl.RecentRuns[0].RunID == "" {
+	if entries[0].RunID == "" {
 		t.Errorf("expected generated RunID, got empty")
 	}
 }
@@ -434,15 +437,15 @@ func TestProgressHandoffLapFailureStillWritesEntry(t *testing.T) {
 		t.Fatalf("Execute error: %v", err)
 	}
 
-	pl, err := LoadProgress(tmp)
+	entries, err := LoadSummaryEntries(tmp)
 	if err != nil {
-		t.Fatalf("LoadProgress error: %v", err)
+		t.Fatalf("LoadSummaryEntries error: %v", err)
 	}
-	if len(pl.RecentRuns) != 1 {
-		t.Fatalf("len(RecentRuns) = %d, want 1", len(pl.RecentRuns))
+	if len(entries) != 1 {
+		t.Fatalf("len(entries) = %d, want 1", len(entries))
 	}
 	// Entry should still be written even though lap creation failed.
-	entry := pl.RecentRuns[0]
+	entry := entries[0]
 	if entry.Handoff == nil {
 		t.Fatal("expected Handoff to be present")
 	}

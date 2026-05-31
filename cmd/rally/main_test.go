@@ -2,17 +2,20 @@ package main
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/mitchell-wallace/rally/internal/config"
+	"github.com/mitchell-wallace/rally/internal/relay"
+	"github.com/mitchell-wallace/rally/internal/store"
 	"github.com/spf13/cobra"
 )
 
 func writeTestConfig(t *testing.T, dir, content string) {
 	t.Helper()
-	rallyDir := filepath.Join(dir, ".rally")
+	rallyDir := store.RallyDir(dir)
 	if err := os.MkdirAll(rallyDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -24,7 +27,7 @@ func writeTestConfig(t *testing.T, dir, content string) {
 func TestRunRelayLoadsInstructions(t *testing.T) {
 	tmp := t.TempDir()
 
-	rallyDir := filepath.Join(tmp, ".rally")
+	rallyDir := store.RallyDir(tmp)
 	if err := os.MkdirAll(rallyDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -95,7 +98,7 @@ func TestRunInit_WritesNewShapeConfig(t *testing.T) {
 		t.Fatalf("runInit failed: %v", err)
 	}
 
-	configPath := filepath.Join(tmp, ".rally", "config.toml")
+	configPath := store.ConfigPath(tmp)
 	data, err := os.ReadFile(configPath)
 	if err != nil {
 		t.Fatalf("failed to read config: %v", err)
@@ -131,6 +134,40 @@ func TestRunInit_WritesNewShapeConfig(t *testing.T) {
 	if cfg.Defaults.Iterations != 5 {
 		t.Errorf("Defaults.Iterations = %d, want 5", cfg.Defaults.Iterations)
 	}
+
+	gitignore, err := os.ReadFile(filepath.Join(store.RallyDir(tmp), ".gitignore"))
+	if err != nil {
+		t.Fatalf("failed to read .rally/.gitignore: %v", err)
+	}
+	if string(gitignore) != "state/\n" {
+		t.Fatalf(".rally/.gitignore = %q, want %q", string(gitignore), "state/\n")
+	}
+
+	readme, err := os.ReadFile(filepath.Join(store.RallyDir(tmp), "README.md"))
+	if err != nil {
+		t.Fatalf("failed to read .rally/README.md: %v", err)
+	}
+	readmeText := string(readme)
+	if !strings.Contains(readmeText, ".rally/state/") {
+		t.Fatal("README missing .rally/state/ layout")
+	}
+	if strings.Contains(readmeText, "git-tracked") {
+		t.Fatal("README still claims JSONL state is git-tracked")
+	}
+
+	s, err := store.NewStore(store.RallyDir(tmp))
+	if err != nil {
+		t.Fatalf("NewStore after init failed: %v", err)
+	}
+	if err := s.AppendTry(store.TryRecord{ID: 1, AgentType: "codex"}); err != nil {
+		t.Fatalf("AppendTry after init failed: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(store.StateDir(tmp), "tries.jsonl")); err != nil {
+		t.Fatalf("expected try record under .rally/state/: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(store.RallyDir(tmp), "tries.jsonl")); !os.IsNotExist(err) {
+		t.Fatalf("top-level tries.jsonl should not exist, stat err=%v", err)
+	}
 }
 
 func TestRunInit_DoesNotOverwriteExistingConfig(t *testing.T) {
@@ -159,6 +196,77 @@ claude_model = "my-custom-model"
 		t.Errorf("ClaudeModel = %q, want 'my-custom-model' (existing config should be preserved)", cfg.ClaudeModel)
 	}
 }
+
+func TestRunInit_UpdatesExistingGitignore(t *testing.T) {
+	tmp := t.TempDir()
+	t.Chdir(tmp)
+
+	if err := os.MkdirAll(filepath.Join(tmp, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	rallyDir := store.RallyDir(tmp)
+	if err := os.MkdirAll(rallyDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	// Write an existing .gitignore without state/
+	existingGitignore := "current_task.md\nrelays/\nrun-state.json\n"
+	gitignorePath := filepath.Join(rallyDir, ".gitignore")
+	if err := os.WriteFile(gitignorePath, []byte(existingGitignore), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cmd := &cobra.Command{}
+	if err := runInit(cmd, []string{}); err != nil {
+		t.Fatalf("runInit failed: %v", err)
+	}
+
+	// Verify .gitignore got updated with state/
+	data, err := os.ReadFile(gitignorePath)
+	if err != nil {
+		t.Fatalf("failed to read .gitignore: %v", err)
+	}
+	expected := "current_task.md\nrelays/\nrun-state.json\nstate/\n"
+	if string(data) != expected {
+		t.Errorf(".gitignore = %q, want %q", string(data), expected)
+	}
+}
+
+func TestRunInit_UpdatesExistingGitignoreNoTrailingNewline(t *testing.T) {
+	tmp := t.TempDir()
+	t.Chdir(tmp)
+
+	if err := os.MkdirAll(filepath.Join(tmp, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	rallyDir := store.RallyDir(tmp)
+	if err := os.MkdirAll(rallyDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	// Write an existing .gitignore without state/ and no trailing newline
+	existingGitignore := "current_task.md\nrelays/\nrun-state.json"
+	gitignorePath := filepath.Join(rallyDir, ".gitignore")
+	if err := os.WriteFile(gitignorePath, []byte(existingGitignore), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cmd := &cobra.Command{}
+	if err := runInit(cmd, []string{}); err != nil {
+		t.Fatalf("runInit failed: %v", err)
+	}
+
+	// Verify .gitignore got updated with state/ and a preceding newline
+	data, err := os.ReadFile(gitignorePath)
+	if err != nil {
+		t.Fatalf("failed to read .gitignore: %v", err)
+	}
+	expected := "current_task.md\nrelays/\nrun-state.json\nstate/\n"
+	if string(data) != expected {
+		t.Errorf(".gitignore = %q, want %q", string(data), expected)
+	}
+}
+
 
 func TestRunInitRoles_InstallsRoutesAndRoleInstructions(t *testing.T) {
 	tmp := t.TempDir()
@@ -209,7 +317,7 @@ func TestRunInitRoles_InstallsRoutesAndRoleInstructions(t *testing.T) {
 	}
 
 	for _, role := range []string{"junior", "senior", "ui", "verify"} {
-		path := filepath.Join(tmp, ".rally", "agents", role+".md")
+		path := filepath.Join(store.AgentsDir(tmp), role+".md")
 		data, err := os.ReadFile(path)
 		if err != nil {
 			t.Fatalf("read %s instructions: %v", role, err)
@@ -217,5 +325,44 @@ func TestRunInitRoles_InstallsRoutesAndRoleInstructions(t *testing.T) {
 		if !strings.Contains(string(data), "# ") {
 			t.Errorf("%s instructions missing heading", role)
 		}
+	}
+}
+
+func TestRunRelayNewResetsAgentStatus(t *testing.T) {
+	workspaceDir := t.TempDir()
+	rallyDir := store.RallyDir(workspaceDir)
+	os.MkdirAll(rallyDir, 0o755)
+	if err := exec.Command("git", "init", workspaceDir).Run(); err != nil {
+		t.Fatalf("git init: %v", err)
+	}
+	writeTestConfig(t, workspaceDir, "schema_version = 2\n")
+
+	s, err := store.NewStore(rallyDir)
+	if err != nil {
+		t.Fatalf("failed to init store: %v", err)
+	}
+
+	resilience := relay.NewResilience(s)
+	key := relay.ResilienceKey{Harness: "gemini", Model: "default"}
+	if err := resilience.FreezeAgent(key, 1, "test freeze"); err != nil {
+		t.Fatalf("freeze agent: %v", err)
+	}
+	st, _ := resilience.GetState(key)
+	if st != relay.StateFrozen {
+		t.Fatalf("expected agent frozen, got %v", st)
+	}
+
+	origWd, _ := os.Getwd()
+	os.Chdir(workspaceDir)
+	defer os.Chdir(origWd)
+
+	rootCmd.SetArgs([]string{"start", "--new", "--iterations", "0"})
+	rootCmd.Execute()
+
+	s2, _ := store.NewStore(rallyDir)
+	resilience2 := relay.NewResilience(s2)
+	st2, _ := resilience2.GetState(key)
+	if st2 == relay.StateFrozen {
+		t.Fatalf("expected agent to NOT be frozen after --new, got %v", st2)
 	}
 }

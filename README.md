@@ -18,7 +18,7 @@ curl -fsSL https://raw.githubusercontent.com/mitchell-wallace/rally/main/install
 This drops `rally` into `~/.local/bin/rally`. Add that directory to your
 `PATH` if it isn't already.
 
-Update later with the built-in self-updater:
+Update later with the built-in self-updater (which also updates `laps` if it is installed next to `rally`):
 
 ```sh
 rally update
@@ -71,9 +71,8 @@ Each iteration of `rally start` does this:
    and stderr to a try log.
 5. **Auto-commit** any dirty workspace changes once the try finishes
    (uses `--no-verify` by default — see `run_hooks_on_autocommit`).
-6. **Record the try** in `.rally/tries.jsonl` and append filtered output to
-   the relay log in `~/.local/share/rally/relays/` (mirrored into
-   `.rally/relays/` for the most recent few).
+6. **Record the try** in `.rally/state/tries.jsonl` and append filtered
+   output to the relay log in `~/.local/share/rally/relays/`.
 
 If the agent stalls, Rally graceful-kills it, classifies the failure, and
 either retries via session resume or advances to the next route entry. See
@@ -471,11 +470,11 @@ Default data directory (override with `data_dir` in config):
 |-------------------------------------------------------|-----------------------------------------|
 | `~/.local/share/rally/relays/<repo>/relay-N.log`      | Full relay log per repo                 |
 | `~/.local/share/rally/tries/<repo>/try-N.log`         | Per-try transcript                      |
-| `.rally/relays/relay-N.log`                           | Recent relay logs mirrored into repo    |
 | `.rally/config.toml`                                  | Workspace config                        |
-| `.rally/tries.jsonl`                                  | Try records (read by `rally tail`)      |
-| `.rally/messages.jsonl`                               | Inbox messages                          |
-| `.rally/agent_status.jsonl`                           | Agent status events                     |
+| `.rally/state/tries.jsonl`                            | Try records (read by `rally tail`)      |
+| `.rally/state/messages.jsonl`                         | Inbox messages                          |
+| `.rally/state/agent_status.jsonl`                     | Agent status events                     |
+| `.rally/state/summary.jsonl`                          | Run summaries and lap completions       |
 | `.rally/instructions.md`                              | Project instructions                    |
 | `.rally/agents/{ROLE}.md`                             | Role-specific instructions              |
 
@@ -495,6 +494,31 @@ rally instructions show
 rally update             # self-update from GitHub Releases
 rally version            # print version (vX.Y.Z, vX.Y.Z-dev for source builds)
 ```
+
+## Telemetry
+
+Rally includes opt-in error reporting via Sentry to help improve reliability. It captures infrastructure and agent-class errors (e.g. rate limits, crashes, stall timeouts) but rigorously scrubs sensitive data.
+
+- **To opt in:** Configure your DSN in `.rally/config.toml` or set the `SENTRY_DSN` environment variable:
+  ```toml
+  [telemetry]
+  sentry_dsn = "https://your-dsn-key@sentry.io/project-id"
+  ```
+  The `SENTRY_DSN` environment variable takes precedence over the config file if both are set.
+- **Kill switch:** You can forcefully disable all telemetry by setting `RALLY_TELEMETRY=0` in your environment.
+- **What is sent:** Rally sends structured error signals for operator-worthy failures (e.g., panics, non-zero command exits, agent pause events, freeze detections, stall timeouts, and lap-integrity violations). Spans include execution metadata like `relay_id`, `run_id`, `try_id`, `role`, `runner`, `repo`, `lap_id`, and prompt metrics (total prompt size and a per-source breakdown of tokens).
+- **What is NOT sent:** Rally NEVER sends your task description, codebase context, file contents, or agent transcripts. All potentially sensitive string fields (such as `prompt`, `output`, `transcript`, and the contents of `current_task.md`) are aggressively dropped or scrubbed locally before transmission.
+
+## Self-Updates
+
+Rally features a built-in updater to fetch the latest binaries directly from GitHub Releases.
+To upgrade Rally to the latest release, run:
+
+```sh
+rally update
+```
+
+If the companion `laps` binary is installed next to `rally` (the default for new installations), `rally update` will automatically upgrade `laps` to its corresponding compatible release as well.
 
 ## Architecture
 

@@ -32,7 +32,7 @@ Requires the `laps` CLI. Rally injects per-role guidance from `.rally/agents/<as
 - Diff and cleanup instructions must be branch-target aware. Do not assume `main`; tell VERIFY laps to identify the intended merge target from the user, PR metadata, repo docs, branch config, or recent history before using `git diff <target>...HEAD`.
 - Work that predates the first lap in the current batch is valid baseline context, even when it is not part of the current request. VERIFY may flag it as pre-existing, but must not add cleanup laps that remove it unless the user explicitly asks.
 - Never ask a lap to rewrite git history (`reset`, `rebase`, squash, amend-away, force-push) as a cleanup strategy. Prefer additive commits, explicit revert commits, or a user-approved recovery branch so reverted work remains backtrackable.
-- Do not classify `.laps/`, `.rally/config.toml`, or `.rally/agents/` as disposable runtime noise. They are normally tracked planning/config artifacts. High-churn runtime/debug artifacts under `.rally/` should be pruned/exported separately.
+- Do not classify `.laps/`, `.rally/config.toml`, or `.rally/agents/` as disposable runtime noise. They are normally tracked planning/config artifacts. High-churn runtime/debug artifacts under `.rally/state/` should be pruned/exported separately.
 
 ## Workflow
 

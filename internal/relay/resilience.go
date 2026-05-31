@@ -11,15 +11,37 @@ import (
 type AgentState string
 
 const (
-	StateActive AgentState = "active"
-	StatePaused AgentState = "paused"
-	StateFrozen AgentState = "frozen"
+	StateActive    AgentState = "active"
+	StatePaused    AgentState = "paused"
+	StateFrozen    AgentState = "frozen"
+	StateProbation AgentState = "probation"
 )
+
+// ResilienceKey identifies a specific harness+model pair for resilience tracking.
+// Rate-limit and freeze state is tracked per harness-model combination.
+type ResilienceKey struct {
+	Harness string
+	Model   string
+}
+
+// String returns the display form "harness:model" (or just "harness" when model is empty).
+func (k ResilienceKey) String() string {
+	if k.Model == "" {
+		return k.Harness
+	}
+	return k.Harness + ":" + k.Model
+}
+
+// KeyFromAgent constructs a ResilienceKey from a ResolvedAgent.
+func KeyFromAgent(a agent.ResolvedAgent) ResilienceKey {
+	return ResilienceKey{Harness: a.Harness, Model: a.Model}
+}
 
 // Resilience tracks per-agent-type pause/freeze state via agent_status.jsonl.
 type Resilience struct {
 	Store                     *store.Store
 	PauseDuration             time.Duration
+	FreezeDuration            time.Duration
 	HourlyRetriesBeforeFreeze int
 	NowFunc                   func() time.Time
 }
@@ -27,14 +49,18 @@ type Resilience struct {
 func NewResilience(s *store.Store) *Resilience {
 	return &Resilience{
 		Store:                     s,
-		PauseDuration:             time.Hour,
-		HourlyRetriesBeforeFreeze: 5,
+		PauseDuration:             PauseDuration,
+		FreezeDuration:            FreezeDuration,
+		HourlyRetriesBeforeFreeze: HourlyRetriesBeforeFreeze,
 		NowFunc:                   time.Now,
 	}
 }
 
-func (r *Resilience) getState(agentType string) (AgentState, time.Time) {
-	events := r.Store.GetAgentStatus(agentType)
+func (r *Resilience) GetState(key ResilienceKey) (AgentState, time.Time) {
+	events, err := r.Store.GetAgentStatus(key.Harness, key.Model)
+	if err != nil {
+		return StateActive, time.Time{}
+	}
 	var state AgentState = StateActive
 	var since time.Time
 	for _, e := range events {
@@ -49,9 +75,20 @@ func (r *Resilience) getState(agentType string) (AgentState, time.Time) {
 		case "frozen":
 			state = StateFrozen
 			since = t
+		case "probation":
+			state = StateProbation
+			since = t
 		case "active", "unfrozen":
 			state = StateActive
 			since = t
+		}
+	}
+	// Pure-read freeze decay: if the most recent state is frozen and it has
+	// aged past FreezeDuration, surface it as probation. The on-disk event log
+	// is untouched; syncRecoverySignals owns persisting the probation event.
+	if state == StateFrozen && r.FreezeDuration > 0 && !since.IsZero() {
+		if !r.NowFunc().Before(since.Add(r.FreezeDuration)) {
+			state = StateProbation
 		}
 	}
 	return state, since
@@ -67,18 +104,23 @@ func (r *Resilience) SelectActiveAgent(mix AgentMix, runIndex int) (agent.Resolv
 
 	allFrozen := true
 	anyActive := false
-	uniqueAgents := map[string]struct{}{}
+	anyProbation := false
+	uniqueAgents := map[ResilienceKey]struct{}{}
 	for _, a := range mix.Cycle {
-		if _, ok := uniqueAgents[a.Harness]; ok {
+		key := KeyFromAgent(a)
+		if _, ok := uniqueAgents[key]; ok {
 			continue
 		}
-		uniqueAgents[a.Harness] = struct{}{}
-		st, _ := r.getState(a.Harness)
+		uniqueAgents[key] = struct{}{}
+		st, _ := r.GetState(key)
 		if st != StateFrozen {
 			allFrozen = false
 		}
 		if st == StateActive {
 			anyActive = true
+		}
+		if st == StateProbation {
+			anyProbation = true
 		}
 	}
 	if allFrozen {
@@ -89,9 +131,12 @@ func (r *Resilience) SelectActiveAgent(mix AgentMix, runIndex int) (agent.Resolv
 	for i := 0; i < cycleLen; i++ {
 		idx := (runIndex + i) % cycleLen
 		a := mix.Cycle[idx]
-		st, since := r.getState(a.Harness)
+		key := KeyFromAgent(a)
+		st, since := r.GetState(key)
 		switch st {
 		case StateActive:
+			return a, runIndex + i + 1, false, nil
+		case StateProbation:
 			return a, runIndex + i + 1, false, nil
 		case StatePaused:
 			if !r.NowFunc().Before(since.Add(r.PauseDuration)) {
@@ -100,19 +145,20 @@ func (r *Resilience) SelectActiveAgent(mix AgentMix, runIndex int) (agent.Resolv
 		}
 	}
 
-	if !anyActive {
+	if !anyActive && !anyProbation {
 		return agent.ResolvedAgent{}, runIndex, false, fmt.Errorf("all agents paused")
 	}
 	return agent.ResolvedAgent{}, runIndex, false, fmt.Errorf("no active agent found")
 }
 
-func (r *Resilience) PauseAgent(agentType string, relayID int) error {
-	st, _ := r.getState(agentType)
+func (r *Resilience) PauseAgent(key ResilienceKey, relayID int) error {
+	st, _ := r.GetState(key)
 	if st != StateActive {
 		return nil
 	}
 	return r.Store.AppendAgentStatus(store.AgentStatusEvent{
-		AgentType: agentType,
+		AgentType: key.Harness,
+		Model:     key.Model,
 		EventType: "paused",
 		Timestamp: r.NowFunc().UTC().Format(time.RFC3339),
 		RelayID:   relayID,
@@ -120,13 +166,14 @@ func (r *Resilience) PauseAgent(agentType string, relayID int) error {
 	})
 }
 
-func (r *Resilience) UnpauseAgent(agentType string, relayID int) error {
-	st, _ := r.getState(agentType)
+func (r *Resilience) UnpauseAgent(key ResilienceKey, relayID int) error {
+	st, _ := r.GetState(key)
 	if st == StateActive {
 		return nil
 	}
 	return r.Store.AppendAgentStatus(store.AgentStatusEvent{
-		AgentType: agentType,
+		AgentType: key.Harness,
+		Model:     key.Model,
 		EventType: "active",
 		Timestamp: r.NowFunc().UTC().Format(time.RFC3339),
 		RelayID:   relayID,
@@ -134,9 +181,10 @@ func (r *Resilience) UnpauseAgent(agentType string, relayID int) error {
 	})
 }
 
-func (r *Resilience) RecordHourlyFailure(agentType string, relayID int) error {
+func (r *Resilience) RecordHourlyFailure(key ResilienceKey, relayID int) error {
 	if err := r.Store.AppendAgentStatus(store.AgentStatusEvent{
-		AgentType: agentType,
+		AgentType: key.Harness,
+		Model:     key.Model,
 		EventType: "retry_failed",
 		Timestamp: r.NowFunc().UTC().Format(time.RFC3339),
 		RelayID:   relayID,
@@ -145,11 +193,14 @@ func (r *Resilience) RecordHourlyFailure(agentType string, relayID int) error {
 		return err
 	}
 
-	events := r.Store.GetAgentStatus(agentType)
+	events, err := r.Store.GetAgentStatus(key.Harness, key.Model)
+	if err != nil {
+		return err
+	}
 	retryFailedCount := 0
 	for i := len(events) - 1; i >= 0; i-- {
 		e := events[i]
-		if e.EventType == "active" {
+		if e.EventType == "active" || e.EventType == "frozen" || e.EventType == "probation" {
 			break
 		}
 		if e.EventType == "retry_failed" {
@@ -157,21 +208,35 @@ func (r *Resilience) RecordHourlyFailure(agentType string, relayID int) error {
 		}
 	}
 	if retryFailedCount >= r.HourlyRetriesBeforeFreeze {
-		return r.FreezeAgent(agentType, relayID)
+		return r.FreezeAgent(key, relayID, "hourly retry threshold reached")
 	}
 	return nil
 }
 
-func (r *Resilience) FreezeAgent(agentType string, relayID int) error {
-	st, _ := r.getState(agentType)
+func (r *Resilience) FreezeAgent(key ResilienceKey, relayID int, reason string) error {
+	st, _ := r.GetState(key)
 	if st == StateFrozen {
 		return nil
 	}
 	return r.Store.AppendAgentStatus(store.AgentStatusEvent{
-		AgentType: agentType,
+		AgentType: key.Harness,
+		Model:     key.Model,
 		EventType: "frozen",
 		Timestamp: r.NowFunc().UTC().Format(time.RFC3339),
 		RelayID:   relayID,
-		Reason:    "5 hourly retries failed",
+		Reason:    reason,
+	})
+}
+
+// persistProbationEvent appends a probation event for the given key. Callers
+// (currently syncRecoverySignals) are responsible for the once-per-cycle
+// guard; this method does not check whether a probation event already exists.
+func (r *Resilience) persistProbationEvent(key ResilienceKey) error {
+	return r.Store.AppendAgentStatus(store.AgentStatusEvent{
+		AgentType: key.Harness,
+		Model:     key.Model,
+		EventType: "probation",
+		Timestamp: r.NowFunc().UTC().Format(time.RFC3339),
+		Reason:    "freeze decayed to probation",
 	})
 }

@@ -2,7 +2,6 @@ package store
 
 import (
 	"os"
-	"os/exec"
 	"path/filepath"
 	"sort"
 	"testing"
@@ -12,25 +11,9 @@ import (
 func setupTempStore(t *testing.T) (string, *Store) {
 	t.Helper()
 	dir := t.TempDir()
-	rallyDir := filepath.Join(dir, ".rally")
+	rallyDir := RallyDir(dir)
 	if err := os.MkdirAll(rallyDir, 0755); err != nil {
 		t.Fatal(err)
-	}
-	// Init a git repo so commit-then-truncate works.
-	cmd := exec.Command("git", "init")
-	cmd.Dir = dir
-	if out, err := cmd.CombinedOutput(); err != nil {
-		t.Fatalf("git init: %v\n%s", err, out)
-	}
-	cmd = exec.Command("git", "config", "user.email", "test@test.com")
-	cmd.Dir = dir
-	if out, err := cmd.CombinedOutput(); err != nil {
-		t.Fatalf("git config email: %v\n%s", err, out)
-	}
-	cmd = exec.Command("git", "config", "user.name", "Test")
-	cmd.Dir = dir
-	if out, err := cmd.CombinedOutput(); err != nil {
-		t.Fatalf("git config name: %v\n%s", err, out)
 	}
 
 	store, err := NewStore(rallyDir)
@@ -114,47 +97,6 @@ func TestCacheReload(t *testing.T) {
 	}
 }
 
-func TestCommitThenTruncate(t *testing.T) {
-	rallyDir, _ := setupTempStore(t)
-	path := filepath.Join(rallyDir, "tries.jsonl")
-
-	// Write more records than window
-	for i := 1; i <= triesWindowSize+5; i++ {
-		if err := appendJSONL(path, TryRecord{ID: i}); err != nil {
-			t.Fatal(err)
-		}
-	}
-
-	if err := commitThenTruncate(path, triesWindowSize); err != nil {
-		t.Fatal(err)
-	}
-
-	read, err := readJSONL[TryRecord](path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(read) != triesWindowSize {
-		t.Fatalf("expected %d records after truncate, got %d", triesWindowSize, len(read))
-	}
-	// Should keep the most recent records
-	if read[0].ID != 6 {
-		t.Fatalf("expected first kept ID to be 6, got %d", read[0].ID)
-	}
-	if read[len(read)-1].ID != triesWindowSize+5 {
-		t.Fatalf("expected last kept ID to be %d, got %d", triesWindowSize+5, read[len(read)-1].ID)
-	}
-
-	// Verify git commits exist
-	cmd := exec.Command("git", "-C", filepath.Dir(path), "log", "--oneline")
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("git log: %v\n%s", err, out)
-	}
-	if len(out) == 0 {
-		t.Fatal("expected git commits")
-	}
-}
-
 func TestMessageInPlaceUpdate(t *testing.T) {
 	rallyDir, store := setupTempStore(t)
 
@@ -198,11 +140,14 @@ func TestMessageInPlaceUpdate(t *testing.T) {
 func TestAgentStatusReplay(t *testing.T) {
 	rallyDir, store := setupTempStore(t)
 
-	_ = store.AppendAgentStatus(AgentStatusEvent{AgentType: "claude", EventType: "active", Timestamp: "t1"})
-	_ = store.AppendAgentStatus(AgentStatusEvent{AgentType: "claude", EventType: "paused", Timestamp: "t2"})
-	_ = store.AppendAgentStatus(AgentStatusEvent{AgentType: "codex", EventType: "active", Timestamp: "t3"})
+	_ = store.AppendAgentStatus(AgentStatusEvent{AgentType: "claude", Model: "test-model", EventType: "active", Timestamp: "t1"})
+	_ = store.AppendAgentStatus(AgentStatusEvent{AgentType: "claude", Model: "test-model", EventType: "paused", Timestamp: "t2"})
+	_ = store.AppendAgentStatus(AgentStatusEvent{AgentType: "codex", Model: "test-model", EventType: "active", Timestamp: "t3"})
 
-	claudeEvents := store.GetAgentStatus("claude")
+	claudeEvents, err := store.GetAgentStatus("claude", "test-model")
+	if err != nil {
+		t.Fatal(err)
+	}
 	if len(claudeEvents) != 2 {
 		t.Fatalf("expected 2 claude events, got %d", len(claudeEvents))
 	}
@@ -210,7 +155,10 @@ func TestAgentStatusReplay(t *testing.T) {
 		t.Fatalf("unexpected claude events: %v", claudeEvents)
 	}
 
-	codexEvents := store.GetAgentStatus("codex")
+	codexEvents, err := store.GetAgentStatus("codex", "test-model")
+	if err != nil {
+		t.Fatal(err)
+	}
 	if len(codexEvents) != 1 || codexEvents[0].EventType != "active" {
 		t.Fatalf("unexpected codex events: %v", codexEvents)
 	}
@@ -220,7 +168,11 @@ func TestAgentStatusReplay(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(store2.GetAgentStatus("claude")) != 2 {
+	events, err := store2.GetAgentStatus("claude", "test-model")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(events) != 2 {
 		t.Fatal("claude events not persisted")
 	}
 }
@@ -278,7 +230,7 @@ func TestPendingMessageExemption(t *testing.T) {
 	}
 
 	// Verify file was truncated for resolved messages
-	read, err := readJSONL[MessageRecord](filepath.Join(rallyDir, "messages.jsonl"))
+	read, err := readJSONL[MessageRecord](filepath.Join(rallyDir, "state", "messages.jsonl"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -353,30 +305,32 @@ func TestRecentTriesAndRelays(t *testing.T) {
 func TestStoreWindowing(t *testing.T) {
 	rallyDir, store := setupTempStore(t)
 
-	// Tries window
-	for i := 1; i <= triesWindowSize+5; i++ {
+	// Tries are append-only and never windowed.
+	tryCount := 505
+	for i := 1; i <= tryCount; i++ {
 		if err := store.AppendTry(TryRecord{ID: i}); err != nil {
 			t.Fatal(err)
 		}
 	}
-	if len(store.cache.Tries) != triesWindowSize {
-		t.Fatalf("expected %d tries after window, got %d", triesWindowSize, len(store.cache.Tries))
+	if len(store.cache.Tries) != tryCount {
+		t.Fatalf("expected %d tries, got %d", tryCount, len(store.cache.Tries))
 	}
-	if store.GetTry(1) != nil {
-		t.Fatal("old try should have been truncated")
+	if store.GetTry(1) == nil {
+		t.Fatal("old try should not have been truncated")
 	}
-	if store.GetTry(triesWindowSize+5) == nil {
+	if store.GetTry(tryCount) == nil {
 		t.Fatal("newest try should exist")
 	}
 
-	// Relays window
-	for i := 1; i <= relaysWindowSize+3; i++ {
+	// Relays are append-only and never windowed.
+	relayCount := 53
+	for i := 1; i <= relayCount; i++ {
 		if err := store.AppendRelay(RelayRecord{ID: i}); err != nil {
 			t.Fatal(err)
 		}
 	}
-	if len(store.cache.Relays) != relaysWindowSize {
-		t.Fatalf("expected %d relays after window, got %d", relaysWindowSize, len(store.cache.Relays))
+	if len(store.cache.Relays) != relayCount {
+		t.Fatalf("expected %d relays, got %d", relayCount, len(store.cache.Relays))
 	}
 
 	// Agent status window
@@ -390,9 +344,9 @@ func TestStoreWindowing(t *testing.T) {
 	}
 
 	// Verify files on disk
-	read, _ := readJSONL[TryRecord](filepath.Join(rallyDir, "tries.jsonl"))
-	if len(read) != triesWindowSize {
-		t.Fatalf("tries file has %d records, expected %d", len(read), triesWindowSize)
+	read, _ := readJSONL[TryRecord](filepath.Join(rallyDir, "state", "tries.jsonl"))
+	if len(read) != tryCount {
+		t.Fatalf("tries file has %d records, expected %d", len(read), tryCount)
 	}
 }
 
@@ -482,30 +436,6 @@ func TestRelayScopedMessages_Empty(t *testing.T) {
 	}
 }
 
-func TestCommitThenTruncateNoGitRepo(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "tries.jsonl")
-
-	for i := 1; i <= 10; i++ {
-		if err := appendJSONL(path, TryRecord{ID: i}); err != nil {
-			t.Fatal(err)
-		}
-	}
-
-	// Should not error even though not in a git repo
-	if err := commitThenTruncate(path, 5); err != nil {
-		t.Fatal(err)
-	}
-
-	read, err := readJSONL[TryRecord](path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(read) != 5 {
-		t.Fatalf("expected 5 records, got %d", len(read))
-	}
-}
-
 func TestReadJSONLMissingFile(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "nonexistent.jsonl")
@@ -546,14 +476,187 @@ func TestAgentStatusPersistsAcrossRelays(t *testing.T) {
 	rallyDir, _ := setupTempStore(t)
 
 	store1, _ := NewStore(rallyDir)
-	_ = store1.AppendAgentStatus(AgentStatusEvent{AgentType: "claude", EventType: "paused", Timestamp: time.Now().Format(time.RFC3339)})
+	_ = store1.AppendAgentStatus(AgentStatusEvent{AgentType: "claude", Model: "test-model", EventType: "paused", Timestamp: time.Now().Format(time.RFC3339)})
 
 	store2, _ := NewStore(rallyDir)
-	_ = store2.AppendAgentStatus(AgentStatusEvent{AgentType: "claude", EventType: "unfrozen", Timestamp: time.Now().Format(time.RFC3339)})
+	_ = store2.AppendAgentStatus(AgentStatusEvent{AgentType: "claude", Model: "test-model", EventType: "unfrozen", Timestamp: time.Now().Format(time.RFC3339)})
 
 	store3, _ := NewStore(rallyDir)
-	events := store3.GetAgentStatus("claude")
+	events, err := store3.GetAgentStatus("claude", "test-model")
+	if err != nil {
+		t.Fatal(err)
+	}
 	if len(events) != 2 {
 		t.Fatalf("expected 2 events across reloads, got %d", len(events))
 	}
 }
+
+func TestAgentStatusTruncationPreservesFreezeTimestamps(t *testing.T) {
+	_, store := setupTempStore(t)
+
+	frozenAt := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	_ = store.AppendAgentStatus(AgentStatusEvent{
+		AgentType: "claude",
+		Model:     "sonnet",
+		EventType: "frozen",
+		Timestamp: frozenAt.Format(time.RFC3339),
+		RelayID:   1,
+	})
+
+	for i := 0; i < agentStatusWindowSize+10; i++ {
+		_ = store.AppendAgentStatus(AgentStatusEvent{
+			AgentType: "codex",
+			Model:     "",
+			EventType: "paused",
+			Timestamp: time.Now().Add(time.Duration(i) * time.Second).Format(time.RFC3339),
+			RelayID:   1,
+		})
+	}
+
+	events, err := store.GetAgentStatus("claude", "sonnet")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(events) == 0 {
+		t.Fatal("expected frozen event to be preserved after truncation")
+	}
+
+	foundSummary := false
+	for _, e := range events {
+		if e.EventType == "frozen" && e.Reason == "truncation summary" {
+			foundSummary = true
+			if e.Timestamp != frozenAt.Format(time.RFC3339) {
+				t.Fatalf("expected preserved timestamp %q, got %q", frozenAt.Format(time.RFC3339), e.Timestamp)
+			}
+		}
+	}
+	if !foundSummary {
+		t.Fatal("expected truncation summary event for frozen agent")
+	}
+}
+
+func TestAgentStatusTruncationPreservesProbationTimestamps(t *testing.T) {
+	_, store := setupTempStore(t)
+
+	probationAt := time.Date(2026, 1, 1, 6, 0, 0, 0, time.UTC)
+	_ = store.AppendAgentStatus(AgentStatusEvent{
+		AgentType: "opencode",
+		Model:     "gemini",
+		EventType: "probation",
+		Timestamp: probationAt.Format(time.RFC3339),
+		RelayID:   1,
+	})
+
+	for i := 0; i < agentStatusWindowSize+10; i++ {
+		_ = store.AppendAgentStatus(AgentStatusEvent{
+			AgentType: "codex",
+			Model:     "",
+			EventType: "paused",
+			Timestamp: time.Now().Add(time.Duration(i) * time.Second).Format(time.RFC3339),
+			RelayID:   1,
+		})
+	}
+
+	events, err := store.GetAgentStatus("opencode", "gemini")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(events) == 0 {
+		t.Fatal("expected probation event to be preserved after truncation")
+	}
+
+	foundSummary := false
+	for _, e := range events {
+		if e.EventType == "probation" && e.Reason == "truncation summary" {
+			foundSummary = true
+			if e.Timestamp != probationAt.Format(time.RFC3339) {
+				t.Fatalf("expected preserved timestamp %q, got %q", probationAt.Format(time.RFC3339), e.Timestamp)
+			}
+		}
+	}
+	if !foundSummary {
+		t.Fatal("expected truncation summary event for probation agent")
+	}
+}
+
+func TestTryCommitHistory(t *testing.T) {
+	dir := t.TempDir()
+	s, err := NewStore(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// 1. Single commit -> populates CommitHistory with one element
+	try1 := TryRecord{ID: 1, CommitHash: "singlehash"}
+	if err := s.AppendTry(try1); err != nil {
+		t.Fatal(err)
+	}
+
+	// 2. Multiple commits -> backward compat sets CommitHash to last element
+	try2 := TryRecord{ID: 2, CommitHistory: []string{"hash1", "hash2", "hash3"}}
+	if err := s.AppendTry(try2); err != nil {
+		t.Fatal(err)
+	}
+
+	// Verify
+	tries := s.RecentTries(10)
+	if len(tries) != 2 {
+		t.Fatalf("expected 2 tries, got %d", len(tries))
+	}
+
+	// try1 (returned first because RecentTries does not reverse)
+	t1 := tries[0]
+	if t1.CommitHash != "singlehash" {
+		t.Errorf("try1 CommitHash = %q, want singlehash", t1.CommitHash)
+	}
+	if len(t1.CommitHistory) != 1 || t1.CommitHistory[0] != "singlehash" {
+		t.Errorf("try1 CommitHistory = %v, want [singlehash]", t1.CommitHistory)
+	}
+
+	// try2 (returned second)
+	t2 := tries[1]
+	if t2.CommitHash != "hash3" {
+		t.Errorf("try2 CommitHash = %q, want hash3", t2.CommitHash)
+	}
+	if len(t2.CommitHistory) != 3 || t2.CommitHistory[0] != "hash1" {
+		t.Errorf("try2 CommitHistory = %v", t2.CommitHistory)
+	}
+}
+
+func TestNewStoreAutoMigration(t *testing.T) {
+	workspaceDir := t.TempDir()
+	rallyDir := RallyDir(workspaceDir)
+	if err := os.MkdirAll(rallyDir, 0o755); err != nil {
+		t.Fatalf("failed to create rally dir: %v", err)
+	}
+
+	// Create a legacy tries.jsonl file
+	legacyFile := filepath.Join(rallyDir, "tries.jsonl")
+	recordJSON := `{"id":42,"run_id":1,"agent_type":"claude"}`
+	if err := os.WriteFile(legacyFile, []byte(recordJSON+"\n"), 0o644); err != nil {
+		t.Fatalf("failed to write legacy tries: %v", err)
+	}
+
+	// Initialize store - this should trigger migration
+	s, err := NewStore(rallyDir)
+	if err != nil {
+		t.Fatalf("NewStore failed: %v", err)
+	}
+
+	// Verify the legacy file was moved
+	if _, err := os.Stat(legacyFile); !os.IsNotExist(err) {
+		t.Errorf("legacy tries.jsonl should have been moved from root")
+	}
+
+	migratedFile := filepath.Join(rallyDir, "state", "tries.jsonl")
+	if _, err := os.Stat(migratedFile); err != nil {
+		t.Errorf("migrated tries.jsonl should exist in state dir: %v", err)
+	}
+
+	// Verify cache contains the loaded try
+	tries := s.RecentTries(10)
+	if len(tries) != 1 || tries[0].ID != 42 {
+		t.Errorf("expected 1 try with ID 42 in cache, got: %v", tries)
+	}
+}
+

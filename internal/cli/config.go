@@ -63,7 +63,7 @@ func runConfig(cmd *cobra.Command, _ []string) error {
 	fallbackInstructions := cfg.Fallback.InstructionsFile
 	runHooksOnAutoCommit := cfg.RunHooksOnAutoCommit
 
-	freezeStr := strconv.Itoa(cfg.Reliability.FreezeThresholdSecs)
+	stallStr := strconv.Itoa(cfg.Reliability.StallThresholdSecs)
 	retryStr := strconv.Itoa(cfg.Reliability.RetryBudget)
 	livenessProbe := cfg.Reliability.LivenessProbe
 
@@ -124,7 +124,7 @@ func runConfig(cmd *cobra.Command, _ []string) error {
 
 	reliabilityGroup := huh.NewGroup(
 		huh.NewNote().Title("Reliability").Description("Freeze detection and retry behaviour."),
-		huh.NewInput().Title("freeze_threshold_secs").Description("Log silence (seconds) before treating an agent as frozen.").Value(&freezeStr).Validate(validateOptionalInt),
+		huh.NewInput().Title("stall_threshold_secs").Description("Log silence (seconds) before treating an agent as stalled.").Value(&stallStr).Validate(validateOptionalInt),
 		huh.NewInput().Title("retry_budget").Description("Per-run retry budget before a try is marked failed.").Value(&retryStr).Validate(validateOptionalInt),
 		huh.NewConfirm().Title("liveness_probe").Description("Send a periodic check to detect connection drops.").Affirmative("On").Negative("Off").Value(&livenessProbe),
 	)
@@ -171,8 +171,8 @@ func runConfig(cmd *cobra.Command, _ []string) error {
 	cfg.Fallback.InstructionsFile = strings.TrimSpace(fallbackInstructions)
 	cfg.RunHooksOnAutoCommit = runHooksOnAutoCommit
 
-	if n, ok := parseIntDefault(freezeStr, cfg.Reliability.FreezeThresholdSecs); ok {
-		cfg.Reliability.FreezeThresholdSecs = n
+	if n, ok := parseIntDefault(stallStr, cfg.Reliability.StallThresholdSecs); ok {
+		cfg.Reliability.StallThresholdSecs = n
 	}
 	if n, ok := parseIntDefault(retryStr, cfg.Reliability.RetryBudget); ok {
 		cfg.Reliability.RetryBudget = n

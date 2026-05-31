@@ -2,7 +2,6 @@ package routing
 
 import (
 	"fmt"
-	"strings"
 	"sync"
 )
 
@@ -11,7 +10,7 @@ type EntryState struct {
 	Entry           ParsedEntry
 	ConsecutiveRuns int
 	Exhausted       bool
-	Frozen          bool
+	Benched         bool
 	RangeQuotaUsed  int
 }
 
@@ -82,7 +81,7 @@ func (s *Scheduler) Next() (*Selection, error) {
 }
 
 func (s *Scheduler) shouldStayOnCurrentLocked(current *EntryState) bool {
-	if current.Frozen || current.Exhausted {
+	if current.Benched || current.Exhausted {
 		return false
 	}
 
@@ -110,7 +109,7 @@ func (s *Scheduler) advanceLocked() (*EntryState, error) {
 	if ok {
 		return s.selectAtLocked(next), nil
 	}
-	if s.allEntriesUnavailableLocked() {
+	if s.allBenchedOrExhaustedLocked() {
 		return nil, fmt.Errorf("scheduler: all entries exhausted; waiting for recovery")
 	}
 
@@ -140,7 +139,7 @@ func (s *Scheduler) findSelectableLocked(start int) (int, bool) {
 }
 
 func (s *Scheduler) isSelectableLocked(entry *EntryState) bool {
-	return !entry.Frozen && !entry.Exhausted
+	return !entry.Benched && !entry.Exhausted
 }
 
 func (s *Scheduler) hasAlternativeLocked(exclude int) bool {
@@ -156,7 +155,7 @@ func (s *Scheduler) hasAlternativeLocked(exclude int) bool {
 	return false
 }
 
-func (s *Scheduler) allEntriesUnavailableLocked() bool {
+func (s *Scheduler) allBenchedOrExhaustedLocked() bool {
 	for _, entry := range s.entries {
 		if s.isSelectableLocked(entry) {
 			return false
@@ -202,19 +201,19 @@ func (s *Scheduler) resetCycleLocked() {
 	}
 }
 
-func (s *Scheduler) OnAgentFailed(entry *EntryState, reason string) {
+func (s *Scheduler) OnAgentFailed(entry *EntryState, reason string, bench bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	entry.Exhausted = true
-	entry.Frozen = failureFreezesEntry(reason)
+	entry.Benched = bench
 }
 
 func (s *Scheduler) OnAgentRecovered(entry *EntryState) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if !entry.Frozen {
+	if !entry.Benched {
 		return
 	}
 	resetEntryState(entry)
@@ -227,7 +226,7 @@ func (s *Scheduler) ResetEntry(entry *EntryState) {
 	resetEntryState(entry)
 }
 
-func (s *Scheduler) AllExhausted() bool {
+func (s *Scheduler) AllBenched() bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -246,12 +245,34 @@ func (s *Scheduler) AllExhausted() bool {
 	}
 
 	for _, entry := range s.entries {
-		if !entry.Frozen {
+		if !entry.Benched {
 			return false
 		}
 	}
 
 	return true
+}
+
+func (s *Scheduler) AllExhausted() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if len(s.entries) == 0 {
+		return true
+	}
+
+	for _, entry := range s.entries {
+		if !entry.Exhausted {
+			return false
+		}
+	}
+	return true
+}
+
+func (s *Scheduler) AllBenchedOrExhausted() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.allBenchedOrExhaustedLocked()
 }
 
 func (s *Scheduler) Pos() int {
@@ -283,19 +304,9 @@ func cloneEntryState(entry *EntryState) *EntryState {
 	return &clone
 }
 
-func failureFreezesEntry(reason string) bool {
-	reason = strings.ToLower(reason)
-	return strings.Contains(reason, "freeze") ||
-		strings.Contains(reason, "frozen") ||
-		strings.Contains(reason, "rate limit") ||
-		strings.Contains(reason, "rate-limit") ||
-		strings.Contains(reason, "pause") ||
-		strings.Contains(reason, "paused")
-}
-
 func resetEntryState(entry *EntryState) {
 	entry.Exhausted = false
-	entry.Frozen = false
+	entry.Benched = false
 	entry.ConsecutiveRuns = 0
 	entry.RangeQuotaUsed = 0
 }

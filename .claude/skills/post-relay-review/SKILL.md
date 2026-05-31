@@ -17,7 +17,7 @@ Use this after a Rally relay when the repo state, git history, or agent outcomes
 - Preserve Rally state where it was generated. Do not delete local `.rally/` or `.laps/` artifacts during review.
 - Treat `.laps/` as the structured planning system, not runtime noise. It is normally git-tracked.
 - Treat stable Rally configuration as source: `.rally/config.toml` and `.rally/agents/` are normally git-tracked.
-- Treat high-churn Rally runtime/debug files separately: `tries.jsonl`, `relays.jsonl`, `progress.yaml`, `agent_status.jsonl`, hook audits, relay logs, and harness logs may need pruning or export instead of indefinite git history.
+- Treat high-churn Rally runtime/debug files separately: `state/tries.jsonl`, `state/relays.jsonl`, `summary.jsonl`, `state/agent_status.jsonl`, `state/hook-audit.jsonl`, relay logs, and harness logs may need pruning or export instead of indefinite git history.
 - Observability tools such as Sentry are appropriate for preserving historical debug logs and harness/runtime errors, especially for container-based runs. They are not the operational source of truth for current lap scheduling; current planning/config still lives in `.laps/` and stable `.rally/` files.
 - Identify the intended target branch before diffing. Do not assume `main`; use repo docs, PR metadata, branch names, `git branch -vv`, `git merge-base`, or user input.
 - Treat work before the first lap/try in the current batch as baseline context. It may be out of the current request scope, but it is not automatically disposable.
@@ -29,9 +29,9 @@ Read these first when present:
 
 - `.laps/laps.json` — task queue, assignees, completed state, follow-up laps. This is planning state and is usually tracked.
 - `.rally/config.toml` and `.rally/agents/` — routing and role instructions. These are usually tracked.
-- `.rally/progress.yaml` — run summaries and lap completions.
-- `.rally/relays.jsonl` — relay batches and first/last try ids.
-- `.rally/tries.jsonl` — one attempt per line, including harness, assignee, summary, changed files, commit hash, and log path.
+- `.rally/summary.jsonl` — run summaries and lap completions (tracked).
+- `.rally/state/relays.jsonl` — relay batches and first/last try ids (untracked).
+- `.rally/state/tries.jsonl` — one attempt per line, including harness, assignee, summary, changed files, commit history, and log path (untracked).
 
 Use `jq` or small Python helpers for JSONL; runtime files can be verbose and may be pruned or exported after review.
 
@@ -62,8 +62,8 @@ Use `docker exec <container> ...` when the container still exists. For large log
 
 ## Terminology
 
-- **Relay**: a Rally execution batch, recorded in `relays.jsonl`.
-- **Try**: one agent/harness attempt, recorded in `tries.jsonl`.
+- **Relay**: a Rally execution batch, recorded in `state/relays.jsonl`.
+- **Try**: one agent/harness attempt, recorded in `state/tries.jsonl`.
 - **Lap**: one unit of queued work in `.laps/laps.json`.
 - **VERIFY lap**: a review/checking lap. It may make tiny safe fixes, but substantive repair should become a new lap or explicit recovery plan.
 - **Dune**: the CLI commonly used to create agent-ready containers/sandboxes for Rally work.

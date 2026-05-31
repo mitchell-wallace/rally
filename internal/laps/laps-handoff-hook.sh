@@ -3,7 +3,7 @@
 # Sets handoff state and directs agent to wrapup
 
 # Audit trail: record this hook firing.
-AUDIT_FILE=".rally/hook-audit.jsonl"
+AUDIT_FILE=".rally/state/hook-audit.jsonl"
 mkdir -p "$(dirname "$AUDIT_FILE")" 2>/dev/null || true
 TS=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 printf '{"ts":"%s","hook":"laps-handoff","args":"%s","pid":%d}\n' "$TS" "$*" "$$" >> "$AUDIT_FILE" 2>/dev/null || true

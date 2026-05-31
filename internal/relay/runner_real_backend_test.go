@@ -53,7 +53,7 @@ func setupRealWorkspace(t *testing.T) (workspaceDir, rallyDir, dataDir string) {
 	}
 	testutil.RunCommand(t, workspaceDir, "git", "add", ".")
 	testutil.RunCommand(t, workspaceDir, "git", "commit", "-m", "init")
-	rallyDir = filepath.Join(workspaceDir, ".rally")
+	rallyDir = store.RallyDir(workspaceDir)
 	if err := os.MkdirAll(rallyDir, 0o755); err != nil {
 		t.Fatalf("mkdir .rally: %v", err)
 	}
@@ -304,7 +304,7 @@ func TestRealBackend_CodexRelay(t *testing.T) {
 //   - When opencode is rate-limited or frozen, rally marks the agent paused
 //     (resilient execution) and the context cancellation exits cleanly
 //
-// Uses a short FreezeThreshold (60s) so the test terminates quickly when
+// Uses a short StallThreshold (60s) so the test terminates quickly when
 // opencode-go is rate-limited. The 3-minute context ensures ctx.Done() fires
 // well before the test framework's 5-minute panic threshold.
 func TestRealBackend_OpenCodeRelay(t *testing.T) {
@@ -327,7 +327,7 @@ func TestRealBackend_OpenCodeRelay(t *testing.T) {
 		AgentMixSpecs:    []string{"op"},
 		TargetIterations: 1,
 		RetryBudget:      1,
-		FreezeThreshold:  60 * time.Second,
+		StallThreshold:  60 * time.Second,
 		TaskPrompt:       "Create a file called opencode-e2e.txt with the text 'opencode e2e pass'. Do not create any other files.",
 	}, executors)
 
@@ -354,7 +354,10 @@ func TestRealBackend_OpenCodeRelay(t *testing.T) {
 	// frozen indefinitely. This verifies resilient execution handles the case.
 	lastTry := tries[len(tries)-1]
 	if !lastTry.Completed {
-		statusEvents := s.GetAgentStatus("opencode")
+		statusEvents, err := s.GetAgentStatus("opencode", "opencode-go/kimi-k2.6")
+		if err != nil {
+			t.Fatal(err)
+		}
 		paused := false
 		for _, ev := range statusEvents {
 			if ev.EventType == "paused" {
@@ -468,7 +471,10 @@ func TestRealBackend_ResilienceRetryBudget(t *testing.T) {
 	}
 
 	// Agent should be marked paused in agent_status.jsonl.
-	statusEvents := s.GetAgentStatus("claude")
+	statusEvents, err := s.GetAgentStatus("claude", "default")
+	if err != nil {
+		t.Fatal(err)
+	}
 	paused := false
 	for _, ev := range statusEvents {
 		if ev.EventType == "paused" {
@@ -514,7 +520,7 @@ func TestRealBackend_CustomHarnessRelay(t *testing.T) {
 		AgentMixSpecs:    []string{"mycode"},
 		TargetIterations: 1,
 		RetryBudget:      1,
-		FreezeThreshold:  60 * time.Second,
+		StallThreshold:  60 * time.Second,
 		TaskPrompt:       "Create a file called custom-harness-e2e.txt with the text 'custom harness ok'. Do not create any other files.",
 		Resolver: func(spec string) (agent.ResolvedAgent, error) {
 			// Resolve "mycode" as a custom harness with its default model.
@@ -605,7 +611,7 @@ func TestRealBackend_MultiHarnessRoundRobin(t *testing.T) {
 		UseOverrideRoute: true,
 		TargetIterations: 3,
 		RetryBudget:      1,
-		FreezeThreshold:  180 * time.Second,
+		StallThreshold:  180 * time.Second,
 		TaskPrompt:       "Create a single empty file with a unique name like step-N.txt where N is unique per iteration. Do not create any other files.",
 		Resolver:         resolver,
 	}, executors)
