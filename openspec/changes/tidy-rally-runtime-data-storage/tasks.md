@@ -16,7 +16,7 @@
 - [x] 3.3 Update the `.rally/.gitignore` template in `cmd/rally/main.go` to a single `state/` line
 - [x] 3.4 Replace commit-then-truncate-to-git windowing (`internal/store/window.go`): append-only log files (`tries.jsonl`, `relays.jsonl`) get no pruning at all — they grow unbounded. Read-oriented state files (`agent_status.jsonl`, `messages.jsonl`) use in-place local truncation (no git commit) with conservative limits (500 for agent_status, 200 resolved for messages; pending messages exempt)
 - [x] 3.5 Update the `.rally/README.md` template to describe the new layout and correct the false "git-tracked JSONL source of truth" claim
-- [ ] 3.6 Add a `CommitHistory []string` field to `TryRecord` (`internal/store/records.go`) alongside the existing `CommitHash string` and `LapsAttempted []LapAttempt` fields. Persist the full ordered commit list per try in `tries.jsonl` instead of only a single commit hash; a single commit becomes a one-element list. Keep `CommitHash` for backward compatibility (set to last element of `CommitHistory`)
+- [x] 3.6 Add a `CommitHistory []string` field to `TryRecord` (`internal/store/records.go`) alongside the existing `CommitHash string` and `LapsAttempted []LapAttempt` fields. Persist the full ordered commit list per try in `tries.jsonl` instead of only a single commit hash; a single commit becomes a one-element list. Keep `CommitHash` for backward compatibility (set to last element of `CommitHistory`)
 - [x] 3.7 Update `internal/gitx/git.go`: `CommitRallyState` (line 113) currently `git add .rally/*.jsonl` — post-change the only tracked `.rally/*.jsonl` is `summary.jsonl`, so scope the git-add accordingly or remove if no longer needed. Update `IsWorkspaceDirty` (lines 64, 81-82) to remove stale suffix checks for `.rally/current_task.md` and `.rally/relays/` (these move to gitignored `state/`). Update `runner_test.go` comments (lines 85-87) that reference "JSONL state files committed as durable git-backed state"
 
 ## 4. Replace `progress.yaml` with `summary.jsonl`
@@ -56,13 +56,13 @@
 - [ ] 8.1 Tests for the migration on a fixture `.rally/` (flat→state move, legacy dir cleanup, idempotency, no-overwrite, progress.yaml left untouched)
 - [x] 8.2 Tests for store/cache reading and writing under `.rally/state/` and for local-only truncation windowing (assert `tries.jsonl`/`relays.jsonl` are never truncated; `agent_status.jsonl`/`messages.jsonl` use conservative in-place limits)
 - [x] 8.3 Tests for `summary.jsonl` append shape and that `progress.yaml` is never written. Update `runner_test.go:2045` to reference `summary.jsonl` instead of `progress.yaml`
-- [ ] 8.4 Tests for the telemetry sink: no-op without DSN, kill switch, env-over-config precedence, tag presence, and scrubber dropping `current_task.md`
+- [x] 8.4 Tests for the telemetry sink: no-op without DSN, kill switch, env-over-config precedence, tag presence, and scrubber dropping `current_task.md`
 - [ ] 8.5 Tests for prompt-size fields (total + per-source breakdown present on the try log) and Issue criteria (infra failure + relay stall → Issue; agent-class retry → no Issue; route fallback → common event, no Issue)
-- [ ] 8.6 Tests for try commit history (multiple commits retained in order; single commit as one-element list; `CommitHash` backward compat set to last element)
+- [x] 8.6 Tests for try commit history (multiple commits retained in order; single commit as one-element list; `CommitHash` backward compat set to last element)
 - [ ] 8.7 Test that `rally update` and the min-version check behave correctly (warn vs silent)
 
 ## 9. Docs & rollout
 
-- [ ] 9.1 Update `AGENTS.md`/`README.md` and any skill references (`test-driving-rally`, `post-relay-review` including `post-relay-review/references/prayer-app-2.md`) that mention `progress.yaml` or flat `.rally/*.jsonl` paths to the new `state/` + `summary.jsonl` layout
-- [ ] 9.2 Document telemetry opt-in (DSN config, env vars, kill switch, what is/ isn't sent) and `rally update`
-- [ ] 9.3 Bump `internal/buildinfo/VERSION` (per release process) as part of the change
+- [x] 9.1 Update `AGENTS.md`/`README.md` and any skill references (`test-driving-rally`, `post-relay-review` including `post-relay-review/references/prayer-app-2.md`) that mention `progress.yaml` or flat `.rally/*.jsonl` paths to the new `state/` + `summary.jsonl` layout
+- [x] 9.2 Document telemetry opt-in (DSN config, env vars, kill switch, what is/ isn't sent) and `rally update`
+- [x] 9.3 Bump `internal/buildinfo/VERSION` (per release process) as part of the change
