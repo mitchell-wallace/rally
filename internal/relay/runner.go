@@ -441,10 +441,12 @@ func (r *Runner) Run(ctx context.Context) error {
 				"event":       "route_fallback",
 				"relay_id":    relay.ID,
 				"run_id":      runID,
+				"runner":      to,
 				"from_runner": from,
 				"to_runner":   to,
 				"role":        task.Assignee,
 				"repo":        repoKey(r.cfg.WorkspaceDir),
+				"lap_id":      task.LapID,
 			})
 		}
 		var consumedMsg *store.MessageRecord

@@ -44,6 +44,7 @@ func main() {
 
 	if err := rootCmd.Execute(); err != nil {
 		flushUpdateNotice()
+		flushTelemetry()
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
