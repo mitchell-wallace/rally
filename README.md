@@ -18,7 +18,7 @@ curl -fsSL https://raw.githubusercontent.com/mitchell-wallace/rally/main/install
 This drops `rally` into `~/.local/bin/rally`. Add that directory to your
 `PATH` if it isn't already.
 
-Update later with the built-in self-updater:
+Update later with the built-in self-updater (which also updates `laps` if it is installed next to `rally`):
 
 ```sh
 rally update
@@ -474,6 +474,7 @@ Default data directory (override with `data_dir` in config):
 | `.rally/state/tries.jsonl`                            | Try records (read by `rally tail`)      |
 | `.rally/state/messages.jsonl`                         | Inbox messages                          |
 | `.rally/state/agent_status.jsonl`                     | Agent status events                     |
+| `.rally/state/summary.jsonl`                          | Run summaries and lap completions       |
 | `.rally/instructions.md`                              | Project instructions                    |
 | `.rally/agents/{ROLE}.md`                             | Role-specific instructions              |
 
@@ -493,6 +494,14 @@ rally instructions show
 rally update             # self-update from GitHub Releases
 rally version            # print version (vX.Y.Z, vX.Y.Z-dev for source builds)
 ```
+
+## Telemetry
+
+Rally includes opt-in error reporting via Sentry to help improve reliability. It captures infrastructure and agent-class errors (e.g. rate limits, crashes, stall timeouts) but rigorously scrubs sensitive data.
+
+- **To opt in:** Set `SENTRY_DSN` in your environment, or configure it via the `sentry_dsn` field in your config if supported.
+- **Kill switch:** You can forcefully disable all telemetry by setting `RALLY_TELEMETRY=0`.
+- **Privacy:** Rally NEVER sends your task description, codebase context, or agent transcripts. All large string fields and potential sensitive keys (`prompt`, `output`, `transcript`) are aggressively dropped or truncated before transmission.
 
 ## Architecture
 
