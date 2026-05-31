@@ -622,3 +622,41 @@ func TestTryCommitHistory(t *testing.T) {
 		t.Errorf("try2 CommitHistory = %v", t2.CommitHistory)
 	}
 }
+
+func TestNewStoreAutoMigration(t *testing.T) {
+	workspaceDir := t.TempDir()
+	rallyDir := RallyDir(workspaceDir)
+	if err := os.MkdirAll(rallyDir, 0o755); err != nil {
+		t.Fatalf("failed to create rally dir: %v", err)
+	}
+
+	// Create a legacy tries.jsonl file
+	legacyFile := filepath.Join(rallyDir, "tries.jsonl")
+	recordJSON := `{"id":42,"run_id":1,"agent_type":"claude"}`
+	if err := os.WriteFile(legacyFile, []byte(recordJSON+"\n"), 0o644); err != nil {
+		t.Fatalf("failed to write legacy tries: %v", err)
+	}
+
+	// Initialize store - this should trigger migration
+	s, err := NewStore(rallyDir)
+	if err != nil {
+		t.Fatalf("NewStore failed: %v", err)
+	}
+
+	// Verify the legacy file was moved
+	if _, err := os.Stat(legacyFile); !os.IsNotExist(err) {
+		t.Errorf("legacy tries.jsonl should have been moved from root")
+	}
+
+	migratedFile := filepath.Join(rallyDir, "state", "tries.jsonl")
+	if _, err := os.Stat(migratedFile); err != nil {
+		t.Errorf("migrated tries.jsonl should exist in state dir: %v", err)
+	}
+
+	// Verify cache contains the loaded try
+	tries := s.RecentTries(10)
+	if len(tries) != 1 || tries[0].ID != 42 {
+		t.Errorf("expected 1 try with ID 42 in cache, got: %v", tries)
+	}
+}
+

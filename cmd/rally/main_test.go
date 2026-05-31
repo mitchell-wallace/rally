@@ -197,6 +197,77 @@ claude_model = "my-custom-model"
 	}
 }
 
+func TestRunInit_UpdatesExistingGitignore(t *testing.T) {
+	tmp := t.TempDir()
+	t.Chdir(tmp)
+
+	if err := os.MkdirAll(filepath.Join(tmp, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	rallyDir := store.RallyDir(tmp)
+	if err := os.MkdirAll(rallyDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	// Write an existing .gitignore without state/
+	existingGitignore := "current_task.md\nrelays/\nrun-state.json\n"
+	gitignorePath := filepath.Join(rallyDir, ".gitignore")
+	if err := os.WriteFile(gitignorePath, []byte(existingGitignore), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cmd := &cobra.Command{}
+	if err := runInit(cmd, []string{}); err != nil {
+		t.Fatalf("runInit failed: %v", err)
+	}
+
+	// Verify .gitignore got updated with state/
+	data, err := os.ReadFile(gitignorePath)
+	if err != nil {
+		t.Fatalf("failed to read .gitignore: %v", err)
+	}
+	expected := "current_task.md\nrelays/\nrun-state.json\nstate/\n"
+	if string(data) != expected {
+		t.Errorf(".gitignore = %q, want %q", string(data), expected)
+	}
+}
+
+func TestRunInit_UpdatesExistingGitignoreNoTrailingNewline(t *testing.T) {
+	tmp := t.TempDir()
+	t.Chdir(tmp)
+
+	if err := os.MkdirAll(filepath.Join(tmp, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	rallyDir := store.RallyDir(tmp)
+	if err := os.MkdirAll(rallyDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	// Write an existing .gitignore without state/ and no trailing newline
+	existingGitignore := "current_task.md\nrelays/\nrun-state.json"
+	gitignorePath := filepath.Join(rallyDir, ".gitignore")
+	if err := os.WriteFile(gitignorePath, []byte(existingGitignore), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cmd := &cobra.Command{}
+	if err := runInit(cmd, []string{}); err != nil {
+		t.Fatalf("runInit failed: %v", err)
+	}
+
+	// Verify .gitignore got updated with state/ and a preceding newline
+	data, err := os.ReadFile(gitignorePath)
+	if err != nil {
+		t.Fatalf("failed to read .gitignore: %v", err)
+	}
+	expected := "current_task.md\nrelays/\nrun-state.json\nstate/\n"
+	if string(data) != expected {
+		t.Errorf(".gitignore = %q, want %q", string(data), expected)
+	}
+}
+
+
 func TestRunInitRoles_InstallsRoutesAndRoleInstructions(t *testing.T) {
 	tmp := t.TempDir()
 	t.Chdir(tmp)

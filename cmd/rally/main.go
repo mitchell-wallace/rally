@@ -387,13 +387,36 @@ func runInit(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	// 3. Create .rally/.gitignore
+	// 3. Create or update .rally/.gitignore
 	gitignorePath := filepath.Join(rallyDir, ".gitignore")
-	if _, err := os.Stat(gitignorePath); os.IsNotExist(err) {
+	data, err := os.ReadFile(gitignorePath)
+	if os.IsNotExist(err) {
 		content := "state/\n"
 		if err := os.WriteFile(gitignorePath, []byte(content), 0o644); err != nil {
 			return err
 		}
+	} else if err == nil {
+		lines := strings.Split(string(data), "\n")
+		hasState := false
+		for _, line := range lines {
+			trimmed := strings.TrimSpace(line)
+			if trimmed == "state" || trimmed == "state/" || trimmed == "/state" || trimmed == "/state/" {
+				hasState = true
+				break
+			}
+		}
+		if !hasState {
+			content := string(data)
+			if len(content) > 0 && !strings.HasSuffix(content, "\n") {
+				content += "\n"
+			}
+			content += "state/\n"
+			if err := os.WriteFile(gitignorePath, []byte(content), 0o644); err != nil {
+				return err
+			}
+		}
+	} else {
+		return err
 	}
 
 	// 4. Create .rally/config.toml

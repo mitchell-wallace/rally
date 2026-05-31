@@ -21,6 +21,14 @@ type Store struct {
 
 // NewStore creates a Store and loads all JSONL data into memory.
 func NewStore(dir string) (*Store, error) {
+	// If the .rally directory exists, run migration to ensure any legacy files
+	// are moved to the state/ directory before loading the cache.
+	if info, err := os.Stat(dir); err == nil && info.IsDir() {
+		if err := MigrateRallyStateLayout(filepath.Dir(dir)); err != nil {
+			return nil, fmt.Errorf("migrate rally state layout: %w", err)
+		}
+	}
+
 	cache, err := LoadCache(dir)
 	if err != nil {
 		return nil, err

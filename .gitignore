@@ -8,6 +8,9 @@
 !/.rally/agents/
 !/.rally/agents/*.md
 
+# add exceptions for any config that may live under here
+/.antigravitycli/*
+
 # temporary as otherwise causes error with rally 0.8.0
 !/.rally/agent_status.jsonl
 
