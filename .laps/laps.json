@@ -86,10 +86,10 @@
       "title": "One-time idempotent .rally/ migration",
       "description": "Context: OpenSpec change tidy-rally-runtime-data-storage (specs/store ADDED: Runtime data layout migration, design Decision 5). High-risk: moves real user data.\\n\\nOutcome: On `rally init`, an idempotent migration: creates .rally/state/, moves legacy flat files in WITHOUT overwriting existing targets. Removes legacy .rally/batches/ and top-level .rally/relays/ log dir (if present). Existing progress.yaml is left as-is (NOT converted to summary.jsonl — new writes go to summary.jsonl only). config.toml.bak is never touched (user-managed backup). Re-running is a no-op.\\n\\nFiles \\u0026 scope: cmd/rally/main.go (runInit ~332) and/or a migration helper in internal/store or internal/progress.\\n\\nDesign: Move-don't-copy with existence checks; never clobber an existing state/ target; guard every step so a partially-migrated dir converges cleanly. No git history rewriting.\\n\\nAcceptance: `go build ./...`; manual run against a fixture legacy .rally/ migrates correctly and a second run changes nothing (tests come in a later lap).",
       "assignee": "SENIOR",
-      "isDone": false,
+      "isDone": true,
       "createdAt": "2026-05-26T12:42:23.212913423Z",
-      "updatedAt": "2026-05-26T12:42:23.212913423Z",
-      "completedAt": null
+      "updatedAt": "2026-05-31T05:31:02.302285195Z",
+      "completedAt": "2026-05-31T05:31:02.302285195Z"
     },
     {
       "id": "rall-00a1",

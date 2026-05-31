@@ -348,6 +348,9 @@ func runInit(cmd *cobra.Command, args []string) error {
 	if err := os.MkdirAll(rallyDir, 0o755); err != nil {
 		return err
 	}
+	if err := store.MigrateRallyStateLayout(workspaceDir); err != nil {
+		return err
+	}
 
 	// 3. Create .rally/.gitignore
 	gitignorePath := filepath.Join(rallyDir, ".gitignore")

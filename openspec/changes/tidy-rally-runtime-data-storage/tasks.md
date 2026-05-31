@@ -28,9 +28,9 @@
 
 ## 5. One-time migration (runInit only)
 
-- [ ] 5.1 Implement an idempotent migration in `runInit`: create `.rally/state/`, move legacy flat files in (never overwriting existing targets)
-- [ ] 5.2 Remove legacy `.rally/batches/` and top-level `.rally/relays/` log dir (if present — these are legacy artifacts that may not exist in all repos). Do NOT touch `config.toml.bak` (user-managed) or convert `progress.yaml` (left as-is)
-- [ ] 5.3 Invoke migration from `runInit` only; ensure re-running is a no-op
+- [x] 5.1 Implement an idempotent migration in `runInit`: create `.rally/state/`, move legacy flat files in (never overwriting existing targets)
+- [x] 5.2 Remove legacy `.rally/batches/` and top-level `.rally/relays/` log dir (if present — these are legacy artifacts that may not exist in all repos). Do NOT touch `config.toml.bak` (user-managed) or convert `progress.yaml` (left as-is)
+- [x] 5.3 Invoke migration from `runInit` only; ensure re-running is a no-op
 
 ## 6. Telemetry sink (Sentry)
 
