@@ -16,10 +16,10 @@
       "title": "Complete telemetry/distribution regression coverage",
       "description": "Context: final VERIFY found tasks 8.5 and 8.7 are still not fully satisfied. cmd/rally/telemetry_test.go only asserts prompt_bytes, prompt_task_bytes, one captured issue, and route_fallback non-Issue behavior; it does not cover the full per-source prompt breakdown, agent-class retry =\u003e no Issue, or distinguish infra/stall issue capture. There is also version-warning coverage in internal/laps/version_test.go, but no command-level test that rally update wiring upgrades or installs laps or reports laps failures non-fatally. Outcome: add focused regression tests for the missing 8.5 and 8.7 acceptance points and then mark only the truly completed task boxes in openspec/changes/tidy-rally-runtime-data-storage/tasks.md. Acceptance: targeted tests fail before the fix and pass after; go test ./cmd/rally ./internal/laps ./internal/telemetry ./internal/store passes.",
       "assignee": "JUNIOR",
-      "isDone": false,
+      "isDone": true,
       "createdAt": "2026-05-31T10:10:06.892444614Z",
-      "updatedAt": "2026-05-31T10:10:06.892444614Z",
-      "completedAt": null
+      "updatedAt": "2026-05-31T10:21:07.015529545Z",
+      "completedAt": "2026-05-31T10:21:07.015529545Z"
     },
     {
       "id": "work-8dab",
