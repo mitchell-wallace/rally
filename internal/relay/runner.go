@@ -931,19 +931,25 @@ attemptLoop:
 
 		runtime := endedAt.Sub(startedAt)
 		commitHash := ""
+		commitHistory := []string{}
 		preCommitFilesChanged := r.filesChangedList(result, headBefore, headAfter, "")
 		dirtyBeforeAutoCommit, _ := gitx.IsWorkspaceDirty(r.cfg.WorkspaceDir)
 		finalized := !task.IsLapsBacked || len(recordedLaps) > 0 || handoffState != 0 || (task.LapID == "" && result != nil && result.Completed)
 		hasUserFileChanges := len(preCommitFilesChanged) > 0
 		incomplete := task.IsLapsBacked && dirtyBeforeAutoCommit && hasUserFileChanges && !finalized
 		if headBefore != "" && headAfter != "" && headBefore != headAfter {
-			commitHash = headAfter
+			commitHistory = r.commitRange(headBefore, headAfter)
+			if len(commitHistory) == 0 {
+				commitHistory = []string{headAfter}
+			}
+			commitHash = commitHistory[len(commitHistory)-1]
 		} else if dirtyBeforeAutoCommit && hasUserFileChanges && !incomplete {
 			hash, commitErr := r.autoCommit(runIndex, picked.Harness, attempt)
 			if commitErr != nil {
 				fmt.Fprintf(log, "relay %d run %d attempt %d auto-commit warning: %v\n", relay.ID, runIndex+1, attempt, commitErr)
-			} else {
+			} else if hash != "" {
 				commitHash = hash
+				commitHistory = []string{hash}
 			}
 		}
 
@@ -1091,6 +1097,7 @@ attemptLoop:
 			RemainingWork: "",
 			FilesChanged:  filesChangedList,
 			CommitHash:    commitHash,
+			CommitHistory: commitHistory,
 			StartedAt:     startedAt.Format(time.RFC3339),
 			EndedAt:       endedAt.Format(time.RFC3339),
 			AttemptNumber: attempt,
@@ -1352,6 +1359,24 @@ func (r *Runner) headHash() (string, error) {
 		return "", err
 	}
 	return strings.TrimSpace(string(out)), nil
+}
+
+// commitRange returns the commit hashes created between headBefore (exclusive)
+// and headAfter (inclusive), oldest first. This captures every manual commit an
+// agent made in a single try, not just the final HEAD. The last element is
+// always headAfter.
+func (r *Runner) commitRange(headBefore, headAfter string) []string {
+	out, err := gitx.GitOutput(r.cfg.WorkspaceDir, "rev-list", "--reverse", headBefore+".."+headAfter)
+	if err != nil {
+		return nil
+	}
+	var hashes []string
+	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+		if h := strings.TrimSpace(line); h != "" {
+			hashes = append(hashes, h)
+		}
+	}
+	return hashes
 }
 
 func (r *Runner) autoCommit(runIndex int, agentType string, attempt int) (string, error) {

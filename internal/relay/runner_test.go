@@ -1597,6 +1597,84 @@ func TestCommitHashTracking_AutoCommitted(t *testing.T) {
 	}
 }
 
+func TestCommitHistoryTracking_MultipleAgentCommits(t *testing.T) {
+	workspaceDir := t.TempDir()
+	rallyDir := store.RallyDir(workspaceDir)
+	os.MkdirAll(rallyDir, 0o755)
+	initRepo(t, workspaceDir)
+
+	// Seed an initial commit so headBefore is non-empty.
+	os.WriteFile(filepath.Join(workspaceDir, "seed.txt"), []byte("seed"), 0o644)
+	runGit(t, workspaceDir, "add", ".")
+	runGit(t, workspaceDir, "commit", "-m", "initial", "--no-verify")
+
+	s := newTestStore(t, rallyDir)
+	exec := &funcExecutor{
+		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+			// Make three distinct commits within a single try.
+			for i := 1; i <= 3; i++ {
+				name := fmt.Sprintf("file%d.txt", i)
+				if err := os.WriteFile(filepath.Join(workspaceDir, name), []byte("x"), 0o644); err != nil {
+					return nil, err
+				}
+				runGit(t, workspaceDir, "add", ".")
+				runGit(t, workspaceDir, "commit", "-m", fmt.Sprintf("commit %d", i), "--no-verify")
+			}
+			return &agent.TryResult{Completed: true}, nil
+		},
+	}
+	executors := map[string]agent.Executor{"claude": exec}
+
+	r := NewRunner(s, Config{
+		WorkspaceDir:     workspaceDir,
+		DataDir:          t.TempDir(),
+		AgentMixSpecs:    []string{"cc:1"},
+		TargetIterations: 1,
+	}, executors)
+
+	if err := r.Run(context.Background()); err != nil {
+		t.Fatalf("run failed: %v", err)
+	}
+
+	// Re-read from tries.jsonl (not just the in-memory cache) to prove the full
+	// ordered history survives the round-trip to disk.
+	reloaded := newTestStore(t, rallyDir)
+	tries := reloaded.AllTries()
+	if len(tries) != 1 {
+		t.Fatalf("expected 1 try, got %d", len(tries))
+	}
+	got := tries[0]
+	if len(got.CommitHistory) != 3 {
+		t.Fatalf("expected 3 commits in CommitHistory, got %d: %v", len(got.CommitHistory), got.CommitHistory)
+	}
+
+	// The recorded history must match the actual chronological commit order.
+	wantHashes := commitHashesInOrder(t, workspaceDir, 3)
+	for i, want := range wantHashes {
+		if got.CommitHistory[i] != want {
+			t.Errorf("CommitHistory[%d] = %q, want %q", i, got.CommitHistory[i], want)
+		}
+	}
+
+	// CommitHash backward compat: equals the last element of the history.
+	if got.CommitHash != got.CommitHistory[len(got.CommitHistory)-1] {
+		t.Errorf("CommitHash = %q, want last history element %q", got.CommitHash, got.CommitHistory[len(got.CommitHistory)-1])
+	}
+}
+
+// commitHashesInOrder returns the most recent n commit hashes, oldest first.
+func commitHashesInOrder(t *testing.T, dir string, n int) []string {
+	t.Helper()
+	out := runGit(t, dir, "rev-list", "--reverse", fmt.Sprintf("-%d", n), "HEAD")
+	var hashes []string
+	for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
+		if h := strings.TrimSpace(line); h != "" {
+			hashes = append(hashes, h)
+		}
+	}
+	return hashes
+}
+
 func TestCommitHashTracking_NoChanges(t *testing.T) {
 	workspaceDir := t.TempDir()
 	rallyDir := store.RallyDir(workspaceDir)
