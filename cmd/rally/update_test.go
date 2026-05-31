@@ -52,11 +52,11 @@ func captureOutput(t *testing.T, fn func()) (string, string) {
 func TestUpdateCommandWiring_LapsAlreadyUpToDate(t *testing.T) {
 	oldUpdateCurrentBinary := release.UpdateCurrentBinary
 	oldUpdateTool := release.UpdateTool
-	oldInstalledVersion := laps.InstalledVersion
+	oldInstalledVersion := laps.CompanionVersion
 	defer func() {
 		release.UpdateCurrentBinary = oldUpdateCurrentBinary
 		release.UpdateTool = oldUpdateTool
-		laps.InstalledVersion = oldInstalledVersion
+		laps.CompanionVersion = oldInstalledVersion
 	}()
 
 	// Mock release.UpdateCurrentBinary: returns updated = true
@@ -64,8 +64,8 @@ func TestUpdateCommandWiring_LapsAlreadyUpToDate(t *testing.T) {
 		return "dev", "0.8.2", true, nil
 	}
 
-	// Mock laps.InstalledVersion: returns "0.1.0", true
-	laps.InstalledVersion = func() (string, bool) {
+	// Mock laps.CompanionVersion: returns "0.1.0", true
+	laps.CompanionVersion = func() (string, bool) {
 		return "0.1.0", true
 	}
 
@@ -98,11 +98,11 @@ func TestUpdateCommandWiring_LapsAlreadyUpToDate(t *testing.T) {
 func TestUpdateCommandWiring_LapsNotInstalled(t *testing.T) {
 	oldUpdateCurrentBinary := release.UpdateCurrentBinary
 	oldUpdateTool := release.UpdateTool
-	oldInstalledVersion := laps.InstalledVersion
+	oldInstalledVersion := laps.CompanionVersion
 	defer func() {
 		release.UpdateCurrentBinary = oldUpdateCurrentBinary
 		release.UpdateTool = oldUpdateTool
-		laps.InstalledVersion = oldInstalledVersion
+		laps.CompanionVersion = oldInstalledVersion
 	}()
 
 	// Mock release.UpdateCurrentBinary: returns updated = false (already up to date)
@@ -110,8 +110,8 @@ func TestUpdateCommandWiring_LapsNotInstalled(t *testing.T) {
 		return "dev", "dev", false, nil
 	}
 
-	// Mock laps.InstalledVersion: returns "", false (not installed)
-	laps.InstalledVersion = func() (string, bool) {
+	// Mock laps.CompanionVersion: returns "", false (not installed)
+	laps.CompanionVersion = func() (string, bool) {
 		return "", false
 	}
 
@@ -144,11 +144,11 @@ func TestUpdateCommandWiring_LapsNotInstalled(t *testing.T) {
 func TestUpdateCommandWiring_LapsUpdateFailsNonFatally(t *testing.T) {
 	oldUpdateCurrentBinary := release.UpdateCurrentBinary
 	oldUpdateTool := release.UpdateTool
-	oldInstalledVersion := laps.InstalledVersion
+	oldInstalledVersion := laps.CompanionVersion
 	defer func() {
 		release.UpdateCurrentBinary = oldUpdateCurrentBinary
 		release.UpdateTool = oldUpdateTool
-		laps.InstalledVersion = oldInstalledVersion
+		laps.CompanionVersion = oldInstalledVersion
 	}()
 
 	// Mock release.UpdateCurrentBinary: returns updated = true
@@ -156,8 +156,8 @@ func TestUpdateCommandWiring_LapsUpdateFailsNonFatally(t *testing.T) {
 		return "dev", "0.8.2", true, nil
 	}
 
-	// Mock laps.InstalledVersion: returns "0.1.0", true
-	laps.InstalledVersion = func() (string, bool) {
+	// Mock laps.CompanionVersion: returns "0.1.0", true
+	laps.CompanionVersion = func() (string, bool) {
 		return "0.1.0", true
 	}
 

@@ -576,7 +576,7 @@ executable so the two travel together; laps remains independently usable.`,
 		// non-fatal: rally itself is already updated, and laps stays
 		// independently installable.
 		lapsDest := filepath.Join(filepath.Dir(exePath), release.Laps.BinaryName)
-		lapsCurrent, _ := laps.InstalledVersion()
+		lapsCurrent, _ := laps.CompanionVersion()
 		oldLaps, newLaps, lapsUpdated, err := release.UpdateTool(release.Laps, lapsCurrent, lapsDest)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "warning: could not update laps: %v\n", err)
