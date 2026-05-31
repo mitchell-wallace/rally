@@ -206,6 +206,7 @@ If all harness-model pairs are paused, the system waits for the next hourly chec
 - **WHEN** all available harness-model pairs are paused (but not frozen)
 - **THEN** the system SHALL wait until the next pair's hourly retry check
 
+
 #### Scenario: Pause/freeze/probation state persisted across restarts
 - **WHEN** rally is restarted while agents are paused, frozen, or on probation
 - **THEN** the system SHALL restore state and timestamps from `agent_status.jsonl`, re-evaluating frozen entries against `FreezeDuration` rather than inheriting stale state
@@ -246,3 +247,55 @@ The system SHALL produce a human-readable relay log for each relay, capturing fi
 #### Scenario: Relay log is not mirrored into the repo
 - **WHEN** a relay run writes log output
 - **THEN** the system SHALL NOT create `.rally/relays/`
+
+### Requirement: Lap-ID pinning
+The system SHALL pin the assigned lap ID when a run starts and SHALL verify, when the run finalizes, that the lap recorded as completed matches the pinned ID. A mismatch SHALL fail the run with a distinct reason and SHALL NOT advance the work queue. The system SHALL record every lap completion attempt (with timestamp) on the try record so multi-lap consumption is traceable.
+
+#### Scenario: Completed lap matches pinned lap
+- **WHEN** a run finalizes and the lap recorded as completed equals the lap pinned at run start
+- **THEN** the system SHALL accept the completion and advance the queue normally
+
+#### Scenario: Wrong lap consumed
+- **WHEN** a run finalizes recording a completed lap different from the pinned lap
+- **THEN** the system SHALL fail the run with reason `wrong_lap_consumed`, SHALL NOT mark the pinned lap done, and SHALL NOT advance past it
+
+#### Scenario: Multiple laps consumed in one run
+- **WHEN** a run records more completed laps than the single lap it was assigned
+- **THEN** the system SHALL fail the run with reason `multi_lap_consumed` and SHALL NOT advance the queue on the unassigned laps
+
+#### Scenario: Attempted laps recorded
+- **WHEN** a run records a lap completion attempt
+- **THEN** the system SHALL record the lap ID and timestamp on the try record, not only the lap(s) accepted as done, so multi-lap consumption is traceable
+
+### Requirement: Incomplete failure class
+The system SHALL classify a try as "incomplete" rather than "failed" when file changes were produced (dirty working tree) but the agent neither finalized the lap (`laps done`) nor handed off (`laps handoff`). An incomplete try SHALL have its auto-commit suppressed, leaving changes uncommitted. The retry run SHALL inherit the uncommitted changes and SHALL receive prompt guidance: "The last run was incomplete. Check any current git changes, finish anything not done, verify correctness, commit when good, then run `laps done`." An incomplete try SHALL be retried but SHALL NOT count toward the pause/freeze resilience cascade.
+
+#### Scenario: Agent produces file changes without finalizing
+- **WHEN** a try produces file changes in the working tree but the agent does not call `laps done` or `laps handoff`
+- **THEN** the system SHALL classify the try as incomplete, suppress auto-commit, retry the run with prompt guidance, and SHALL NOT call `PauseAgent` or `RecordHourlyFailure`
+
+#### Scenario: No file changes and no finalization
+- **WHEN** a try produces no file changes and the agent does not finalize
+- **THEN** the system SHALL classify as a normal agent-class failure (retry-eligible, does not escalate)
+
+### Requirement: Role-aware stall-recovery
+The system SHALL NOT treat "files were committed" as sufficient to convert a stalled try (one killed by the liveness stall detector) into a success for a VERIFY run. A stalled VERIFY try SHALL remain a retry-eligible failure regardless of committed files (a VERIFY run may legitimately commit only a trivial fix, which is not evidence that verification occurred); it is retried or resumed rather than accepted. Implementation roles SHALL retain files-committed stall-recovery.
+
+#### Scenario: Stalled VERIFY try is not auto-accepted
+- **WHEN** a VERIFY try is killed for a stall and files were committed
+- **THEN** the system SHALL NOT treat the try as success and SHALL keep it a retry-eligible failure
+
+#### Scenario: Stalled implementation try with commits
+- **WHEN** a non-VERIFY implementation try is killed for a stall and files were committed
+- **THEN** the system SHALL retain the existing stall-recovery and may treat the committed work as success
+
+### Requirement: Bounded prompt context
+The system SHALL bound the recent-try context included in the assembled prompt by a configurable run count (default 5, under `[reliability]` config) and by per-summary and overall character budgets, truncating sensibly when a budget is exceeded.
+
+#### Scenario: Verbose summaries truncated
+- **WHEN** recent-try summaries exceed the per-summary or overall character budget
+- **THEN** the system SHALL truncate them (head/tail) so the assembled prompt stays within the budget
+
+#### Scenario: Run count configurable
+- **WHEN** a run count is configured for recent-try context
+- **THEN** the system SHALL include at most that many recent tries (defaulting to 5 when unset)
