@@ -29,6 +29,6 @@ func (NoopSink) Flush(time.Duration) {}
 // NoopSpan is the span returned by NoopSink. All methods are no-ops.
 type NoopSpan struct{}
 
-func (NoopSpan) SetTag(string, string)        {}
-func (NoopSpan) SetData(string, interface{})   {}
-func (NoopSpan) Finish()                       {}
+func (NoopSpan) SetTag(string, string)       {}
+func (NoopSpan) SetData(string, interface{}) {}
+func (NoopSpan) Finish()                     {}

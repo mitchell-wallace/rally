@@ -327,7 +327,7 @@ func TestRealBackend_OpenCodeRelay(t *testing.T) {
 		AgentMixSpecs:    []string{"op"},
 		TargetIterations: 1,
 		RetryBudget:      1,
-		StallThreshold:  60 * time.Second,
+		StallThreshold:   60 * time.Second,
 		TaskPrompt:       "Create a file called opencode-e2e.txt with the text 'opencode e2e pass'. Do not create any other files.",
 	}, executors)
 
@@ -520,7 +520,7 @@ func TestRealBackend_CustomHarnessRelay(t *testing.T) {
 		AgentMixSpecs:    []string{"mycode"},
 		TargetIterations: 1,
 		RetryBudget:      1,
-		StallThreshold:  60 * time.Second,
+		StallThreshold:   60 * time.Second,
 		TaskPrompt:       "Create a file called custom-harness-e2e.txt with the text 'custom harness ok'. Do not create any other files.",
 		Resolver: func(spec string) (agent.ResolvedAgent, error) {
 			// Resolve "mycode" as a custom harness with its default model.
@@ -611,7 +611,7 @@ func TestRealBackend_MultiHarnessRoundRobin(t *testing.T) {
 		UseOverrideRoute: true,
 		TargetIterations: 3,
 		RetryBudget:      1,
-		StallThreshold:  180 * time.Second,
+		StallThreshold:   180 * time.Second,
 		TaskPrompt:       "Create a single empty file with a unique name like step-N.txt where N is unique per iteration. Do not create any other files.",
 		Resolver:         resolver,
 	}, executors)

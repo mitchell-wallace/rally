@@ -357,8 +357,8 @@ type Monitor struct {
 	// Reliability state
 	stallThreshold time.Duration // 0 = slowing detection disabled
 	stalled        bool
-	recovered       bool
-	recoveredTicks  int // counts steady ticks after recovery; clears indicator
+	recovered      bool
+	recoveredTicks int // counts steady ticks after recovery; clears indicator
 
 	ticker *time.Ticker
 	stopCh chan struct{}

@@ -659,4 +659,3 @@ func TestNewStoreAutoMigration(t *testing.T) {
 		t.Errorf("expected 1 try with ID 42 in cache, got: %v", tries)
 	}
 }
-

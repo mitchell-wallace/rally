@@ -72,12 +72,12 @@ type FallbackConfig struct {
 }
 
 type ReliabilityConfig struct {
-	StallThresholdSecs      int  `toml:"stall_threshold_secs,omitempty"`
-	LivenessProbe           bool `toml:"liveness_probe,omitempty"`
-	RetryBudget             int  `toml:"retry_budget,omitempty"`
-	RecentTryCount          int  `toml:"recent_try_count,omitempty"`
-	RecentTryCharLimit      int  `toml:"recent_try_char_limit,omitempty"`
-	RecentContextCharLimit  int  `toml:"recent_context_char_limit,omitempty"`
+	StallThresholdSecs     int  `toml:"stall_threshold_secs,omitempty"`
+	LivenessProbe          bool `toml:"liveness_probe,omitempty"`
+	RetryBudget            int  `toml:"retry_budget,omitempty"`
+	RecentTryCount         int  `toml:"recent_try_count,omitempty"`
+	RecentTryCharLimit     int  `toml:"recent_try_char_limit,omitempty"`
+	RecentContextCharLimit int  `toml:"recent_context_char_limit,omitempty"`
 }
 
 func (r ReliabilityConfig) StallThreshold() time.Duration {

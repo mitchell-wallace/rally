@@ -72,8 +72,10 @@ var claudeRateLimitRegex = regexp.MustCompile(`retry-after:?\s*(\d+)`)
 var ErrorPatterns = []Pattern{
 	// ── Infra-class: rate limits ──
 	{
-		Name:         "claude rate-limit interrupt",
-		Match:        func(lines []string) bool { return containsSubstring(lines, "rate-limit") || containsSubstring(lines, "429 Too Many Requests") },
+		Name: "claude rate-limit interrupt",
+		Match: func(lines []string) bool {
+			return containsSubstring(lines, "rate-limit") || containsSubstring(lines, "429 Too Many Requests")
+		},
 		Strategy:     StrategyWaitResume,
 		FailureClass: FailureInfra,
 		Extract: func(lines []string) time.Duration {
@@ -88,8 +90,10 @@ var ErrorPatterns = []Pattern{
 		},
 	},
 	{
-		Name:         "rate limit generic",
-		Match:        func(lines []string) bool { return containsSubstring(lines, "rate limit") || containsSubstring(lines, "too many requests") },
+		Name: "rate limit generic",
+		Match: func(lines []string) bool {
+			return containsSubstring(lines, "rate limit") || containsSubstring(lines, "too many requests")
+		},
 		Strategy:     StrategyWaitResume,
 		FailureClass: FailureInfra,
 		Extract: func(lines []string) time.Duration {
@@ -97,8 +101,10 @@ var ErrorPatterns = []Pattern{
 		},
 	},
 	{
-		Name:         "usage limit hit",
-		Match:        func(lines []string) bool { return containsSubstring(lines, "usage limit") || containsSubstring(lines, "hit your usage limit") },
+		Name: "usage limit hit",
+		Match: func(lines []string) bool {
+			return containsSubstring(lines, "usage limit") || containsSubstring(lines, "hit your usage limit")
+		},
 		Strategy:     StrategyWaitResume,
 		FailureClass: FailureInfra,
 		Extract: func(lines []string) time.Duration {
@@ -126,48 +132,62 @@ var ErrorPatterns = []Pattern{
 		FailureClass: FailureInfra,
 	},
 	{
-		Name:         "no such file or directory (harness)",
-		Match:        func(lines []string) bool { return containsSubstring(lines, "exec:") && containsSubstring(lines, "not found") },
+		Name: "no such file or directory (harness)",
+		Match: func(lines []string) bool {
+			return containsSubstring(lines, "exec:") && containsSubstring(lines, "not found")
+		},
 		Strategy:     StrategyRotate,
 		FailureClass: FailureInfra,
 	},
 
 	// ── Infra-class: API timeout / network stall ──
 	{
-		Name:         "API timeout",
-		Match:        func(lines []string) bool { return containsSubstring(lines, "request timed out") || containsSubstring(lines, "deadline exceeded") || containsSubstring(lines, "context deadline exceeded") },
+		Name: "API timeout",
+		Match: func(lines []string) bool {
+			return containsSubstring(lines, "request timed out") || containsSubstring(lines, "deadline exceeded") || containsSubstring(lines, "context deadline exceeded")
+		},
 		Strategy:     StrategyResume,
 		FailureClass: FailureInfra,
 	},
 	{
-		Name:         "connection refused",
-		Match:        func(lines []string) bool { return containsSubstring(lines, "connection refused") || containsSubstring(lines, "connection reset") },
+		Name: "connection refused",
+		Match: func(lines []string) bool {
+			return containsSubstring(lines, "connection refused") || containsSubstring(lines, "connection reset")
+		},
 		Strategy:     StrategyResume,
 		FailureClass: FailureInfra,
 	},
 	{
-		Name:         "network unreachable",
-		Match:        func(lines []string) bool { return containsSubstring(lines, "network is unreachable") || containsSubstring(lines, "no route to host") },
+		Name: "network unreachable",
+		Match: func(lines []string) bool {
+			return containsSubstring(lines, "network is unreachable") || containsSubstring(lines, "no route to host")
+		},
 		Strategy:     StrategyResume,
 		FailureClass: FailureInfra,
 	},
 	{
-		Name:         "TLS handshake timeout",
-		Match:        func(lines []string) bool { return containsSubstring(lines, "tls handshake timeout") || containsSubstring(lines, "certificate verify failed") },
+		Name: "TLS handshake timeout",
+		Match: func(lines []string) bool {
+			return containsSubstring(lines, "tls handshake timeout") || containsSubstring(lines, "certificate verify failed")
+		},
 		Strategy:     StrategyResume,
 		FailureClass: FailureInfra,
 	},
 	{
-		Name:         "server error 5xx",
-		Match:        func(lines []string) bool { return containsSubstring(lines, "500 internal server error") || containsSubstring(lines, "502 bad gateway") || containsSubstring(lines, "503 service unavailable") || containsSubstring(lines, "504 gateway timeout") },
+		Name: "server error 5xx",
+		Match: func(lines []string) bool {
+			return containsSubstring(lines, "500 internal server error") || containsSubstring(lines, "502 bad gateway") || containsSubstring(lines, "503 service unavailable") || containsSubstring(lines, "504 gateway timeout")
+		},
 		Strategy:     StrategyResume,
 		FailureClass: FailureInfra,
 	},
 
 	// ── Infra-class: stall-detection signals ──
 	{
-		Name:         "stall detected",
-		Match:        func(lines []string) bool { return containsSubstring(lines, "stall detected") || containsSubstring(lines, "stall recovery") },
+		Name: "stall detected",
+		Match: func(lines []string) bool {
+			return containsSubstring(lines, "stall detected") || containsSubstring(lines, "stall recovery")
+		},
 		Strategy:     StrategyResume,
 		FailureClass: FailureInfra,
 	},
@@ -180,14 +200,18 @@ var ErrorPatterns = []Pattern{
 		FailureClass: FailureAgent,
 	},
 	{
-		Name:         "gemini-cli exit 1",
-		Match:        func(lines []string) bool { return containsSubstring(lines, "exit status 1") && containsSubstring(lines, "gemini-cli") },
+		Name: "gemini-cli exit 1",
+		Match: func(lines []string) bool {
+			return containsSubstring(lines, "exit status 1") && containsSubstring(lines, "gemini-cli")
+		},
 		Strategy:     StrategyResume,
 		FailureClass: FailureAgent,
 	},
 	{
-		Name:         "codex completion despite limit warning",
-		Match:        func(lines []string) bool { return containsSubstring(lines, "limit warning") && containsSubstring(lines, "completion") },
+		Name: "codex completion despite limit warning",
+		Match: func(lines []string) bool {
+			return containsSubstring(lines, "limit warning") && containsSubstring(lines, "completion")
+		},
 		Strategy:     StrategyNoOp,
 		FailureClass: FailureAgent,
 	},

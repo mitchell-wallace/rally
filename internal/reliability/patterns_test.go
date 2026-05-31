@@ -272,13 +272,13 @@ func TestClassifyError(t *testing.T) {
 			expectedClass:    FailureAgent,
 		},
 		{
-			name: "empty log defaults to agent class",
+			name:             "empty log defaults to agent class",
 			logLines:         []string{},
 			expectedStrategy: StrategyFreshRestart,
 			expectedClass:    FailureAgent,
 		},
 		{
-			name: "nil log defaults to agent class",
+			name:             "nil log defaults to agent class",
 			logLines:         nil,
 			expectedStrategy: StrategyFreshRestart,
 			expectedClass:    FailureAgent,
@@ -340,9 +340,9 @@ func TestClassifyError_IncompleteContext(t *testing.T) {
 			expectedName:  "unknown error",
 		},
 		{
-			name:     "nil context uses pattern matching",
-			logLines: []string{"fork/exec /bin/agent: permission denied"},
-			ctx:      nil,
+			name:          "nil context uses pattern matching",
+			logLines:      []string{"fork/exec /bin/agent: permission denied"},
+			ctx:           nil,
 			expectedClass: FailureInfra,
 			expectedName:  "fork/exec error",
 		},

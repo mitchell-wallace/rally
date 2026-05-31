@@ -267,7 +267,6 @@ func TestRunInit_UpdatesExistingGitignoreNoTrailingNewline(t *testing.T) {
 	}
 }
 
-
 func TestRunInitRoles_InstallsRoutesAndRoleInstructions(t *testing.T) {
 	tmp := t.TempDir()
 	t.Chdir(tmp)

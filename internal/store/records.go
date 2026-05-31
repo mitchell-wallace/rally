@@ -2,27 +2,27 @@ package store
 
 // TryRecord represents a single agent execution attempt.
 type TryRecord struct {
-	ID            int      `json:"id"`
-	RunID         int      `json:"run_id"`
-	RelayID       int      `json:"relay_id"`
-	AgentType     string   `json:"agent_type"`
-	Completed     bool     `json:"completed"`
-	Summary       string   `json:"summary"`
-	RemainingWork string   `json:"remaining_work"`
-	FilesChanged  []string `json:"files_changed"`
-	CommitHash    string   `json:"commit_hash"`
-	CommitHistory []string `json:"commit_history,omitempty"`
-	StartedAt     string   `json:"started_at"`
-	EndedAt       string   `json:"ended_at"`
-	AttemptNumber int      `json:"attempt_number"`
-	LogPath       string   `json:"log_path,omitempty"`
-	FailReason    string   `json:"fail_reason,omitempty"`
-	RuntimeMs     int64    `json:"runtime_ms,omitempty"`
-	LapID         string   `json:"lap_id,omitempty"`
-	LapAssignee   string   `json:"lap_assignee,omitempty"`
-	RecordedLaps  []string `json:"recorded_laps,omitempty"`
+	ID            int          `json:"id"`
+	RunID         int          `json:"run_id"`
+	RelayID       int          `json:"relay_id"`
+	AgentType     string       `json:"agent_type"`
+	Completed     bool         `json:"completed"`
+	Summary       string       `json:"summary"`
+	RemainingWork string       `json:"remaining_work"`
+	FilesChanged  []string     `json:"files_changed"`
+	CommitHash    string       `json:"commit_hash"`
+	CommitHistory []string     `json:"commit_history,omitempty"`
+	StartedAt     string       `json:"started_at"`
+	EndedAt       string       `json:"ended_at"`
+	AttemptNumber int          `json:"attempt_number"`
+	LogPath       string       `json:"log_path,omitempty"`
+	FailReason    string       `json:"fail_reason,omitempty"`
+	RuntimeMs     int64        `json:"runtime_ms,omitempty"`
+	LapID         string       `json:"lap_id,omitempty"`
+	LapAssignee   string       `json:"lap_assignee,omitempty"`
+	RecordedLaps  []string     `json:"recorded_laps,omitempty"`
 	LapsAttempted []LapAttempt `json:"laps_attempted,omitempty"`
-	ToolCalls     int      `json:"tool_calls,omitempty"`
+	ToolCalls     int          `json:"tool_calls,omitempty"`
 }
 
 // LapAttempt records a laps completion or handoff command observed during a try.
