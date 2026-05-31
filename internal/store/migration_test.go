@@ -10,15 +10,17 @@ import (
 
 func TestMigrateRallyStateLayout(t *testing.T) {
 	tests := []struct {
-		name string
-		setup func(t *testing.T, workspaceDir string)
+		name   string
+		setup  func(t *testing.T, workspaceDir string)
 		verify func(t *testing.T, workspaceDir string)
 	}{
 		{
 			name: "HappyPath",
 			setup: func(t *testing.T, workspaceDir string) {
 				rallyDir := store.RallyDir(workspaceDir)
-				os.MkdirAll(rallyDir, 0755)
+				if err := os.MkdirAll(rallyDir, 0o755); err != nil {
+					t.Fatalf("mkdir rally dir: %v", err)
+				}
 
 				// Create legacy flat files
 				legacyFiles := []string{
@@ -31,15 +33,26 @@ func TestMigrateRallyStateLayout(t *testing.T) {
 					"current_task.md",
 				}
 				for _, lf := range legacyFiles {
-					os.WriteFile(filepath.Join(rallyDir, lf), []byte("legacy "+lf), 0644)
+					if err := os.WriteFile(filepath.Join(rallyDir, lf), []byte("legacy "+lf), 0o644); err != nil {
+						t.Fatalf("write %s: %v", lf, err)
+					}
 				}
 
 				// Create legacy dirs
-				os.MkdirAll(filepath.Join(rallyDir, "batches"), 0755)
-				os.MkdirAll(filepath.Join(rallyDir, "relays"), 0755)
+				if err := os.MkdirAll(filepath.Join(rallyDir, "batches"), 0o755); err != nil {
+					t.Fatalf("mkdir batches: %v", err)
+				}
+				if err := os.MkdirAll(filepath.Join(rallyDir, "relays"), 0o755); err != nil {
+					t.Fatalf("mkdir relays: %v", err)
+				}
 
-				// Create untouched files
-				os.WriteFile(filepath.Join(rallyDir, "progress.yaml"), []byte("verbatim"), 0644)
+				// Create untouched user-managed files.
+				if err := os.WriteFile(filepath.Join(rallyDir, "progress.yaml"), []byte("verbatim"), 0o644); err != nil {
+					t.Fatalf("write progress.yaml: %v", err)
+				}
+				if err := os.WriteFile(filepath.Join(rallyDir, "config.toml.bak"), []byte("backup"), 0o644); err != nil {
+					t.Fatalf("write config backup: %v", err)
+				}
 			},
 			verify: func(t *testing.T, workspaceDir string) {
 				rallyDir := store.RallyDir(workspaceDir)
@@ -82,6 +95,12 @@ func TestMigrateRallyStateLayout(t *testing.T) {
 				} else if string(content) != "verbatim" {
 					t.Errorf("progress.yaml changed")
 				}
+				content, err = os.ReadFile(filepath.Join(rallyDir, "config.toml.bak"))
+				if err != nil {
+					t.Errorf("config.toml.bak missing")
+				} else if string(content) != "backup" {
+					t.Errorf("config.toml.bak changed")
+				}
 			},
 		},
 		{
@@ -89,16 +108,25 @@ func TestMigrateRallyStateLayout(t *testing.T) {
 			setup: func(t *testing.T, workspaceDir string) {
 				rallyDir := store.RallyDir(workspaceDir)
 				stateDir := store.StateDir(workspaceDir)
-				os.MkdirAll(rallyDir, 0755)
-				os.MkdirAll(stateDir, 0755)
+				if err := os.MkdirAll(rallyDir, 0o755); err != nil {
+					t.Fatalf("mkdir rally dir: %v", err)
+				}
+				if err := os.MkdirAll(stateDir, 0o755); err != nil {
+					t.Fatalf("mkdir state dir: %v", err)
+				}
 
 				// Create legacy flat file
-				os.WriteFile(filepath.Join(rallyDir, "tries.jsonl"), []byte("legacy tries"), 0644)
+				if err := os.WriteFile(filepath.Join(rallyDir, "tries.jsonl"), []byte("legacy tries"), 0o644); err != nil {
+					t.Fatalf("write legacy tries: %v", err)
+				}
 
 				// Create existing state target
-				os.WriteFile(filepath.Join(stateDir, "tries.jsonl"), []byte("existing tries"), 0644)
+				if err := os.WriteFile(filepath.Join(stateDir, "tries.jsonl"), []byte("existing tries"), 0o644); err != nil {
+					t.Fatalf("write state tries: %v", err)
+				}
 			},
 			verify: func(t *testing.T, workspaceDir string) {
+				rallyDir := store.RallyDir(workspaceDir)
 				stateDir := store.StateDir(workspaceDir)
 
 				// Ensure existing state target not overwritten
@@ -108,10 +136,9 @@ func TestMigrateRallyStateLayout(t *testing.T) {
 				} else if string(content) != "existing tries" {
 					t.Errorf("state tries.jsonl was overwritten, expected 'existing tries'")
 				}
-
-				// The legacy file is untouched because move fails
-				// Wait, the logic says "if err := moveIfTargetMissing(src, dst)".
-				// Since target is not missing, it does nothing and returns nil. So legacy file is kept? Let's check implementation.
+				if _, err := os.Stat(filepath.Join(rallyDir, "tries.jsonl")); !os.IsNotExist(err) {
+					t.Errorf("legacy tries.jsonl should be removed once state/tries.jsonl already exists")
+				}
 			},
 		},
 	}

@@ -53,7 +53,7 @@
 
 ## 8. Tests
 
-- [ ] 8.1 Tests for the migration on a fixture `.rally/` (flat→state move, legacy dir cleanup, idempotency, no-overwrite, progress.yaml left untouched)
+- [x] 8.1 Tests for the migration on a fixture `.rally/` (flat→state move, legacy dir cleanup, idempotency, no-overwrite, progress.yaml left untouched)
 - [x] 8.2 Tests for store/cache reading and writing under `.rally/state/` and for local-only truncation windowing (assert `tries.jsonl`/`relays.jsonl` are never truncated; `agent_status.jsonl`/`messages.jsonl` use conservative in-place limits)
 - [x] 8.3 Tests for `summary.jsonl` append shape and that `progress.yaml` is never written. Update `runner_test.go:2045` to reference `summary.jsonl` instead of `progress.yaml`
 - [x] 8.4 Tests for the telemetry sink: no-op without DSN, kill switch, env-over-config precedence, tag presence, and scrubber dropping `current_task.md`

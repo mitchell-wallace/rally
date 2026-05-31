@@ -72,6 +72,12 @@ func moveIfTargetMissing(src, dst string) error {
 	}
 
 	if _, err := os.Stat(dst); err == nil {
+		// A partially migrated workspace may already have the state/ target.
+		// Keep the existing destination and drop the stale legacy source so the
+		// root .rally/ layout still converges to the new shape.
+		if err := os.Remove(src); err != nil && !os.IsNotExist(err) {
+			return err
+		}
 		return nil
 	} else if !os.IsNotExist(err) {
 		return err
