@@ -175,20 +175,20 @@
       "title": "Bundle laps alongside rally: install.sh, rally update extension, version check",
       "description": "Context: OpenSpec change tidy-rally-runtime-data-storage (specs/tooling-distribution, design Decision 4 + AGENTS.md release process). Distribution/release-sensitive.\n\nOutcome: install.sh fetches and installs a compatible laps binary next to rally (from https://github.com/mitchell-wallace/laps). The existing `rally update` command (cmd/rally/main.go:505) is extended to also upgrade laps. A startup minimum-laps-version check warns (not hard-fail) and advises `rally update` when laps is too old. .laps/ stays a separate top-level dir; laps must not read .rally/.\n\nFiles \u0026 scope: install.sh, cmd/rally (extend existing update command ~505 + version-check at startup), wherever laps hooks are installed (laps.InstallHooks call in main.go ~169 for reference). Respect the auto-tag/GoReleaser release flow described in AGENTS.md (do not hand-tag).\n\nDesign: Pin/declare a minimum laps version the hooks contract needs. `rally update` should be the single entry point that re-runs the install/upgrade for both binaries. Keep laps independently installable.\n\nAcceptance: `go build ./...`; `rally update --help` exists and mentions laps; running rally with an old/missing laps prints a warning and continues; install.sh references both binaries.",
       "assignee": "SENIOR",
-      "isDone": false,
+      "isDone": true,
       "createdAt": "2026-05-26T12:42:23.263523027Z",
-      "updatedAt": "2026-05-26T12:42:23.263523027Z",
-      "completedAt": null
+      "updatedAt": "2026-05-31T08:21:10.548053715Z",
+      "completedAt": "2026-05-31T08:21:10.548053715Z"
     },
     {
       "id": "rall-058b",
       "title": "Tests: migration, store/state, summary.jsonl",
       "description": "Context: OpenSpec change tidy-rally-runtime-data-storage (tasks 8.1-8.3). Follow existing table-test patterns in internal/store and internal/progress.\n\nOutcome: Tests covering (a) migration on a fixture legacy .rally/ — flat-\u003estate move, no-overwrite, legacy cleanup (batches/, relays/ log dir), idempotency, progress.yaml left untouched; (b) store/cache read+write under .rally/state/ and local-only truncation windowing (tries/relays never pruned; agent_status/messages with conservative limits); (c) summary.jsonl append shape and that progress.yaml is never written.\n\nFiles \u0026 scope: *_test.go in internal/store, internal/progress, and cmd/rally as appropriate. Use t.TempDir fixtures.\n\nAcceptance: `go test ./internal/store/... ./internal/progress/... ./cmd/...` passes; tests fail if migration is non-idempotent or if progress.yaml reappears.",
       "assignee": "JUNIOR",
-      "isDone": false,
+      "isDone": true,
       "createdAt": "2026-05-26T12:42:23.270911121Z",
-      "updatedAt": "2026-05-26T12:42:23.270911121Z",
-      "completedAt": null
+      "updatedAt": "2026-05-31T08:24:50.690146887Z",
+      "completedAt": "2026-05-31T08:24:50.690146887Z"
     },
     {
       "id": "rall-4d04",
