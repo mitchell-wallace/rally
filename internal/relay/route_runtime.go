@@ -50,6 +50,7 @@ type routeSelection struct {
 	Entry         *routing.EntryState
 	Scheduler     *routing.Scheduler
 	HourlyRetry   bool
+	Probation     bool
 }
 
 type routeSelectionError struct {
@@ -188,8 +189,9 @@ func (r *routeRuntime) next(task runTask, resilience *Resilience) (routeSelectio
 		return routeSelection{}, err
 	}
 
-	st, since := resilience.getState(picked.Harness)
+	st, since := resilience.GetState(KeyFromAgent(picked))
 	hourlyRetry := st == StatePaused && !resilience.NowFunc().Before(since.Add(resilience.PauseDuration))
+	probation := st == StateProbation
 
 	var previousAgent *agent.ResolvedAgent
 	routeKey := strings.ToLower(route.Name)
@@ -208,6 +210,7 @@ func (r *routeRuntime) next(task runTask, resilience *Resilience) (routeSelectio
 		Entry:         entry,
 		Scheduler:     scheduler,
 		HourlyRetry:   hourlyRetry,
+		Probation:     probation,
 	}, nil
 }
 
@@ -229,42 +232,82 @@ func (r *routeRuntime) syncRecoverySignals(scheduler *routing.Scheduler, resilie
 			continue
 		}
 
-		status, since := resilience.getState(resolved.Harness)
+		key := KeyFromAgent(resolved)
+		status, since := resilience.GetState(key)
 		switch status {
 		case StateActive:
-			if state.Frozen {
+			if state.Benched {
 				scheduler.OnAgentRecovered(state)
 			}
 		case StatePaused:
-			if !resilience.NowFunc().Before(since.Add(resilience.PauseDuration)) && (state.Frozen || state.Exhausted) {
+			if !resilience.NowFunc().Before(since.Add(resilience.PauseDuration)) && (state.Benched || state.Exhausted) {
 				scheduler.ResetEntry(state)
-			} else if !state.Frozen || !state.Exhausted {
-				scheduler.OnAgentFailed(state, "paused")
+			} else if !(state.Benched && state.Exhausted) {
+				scheduler.OnAgentFailed(state, "paused", true)
+			}
+		case StateProbation:
+			// Probation is the freeze-decay window: a frozen agent has aged
+			// past FreezeDuration and is granted exactly one tentative
+			// recovery attempt per probation cycle. The one-shot is split
+			// across two sync calls. On the first sync (no probation event
+			// yet) we persist the event and unbench the entry so Next() can
+			// pick it for the probation run. On any subsequent sync where
+			// the state is still probation (e.g. the prior run didn't
+			// resolve cleanly via UnpauseAgent/FreezeAgent), the entry is
+			// re-benched so it cannot be selected again until the state
+			// transitions. runOne is responsible for writing the active or
+			// frozen event that ends the probation cycle.
+			if !r.hasProbationEventForCurrentFreeze(resilience, key) {
+				_ = resilience.persistProbationEvent(key)
+				scheduler.ResetEntry(state)
+			} else if !(state.Benched && state.Exhausted) {
+				scheduler.OnAgentFailed(state, "probation", true)
 			}
 		case StateFrozen:
-			if !state.Frozen || !state.Exhausted {
-				scheduler.OnAgentFailed(state, "frozen")
+			if !(state.Benched && state.Exhausted) {
+				scheduler.OnAgentFailed(state, "frozen", true)
 			}
 		}
 	}
 }
 
+// hasProbationEventForCurrentFreeze returns true when the agent's event log
+// already contains a probation event newer than the latest frozen event for
+// this key. Used by syncRecoverySignals so the probation event is persisted
+// exactly once per freeze cycle.
+func (r *routeRuntime) hasProbationEventForCurrentFreeze(resilience *Resilience, key ResilienceKey) bool {
+	events, err := resilience.Store.GetAgentStatus(key.Harness, key.Model)
+	if err != nil {
+		return false
+	}
+	for i := len(events) - 1; i >= 0; i-- {
+		switch events[i].EventType {
+		case "probation":
+			return true
+		case "frozen":
+			return false
+		}
+	}
+	return false
+}
+
 func (r *routeRuntime) selectionWaitError(scheduler *routing.Scheduler, resilience *Resilience) error {
 	var minWait time.Duration
 	waitSet := false
-	seenHarnesses := map[string]struct{}{}
+	seenKeys := map[ResilienceKey]struct{}{}
 
 	for _, state := range scheduler.EntryStates() {
 		resolved, err := resolveAgentSpec(state.Entry.Spec, nil)
 		if err != nil {
 			continue
 		}
-		if _, ok := seenHarnesses[resolved.Harness]; ok {
+		key := KeyFromAgent(resolved)
+		if _, ok := seenKeys[key]; ok {
 			continue
 		}
-		seenHarnesses[resolved.Harness] = struct{}{}
+		seenKeys[key] = struct{}{}
 
-		status, since := resilience.getState(resolved.Harness)
+		status, since := resilience.GetState(key)
 		if status != StatePaused {
 			continue
 		}
@@ -296,7 +339,7 @@ func (r *routeRuntime) selectionWaitError(scheduler *routing.Scheduler, resilien
 // back to active state. Used when the user hits skip during a frozen-wait to
 // retry immediately rather than serving out the pause window.
 func (r *routeRuntime) forceUnpauseAll(resilience *Resilience, relayID int) (int, error) {
-	seen := map[string]struct{}{}
+	seen := map[ResilienceKey]struct{}{}
 	unpaused := 0
 	for _, scheduler := range r.schedulers {
 		for _, state := range scheduler.EntryStates() {
@@ -304,15 +347,16 @@ func (r *routeRuntime) forceUnpauseAll(resilience *Resilience, relayID int) (int
 			if err != nil {
 				continue
 			}
-			if _, ok := seen[resolved.Harness]; ok {
+			key := KeyFromAgent(resolved)
+			if _, ok := seen[key]; ok {
 				continue
 			}
-			seen[resolved.Harness] = struct{}{}
-			status, _ := resilience.getState(resolved.Harness)
+			seen[key] = struct{}{}
+			status, _ := resilience.GetState(key)
 			if status != StatePaused {
 				continue
 			}
-			if err := resilience.UnpauseAgent(resolved.Harness, relayID); err != nil {
+			if err := resilience.UnpauseAgent(key, relayID); err != nil {
 				return unpaused, err
 			}
 			unpaused++

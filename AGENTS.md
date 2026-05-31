@@ -49,6 +49,9 @@ The intended flow is:
 - **Laps is Rally's permanent backend**, not one work-queue option among many.
   Rally always drives laps; the two ship and version together. Code may assume
   laps is present.
+- **Commit `.laps/laps.json`**: The work queue state file `.laps/laps.json` tracks
+  the campaign's progress and must be committed and pushed to Git. Do not
+  gitignore, delete, or omit it from commits.
 - **OpenSpec is optional.** Rally is not married to OpenSpec — they're dating.
   Rally core, the executor, and the default role docs (`.rally/agents/<role>.md`)
   stay OpenSpec-agnostic. Nothing in rally should *require* OpenSpec to function

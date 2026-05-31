@@ -13,17 +13,17 @@ import (
 )
 
 const (
-	DefaultFreezeThreshold  = 180 * time.Second
-	DefaultFreezeTick       = 5 * time.Second
+	DefaultStallThreshold  = 180 * time.Second
+	DefaultStallTick       = 5 * time.Second
 	defaultKillDrain        = 5 * time.Second
 	defaultKillPoll         = 100 * time.Millisecond
 	// NetworkSilentThreshold is how long an agent may hold open TCP connections
-	// without any syscall I/O (rchar+wchar) before it is declared frozen.
+	// without any syscall I/O (rchar+wchar) before it is declared stalled.
 	// This catches rate-limited agents that keep a connection alive but send no data.
 	NetworkSilentThreshold = 5 * time.Minute
 )
 
-var errProcessGroupUnavailable = errors.New("freeze detector waiting for process group")
+var errProcessGroupUnavailable = errors.New("stall detector waiting for process group")
 
 type SignalSnapshot struct {
 	Now          time.Time
@@ -34,7 +34,7 @@ type SignalSnapshot struct {
 }
 
 type Assessment struct {
-	Frozen    bool
+	Stalled   bool
 	Ambiguous bool
 }
 
@@ -50,7 +50,7 @@ type Detector struct {
 
 func NewDetector(threshold time.Duration) *Detector {
 	if threshold <= 0 {
-		threshold = DefaultFreezeThreshold
+		threshold = DefaultStallThreshold
 	}
 	return &Detector{
 		threshold: threshold,
@@ -60,7 +60,7 @@ func NewDetector(threshold time.Duration) *Detector {
 
 func NewDetectorForPlatform(platform string, threshold time.Duration) *Detector {
 	if threshold <= 0 {
-		threshold = DefaultFreezeThreshold
+		threshold = DefaultStallThreshold
 	}
 	return &Detector{
 		threshold: threshold,
@@ -69,7 +69,7 @@ func NewDetectorForPlatform(platform string, threshold time.Duration) *Detector 
 }
 
 func (d *Detector) Evaluate(snapshot SignalSnapshot) bool {
-	return d.Assess(snapshot).Frozen
+	return d.Assess(snapshot).Stalled
 }
 
 func (d *Detector) Assess(snapshot SignalSnapshot) Assessment {
@@ -77,7 +77,7 @@ func (d *Detector) Assess(snapshot SignalSnapshot) Assessment {
 	case "windows":
 		return Assessment{}
 	case "darwin":
-		return Assessment{Frozen: snapshot.LogSilentFor >= d.threshold}
+		return Assessment{Stalled: snapshot.LogSilentFor >= d.threshold}
 	case "linux":
 		if snapshot.Now.IsZero() {
 			snapshot.Now = time.Now()
@@ -103,17 +103,17 @@ func (d *Detector) Assess(snapshot SignalSnapshot) Assessment {
 		// We intentionally exclude the IO-silence check here: idle and background
 		// processes do sporadic disk writes every 30-40s (GC, buffers, opencode
 		// TUI) that would prevent ioSilentFor from ever reaching the threshold,
-		// causing the freeze to never fire even when the process is clearly stuck.
-		classicFrozen := snapshot.LogSilentFor >= d.threshold &&
+		// causing the stall to never fire even when the process is clearly stuck.
+		classicStalled := snapshot.LogSilentFor >= d.threshold &&
 			snapshot.Connections == 0
 		// Connected-but-silent: agent holds open TCP connections but no syscall
 		// I/O (send/recv) has occurred for NetworkSilentThreshold — catches
 		// rate-limited agents that keep a connection alive without sending data.
-		connectedFrozen := snapshot.LogSilentFor >= d.threshold &&
+		connectedStalled := snapshot.LogSilentFor >= d.threshold &&
 			snapshot.Connections > 0 &&
 			syscallSilentFor >= NetworkSilentThreshold
 		return Assessment{
-			Frozen: classicFrozen || connectedFrozen,
+			Stalled: classicStalled || connectedStalled,
 			Ambiguous: snapshot.LogSilentFor < DefaultAmbiguousProbeWindow &&
 				ioSilentFor >= DefaultAmbiguousProbeWindow,
 		}
@@ -122,14 +122,14 @@ func (d *Detector) Assess(snapshot SignalSnapshot) Assessment {
 	}
 }
 
-type FreezeController interface {
+type StallController interface {
 	SetProcessGroupID(int)
 	Check(context.Context) (bool, error)
 }
 
-type freezeController struct {
+type stallController struct {
 	logPath      string
-	netStatsPath string // JSONL file for per-tick network stats; empty = disabled
+	netStatsPath string
 	pgid         int
 	detector     *Detector
 	killer       processGroupKiller
@@ -139,20 +139,20 @@ type freezeController struct {
 	takeSnapshot func() (SignalSnapshot, error)
 }
 
-func NewFreezeController(logPath string, threshold time.Duration) FreezeController {
-	return NewFreezeControllerWithProbe(logPath, threshold, nil)
+func NewStallController(logPath string, threshold time.Duration) StallController {
+	return NewStallControllerWithProbe(logPath, threshold, nil)
 }
 
-func NewFreezeControllerWithProbe(logPath string, threshold time.Duration, probe *LivenessProbe) FreezeController {
-	return NewFreezeControllerFull(logPath, threshold, probe, "")
+func NewStallControllerWithProbe(logPath string, threshold time.Duration, probe *LivenessProbe) StallController {
+	return NewStallControllerFull(logPath, threshold, probe, "")
 }
 
-// NewFreezeControllerFull creates a freeze controller with optional per-tick
+// NewStallControllerFull creates a stall controller with optional per-tick
 // network stats logging. When netStatsPath is non-empty, each Check() call
 // appends a JSONL record with snapshot metrics (connections, io_bytes,
 // syscall_bytes, log_silent_s) for post-run analysis.
-func NewFreezeControllerFull(logPath string, threshold time.Duration, probe *LivenessProbe, netStatsPath string) FreezeController {
-	return &freezeController{
+func NewStallControllerFull(logPath string, threshold time.Duration, probe *LivenessProbe, netStatsPath string) StallController {
+	return &stallController{
 		logPath:      logPath,
 		netStatsPath: netStatsPath,
 		detector:     NewDetector(threshold),
@@ -170,11 +170,11 @@ func NewFreezeControllerFull(logPath string, threshold time.Duration, probe *Liv
 	}
 }
 
-func (c *freezeController) SetProcessGroupID(pgid int) {
+func (c *stallController) SetProcessGroupID(pgid int) {
 	c.pgid = pgid
 }
 
-func (c *freezeController) Check(ctx context.Context) (bool, error) {
+func (c *stallController) Check(ctx context.Context) (bool, error) {
 	snapshotFn := c.snapshot
 	if c.takeSnapshot != nil {
 		snapshotFn = c.takeSnapshot
@@ -193,15 +193,15 @@ func (c *freezeController) Check(ctx context.Context) (bool, error) {
 	}
 
 	assessment := c.detector.Assess(snapshot)
-	probeConfirmedFreeze := false
+	probeConfirmedStall := false
 	if assessment.Ambiguous && c.probe != nil {
 		if c.probe.Check(ctx) {
 			return false, nil
 		}
-		probeConfirmedFreeze = true
+		probeConfirmedStall = true
 	}
 
-	if !assessment.Frozen && !probeConfirmedFreeze {
+	if !assessment.Stalled && !probeConfirmedStall {
 		return false, nil
 	}
 	if err := c.killer.Kill(ctx, c.pgid); err != nil {
@@ -210,10 +210,10 @@ func (c *freezeController) Check(ctx context.Context) (bool, error) {
 	return true, nil
 }
 
-func (c *freezeController) snapshot() (SignalSnapshot, error) {
+func (c *stallController) snapshot() (SignalSnapshot, error) {
 	lastActivity, err := monitor.LogLastActivity(c.logPath)
 	if err != nil {
-		return SignalSnapshot{}, fmt.Errorf("freeze detector log activity: %w", err)
+		return SignalSnapshot{}, fmt.Errorf("stall detector log activity: %w", err)
 	}
 
 	snapshot := SignalSnapshot{
@@ -230,19 +230,19 @@ func (c *freezeController) snapshot() (SignalSnapshot, error) {
 
 	pids, err := monitor.GetPIDsInGroup(c.pgid)
 	if err != nil {
-		return SignalSnapshot{}, fmt.Errorf("freeze detector pids: %w", err)
+		return SignalSnapshot{}, fmt.Errorf("stall detector pids: %w", err)
 	}
 	conns, err := monitor.CountTCPConnections(pids)
 	if err != nil {
-		return SignalSnapshot{}, fmt.Errorf("freeze detector connections: %w", err)
+		return SignalSnapshot{}, fmt.Errorf("stall detector connections: %w", err)
 	}
 	ioBytes, err := monitor.ReadIOBytes(pids)
 	if err != nil {
-		return SignalSnapshot{}, fmt.Errorf("freeze detector io bytes: %w", err)
+		return SignalSnapshot{}, fmt.Errorf("stall detector io bytes: %w", err)
 	}
 	syscallBytes, err := monitor.ReadSyscallBytes(pids)
 	if err != nil {
-		return SignalSnapshot{}, fmt.Errorf("freeze detector syscall bytes: %w", err)
+		return SignalSnapshot{}, fmt.Errorf("stall detector syscall bytes: %w", err)
 	}
 
 	snapshot.Connections = conns
@@ -259,7 +259,7 @@ type netStatEntry struct {
 	SyscallBytes uint64  `json:"syscall_bytes"`
 }
 
-func (c *freezeController) appendNetStat(snap SignalSnapshot) {
+func (c *stallController) appendNetStat(snap SignalSnapshot) {
 	entry := netStatEntry{
 		Timestamp:    snap.Now.UTC().Format(time.RFC3339),
 		LogSilentS:   snap.LogSilentFor.Seconds(),

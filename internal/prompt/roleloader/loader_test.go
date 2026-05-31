@@ -5,11 +5,13 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/mitchell-wallace/rally/internal/store"
 )
 
 func TestLoadExactMatch(t *testing.T) {
 	workspaceDir := t.TempDir()
-	agentsDir := filepath.Join(workspaceDir, ".rally", "agents")
+	agentsDir := store.AgentsDir(workspaceDir)
 	if err := os.MkdirAll(agentsDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -28,7 +30,7 @@ func TestLoadExactMatch(t *testing.T) {
 
 func TestLoadCaseInsensitiveMatch(t *testing.T) {
 	workspaceDir := t.TempDir()
-	agentsDir := filepath.Join(workspaceDir, ".rally", "agents")
+	agentsDir := store.AgentsDir(workspaceDir)
 	if err := os.MkdirAll(agentsDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -47,7 +49,7 @@ func TestLoadCaseInsensitiveMatch(t *testing.T) {
 
 func TestLoadDeterministicFirstCaseVariant(t *testing.T) {
 	workspaceDir := t.TempDir()
-	agentsDir := filepath.Join(workspaceDir, ".rally", "agents")
+	agentsDir := store.AgentsDir(workspaceDir)
 	if err := os.MkdirAll(agentsDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -89,7 +91,7 @@ func TestLoadMissingFileIsSilent(t *testing.T) {
 
 func TestLoadIgnoresExtensionWhenMatchingBaseName(t *testing.T) {
 	workspaceDir := t.TempDir()
-	agentsDir := filepath.Join(workspaceDir, ".rally", "agents")
+	agentsDir := store.AgentsDir(workspaceDir)
 	if err := os.MkdirAll(agentsDir, 0o755); err != nil {
 		t.Fatal(err)
 	}

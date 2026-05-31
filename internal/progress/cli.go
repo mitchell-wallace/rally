@@ -49,7 +49,7 @@ func NewProgressCmd() *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "progress",
-		Short: "Manage rally progress log and run state",
+		Short: "Manage rally summary log and run state",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			workspaceDir, err := getWorkspaceDir()
 			if err != nil {

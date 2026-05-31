@@ -7,51 +7,51 @@ import (
 	"time"
 )
 
-func TestDetectorLinuxClassicFreeze(t *testing.T) {
+func TestDetectorLinuxClassicStall(t *testing.T) {
 	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	d := NewDetectorForPlatform("linux", 3*time.Minute)
 
-	// Log silent + no connections exceeding threshold → freeze.
-	// IO activity does NOT prevent the classic freeze; background processes
+	// Log silent + no connections exceeding threshold → stall.
+	// IO activity does NOT prevent the classic stall; background processes
 	// (GC, opencode TUI) produce sporadic disk writes that would otherwise
-	// cause the freeze to never fire.
-	if frozen := d.Evaluate(SignalSnapshot{
+	// cause the stall to never fire.
+	if stalled := d.Evaluate(SignalSnapshot{
 		Now:          base,
 		LogSilentFor: 4 * time.Minute,
 		Connections:  0,
 		IOBytes:      10,
-	}); !frozen {
-		t.Fatal("expected freeze: log silent >= threshold and no connections")
+	}); !stalled {
+		t.Fatal("expected stall: log silent >= threshold and no connections")
 	}
 
 	d = NewDetectorForPlatform("linux", 3*time.Minute)
-	if frozen := d.Evaluate(SignalSnapshot{
+	if stalled := d.Evaluate(SignalSnapshot{
 		Now:          base,
 		LogSilentFor: 4 * time.Minute,
 		Connections:  1,
 		IOBytes:      10,
-	}); frozen {
-		t.Fatal("nonzero connections should prevent classic freeze")
+	}); stalled {
+		t.Fatal("nonzero connections should prevent classic stall")
 	}
 
-	// Log silent below threshold → no freeze.
+	// Log silent below threshold → no stall.
 	d = NewDetectorForPlatform("linux", 3*time.Minute)
-	if frozen := d.Evaluate(SignalSnapshot{
+	if stalled := d.Evaluate(SignalSnapshot{
 		Now:          base,
 		LogSilentFor: 2 * time.Minute,
 		Connections:  0,
 		IOBytes:      10,
-	}); frozen {
-		t.Fatal("log silent below threshold should not freeze")
+	}); stalled {
+		t.Fatal("log silent below threshold should not stall")
 	}
 }
 
-func TestDetectorLinuxConnectedNoTrafficFreeze(t *testing.T) {
+func TestDetectorLinuxConnectedNoTrafficStall(t *testing.T) {
 	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	threshold := 3 * time.Minute
 	d := NewDetectorForPlatform("linux", threshold)
 
-	// Connections open but no syscall I/O for NetworkSilentThreshold → freeze.
+	// Connections open but no syscall I/O for NetworkSilentThreshold → stall.
 	// Simulates a rate-limited agent that keeps a TCP connection alive without
 	// sending any data.
 	d.Evaluate(SignalSnapshot{
@@ -60,14 +60,14 @@ func TestDetectorLinuxConnectedNoTrafficFreeze(t *testing.T) {
 		Connections:  2,
 		SyscallBytes: 1000,
 	})
-	// SyscallBytes unchanged for NetworkSilentThreshold → connectedFrozen
-	if frozen := d.Evaluate(SignalSnapshot{
+	// SyscallBytes unchanged for NetworkSilentThreshold → connectedStalled
+	if stalled := d.Evaluate(SignalSnapshot{
 		Now:          base.Add(NetworkSilentThreshold),
 		LogSilentFor: threshold + time.Second,
 		Connections:  2,
 		SyscallBytes: 1000, // no change
-	}); !frozen {
-		t.Fatal("expected freeze: connections open but no syscall I/O for NetworkSilentThreshold")
+	}); !stalled {
+		t.Fatal("expected stall: connections open but no syscall I/O for NetworkSilentThreshold")
 	}
 
 	// Fresh syscall I/O resets the timer.
@@ -78,39 +78,39 @@ func TestDetectorLinuxConnectedNoTrafficFreeze(t *testing.T) {
 		Connections:  2,
 		SyscallBytes: 1000,
 	})
-	if frozen := d2.Evaluate(SignalSnapshot{
+	if stalled := d2.Evaluate(SignalSnapshot{
 		Now:          base.Add(NetworkSilentThreshold),
 		LogSilentFor: threshold + time.Second,
 		Connections:  2,
 		SyscallBytes: 2000, // changed
-	}); frozen {
-		t.Fatal("fresh syscall I/O should prevent connected-frozen")
+	}); stalled {
+		t.Fatal("fresh syscall I/O should prevent connected-stall")
 	}
 }
 
 func TestDetectorMacOSUsesLogSilenceOnly(t *testing.T) {
 	d := NewDetectorForPlatform("darwin", 90*time.Second)
-	frozen := d.Evaluate(SignalSnapshot{
+	stalled := d.Evaluate(SignalSnapshot{
 		Now:          time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC),
 		LogSilentFor: 2 * time.Minute,
 		Connections:  3,
 		IOBytes:      99,
 	})
-	if !frozen {
-		t.Fatal("expected macOS freeze detection to use log silence alone")
+	if !stalled {
+		t.Fatal("expected macOS stall detection to use log silence alone")
 	}
 }
 
 func TestDetectorWindowsDisabled(t *testing.T) {
 	d := NewDetectorForPlatform("windows", 30*time.Second)
-	frozen := d.Evaluate(SignalSnapshot{
+	stalled := d.Evaluate(SignalSnapshot{
 		Now:          time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC),
 		LogSilentFor: 10 * time.Minute,
 		Connections:  0,
 		IOBytes:      0,
 	})
-	if frozen {
-		t.Fatal("windows freeze detection should be disabled")
+	if stalled {
+		t.Fatal("windows stall detection should be disabled")
 	}
 }
 
@@ -134,8 +134,8 @@ func TestDetectorLinuxFlagsAmbiguousProbeWindow(t *testing.T) {
 	if !assessment.Ambiguous {
 		t.Fatal("expected probe ambiguity once log activity continues but IO stays stalled for 60s")
 	}
-	if assessment.Frozen {
-		t.Fatal("ambiguous state should not trip passive freeze detection")
+	if assessment.Stalled {
+		t.Fatal("ambiguous state should not trip passive stall detection")
 	}
 }
 
@@ -206,7 +206,7 @@ func TestProcessGroupKillerEscalatesAfterDrain(t *testing.T) {
 	}
 }
 
-func TestFreezeControllerProbeSuccessClearsAmbiguousFreeze(t *testing.T) {
+func TestStallControllerProbeSuccessClearsAmbiguousStall(t *testing.T) {
 	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	probeCalls := 0
 	killerCalls := 0
@@ -216,7 +216,7 @@ func TestFreezeControllerProbeSuccessClearsAmbiguousFreeze(t *testing.T) {
 	}
 	index := 0
 
-	controller := &freezeController{
+	controller := &stallController{
 		detector: NewDetectorForPlatform("linux", 3*time.Minute),
 		probe: NewLivenessProbe(5*time.Second, func(context.Context) (bool, error) {
 			probeCalls++
@@ -243,11 +243,11 @@ func TestFreezeControllerProbeSuccessClearsAmbiguousFreeze(t *testing.T) {
 		t.Fatalf("warm-up Check() error = %v", err)
 	}
 
-	frozen, err := controller.Check(context.Background())
+	stalled, err := controller.Check(context.Background())
 	if err != nil {
 		t.Fatalf("Check() error = %v", err)
 	}
-	if frozen {
+	if stalled {
 		t.Fatal("probe success should keep the try running")
 	}
 	if probeCalls != 1 {
@@ -258,7 +258,7 @@ func TestFreezeControllerProbeSuccessClearsAmbiguousFreeze(t *testing.T) {
 	}
 }
 
-func TestFreezeControllerProbeFailureConfirmsFreeze(t *testing.T) {
+func TestStallControllerProbeFailureConfirmsStall(t *testing.T) {
 	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	killerCalls := 0
 	snapshots := []SignalSnapshot{
@@ -267,7 +267,7 @@ func TestFreezeControllerProbeFailureConfirmsFreeze(t *testing.T) {
 	}
 	index := 0
 
-	controller := &freezeController{
+	controller := &stallController{
 		detector: NewDetectorForPlatform("linux", 3*time.Minute),
 		probe: NewLivenessProbe(5*time.Second, func(context.Context) (bool, error) {
 			return false, nil
@@ -293,19 +293,19 @@ func TestFreezeControllerProbeFailureConfirmsFreeze(t *testing.T) {
 		t.Fatalf("warm-up Check() error = %v", err)
 	}
 
-	frozen, err := controller.Check(context.Background())
+	stalled, err := controller.Check(context.Background())
 	if err != nil {
 		t.Fatalf("Check() error = %v", err)
 	}
-	if !frozen {
-		t.Fatal("probe failure should confirm freeze")
+	if !stalled {
+		t.Fatal("probe failure should confirm stall")
 	}
 	if killerCalls != 1 {
 		t.Fatalf("killer calls = %d, want 1", killerCalls)
 	}
 }
 
-func TestFreezeControllerProbeTimeoutConfirmsFreeze(t *testing.T) {
+func TestStallControllerProbeTimeoutConfirmsStall(t *testing.T) {
 	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	killerCalls := 0
 	snapshots := []SignalSnapshot{
@@ -314,7 +314,7 @@ func TestFreezeControllerProbeTimeoutConfirmsFreeze(t *testing.T) {
 	}
 	index := 0
 
-	controller := &freezeController{
+	controller := &stallController{
 		detector: NewDetectorForPlatform("linux", 3*time.Minute),
 		probe: NewLivenessProbe(10*time.Millisecond, func(ctx context.Context) (bool, error) {
 			<-ctx.Done()
@@ -341,12 +341,12 @@ func TestFreezeControllerProbeTimeoutConfirmsFreeze(t *testing.T) {
 		t.Fatalf("warm-up Check() error = %v", err)
 	}
 
-	frozen, err := controller.Check(context.Background())
+	stalled, err := controller.Check(context.Background())
 	if err != nil {
 		t.Fatalf("Check() error = %v", err)
 	}
-	if !frozen {
-		t.Fatal("probe timeout should confirm freeze")
+	if !stalled {
+		t.Fatal("probe timeout should confirm stall")
 	}
 	if killerCalls != 1 {
 		t.Fatalf("killer calls = %d, want 1", killerCalls)

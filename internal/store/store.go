@@ -2,84 +2,96 @@ package store
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 	"sort"
 )
 
 const (
-	triesWindowSize       = 200
-	relaysWindowSize      = 50
-	agentStatusWindowSize = 50
+	agentStatusWindowSize = 500
 	messagesWindowSize    = 200
 )
 
 // Store provides unified read/write access to Rally's JSONL-backed storage.
 type Store struct {
-	dir   string
-	cache *Cache
+	dir      string
+	stateDir string
+	cache    *Cache
 }
 
 // NewStore creates a Store and loads all JSONL data into memory.
 func NewStore(dir string) (*Store, error) {
+	// If the .rally directory exists, run migration to ensure any legacy files
+	// are moved to the state/ directory before loading the cache.
+	if info, err := os.Stat(dir); err == nil && info.IsDir() {
+		if err := MigrateRallyStateLayout(filepath.Dir(dir)); err != nil {
+			return nil, fmt.Errorf("migrate rally state layout: %w", err)
+		}
+	}
+
 	cache, err := LoadCache(dir)
 	if err != nil {
 		return nil, err
 	}
-	return &Store{dir: dir, cache: cache}, nil
+	return &Store{dir: dir, stateDir: filepath.Join(dir, "state"), cache: cache}, nil
 }
 
 // AppendTry appends a try record to JSONL and the cache.
 func (s *Store) AppendTry(t TryRecord) error {
-	path := filepath.Join(s.dir, "tries.jsonl")
+	if len(t.CommitHistory) > 0 {
+		t.CommitHash = t.CommitHistory[len(t.CommitHistory)-1]
+	} else if t.CommitHash != "" {
+		t.CommitHistory = []string{t.CommitHash}
+	}
+
+	if err := os.MkdirAll(s.stateDir, 0o755); err != nil {
+		return err
+	}
+	path := filepath.Join(s.stateDir, "tries.jsonl")
 	if err := appendJSONL(path, t); err != nil {
 		return err
 	}
 	s.cache.Tries = append(s.cache.Tries, t)
 	s.cache.TryIndex[t.ID] = len(s.cache.Tries) - 1
-	if len(s.cache.Tries) > triesWindowSize {
-		if err := commitThenTruncate(path, triesWindowSize); err != nil {
-			return fmt.Errorf("truncate tries: %w", err)
-		}
-		// Reload cache after truncation
-		c, err := LoadCache(s.dir)
-		if err != nil {
-			return fmt.Errorf("reload cache after truncate: %w", err)
-		}
-		s.cache = c
-	}
 	return nil
 }
 
 // AppendRelay appends a relay record to JSONL and the cache.
 func (s *Store) AppendRelay(r RelayRecord) error {
-	path := filepath.Join(s.dir, "relays.jsonl")
+	if err := os.MkdirAll(s.stateDir, 0o755); err != nil {
+		return err
+	}
+	path := filepath.Join(s.stateDir, "relays.jsonl")
 	if err := appendJSONL(path, r); err != nil {
 		return err
 	}
 	s.cache.Relays = append(s.cache.Relays, r)
 	s.cache.RelayIndex[r.ID] = len(s.cache.Relays) - 1
-	if len(s.cache.Relays) > relaysWindowSize {
-		if err := commitThenTruncate(path, relaysWindowSize); err != nil {
-			return fmt.Errorf("truncate relays: %w", err)
-		}
-		c, err := LoadCache(s.dir)
-		if err != nil {
-			return fmt.Errorf("reload cache after truncate: %w", err)
-		}
-		s.cache = c
+	return nil
+}
+
+// ResetAgentStatus removes all agent status history to start fresh.
+func (s *Store) ResetAgentStatus() error {
+	path := filepath.Join(s.stateDir, "agent_status.jsonl")
+	s.cache.AgentStatus = nil
+	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+		return err
 	}
 	return nil
 }
 
 // AppendAgentStatus appends an agent status event to JSONL and the cache.
 func (s *Store) AppendAgentStatus(e AgentStatusEvent) error {
-	path := filepath.Join(s.dir, "agent_status.jsonl")
+	if err := os.MkdirAll(s.stateDir, 0o755); err != nil {
+		return err
+	}
+	path := filepath.Join(s.stateDir, "agent_status.jsonl")
 	if err := appendJSONL(path, e); err != nil {
 		return err
 	}
 	s.cache.AgentStatus = append(s.cache.AgentStatus, e)
 	if len(s.cache.AgentStatus) > agentStatusWindowSize {
-		if err := commitThenTruncate(path, agentStatusWindowSize); err != nil {
+		if err := s.truncateAgentStatus(path); err != nil {
 			return fmt.Errorf("truncate agent_status: %w", err)
 		}
 		c, err := LoadCache(s.dir)
@@ -88,6 +100,63 @@ func (s *Store) AppendAgentStatus(e AgentStatusEvent) error {
 		}
 		s.cache = c
 	}
+	return nil
+}
+
+// truncateAgentStatus truncates the agent status log while preserving summary
+// events for any active frozen or probation entries that would otherwise be
+// lost. This ensures that after truncation, the resilience state machine can
+// still correctly identify agents that are frozen or in probation.
+func (s *Store) truncateAgentStatus(path string) error {
+	events := s.cache.AgentStatus
+	if len(events) <= agentStatusWindowSize {
+		return nil
+	}
+
+	dropped := events[:len(events)-agentStatusWindowSize]
+	retained := events[len(events)-agentStatusWindowSize:]
+
+	type agentKey struct {
+		AgentType string
+		Model     string
+	}
+	summaryEvents := make(map[agentKey]AgentStatusEvent)
+
+	for _, e := range dropped {
+		if e.EventType != "frozen" && e.EventType != "probation" {
+			continue
+		}
+		key := agentKey{AgentType: e.AgentType, Model: e.Model}
+		if existing, ok := summaryEvents[key]; ok {
+			if e.Timestamp > existing.Timestamp {
+				summaryEvents[key] = e
+			}
+		} else {
+			summaryEvents[key] = e
+		}
+	}
+
+	var summaries []AgentStatusEvent
+	for _, e := range summaryEvents {
+		summaries = append(summaries, AgentStatusEvent{
+			AgentType: e.AgentType,
+			Model:     e.Model,
+			EventType: e.EventType,
+			Timestamp: e.Timestamp,
+			Reason:    "truncation summary",
+		})
+	}
+
+	sort.Slice(summaries, func(i, j int) bool {
+		return summaries[i].Timestamp < summaries[j].Timestamp
+	})
+
+	kept := append(summaries, retained...)
+
+	if err := rewriteJSONL(path, kept); err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -104,13 +173,15 @@ func (s *Store) AddMessage(m MessageRecord) error {
 		m.Position = maxPos + 1
 	}
 
-	path := filepath.Join(s.dir, "messages.jsonl")
+	if err := os.MkdirAll(s.stateDir, 0o755); err != nil {
+		return err
+	}
+	path := filepath.Join(s.stateDir, "messages.jsonl")
 	if err := appendJSONL(path, m); err != nil {
 		return err
 	}
 	s.cache.Messages = append(s.cache.Messages, m)
 	s.cache.MessageIndex[m.ID] = len(s.cache.Messages) - 1
-	// Pending messages are exempt from windowing.
 	return nil
 }
 
@@ -123,12 +194,11 @@ func (s *Store) UpdateMessage(m MessageRecord) error {
 	s.cache.Messages[idx] = m
 	s.cache.MessageIndex[m.ID] = idx
 
-	path := filepath.Join(s.dir, "messages.jsonl")
+	path := filepath.Join(s.stateDir, "messages.jsonl")
 	if err := rewriteJSONL(path, s.cache.Messages); err != nil {
 		return err
 	}
 
-	// Window messages only when resolved/cancelled; pending exempt.
 	if m.Status == "addressed" || m.Status == "cancelled" {
 		if err := s.maybeTruncateMessages(); err != nil {
 			return fmt.Errorf("truncate messages: %w", err)
@@ -150,21 +220,18 @@ func (s *Store) maybeTruncateMessages() error {
 		return nil
 	}
 
-	path := filepath.Join(s.dir, "messages.jsonl")
+	path := filepath.Join(s.stateDir, "messages.jsonl")
 
-	// Determine which non-pending messages to keep (the most recent ones).
 	keepCount := 0
 	for i := len(s.cache.Messages) - 1; i >= 0; i-- {
 		if s.cache.Messages[i].Status != "pending" {
 			keepCount++
 			if keepCount >= messagesWindowSize {
-				// All messages before this index that are non-pending should be dropped.
 				break
 			}
 		}
 	}
 
-	// Build new slice preserving order: pending + recent non-pending.
 	var kept []MessageRecord
 	dropThreshold := -1
 	if keepCount >= messagesWindowSize {
@@ -186,17 +253,14 @@ func (s *Store) maybeTruncateMessages() error {
 		} else if dropThreshold >= 0 && i >= dropThreshold {
 			kept = append(kept, m)
 		} else if dropThreshold < 0 {
-			// Not enough non-pending to trigger drop, keep all (shouldn't happen here).
 			kept = append(kept, m)
 		}
 	}
 
-	// Archive the full file, write the exact kept set, then commit the result.
-	if err := commitThenTruncateWithContent(path, kept); err != nil {
+	if err := rewriteJSONL(path, kept); err != nil {
 		return err
 	}
 
-	// Rebuild cache
 	c, err := LoadCache(s.dir)
 	if err != nil {
 		return fmt.Errorf("reload cache after message truncate: %w", err)
@@ -287,28 +351,49 @@ func (s *Store) ConsumedRunScopedMessageForRun(runID int) *MessageRecord {
 	return nil
 }
 
-// GetAgentStatus returns all status events for a given agent type.
-func (s *Store) GetAgentStatus(agentType string) []AgentStatusEvent {
+// GetAgentStatus returns all status events for a given agent type and model.
+func (s *Store) GetAgentStatus(agentType string, model string) ([]AgentStatusEvent, error) {
+	if model == "" {
+		return nil, fmt.Errorf("GetAgentStatus: model is required")
+	}
 	var out []AgentStatusEvent
 	for _, e := range s.cache.AgentStatus {
-		if e.AgentType == agentType {
-			out = append(out, e)
+		if e.AgentType != agentType {
+			continue
 		}
+		if e.Model != model {
+			continue
+		}
+		out = append(out, e)
 	}
-	return out
+	return out, nil
 }
 
-// RecentTries returns the last n tries.
-func (s *Store) RecentTries(n int) []TryRecord {
+// RecentTries returns the last n tries. If a relayID is provided and > 0, only tries
+// matching that relay are returned.
+func (s *Store) RecentTries(n int, relayID ...int) []TryRecord {
 	if n <= 0 {
 		return nil
 	}
-	start := len(s.cache.Tries) - n
+
+	tries := s.cache.Tries
+	if len(relayID) > 0 && relayID[0] > 0 {
+		rid := relayID[0]
+		var filtered []TryRecord
+		for _, t := range tries {
+			if t.RelayID == rid {
+				filtered = append(filtered, t)
+			}
+		}
+		tries = filtered
+	}
+
+	start := len(tries) - n
 	if start < 0 {
 		start = 0
 	}
-	out := make([]TryRecord, len(s.cache.Tries)-start)
-	copy(out, s.cache.Tries[start:])
+	out := make([]TryRecord, len(tries)-start)
+	copy(out, tries[start:])
 	return out
 }
 
@@ -355,21 +440,11 @@ func (s *Store) UpdateRelay(r RelayRecord) error {
 	}
 	s.cache.Relays[idx] = r
 
-	path := filepath.Join(s.dir, "relays.jsonl")
+	path := filepath.Join(s.stateDir, "relays.jsonl")
 	if err := rewriteJSONL(path, s.cache.Relays); err != nil {
 		return err
 	}
 
-	if len(s.cache.Relays) > relaysWindowSize {
-		if err := commitThenTruncate(path, relaysWindowSize); err != nil {
-			return fmt.Errorf("truncate relays: %w", err)
-		}
-		c, err := LoadCache(s.dir)
-		if err != nil {
-			return fmt.Errorf("reload cache after truncate: %w", err)
-		}
-		s.cache = c
-	}
 	return nil
 }
 

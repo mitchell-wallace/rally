@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
 	"time"
 
 	"github.com/mitchell-wallace/rally/internal/store"
@@ -26,29 +25,9 @@ func runTail(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	rallyDir := filepath.Join(workspaceDir, ".rally")
-	if _, err := os.Stat(filepath.Join(rallyDir, "tries.jsonl")); os.IsNotExist(err) {
-		return fmt.Errorf("no tries recorded in this workspace")
-	}
-
-	s, err := store.NewStore(rallyDir)
+	target, err := tailTarget(workspaceDir, tryNum)
 	if err != nil {
-		return fmt.Errorf("load store: %w", err)
-	}
-
-	tries := s.AllTries()
-	if len(tries) == 0 {
-		return fmt.Errorf("no tries recorded in this workspace")
-	}
-
-	var target *store.TryRecord
-	if tryNum <= 0 {
-		target = &tries[len(tries)-1]
-	} else if tryNum > len(tries) || tryNum < 1 {
-		return fmt.Errorf("valid range: 1-%d", len(tries))
-	} else {
-		rec := tries[tryNum-1]
-		target = &rec
+		return err
 	}
 
 	if target.LogPath == "" {
@@ -65,6 +44,29 @@ func runTail(cmd *cobra.Command, args []string) error {
 	defer cancel()
 
 	return followFile(ctx, f, os.Stdout)
+}
+
+func tailTarget(workspaceDir string, tryNum int) (*store.TryRecord, error) {
+	s, err := store.NewStore(store.RallyDir(workspaceDir))
+	if err != nil {
+		return nil, fmt.Errorf("load store: %w", err)
+	}
+
+	tries := s.AllTries()
+	if len(tries) == 0 {
+		return nil, fmt.Errorf("no tries recorded in this workspace")
+	}
+
+	if tryNum <= 0 {
+		rec := tries[len(tries)-1]
+		return &rec, nil
+	}
+	if tryNum > len(tries) || tryNum < 1 {
+		return nil, fmt.Errorf("valid range: 1-%d", len(tries))
+	}
+
+	rec := tries[tryNum-1]
+	return &rec, nil
 }
 
 func followFile(ctx context.Context, f *os.File, out io.Writer) error {

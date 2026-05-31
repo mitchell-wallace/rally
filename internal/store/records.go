@@ -11,6 +11,7 @@ type TryRecord struct {
 	RemainingWork string   `json:"remaining_work"`
 	FilesChanged  []string `json:"files_changed"`
 	CommitHash    string   `json:"commit_hash"`
+	CommitHistory []string `json:"commit_history,omitempty"`
 	StartedAt     string   `json:"started_at"`
 	EndedAt       string   `json:"ended_at"`
 	AttemptNumber int      `json:"attempt_number"`
@@ -20,7 +21,14 @@ type TryRecord struct {
 	LapID         string   `json:"lap_id,omitempty"`
 	LapAssignee   string   `json:"lap_assignee,omitempty"`
 	RecordedLaps  []string `json:"recorded_laps,omitempty"`
+	LapsAttempted []LapAttempt `json:"laps_attempted,omitempty"`
 	ToolCalls     int      `json:"tool_calls,omitempty"`
+}
+
+// LapAttempt records a laps completion or handoff command observed during a try.
+type LapAttempt struct {
+	LapID     string `json:"lap_id"`
+	Timestamp string `json:"timestamp"`
 }
 
 // MessageRecord represents an inbox message that can be consumed by a run.
@@ -53,6 +61,7 @@ type RelayRecord struct {
 // AgentStatusEvent tracks pause/freeze/unfreeze/active events for an agent type.
 type AgentStatusEvent struct {
 	AgentType string `json:"agent_type"`
+	Model     string `json:"model,omitempty"`
 	EventType string `json:"event_type"` // paused, unfrozen, frozen, active
 	Timestamp string `json:"timestamp"`
 	RelayID   int    `json:"relay_id,omitempty"`

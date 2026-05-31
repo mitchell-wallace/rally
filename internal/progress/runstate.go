@@ -5,19 +5,30 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
+
+	"github.com/mitchell-wallace/rally/internal/store"
 )
 
-// RunState tracks the current run's mutable state in .rally/run-state.json.
+// RunState tracks the current run's mutable state in .rally/state/run-state.json.
 type RunState struct {
-	RunID        string   `json:"run_id"`
-	HandoffState int      `json:"handoff_state"`
-	RecordedLaps []string `json:"recorded_laps"`
-	SessionID    string   `json:"session_id,omitempty"`
+	RunID         string       `json:"run_id"`
+	HandoffState  int          `json:"handoff_state"`
+	RecordedLaps  []string     `json:"recorded_laps"`
+	PinnedLapID   string       `json:"pinned_lap_id,omitempty"`
+	LapsAttempted []LapAttempt `json:"laps_attempted,omitempty"`
+	SessionID     string       `json:"session_id,omitempty"`
+}
+
+// LapAttempt records a laps command observed during the current run.
+type LapAttempt struct {
+	LapID     string `json:"lap_id"`
+	Timestamp string `json:"timestamp"`
 }
 
 // RunStatePath returns the path to run-state.json for a workspace.
 func RunStatePath(workspaceDir string) string {
-	return filepath.Join(workspaceDir, ".rally", "run-state.json")
+	return store.RunStatePath(workspaceDir)
 }
 
 // LoadRunState reads the run-state file. If it does not exist, a fresh
@@ -67,6 +78,10 @@ func RecordLap(workspaceDir string, lapID string) error {
 		return err
 	}
 	rs.RecordedLaps = append(rs.RecordedLaps, lapID)
+	rs.LapsAttempted = append(rs.LapsAttempted, LapAttempt{
+		LapID:     lapID,
+		Timestamp: time.Now().UTC().Format(time.RFC3339),
+	})
 	return SaveRunState(workspaceDir, rs)
 }
 
@@ -77,5 +92,9 @@ func SetHandoff(workspaceDir string) error {
 		return err
 	}
 	rs.HandoffState = 1
+	rs.LapsAttempted = append(rs.LapsAttempted, LapAttempt{
+		LapID:     rs.PinnedLapID,
+		Timestamp: time.Now().UTC().Format(time.RFC3339),
+	})
 	return SaveRunState(workspaceDir, rs)
 }

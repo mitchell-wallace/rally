@@ -5,6 +5,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/mitchell-wallace/rally/internal/store"
 )
 
 func newRouteRuntimeHarness(t *testing.T) *Resilience {
@@ -64,7 +66,7 @@ func TestRouteRuntime_CanonicalScenario1_NoQuotasRunUntilFailure(t *testing.T) {
 		t.Fatalf("pick 2 = %q, want claude:opus-4.7", got)
 	}
 
-	if err := resilience.PauseAgent("claude", 1); err != nil {
+	if err := resilience.PauseAgent(ResilienceKey{Harness: "claude", Model: "opus-4.7"}, 1); err != nil {
 		t.Fatalf("PauseAgent(claude) error = %v", err)
 	}
 
@@ -78,7 +80,7 @@ func TestRouteRuntime_CanonicalScenario1_NoQuotasRunUntilFailure(t *testing.T) {
 		t.Fatalf("pick 4 = %q, want codex:gpt-5.5", got)
 	}
 
-	if err := resilience.PauseAgent("codex", 1); err != nil {
+	if err := resilience.PauseAgent(ResilienceKey{Harness: "codex", Model: "gpt-5.5"}, 1); err != nil {
 		t.Fatalf("PauseAgent(codex) error = %v", err)
 	}
 
@@ -87,10 +89,10 @@ func TestRouteRuntime_CanonicalScenario1_NoQuotasRunUntilFailure(t *testing.T) {
 		t.Fatalf("pick 5 = %q, want opencode:opencode-go/kimi-k2.6", got)
 	}
 
-	if err := resilience.PauseAgent("opencode", 1); err != nil {
+	if err := resilience.PauseAgent(ResilienceKey{Harness: "opencode", Model: "opencode-go/kimi-k2.6"}, 1); err != nil {
 		t.Fatalf("PauseAgent(opencode) error = %v", err)
 	}
-	if err := resilience.UnpauseAgent("claude", 1); err != nil {
+	if err := resilience.UnpauseAgent(ResilienceKey{Harness: "claude", Model: "opus-4.7"}, 1); err != nil {
 		t.Fatalf("UnpauseAgent(claude) error = %v", err)
 	}
 
@@ -121,7 +123,7 @@ func TestRouteRuntime_CanonicalScenario2_MixedQuotaThenNoQuotaFallback(t *testin
 		}
 	}
 
-	if err := resilience.PauseAgent("opencode", 1); err != nil {
+	if err := resilience.PauseAgent(ResilienceKey{Harness: "opencode", Model: "opencode-go/kimi-k2.6"}, 1); err != nil {
 		t.Fatalf("PauseAgent(opencode) error = %v", err)
 	}
 
@@ -206,7 +208,7 @@ func TestRouteRuntime_CanonicalScenario6_OverrideRoleReferenceAdvancesDefaultCur
 		t.Fatalf("pick 1 = %q, want fancy override", got)
 	}
 
-	if err := resilience.PauseAgent("opencode", 1); err != nil {
+	if err := resilience.PauseAgent(ResilienceKey{Harness: "opencode", Model: "opencode-go/fancy-new-model"}, 1); err != nil {
 		t.Fatalf("PauseAgent(opencode) error = %v", err)
 	}
 
@@ -215,7 +217,7 @@ func TestRouteRuntime_CanonicalScenario6_OverrideRoleReferenceAdvancesDefaultCur
 		t.Fatalf("pick 2 = %q, want first default entry", got)
 	}
 
-	if err := resilience.UnpauseAgent("opencode", 1); err != nil {
+	if err := resilience.UnpauseAgent(ResilienceKey{Harness: "opencode", Model: "opencode-go/fancy-new-model"}, 1); err != nil {
 		t.Fatalf("UnpauseAgent(opencode) error = %v", err)
 	}
 
@@ -224,7 +226,7 @@ func TestRouteRuntime_CanonicalScenario6_OverrideRoleReferenceAdvancesDefaultCur
 		t.Fatalf("pick 3 = %q, want fancy override", got)
 	}
 
-	if err := resilience.PauseAgent("opencode", 1); err != nil {
+	if err := resilience.PauseAgent(ResilienceKey{Harness: "opencode", Model: "opencode-go/fancy-new-model"}, 1); err != nil {
 		t.Fatalf("PauseAgent(opencode) error = %v", err)
 	}
 
@@ -257,7 +259,7 @@ func TestRouteRuntime_CanonicalScenario7_RangeQuotaWaitsWhenAllOthersPaused(t *t
 		}
 	}
 
-	if err := resilience.PauseAgent("claude", 1); err != nil {
+	if err := resilience.PauseAgent(ResilienceKey{Harness: "claude", Model: "opus-4.7"}, 1); err != nil {
 		t.Fatalf("PauseAgent(claude) error = %v", err)
 	}
 
@@ -274,7 +276,7 @@ func TestRouteRuntime_CanonicalScenario7_RangeQuotaWaitsWhenAllOthersPaused(t *t
 		}
 	}
 
-	if err := resilience.PauseAgent("codex", 1); err != nil {
+	if err := resilience.PauseAgent(ResilienceKey{Harness: "codex", Model: "gpt-5.5"}, 1); err != nil {
 		t.Fatalf("PauseAgent(codex) error = %v", err)
 	}
 
@@ -316,10 +318,10 @@ func TestRouteRuntime_ForceUnpauseAll(t *testing.T) {
 		"default": {"claude:opus-4.7:1", "codex:gpt-5.5:1", "opencode:opencode-go/kimi-k2.6:1"},
 	}, false)
 
-	if err := resilience.PauseAgent("claude", 1); err != nil {
+	if err := resilience.PauseAgent(ResilienceKey{Harness: "claude", Model: "opus-4.7"}, 1); err != nil {
 		t.Fatalf("PauseAgent(claude): %v", err)
 	}
-	if err := resilience.PauseAgent("codex", 1); err != nil {
+	if err := resilience.PauseAgent(ResilienceKey{Harness: "codex", Model: "gpt-5.5"}, 1); err != nil {
 		t.Fatalf("PauseAgent(codex): %v", err)
 	}
 
@@ -331,10 +333,11 @@ func TestRouteRuntime_ForceUnpauseAll(t *testing.T) {
 		t.Errorf("unpaused count = %d, want 2", unpaused)
 	}
 
-	for _, h := range []string{"claude", "codex", "opencode"} {
-		st, _ := resilience.getState(h)
+	for _, spec := range []string{"claude:opus-4.7", "codex:gpt-5.5", "opencode:opencode-go/kimi-k2.6"} {
+		parts := strings.SplitN(spec, ":", 2)
+		st, _ := resilience.GetState(ResilienceKey{Harness: parts[0], Model: parts[1]})
 		if st != StateActive {
-			t.Errorf("state(%s) = %s, want active", h, st)
+			t.Errorf("state(%s) = %s, want active", spec, st)
 		}
 	}
 
@@ -359,7 +362,7 @@ func TestRouteRuntime_ActiveExhaustedEntryStaysAdvanced(t *testing.T) {
 	}
 
 	first.Entry.Exhausted = true
-	first.Entry.Frozen = false
+	first.Entry.Benched = false
 
 	second := mustNextRouteSelection(t, rt, resilience, "")
 	if got := agentRouteSpec(second.Agent); got != "codex:gpt-5" {
@@ -378,9 +381,9 @@ func TestRouteRuntime_PausedExpiryResetsExhaustedEntry(t *testing.T) {
 
 	first := mustNextRouteSelection(t, rt, resilience, "")
 	first.Entry.Exhausted = true
-	first.Entry.Frozen = false
+	first.Entry.Benched = false
 
-	if err := resilience.PauseAgent("claude", 1); err != nil {
+	if err := resilience.PauseAgent(ResilienceKey{Harness: "claude", Model: "opus-4.7"}, 1); err != nil {
 		t.Fatalf("PauseAgent(claude) error = %v", err)
 	}
 
@@ -434,5 +437,287 @@ func TestRouteRuntime_NoBackendAlwaysUsesDefaultRoute(t *testing.T) {
 		if got := agentRouteSpec(sel.Agent); got != want[i] {
 			t.Fatalf("assignee %q pick = %q, want %q", assignee, got, want[i])
 		}
+	}
+}
+
+func TestHasProbationEventForCurrentFreeze(t *testing.T) {
+	rt, resilience := newResolvedRouteRuntimeOrDie(t, map[string][]string{
+		"default": {"claude:opus-4.7"},
+	}, false)
+	key := ResilienceKey{Harness: "claude", Model: "opus-4.7"}
+
+	t.Run("frozen then probation returns true", func(t *testing.T) {
+		s := newTestStore(t, t.TempDir())
+		resilience.Store = s
+		appendEvent(t, s, key, "frozen", 1)
+		appendEvent(t, s, key, "probation", 1)
+		if !rt.hasProbationEventForCurrentFreeze(resilience, key) {
+			t.Fatal("expected true for frozen → probation")
+		}
+	})
+
+	t.Run("frozen only returns false", func(t *testing.T) {
+		s := newTestStore(t, t.TempDir())
+		resilience.Store = s
+		appendEvent(t, s, key, "frozen", 1)
+		if rt.hasProbationEventForCurrentFreeze(resilience, key) {
+			t.Fatal("expected false for frozen only")
+		}
+	})
+
+	t.Run("no events returns false", func(t *testing.T) {
+		s := newTestStore(t, t.TempDir())
+		resilience.Store = s
+		if rt.hasProbationEventForCurrentFreeze(resilience, key) {
+			t.Fatal("expected false for no events")
+		}
+	})
+
+	t.Run("frozen active probation returns true", func(t *testing.T) {
+		s := newTestStore(t, t.TempDir())
+		resilience.Store = s
+		appendEvent(t, s, key, "frozen", 1)
+		appendEvent(t, s, key, "active", 1)
+		appendEvent(t, s, key, "probation", 1)
+		if !rt.hasProbationEventForCurrentFreeze(resilience, key) {
+			t.Fatal("expected true: probation found before frozen scanning backwards")
+		}
+	})
+
+	t.Run("probation frozen probation returns true", func(t *testing.T) {
+		s := newTestStore(t, t.TempDir())
+		resilience.Store = s
+		appendEvent(t, s, key, "probation", 1)
+		appendEvent(t, s, key, "frozen", 1)
+		appendEvent(t, s, key, "probation", 1)
+		if !rt.hasProbationEventForCurrentFreeze(resilience, key) {
+			t.Fatal("expected true: latest probation found first scanning backwards")
+		}
+	})
+}
+
+func appendEvent(t *testing.T, s *store.Store, key ResilienceKey, eventType string, relayID int) {
+	t.Helper()
+	if err := s.AppendAgentStatus(store.AgentStatusEvent{
+		AgentType: key.Harness,
+		Model:     key.Model,
+		EventType: eventType,
+		Timestamp: "2026-01-01T12:00:00Z",
+		RelayID:   relayID,
+	}); err != nil {
+		t.Fatalf("AppendAgentStatus(%s): %v", eventType, err)
+	}
+}
+
+func TestRouteRuntime_ProbationOneShotSyncRecoverySignals(t *testing.T) {
+	now := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
+
+	rt, err := newResolvedRouteRuntime(map[string][]string{
+		"default": {"claude:opus-4.7"},
+	}, testResolver, false, nil)
+	if err != nil {
+		t.Fatalf("newResolvedRouteRuntime: %v", err)
+	}
+
+	s := newTestStore(t, t.TempDir())
+	resilience := &Resilience{
+		Store:          s,
+		PauseDuration:  time.Hour,
+		FreezeDuration: 5 * time.Hour,
+		NowFunc:        func() time.Time { return now },
+	}
+
+	frozenAt := now.Add(-6 * time.Hour)
+	key := ResilienceKey{Harness: "claude", Model: "opus-4.7"}
+	if err := s.AppendAgentStatus(store.AgentStatusEvent{
+		AgentType: key.Harness,
+		Model:     key.Model,
+		EventType: "frozen",
+		Timestamp: frozenAt.UTC().Format(time.RFC3339),
+		RelayID:   1,
+	}); err != nil {
+		t.Fatalf("AppendAgentStatus: %v", err)
+	}
+
+	scheduler := rt.schedulers["default"]
+	if scheduler == nil {
+		t.Fatal("no scheduler for default route")
+	}
+
+	entryStates := scheduler.EntryStates()
+	if len(entryStates) != 1 {
+		t.Fatalf("expected 1 entry state, got %d", len(entryStates))
+	}
+	entry := entryStates[0]
+
+	// First sync: entry should be unbenched by ResetEntry, probation event persisted.
+	rt.syncRecoverySignals(scheduler, resilience)
+	if entry.Benched {
+		t.Fatal("expected entry NOT benched after first sync (ResetEntry)")
+	}
+	if entry.Exhausted {
+		t.Fatal("expected entry NOT exhausted after first sync (ResetEntry)")
+	}
+	events, err := s.GetAgentStatus(key.Harness, key.Model)
+	if err != nil {
+		t.Fatal(err)
+	}
+	probationFound := false
+	for _, e := range events {
+		if e.EventType == "probation" {
+			probationFound = true
+			break
+		}
+	}
+	if !probationFound {
+		t.Fatal("expected probation event after first sync")
+	}
+
+	// Second sync: entry should be Benched (re-benched because probation exists).
+	rt.syncRecoverySignals(scheduler, resilience)
+	if !entry.Benched {
+		t.Fatal("expected entry benched after second sync")
+	}
+	if !entry.Exhausted {
+		t.Fatal("expected entry exhausted after second sync")
+	}
+
+	// Third sync: no-op because already Benched+Exhausted.
+	// Unset Benched to verify the guard re-benches when only Exhausted is set.
+	entry.Benched = false
+	entry.Exhausted = true
+	rt.syncRecoverySignals(scheduler, resilience)
+	if !entry.Benched || !entry.Exhausted {
+		t.Fatal("expected entry re-benched+exhausted when only Benched was clear")
+	}
+	// Fourth sync: true no-op because already Benched+Exhausted.
+	entryBefore := *entry
+	rt.syncRecoverySignals(scheduler, resilience)
+	if entry.Benched != entryBefore.Benched || entry.Exhausted != entryBefore.Exhausted {
+		t.Fatal("expected no-op when already Benched+Exhausted")
+	}
+}
+
+func TestRouteRuntime_ForceUnpauseAllMixedStates(t *testing.T) {
+	rt, err := newResolvedRouteRuntime(map[string][]string{
+		"routeA": {"claude:opus-4.7"},
+		"routeB": {"codex:gpt-5.5"},
+	}, testResolver, false, nil)
+	if err != nil {
+		t.Fatalf("newResolvedRouteRuntime: %v", err)
+	}
+
+	s := newTestStore(t, t.TempDir())
+	now := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
+	resilience := &Resilience{
+		Store:          s,
+		PauseDuration:  time.Hour,
+		FreezeDuration: 5 * time.Hour,
+		NowFunc:        func() time.Time { return now },
+	}
+
+	pausedKey := ResilienceKey{Harness: "claude", Model: "opus-4.7"}
+	frozenKey := ResilienceKey{Harness: "codex", Model: "gpt-5.5"}
+
+	if err := resilience.PauseAgent(pausedKey, 1); err != nil {
+		t.Fatalf("PauseAgent: %v", err)
+	}
+	if err := resilience.FreezeAgent(frozenKey, 1, "test freeze"); err != nil {
+		t.Fatalf("FreezeAgent: %v", err)
+	}
+
+	// Verify initial states.
+	st, _ := resilience.GetState(pausedKey)
+	if st != StatePaused {
+		t.Fatalf("expected paused, got %s", st)
+	}
+	st, _ = resilience.GetState(frozenKey)
+	if st != StateFrozen {
+		t.Fatalf("expected frozen, got %s", st)
+	}
+
+	unpaused, err := rt.forceUnpauseAll(resilience, 1)
+	if err != nil {
+		t.Fatalf("forceUnpauseAll: %v", err)
+	}
+	if unpaused != 1 {
+		t.Errorf("unpaused count = %d, want 1", unpaused)
+	}
+
+	// Paused agent should now be active.
+	st, _ = resilience.GetState(pausedKey)
+	if st != StateActive {
+		t.Errorf("paused agent state = %s, want active", st)
+	}
+
+	// Frozen agent should still be frozen.
+	st, _ = resilience.GetState(frozenKey)
+	if st != StateFrozen {
+		t.Errorf("frozen agent state = %s, want frozen", st)
+	}
+}
+
+func TestRouteRuntime_ProbationOneShotEnforcement(t *testing.T) {
+	rt, resilience := newResolvedRouteRuntimeOrDie(t, map[string][]string{
+		"default": {"claude:opus-4.7"},
+	}, false)
+
+	now := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
+	resilience.NowFunc = func() time.Time { return now }
+	resilience.FreezeDuration = 5 * time.Hour
+
+	frozenAt := now.Add(-6 * time.Hour)
+	k := ResilienceKey{Harness: "claude", Model: "opus-4.7"}
+	if err := resilience.Store.AppendAgentStatus(store.AgentStatusEvent{
+		AgentType: k.Harness,
+		Model:     k.Model,
+		EventType: "frozen",
+		Timestamp: frozenAt.UTC().Format(time.RFC3339),
+		RelayID:   1,
+	}); err != nil {
+		t.Fatalf("AppendAgentStatus: %v", err)
+	}
+
+	sel := mustNextRouteSelection(t, rt, resilience, "")
+	if !sel.Probation {
+		t.Fatal("expected probation selection on first sync")
+	}
+
+	events, err := resilience.Store.GetAgentStatus(k.Harness, k.Model)
+	if err != nil {
+		t.Fatal(err)
+	}
+	foundProbation := false
+	for _, e := range events {
+		if e.EventType == "probation" {
+			foundProbation = true
+			break
+		}
+	}
+	if !foundProbation {
+		t.Fatal("expected probation event to be persisted")
+	}
+
+	// Without runOne resolving the state, a second sync must re-bench the
+	// entry so it cannot be re-selected. With a single-entry route, that
+	// means scheduler.Next() reports no selectable entries and the runtime
+	// returns a routeSelectionError (the entry is exhausted+benched, not
+	// strictly frozen, so AllFrozen reflects "no paused agent to wait on").
+	if _, err := rt.next(runTask{}, resilience); err == nil {
+		t.Fatal("expected error on second sync (probation entry re-benched), got selection")
+	}
+
+	probationCount := 0
+	events, err = resilience.Store.GetAgentStatus(k.Harness, k.Model)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range events {
+		if e.EventType == "probation" {
+			probationCount++
+		}
+	}
+	if probationCount != 1 {
+		t.Fatalf("expected exactly 1 probation event, got %d", probationCount)
 	}
 }

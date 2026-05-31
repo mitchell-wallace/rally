@@ -92,9 +92,9 @@ func TestRenderStatusExtIndicators(t *testing.T) {
 			wantAbsent:   []string{"❄", "⚠", "↻", "tok"},
 		},
 		{
-			name:         "frozen",
-			ind:          Indicators{Reliability: "❄ frozen"},
-			wantContains: []string{"❄ frozen"},
+			name:         "stalled",
+			ind:          Indicators{Reliability: "❄ stalled"},
+			wantContains: []string{"❄ stalled"},
 		},
 		{
 			name:         "slowing",
@@ -138,7 +138,7 @@ func TestMonitorSlowingIndicator(t *testing.T) {
 	os.Chtimes(logPath, past, past)
 
 	m := NewMonitor(dir, logPath, 0)
-	m.SetFreezeThreshold(180 * time.Second)
+	m.SetStallThreshold(180 * time.Second)
 
 	line, err := m.Tick()
 	if err != nil {
@@ -149,25 +149,25 @@ func TestMonitorSlowingIndicator(t *testing.T) {
 	}
 }
 
-func TestMonitorFrozenIndicator(t *testing.T) {
+func TestMonitorStalledIndicator(t *testing.T) {
 	dir := t.TempDir()
 	initGitRepo(t, dir)
 	logPath := filepath.Join(dir, "try.log")
 	os.WriteFile(logPath, []byte("data"), 0o644)
 
 	m := NewMonitor(dir, logPath, 0)
-	m.SetFrozen(true)
+	m.SetStalled(true)
 
 	line, err := m.Tick()
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !containsString(line, "❄ frozen") {
-		t.Errorf("expected frozen indicator, got %q", line)
+	if !containsString(line, "❄ stalled") {
+		t.Errorf("expected stalled indicator, got %q", line)
 	}
-	// Frozen takes priority over slowing
+	// Stalled takes priority over slowing
 	if containsString(line, "⚠ slowing") {
-		t.Errorf("frozen should take priority over slowing, got %q", line)
+		t.Errorf("stalled should take priority over slowing, got %q", line)
 	}
 }
 

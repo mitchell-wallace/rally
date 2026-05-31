@@ -23,15 +23,28 @@ import (
 	"github.com/mitchell-wallace/rally/internal/release"
 	"github.com/mitchell-wallace/rally/internal/routing"
 	"github.com/mitchell-wallace/rally/internal/store"
+	"github.com/mitchell-wallace/rally/internal/telemetry"
 	"github.com/spf13/cobra"
 )
 
 var Version = "dev"
 
+// activeTelemetry holds the process-wide telemetry sink initialised in main.
+// It defaults to a no-op so any command that runs before/without init still
+// has a safe sink. The relay runner reads it via SetTelemetry.
+var activeTelemetry telemetry.Sink = telemetry.NoopSink{}
+
 func main() {
 	flushUpdateNotice := startBackgroundUpdateCheck(os.Args[1:], os.Stderr)
+
+	// Init telemetry — no-op when no DSN or RALLY_TELEMETRY=0.
+	sink, flushTelemetry := telemetry.Init(loadTelemetryConfig())
+	activeTelemetry = sink
+	defer flushTelemetry()
+
 	if err := rootCmd.Execute(); err != nil {
 		flushUpdateNotice()
+		flushTelemetry()
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
@@ -71,6 +84,23 @@ func resolveWorkspaceDir() (string, error) {
 	return wd, nil
 }
 
+// loadTelemetryConfig reads the workspace config and returns the telemetry
+// section. Returns a zero Config on any error — telemetry is best-effort
+// and must never prevent the CLI from starting.
+func loadTelemetryConfig() telemetry.Config {
+	wsDir, err := resolveWorkspaceDir()
+	if err != nil {
+		return telemetry.Config{}
+	}
+	cfg, err := config.LoadV2(wsDir)
+	if err != nil {
+		return telemetry.Config{}
+	}
+	return telemetry.Config{
+		SentryDSN: cfg.Telemetry.SentryDSN,
+	}
+}
+
 func runRelay(cmd *cobra.Command, args []string) error {
 	iterations, _ := cmd.Flags().GetInt("iterations")
 	agentSpecs, _ := cmd.Flags().GetStringArray("agent")
@@ -87,13 +117,17 @@ func runRelay(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	rallyDir := filepath.Join(workspaceDir, ".rally")
+	rallyDir := store.RallyDir(workspaceDir)
 	cfg, err := config.LoadV2(workspaceDir)
 	if err != nil {
 		return fmt.Errorf("load config: %w", err)
 	}
 	for _, note := range cfg.DeprecationNotes {
 		fmt.Fprintln(os.Stderr, "warning:", note)
+	}
+
+	if w := laps.VersionWarning(workspaceDir); w != "" {
+		fmt.Fprintln(os.Stderr, w)
 	}
 
 	lapsEnabled := laps.Detect(workspaceDir)
@@ -182,13 +216,16 @@ func runRelay(cmd *cobra.Command, args []string) error {
 		RouteSpecs:               cfg.Routes,
 		UseOverrideRoute:         usedOverride,
 		TargetIterations:         iterations,
-		FreezeThreshold:          cfg.Reliability.FreezeThreshold(),
+		StallThreshold:           cfg.Reliability.StallThreshold(),
 		LivenessProbe:            cfg.Reliability.LivenessProbe,
 		RetryBudget:              cfg.Reliability.RetryBudget,
 		RunHooksOnAutoCommit:     cfg.RunHooksOnAutoCommit,
 		LapsEnabled:              lapsEnabled,
 		LapsInstructionsFile:     cfg.Laps.InstructionsFile,
 		FallbackInstructionsFile: cfg.Fallback.InstructionsFile,
+		RecentTryCount:           cfg.Reliability.RecentTryCount,
+		RecentTryCharLimit:       cfg.Reliability.RecentTryCharLimit,
+		RecentContextCharLimit:   cfg.Reliability.RecentContextCharLimit,
 	}
 
 	runnerCfg.Resolver = func(spec string) (agent.ResolvedAgent, error) {
@@ -218,6 +255,9 @@ func runRelay(cmd *cobra.Command, args []string) error {
 		relays := s.RecentRelays(1)
 		if len(relays) > 0 && relays[0].EndedAt == "" {
 			_ = relay.CompleteRelay(s, relays[0].ID)
+		}
+		if err := s.ResetAgentStatus(); err != nil {
+			return fmt.Errorf("reset agent status: %w", err)
 		}
 	}
 
@@ -280,6 +320,7 @@ func runRelay(cmd *cobra.Command, args []string) error {
 	}
 
 	r := relay.NewRunner(s, runnerCfg, executors)
+	r.SetTelemetry(activeTelemetry)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -338,18 +379,44 @@ func runInit(cmd *cobra.Command, args []string) error {
 	}
 
 	// 2. Create .rally/ directory
-	rallyDir := filepath.Join(workspaceDir, ".rally")
+	rallyDir := store.RallyDir(workspaceDir)
 	if err := os.MkdirAll(rallyDir, 0o755); err != nil {
 		return err
 	}
+	if err := store.MigrateRallyStateLayout(workspaceDir); err != nil {
+		return err
+	}
 
-	// 3. Create .rally/.gitignore
+	// 3. Create or update .rally/.gitignore
 	gitignorePath := filepath.Join(rallyDir, ".gitignore")
-	if _, err := os.Stat(gitignorePath); os.IsNotExist(err) {
-		content := "current_task.md\nrelays/\nrun-state.json\n"
+	data, err := os.ReadFile(gitignorePath)
+	if os.IsNotExist(err) {
+		content := "state/\n"
 		if err := os.WriteFile(gitignorePath, []byte(content), 0o644); err != nil {
 			return err
 		}
+	} else if err == nil {
+		lines := strings.Split(string(data), "\n")
+		hasState := false
+		for _, line := range lines {
+			trimmed := strings.TrimSpace(line)
+			if trimmed == "state" || trimmed == "state/" || trimmed == "/state" || trimmed == "/state/" {
+				hasState = true
+				break
+			}
+		}
+		if !hasState {
+			content := string(data)
+			if len(content) > 0 && !strings.HasSuffix(content, "\n") {
+				content += "\n"
+			}
+			content += "state/\n"
+			if err := os.WriteFile(gitignorePath, []byte(content), 0o644); err != nil {
+				return err
+			}
+		}
+	} else {
+		return err
 	}
 
 	// 4. Create .rally/config.toml
@@ -380,6 +447,9 @@ codex_model = ""
 gemini_model = ""
 opencode_model = ""
 antigravity_model = ""
+
+[telemetry]
+sentry_dsn = ""
 `
 		if err := os.WriteFile(configPath, []byte(content), 0o644); err != nil {
 			return err
@@ -391,23 +461,31 @@ antigravity_model = ""
 	if _, err := os.Stat(readmePath); os.IsNotExist(err) {
 		content := `# Rally Data Directory
 
-This directory contains rally's operational data. You can access this data
-directly to understand the project's history and current state.
+This directory contains rally's workspace configuration and local runtime data.
 
-## JSONL Data Files (source of truth, git-tracked)
-- ` + "`tries.jsonl`" + ` — One line per agent execution attempt
-- ` + "`messages.jsonl`" + ` — Inbox messages for agents
-- ` + "`relays.jsonl`" + ` — Relay session records
-- ` + "`agent_status.jsonl`" + ` — Agent pause/freeze state history
+## Tracked Files
+- ` + "`config.toml`" + ` — Agent model configuration and runtime settings
+- ` + "`agents/`" + ` — Role instruction files
+- ` + "`README.md`" + ` — This guide
+- ` + "`summary.jsonl`" + ` — Append-only run summary digest, when enabled by the current workflow
+
+## Local State
+
+Machine-managed runtime records live under ` + "`.rally/state/`" + `. That directory is gitignored and not shared through repository history.
+
+- ` + "`state/tries.jsonl`" + ` — One line per agent execution attempt
+- ` + "`state/messages.jsonl`" + ` — Inbox messages for agents
+- ` + "`state/relays.jsonl`" + ` — Relay session records
+- ` + "`state/agent_status.jsonl`" + ` — Agent pause/freeze state history
+- ` + "`state/hook-audit.jsonl`" + ` — Laps hook audit trail
+- ` + "`state/run-state.json`" + ` — Current run handoff and lap recording state
+- ` + "`state/current_task.md`" + ` — Most recent assembled prompt
 
 ## Quick Reference for Agents
-- View recent tries (last 10): ` + "`tail -10 .rally/tries.jsonl | jq .`" + `
-- View pending messages: ` + "`cat .rally/messages.jsonl | jq 'select(.status==\\\"pending\\\")'`" + `
-- View current relay status: ` + "`tail -1 .rally/relays.jsonl | jq .`" + `
-- Counts: ` + "`wc -l .rally/*.jsonl`" + `
-
-## Config
-- ` + "`config.toml`" + ` — Agent model configuration and runtime settings
+- View recent tries (last 10): ` + "`tail -10 .rally/state/tries.jsonl | jq .`" + `
+- View pending messages: ` + "`cat .rally/state/messages.jsonl | jq 'select(.status==\\\"pending\\\")'`" + `
+- View current relay status: ` + "`tail -1 .rally/state/relays.jsonl | jq .`" + `
+- Counts: ` + "`wc -l .rally/state/*.jsonl`" + `
 `
 		if err := os.WriteFile(readmePath, []byte(content), 0o644); err != nil {
 			return err
@@ -448,7 +526,7 @@ func runInstructionsEdit(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	path := filepath.Join(workspaceDir, ".rally", "instructions.md")
+	path := store.InstructionsPath(workspaceDir)
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err
 	}
@@ -474,7 +552,7 @@ func runInstructionsShow(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	path := filepath.Join(workspaceDir, ".rally", "instructions.md")
+	path := store.InstructionsPath(workspaceDir)
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -498,7 +576,10 @@ var versionCmd = &cobra.Command{
 
 var updateCmd = &cobra.Command{
 	Use:   "update",
-	Short: "Update Rally to the latest release",
+	Short: "Update rally and the bundled laps binary to their latest releases",
+	Long: `Update rally to the latest release and upgrade the bundled laps
+companion binary alongside it. Laps is installed next to the rally
+executable so the two travel together; laps remains independently usable.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		exePath, err := os.Executable()
 		if err != nil {
@@ -510,9 +591,28 @@ var updateCmd = &cobra.Command{
 		}
 		if !updated {
 			fmt.Printf("%s is already up to date (%s)\n", app.BinaryName, newVersion)
+		} else {
+			fmt.Printf("Updated %s from %s to %s\n", app.BinaryName, oldVersion, newVersion)
+		}
+
+		// Upgrade the bundled laps binary alongside rally. A laps failure is
+		// non-fatal: rally itself is already updated, and laps stays
+		// independently installable.
+		lapsDest := filepath.Join(filepath.Dir(exePath), release.Laps.BinaryName)
+		lapsCurrent, _ := laps.CompanionVersion()
+		oldLaps, newLaps, lapsUpdated, err := release.UpdateTool(release.Laps, lapsCurrent, lapsDest)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "warning: could not update laps: %v\n", err)
 			return nil
 		}
-		fmt.Printf("Updated %s from %s to %s\n", app.BinaryName, oldVersion, newVersion)
+		switch {
+		case lapsCurrent == "" && lapsUpdated:
+			fmt.Printf("Installed %s %s\n", release.Laps.BinaryName, newLaps)
+		case !lapsUpdated:
+			fmt.Printf("%s is already up to date (%s)\n", release.Laps.BinaryName, newLaps)
+		default:
+			fmt.Printf("Updated %s from %s to %s\n", release.Laps.BinaryName, oldLaps, newLaps)
+		}
 		return nil
 	},
 }

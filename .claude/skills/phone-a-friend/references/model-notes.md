@@ -35,7 +35,7 @@ Example entry shape:
 
 | Model / harness | Symptom | Likely cause | Response |
 |---|---|---|---|
-| `op` / `opencode-go/kimi-k2.6` | Silent hang for about 2 minutes, then freeze/pause; `.rally/agent_status.jsonl` records `paused` | Free-tier rate limit or provider stall | Let Rally pause/rotate. Try another `op` model or non-OpenCode route if the question is still useful. Record if timing/message changes. |
+| `op` / `opencode-go/kimi-k2.6` | Silent hang for about 2 minutes, then freeze/pause; `.rally/state/agent_status.jsonl` records `paused` | Free-tier rate limit or provider stall | Let Rally pause/rotate. Try another `op` model or non-OpenCode route if the question is still useful. Record if timing/message changes. |
 | Custom OpenCode harness with `command = ["opencode"]` | Starts TUI mode and does not exit cleanly | Missing `run` subcommand and JSON format | Use built-in `op` or `["opencode", "run", "$PROMPT", "--format", "json"]`. |
 | `ge` / Gemini | Log may stay quiet for the whole run; `last activity` can count from start | Gemini CLI output behavior, not necessarily a freeze | For complex tasks use a longer freeze threshold if configuring Rally. Wait for clean exit when progress is plausible. |
 | Gemini exit 41/55 in old notes | Workspace trust failure | Stale in current rally: Rally sets `GEMINI_CLI_TRUST_WORKSPACE=true` | Delete stale "Gemini unauthenticated/untrusted" notes if a future run confirms current behavior still works. |

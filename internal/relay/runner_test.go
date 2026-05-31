@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"strconv"
 	"strings"
 	"testing"
@@ -53,13 +54,13 @@ func (f *funcExecutor) ProbeLiveness(ctx context.Context) (bool, error) {
 	return false, fmt.Errorf("liveness probe not supported by func executor")
 }
 
-type fakeFreezeController struct {
+type fakeStallController struct {
 	check func(context.Context) (bool, error)
 }
 
-func (f *fakeFreezeController) SetProcessGroupID(int) {}
+func (f *fakeStallController) SetProcessGroupID(int) {}
 
-func (f *fakeFreezeController) Check(ctx context.Context) (bool, error) {
+func (f *fakeStallController) Check(ctx context.Context) (bool, error) {
 	if f.check == nil {
 		return false, nil
 	}
@@ -81,10 +82,9 @@ func initRepo(t *testing.T, dir string) {
 	runGit(t, dir, "init")
 	runGit(t, dir, "config", "user.name", "Rally Test")
 	runGit(t, dir, "config", "user.email", "rally@example.com")
-	// Exclude only rally's ephemeral files from git status.
-	// Rally's JSONL state files are now committed as durable git-backed state.
+	// Exclude rally's local machine state from git status.
 	excludePath := filepath.Join(dir, ".git", "info", "exclude")
-	os.WriteFile(excludePath, []byte(".rally/current_task.md\n.rally/relays/\n"), 0o644)
+	os.WriteFile(excludePath, []byte(".rally/state/\n"), 0o644)
 }
 
 func newTestStore(t *testing.T, dir string) *store.Store {
@@ -119,6 +119,15 @@ func testResolver(spec string) (agent.ResolvedAgent, error) {
 		return agent.ResolvedAgent{Harness: harness, Model: parts[1]}, nil
 	}
 	return agent.ResolvedAgent{Harness: harness}, nil
+}
+
+const cheapTestModel = "opencode/deepseek-v4-flash-free"
+
+func cheapTestResolver(spec string) (agent.ResolvedAgent, error) {
+	if spec == "op:dsf" {
+		return agent.ResolvedAgent{Harness: "opencode", Model: cheapTestModel}, nil
+	}
+	return testResolver(spec)
 }
 
 func TestFormatRemainingRoundsToSeconds(t *testing.T) {
@@ -242,7 +251,7 @@ func TestWaitWithCountdownElapses(t *testing.T) {
 
 func TestInstructionsPassedToExecutor(t *testing.T) {
 	workspaceDir := t.TempDir()
-	rallyDir := filepath.Join(workspaceDir, ".rally")
+	rallyDir := store.RallyDir(workspaceDir)
 	os.MkdirAll(rallyDir, 0o755)
 	initRepo(t, workspaceDir)
 
@@ -286,7 +295,7 @@ func TestInstructionsPassedToExecutor(t *testing.T) {
 
 func TestLapsHeadTaskPassedToExecutor(t *testing.T) {
 	workspaceDir := t.TempDir()
-	rallyDir := filepath.Join(workspaceDir, ".rally")
+	rallyDir := store.RallyDir(workspaceDir)
 	os.MkdirAll(rallyDir, 0o755)
 	initRepo(t, workspaceDir)
 
@@ -300,6 +309,9 @@ func TestLapsHeadTaskPassedToExecutor(t *testing.T) {
 			receivedTaskName = opts.TaskName
 			receivedRequirements = opts.TaskRequirements
 			receivedTaskPrompt = opts.TaskPrompt
+			if err := progress.RecordLap(workspaceDir, "lap-42"); err != nil {
+				return nil, err
+			}
 			changeCounter++
 			f, _ := os.OpenFile(filepath.Join(workspaceDir, "changes.txt"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
 			fmt.Fprintf(f, "change %d\n", changeCounter)
@@ -346,7 +358,7 @@ func TestLapsHeadTaskPassedToExecutor(t *testing.T) {
 
 func TestAgentCyclingDeterminism(t *testing.T) {
 	workspaceDir := t.TempDir()
-	rallyDir := filepath.Join(workspaceDir, ".rally")
+	rallyDir := store.RallyDir(workspaceDir)
 	os.MkdirAll(rallyDir, 0o755)
 	initRepo(t, workspaceDir)
 
@@ -390,7 +402,7 @@ func TestAgentCyclingDeterminism(t *testing.T) {
 
 func TestRunnerSameHarnessAdvanceUsesRotateModel(t *testing.T) {
 	workspaceDir := t.TempDir()
-	rallyDir := filepath.Join(workspaceDir, ".rally")
+	rallyDir := store.RallyDir(workspaceDir)
 	os.MkdirAll(rallyDir, 0o755)
 	initRepo(t, workspaceDir)
 
@@ -432,7 +444,7 @@ func TestRunnerSameHarnessAdvanceUsesRotateModel(t *testing.T) {
 
 func TestRunnerCrossHarnessAdvanceDoesNotRotate(t *testing.T) {
 	workspaceDir := t.TempDir()
-	rallyDir := filepath.Join(workspaceDir, ".rally")
+	rallyDir := store.RallyDir(workspaceDir)
 	os.MkdirAll(rallyDir, 0o755)
 	initRepo(t, workspaceDir)
 
@@ -480,7 +492,7 @@ func TestRunnerCrossHarnessAdvanceDoesNotRotate(t *testing.T) {
 
 func TestRunnerRotateModelErrorFallsBackToExecution(t *testing.T) {
 	workspaceDir := t.TempDir()
-	rallyDir := filepath.Join(workspaceDir, ".rally")
+	rallyDir := store.RallyDir(workspaceDir)
 	os.MkdirAll(rallyDir, 0o755)
 	initRepo(t, workspaceDir)
 
@@ -521,12 +533,54 @@ func TestRunnerRotateModelErrorFallsBackToExecution(t *testing.T) {
 		t.Fatalf("executed models = %v, want %v", got, want)
 	}
 
-	logData, err := os.ReadFile(filepath.Join(workspaceDir, ".rally", "relays", "relay-1.log"))
+	logData, err := os.ReadFile(relayLogPath(dataDir, workspaceDir, 1))
 	if err != nil {
 		t.Fatalf("read relay log: %v", err)
 	}
 	if !strings.Contains(string(logData), "rotate fallback for opencode: rotate failed") {
 		t.Fatalf("relay log = %q, want rotate fallback message", string(logData))
+	}
+}
+
+func TestRunnerDoesNotCreateRepoRelayLogDir(t *testing.T) {
+	workspaceDir := t.TempDir()
+	rallyDir := store.RallyDir(workspaceDir)
+	if err := os.MkdirAll(rallyDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(rallyDir, ".gitignore"), []byte("state/\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	initRepo(t, workspaceDir)
+
+	s := newTestStore(t, rallyDir)
+	dataDir := t.TempDir()
+	exec := &funcExecutor{
+		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+			if err := os.WriteFile(filepath.Join(workspaceDir, "change.txt"), []byte("ok\n"), 0o644); err != nil {
+				return nil, err
+			}
+			return &agent.TryResult{Completed: true, Summary: "ok"}, nil
+		},
+	}
+
+	r := NewRunner(s, Config{
+		WorkspaceDir:     workspaceDir,
+		DataDir:          dataDir,
+		RouteSpecs:       map[string][]string{"default": {"op:model:1"}},
+		TargetIterations: 1,
+		Resolver:         testResolver,
+		TaskPrompt:       "no repo relay logs",
+	}, map[string]agent.Executor{"opencode": exec})
+
+	if err := r.Run(context.Background()); err != nil {
+		t.Fatalf("run failed: %v", err)
+	}
+	if _, err := os.Stat(relayLogPath(dataDir, workspaceDir, 1)); err != nil {
+		t.Fatalf("expected data-dir relay log: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(rallyDir, "relays")); !os.IsNotExist(err) {
+		t.Fatalf(".rally/relays should not be created when .rally/.gitignore only ignores state/, stat err=%v", err)
 	}
 }
 
@@ -572,10 +626,10 @@ func TestFilesChangedListFallsBackToDirtyFiles(t *testing.T) {
 	// Dirty the workspace without committing. Mix in a .rally/ file that
 	// should be filtered out of the result.
 	os.WriteFile(filepath.Join(workspaceDir, "user.txt"), []byte("user change\n"), 0o644)
-	if err := os.MkdirAll(filepath.Join(workspaceDir, ".rally"), 0o755); err != nil {
+	if err := os.MkdirAll(store.RallyDir(workspaceDir), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	os.WriteFile(filepath.Join(workspaceDir, ".rally", "run-state.json"), []byte("{}"), 0o644)
+	os.WriteFile(store.RunStatePath(workspaceDir), []byte("{}"), 0o644)
 
 	r := &Runner{cfg: Config{WorkspaceDir: workspaceDir}}
 	got := r.filesChangedList(nil, "", "", "")
@@ -609,7 +663,7 @@ func TestDetectLapsMarkerInText(t *testing.T) {
 
 func TestRetryWithinRun(t *testing.T) {
 	workspaceDir := t.TempDir()
-	rallyDir := filepath.Join(workspaceDir, ".rally")
+	rallyDir := store.RallyDir(workspaceDir)
 	os.MkdirAll(rallyDir, 0o755)
 	initRepo(t, workspaceDir)
 
@@ -664,7 +718,7 @@ func TestRetryWithinRun(t *testing.T) {
 
 func TestResumeRetryPassesSessionID(t *testing.T) {
 	workspaceDir := t.TempDir()
-	rallyDir := filepath.Join(workspaceDir, ".rally")
+	rallyDir := store.RallyDir(workspaceDir)
 	os.MkdirAll(rallyDir, 0o755)
 	initRepo(t, workspaceDir)
 
@@ -717,7 +771,7 @@ func TestResumeRetryPassesSessionID(t *testing.T) {
 
 func TestRunOneFreezeRetryResumesAndRecovers(t *testing.T) {
 	workspaceDir := t.TempDir()
-	rallyDir := filepath.Join(workspaceDir, ".rally")
+	rallyDir := store.RallyDir(workspaceDir)
 	os.MkdirAll(rallyDir, 0o755)
 	initRepo(t, workspaceDir)
 
@@ -749,12 +803,12 @@ func TestRunOneFreezeRetryResumesAndRecovers(t *testing.T) {
 	}, map[string]agent.Executor{"claude": exec})
 
 	controllerCount := 0
-	r.freezeControllerFactory = func(logPath string) reliability.FreezeController {
+	r.stallControllerFactory = func(logPath string) reliability.StallController {
 		_ = logPath
 		controllerCount++
 		if controllerCount == 1 {
 			triggered := false
-			return &fakeFreezeController{
+			return &fakeStallController{
 				check: func(context.Context) (bool, error) {
 					if triggered {
 						return false, nil
@@ -765,16 +819,16 @@ func TestRunOneFreezeRetryResumesAndRecovers(t *testing.T) {
 				},
 			}
 		}
-		return &fakeFreezeController{}
+		return &fakeStallController{}
 	}
 
-	oldInterval := freezeCheckInterval
-	freezeCheckInterval = time.Millisecond
-	defer func() { freezeCheckInterval = oldInterval }()
+	oldInterval := stallCheckInterval
+	stallCheckInterval = time.Millisecond
+	defer func() { stallCheckInterval = oldInterval }()
 
 	freezeCalls := 0
 	recoveredCalls := 0
-	success, addressed, interrupted, err := r.runOne(
+	success, addressed, interrupted, _, _, _, err := r.runOne(
 		context.Background(),
 		&store.RelayRecord{ID: 1, TargetIterations: 1},
 		0,
@@ -782,6 +836,7 @@ func TestRunOneFreezeRetryResumesAndRecovers(t *testing.T) {
 		runTask{Name: "relay run", Prompt: "freeze test"},
 		nil,
 		nil,
+		false,
 		false,
 		func() { freezeCalls++ },
 		func() { recoveredCalls++ },
@@ -850,7 +905,7 @@ func TestResumeRetryPreservesRunState(t *testing.T) {
 	defer func() { headPullLap = oldHeadPull }()
 
 	workspaceDir := t.TempDir()
-	rallyDir := filepath.Join(workspaceDir, ".rally")
+	rallyDir := store.RallyDir(workspaceDir)
 	os.MkdirAll(rallyDir, 0o755)
 	initRepo(t, workspaceDir)
 
@@ -906,7 +961,7 @@ func TestFreshStartRetryClearsRunState(t *testing.T) {
 	defer func() { headPullLap = oldHeadPull }()
 
 	workspaceDir := t.TempDir()
-	rallyDir := filepath.Join(workspaceDir, ".rally")
+	rallyDir := store.RallyDir(workspaceDir)
 	os.MkdirAll(rallyDir, 0o755)
 	initRepo(t, workspaceDir)
 
@@ -964,7 +1019,7 @@ func TestResumeRetryMidHandoffPreservesFlag(t *testing.T) {
 	defer func() { headPullLap = oldHeadPull }()
 
 	workspaceDir := t.TempDir()
-	rallyDir := filepath.Join(workspaceDir, ".rally")
+	rallyDir := store.RallyDir(workspaceDir)
 	os.MkdirAll(rallyDir, 0o755)
 	initRepo(t, workspaceDir)
 
@@ -1025,7 +1080,7 @@ func TestFreshStartRetryMidHandoffClearsFlag(t *testing.T) {
 	defer func() { headPullLap = oldHeadPull }()
 
 	workspaceDir := t.TempDir()
-	rallyDir := filepath.Join(workspaceDir, ".rally")
+	rallyDir := store.RallyDir(workspaceDir)
 	os.MkdirAll(rallyDir, 0o755)
 	initRepo(t, workspaceDir)
 
@@ -1080,25 +1135,30 @@ func TestFreshStartRetryMidHandoffClearsFlag(t *testing.T) {
 	}
 }
 
-func TestRetryExhaustionTriggersPause(t *testing.T) {
+func TestFailureCascadeMultipleInfraIncrements(t *testing.T) {
 	workspaceDir := t.TempDir()
-	rallyDir := filepath.Join(workspaceDir, ".rally")
+	rallyDir := store.RallyDir(workspaceDir)
 	os.MkdirAll(rallyDir, 0o755)
 	initRepo(t, workspaceDir)
 
 	s := newTestStore(t, rallyDir)
 	exec := &funcExecutor{
 		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+			if opts.LogPath != "" {
+				_ = os.WriteFile(opts.LogPath, []byte("fork/exec failed\n"), 0o644)
+			}
 			return &agent.TryResult{Completed: false, Summary: "fail"}, nil
 		},
 	}
-	executors := map[string]agent.Executor{"claude": exec}
+	executors := map[string]agent.Executor{"opencode": exec}
 
 	r := NewRunner(s, Config{
 		WorkspaceDir:     workspaceDir,
 		DataDir:          t.TempDir(),
-		AgentMixSpecs:    []string{"cc:1"},
+		AgentMixSpecs:    []string{"op:dsf"},
 		TargetIterations: 1,
+		RetryBudget:      3,
+		Resolver:         cheapTestResolver,
 	}, executors)
 	r.resilience = &Resilience{
 		Store:                     s,
@@ -1106,6 +1166,7 @@ func TestRetryExhaustionTriggersPause(t *testing.T) {
 		HourlyRetriesBeforeFreeze: 2,
 		NowFunc:                   time.Now,
 	}
+	r.sleepFunc = func(time.Duration) {}
 
 	_ = r.Run(context.Background())
 
@@ -1114,7 +1175,10 @@ func TestRetryExhaustionTriggersPause(t *testing.T) {
 		t.Fatalf("got %d tries, want at least 3", len(tries))
 	}
 
-	status := s.GetAgentStatus("claude")
+	status, err := s.GetAgentStatus("opencode", cheapTestModel)
+	if err != nil {
+		t.Fatal(err)
+	}
 	foundPause := false
 	for _, e := range status {
 		if e.EventType == "paused" {
@@ -1127,9 +1191,221 @@ func TestRetryExhaustionTriggersPause(t *testing.T) {
 	}
 }
 
+func TestIncompleteRunLeavesChangesUncommitted(t *testing.T) {
+	oldHeadPull := headPullLap
+	headPullLap = func(context.Context, string) (laps.Lap, error) {
+		return laps.Lap{ID: "lap-1", Title: "test", Assignee: "senior"}, nil
+	}
+	defer func() { headPullLap = oldHeadPull }()
+
+	workspaceDir := t.TempDir()
+	rallyDir := store.RallyDir(workspaceDir)
+	os.MkdirAll(rallyDir, 0o755)
+	initRepo(t, workspaceDir)
+
+	s := newTestStore(t, rallyDir)
+	exec := &funcExecutor{
+		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+			if err := os.WriteFile(filepath.Join(workspaceDir, "partial.txt"), []byte("partial"), 0o644); err != nil {
+				return nil, err
+			}
+			return &agent.TryResult{Completed: true, Summary: "changed but did not finalize"}, nil
+		},
+	}
+
+	r := NewRunner(s, Config{
+		WorkspaceDir:     workspaceDir,
+		DataDir:          t.TempDir(),
+		AgentMixSpecs:    []string{"op:dsf"},
+		TargetIterations: 1,
+		RetryBudget:      1,
+		LapsEnabled:      true,
+		Resolver:         cheapTestResolver,
+	}, map[string]agent.Executor{"opencode": exec})
+
+	_ = r.Run(context.Background())
+
+	tries := s.AllTries()
+	if len(tries) == 0 {
+		t.Fatal("expected at least one try")
+	}
+	if tries[0].Completed {
+		t.Fatal("incomplete try should be failed")
+	}
+	if tries[0].FailReason != "incomplete: file changes without finalization" {
+		t.Fatalf("FailReason = %q, want incomplete classification", tries[0].FailReason)
+	}
+	if tries[0].CommitHash != "" {
+		t.Fatalf("CommitHash = %q, want empty for incomplete try", tries[0].CommitHash)
+	}
+	status := runGit(t, workspaceDir, "status", "--porcelain", "partial.txt")
+	if !strings.Contains(status, "partial.txt") {
+		t.Fatalf("partial.txt should remain uncommitted, status=%q", status)
+	}
+}
+
+func TestIncompleteRetryPromptGuidance(t *testing.T) {
+	oldHeadPull := headPullLap
+	headPullLap = func(context.Context, string) (laps.Lap, error) {
+		return laps.Lap{ID: "lap-1", Title: "test", Description: "finish lap", Assignee: "senior"}, nil
+	}
+	defer func() { headPullLap = oldHeadPull }()
+
+	workspaceDir := t.TempDir()
+	rallyDir := store.RallyDir(workspaceDir)
+	os.MkdirAll(rallyDir, 0o755)
+	initRepo(t, workspaceDir)
+
+	s := newTestStore(t, rallyDir)
+	attempt := 0
+	var retryPrompt string
+	exec := &funcExecutor{
+		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+			attempt++
+			if attempt == 1 {
+				if err := os.WriteFile(filepath.Join(workspaceDir, "partial.txt"), []byte("partial"), 0o644); err != nil {
+					return nil, err
+				}
+				return &agent.TryResult{Completed: true, Summary: "partial"}, nil
+			}
+			retryPrompt = opts.TaskPrompt
+			if err := progress.RecordLap(workspaceDir, "lap-1"); err != nil {
+				return nil, err
+			}
+			return &agent.TryResult{Completed: true, Summary: "done"}, nil
+		},
+	}
+
+	r := NewRunner(s, Config{
+		WorkspaceDir:     workspaceDir,
+		DataDir:          t.TempDir(),
+		AgentMixSpecs:    []string{"op:dsf"},
+		TargetIterations: 1,
+		RetryBudget:      2,
+		LapsEnabled:      true,
+		Resolver:         cheapTestResolver,
+	}, map[string]agent.Executor{"opencode": exec})
+
+	if err := r.Run(context.Background()); err != nil {
+		t.Fatalf("Run error = %v", err)
+	}
+	if !strings.Contains(retryPrompt, incompleteRetryGuidance) {
+		t.Fatalf("retry prompt missing incomplete guidance: %q", retryPrompt)
+	}
+}
+
+func TestIncompleteDoesNotCountTowardFailureCascade(t *testing.T) {
+	oldHeadPull := headPullLap
+	headPullLap = func(context.Context, string) (laps.Lap, error) {
+		return laps.Lap{ID: "lap-1", Title: "test", Assignee: "senior"}, nil
+	}
+	defer func() { headPullLap = oldHeadPull }()
+
+	workspaceDir := t.TempDir()
+	rallyDir := store.RallyDir(workspaceDir)
+	os.MkdirAll(rallyDir, 0o755)
+	initRepo(t, workspaceDir)
+
+	s := newTestStore(t, rallyDir)
+	exec := &funcExecutor{
+		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+			_ = os.WriteFile(filepath.Join(workspaceDir, "partial.txt"), []byte("partial"), 0o644)
+			return &agent.TryResult{Completed: true, Summary: "partial"}, nil
+		},
+	}
+	r := NewRunner(s, Config{
+		WorkspaceDir:     workspaceDir,
+		DataDir:          t.TempDir(),
+		AgentMixSpecs:    []string{"op:dsf"},
+		TargetIterations: 1,
+		RetryBudget:      1,
+		LapsEnabled:      true,
+		Resolver:         cheapTestResolver,
+	}, map[string]agent.Executor{"opencode": exec})
+
+	_ = r.Run(context.Background())
+
+	if got := countAgentStatusEvents(s, "paused", "frozen"); got != 0 {
+		t.Fatalf("cascade events = %d, want 0", got)
+	}
+}
+
+func TestFailureCascadeSingleInfraDoesNotIncrement(t *testing.T) {
+	workspaceDir := t.TempDir()
+	rallyDir := store.RallyDir(workspaceDir)
+	os.MkdirAll(rallyDir, 0o755)
+	initRepo(t, workspaceDir)
+
+	s := newTestStore(t, rallyDir)
+	exec := &funcExecutor{
+		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+			if opts.LogPath != "" {
+				_ = os.WriteFile(opts.LogPath, []byte("fork/exec failed\n"), 0o644)
+			}
+			return &agent.TryResult{Completed: false, Summary: "infra"}, nil
+		},
+	}
+	r := NewRunner(s, Config{
+		WorkspaceDir:     workspaceDir,
+		DataDir:          t.TempDir(),
+		AgentMixSpecs:    []string{"op:dsf"},
+		TargetIterations: 1,
+		RetryBudget:      1,
+		Resolver:         cheapTestResolver,
+	}, map[string]agent.Executor{"opencode": exec})
+
+	_ = r.Run(context.Background())
+
+	if got := countAgentStatusEvents(s, "paused", "frozen"); got != 0 {
+		t.Fatalf("cascade events = %d, want 0", got)
+	}
+}
+
+func TestFailureCascadeAgentErrorDoesNotIncrement(t *testing.T) {
+	workspaceDir := t.TempDir()
+	rallyDir := store.RallyDir(workspaceDir)
+	os.MkdirAll(rallyDir, 0o755)
+	initRepo(t, workspaceDir)
+
+	s := newTestStore(t, rallyDir)
+	exec := &funcExecutor{
+		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+			return &agent.TryResult{Completed: false, Summary: "agent failed"}, nil
+		},
+	}
+	r := NewRunner(s, Config{
+		WorkspaceDir:     workspaceDir,
+		DataDir:          t.TempDir(),
+		AgentMixSpecs:    []string{"op:dsf"},
+		TargetIterations: 1,
+		RetryBudget:      2,
+		Resolver:         cheapTestResolver,
+	}, map[string]agent.Executor{"opencode": exec})
+
+	_ = r.Run(context.Background())
+
+	if got := countAgentStatusEvents(s, "paused", "frozen"); got != 0 {
+		t.Fatalf("cascade events = %d, want 0", got)
+	}
+}
+
+func countAgentStatusEvents(s *store.Store, eventTypes ...string) int {
+	wanted := map[string]bool{}
+	for _, eventType := range eventTypes {
+		wanted[eventType] = true
+	}
+	count := 0
+	for _, event := range s.AllAgentStatus() {
+		if wanted[event.EventType] {
+			count++
+		}
+	}
+	return count
+}
+
 func TestGracefulStop(t *testing.T) {
 	workspaceDir := t.TempDir()
-	rallyDir := filepath.Join(workspaceDir, ".rally")
+	rallyDir := store.RallyDir(workspaceDir)
 	os.MkdirAll(rallyDir, 0o755)
 	initRepo(t, workspaceDir)
 
@@ -1186,7 +1462,7 @@ func TestGracefulStop(t *testing.T) {
 
 func TestMessageConsumptionPerRun(t *testing.T) {
 	workspaceDir := t.TempDir()
-	rallyDir := filepath.Join(workspaceDir, ".rally")
+	rallyDir := store.RallyDir(workspaceDir)
 	os.MkdirAll(rallyDir, 0o755)
 	initRepo(t, workspaceDir)
 
@@ -1241,7 +1517,7 @@ func TestMessageConsumptionPerRun(t *testing.T) {
 
 func TestCommitHashTracking_AgentCommitted(t *testing.T) {
 	workspaceDir := t.TempDir()
-	rallyDir := filepath.Join(workspaceDir, ".rally")
+	rallyDir := store.RallyDir(workspaceDir)
 	os.MkdirAll(rallyDir, 0o755)
 	initRepo(t, workspaceDir)
 
@@ -1282,7 +1558,7 @@ func TestCommitHashTracking_AgentCommitted(t *testing.T) {
 
 func TestCommitHashTracking_AutoCommitted(t *testing.T) {
 	workspaceDir := t.TempDir()
-	rallyDir := filepath.Join(workspaceDir, ".rally")
+	rallyDir := store.RallyDir(workspaceDir)
 	os.MkdirAll(rallyDir, 0o755)
 	initRepo(t, workspaceDir)
 
@@ -1321,9 +1597,87 @@ func TestCommitHashTracking_AutoCommitted(t *testing.T) {
 	}
 }
 
+func TestCommitHistoryTracking_MultipleAgentCommits(t *testing.T) {
+	workspaceDir := t.TempDir()
+	rallyDir := store.RallyDir(workspaceDir)
+	os.MkdirAll(rallyDir, 0o755)
+	initRepo(t, workspaceDir)
+
+	// Seed an initial commit so headBefore is non-empty.
+	os.WriteFile(filepath.Join(workspaceDir, "seed.txt"), []byte("seed"), 0o644)
+	runGit(t, workspaceDir, "add", ".")
+	runGit(t, workspaceDir, "commit", "-m", "initial", "--no-verify")
+
+	s := newTestStore(t, rallyDir)
+	exec := &funcExecutor{
+		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+			// Make three distinct commits within a single try.
+			for i := 1; i <= 3; i++ {
+				name := fmt.Sprintf("file%d.txt", i)
+				if err := os.WriteFile(filepath.Join(workspaceDir, name), []byte("x"), 0o644); err != nil {
+					return nil, err
+				}
+				runGit(t, workspaceDir, "add", ".")
+				runGit(t, workspaceDir, "commit", "-m", fmt.Sprintf("commit %d", i), "--no-verify")
+			}
+			return &agent.TryResult{Completed: true}, nil
+		},
+	}
+	executors := map[string]agent.Executor{"claude": exec}
+
+	r := NewRunner(s, Config{
+		WorkspaceDir:     workspaceDir,
+		DataDir:          t.TempDir(),
+		AgentMixSpecs:    []string{"cc:1"},
+		TargetIterations: 1,
+	}, executors)
+
+	if err := r.Run(context.Background()); err != nil {
+		t.Fatalf("run failed: %v", err)
+	}
+
+	// Re-read from tries.jsonl (not just the in-memory cache) to prove the full
+	// ordered history survives the round-trip to disk.
+	reloaded := newTestStore(t, rallyDir)
+	tries := reloaded.AllTries()
+	if len(tries) != 1 {
+		t.Fatalf("expected 1 try, got %d", len(tries))
+	}
+	got := tries[0]
+	if len(got.CommitHistory) != 3 {
+		t.Fatalf("expected 3 commits in CommitHistory, got %d: %v", len(got.CommitHistory), got.CommitHistory)
+	}
+
+	// The recorded history must match the actual chronological commit order.
+	wantHashes := commitHashesInOrder(t, workspaceDir, 3)
+	for i, want := range wantHashes {
+		if got.CommitHistory[i] != want {
+			t.Errorf("CommitHistory[%d] = %q, want %q", i, got.CommitHistory[i], want)
+		}
+	}
+
+	// CommitHash backward compat: equals the last element of the history.
+	if got.CommitHash != got.CommitHistory[len(got.CommitHistory)-1] {
+		t.Errorf("CommitHash = %q, want last history element %q", got.CommitHash, got.CommitHistory[len(got.CommitHistory)-1])
+	}
+}
+
+// commitHashesInOrder returns the most recent n commit hashes, oldest first.
+func commitHashesInOrder(t *testing.T, dir string, n int) []string {
+	t.Helper()
+	out := runGit(t, dir, "rev-list", "--reverse", fmt.Sprintf("-%d", n), "HEAD")
+	var hashes []string
+	for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
+		if h := strings.TrimSpace(line); h != "" {
+			hashes = append(hashes, h)
+		}
+	}
+	return hashes
+}
+
 func TestCommitHashTracking_NoChanges(t *testing.T) {
 	workspaceDir := t.TempDir()
-	rallyDir := filepath.Join(workspaceDir, ".rally")
+	rallyDir := store.RallyDir(workspaceDir)
 	os.MkdirAll(rallyDir, 0o755)
 	initRepo(t, workspaceDir)
 
@@ -1367,7 +1721,7 @@ func TestCommitHashTracking_NoChanges(t *testing.T) {
 
 func TestRelayScopedMessageIncludedInAllRuns(t *testing.T) {
 	workspaceDir := t.TempDir()
-	rallyDir := filepath.Join(workspaceDir, ".rally")
+	rallyDir := store.RallyDir(workspaceDir)
 	os.MkdirAll(rallyDir, 0o755)
 	initRepo(t, workspaceDir)
 
@@ -1411,7 +1765,7 @@ func TestRelayScopedMessageIncludedInAllRuns(t *testing.T) {
 
 func TestRelayScopedMessageAddressed(t *testing.T) {
 	workspaceDir := t.TempDir()
-	rallyDir := filepath.Join(workspaceDir, ".rally")
+	rallyDir := store.RallyDir(workspaceDir)
 	os.MkdirAll(rallyDir, 0o755)
 	initRepo(t, workspaceDir)
 
@@ -1466,7 +1820,7 @@ func TestRelayScopedMessageAddressed(t *testing.T) {
 
 func TestCombinedRelayAndRunScopedMessages(t *testing.T) {
 	workspaceDir := t.TempDir()
-	rallyDir := filepath.Join(workspaceDir, ".rally")
+	rallyDir := store.RallyDir(workspaceDir)
 	os.MkdirAll(rallyDir, 0o755)
 	initRepo(t, workspaceDir)
 
@@ -1544,23 +1898,28 @@ func TestCombinedRelayAndRunScopedMessages(t *testing.T) {
 
 func TestFreezeCascade(t *testing.T) {
 	workspaceDir := t.TempDir()
-	rallyDir := filepath.Join(workspaceDir, ".rally")
+	rallyDir := store.RallyDir(workspaceDir)
 	os.MkdirAll(rallyDir, 0o755)
 	initRepo(t, workspaceDir)
 
 	s := newTestStore(t, rallyDir)
 	exec := &funcExecutor{
 		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+			if opts.LogPath != "" {
+				_ = os.WriteFile(opts.LogPath, []byte("fork/exec failed\n"), 0o644)
+			}
 			return &agent.TryResult{Completed: false, Summary: "fail"}, nil
 		},
 	}
-	executors := map[string]agent.Executor{"claude": exec}
+	executors := map[string]agent.Executor{"opencode": exec}
 
 	r := NewRunner(s, Config{
 		WorkspaceDir:     workspaceDir,
 		DataDir:          t.TempDir(),
-		AgentMixSpecs:    []string{"cc:1"},
+		AgentMixSpecs:    []string{"op:dsf"},
 		TargetIterations: 1,
+		RetryBudget:      3,
+		Resolver:         cheapTestResolver,
 	}, executors)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
@@ -1568,7 +1927,8 @@ func TestFreezeCascade(t *testing.T) {
 	_ = r.Run(ctx)
 
 	// Verify agent is paused after 3 retries exhausted
-	st, _ := NewResilience(s).getState("claude")
+	cheapKey := ResilienceKey{Harness: "opencode", Model: cheapTestModel}
+	st, _ := NewResilience(s).GetState(cheapKey)
 	if st != StatePaused {
 		t.Fatalf("expected agent paused after retry exhaustion, got %s", st)
 	}
@@ -1586,19 +1946,22 @@ func TestFreezeCascade(t *testing.T) {
 	}
 
 	for i := 0; i < 5; i++ {
-		if err := resilience.RecordHourlyFailure("claude", 1); err != nil {
+		if err := resilience.RecordHourlyFailure(cheapKey, 1); err != nil {
 			t.Fatalf("RecordHourlyFailure %d failed: %v", i+1, err)
 		}
 	}
 
 	// Verify agent is now frozen
-	st, _ = resilience.getState("claude")
+	st, _ = resilience.GetState(cheapKey)
 	if st != StateFrozen {
 		t.Fatalf("expected agent frozen after 5 hourly retries, got %s", st)
 	}
 
 	// Verify a "frozen" event was recorded
-	events := s.GetAgentStatus("claude")
+	events, err := s.GetAgentStatus("opencode", cheapTestModel)
+	if err != nil {
+		t.Fatal(err)
+	}
 	foundFrozen := false
 	for _, e := range events {
 		if e.EventType == "frozen" {
@@ -1613,26 +1976,26 @@ func TestFreezeCascade(t *testing.T) {
 
 func TestAgentUnfreeze(t *testing.T) {
 	workspaceDir := t.TempDir()
-	rallyDir := filepath.Join(workspaceDir, ".rally")
+	rallyDir := store.RallyDir(workspaceDir)
 	os.MkdirAll(rallyDir, 0o755)
 
 	s := newTestStore(t, rallyDir)
 	resilience := NewResilience(s)
 
-	if err := resilience.PauseAgent("claude", 1); err != nil {
+	if err := resilience.PauseAgent(ResilienceKey{Harness: "claude", Model: "test"}, 1); err != nil {
 		t.Fatalf("PauseAgent failed: %v", err)
 	}
 
-	st, _ := resilience.getState("claude")
+	st, _ := resilience.GetState(ResilienceKey{Harness: "claude", Model: "test"})
 	if st != StatePaused {
 		t.Fatalf("expected StatePaused after pause, got %s", st)
 	}
 
-	if err := resilience.UnpauseAgent("claude", 1); err != nil {
+	if err := resilience.UnpauseAgent(ResilienceKey{Harness: "claude", Model: "test"}, 1); err != nil {
 		t.Fatalf("UnpauseAgent failed: %v", err)
 	}
 
-	st, _ = resilience.getState("claude")
+	st, _ = resilience.GetState(ResilienceKey{Harness: "claude", Model: "test"})
 	if st != StateActive {
 		t.Fatalf("expected StateActive after unpause, got %s", st)
 	}
@@ -1640,23 +2003,28 @@ func TestAgentUnfreeze(t *testing.T) {
 
 func TestFailedRunDoesNotCountIteration(t *testing.T) {
 	workspaceDir := t.TempDir()
-	rallyDir := filepath.Join(workspaceDir, ".rally")
+	rallyDir := store.RallyDir(workspaceDir)
 	os.MkdirAll(rallyDir, 0o755)
 	initRepo(t, workspaceDir)
 
 	s := newTestStore(t, rallyDir)
 	exec := &funcExecutor{
 		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+			if opts.LogPath != "" {
+				_ = os.WriteFile(opts.LogPath, []byte("fork/exec failed\n"), 0o644)
+			}
 			return &agent.TryResult{Completed: false, Summary: "fail"}, nil
 		},
 	}
-	executors := map[string]agent.Executor{"claude": exec}
+	executors := map[string]agent.Executor{"opencode": exec}
 
 	r := NewRunner(s, Config{
 		WorkspaceDir:     workspaceDir,
 		DataDir:          t.TempDir(),
-		AgentMixSpecs:    []string{"cc:1"},
+		AgentMixSpecs:    []string{"op:dsf"},
 		TargetIterations: 1,
+		RetryBudget:      3,
+		Resolver:         cheapTestResolver,
 	}, executors)
 	r.resilience = &Resilience{
 		Store:                     s,
@@ -1675,7 +2043,7 @@ func TestFailedRunDoesNotCountIteration(t *testing.T) {
 		t.Fatalf("expected 0 completed iterations after failed run, got %d", relays[0].CompletedIterations)
 	}
 
-	st, _ := NewResilience(s).getState("claude")
+	st, _ := NewResilience(s).GetState(ResilienceKey{Harness: "opencode", Model: cheapTestModel})
 	if st != StateFrozen {
 		t.Fatalf("expected agent frozen after hourly retry exhaustion, got %s", st)
 	}
@@ -1683,7 +2051,7 @@ func TestFailedRunDoesNotCountIteration(t *testing.T) {
 
 func TestHourlyRetryWithOtherAgentActive(t *testing.T) {
 	workspaceDir := t.TempDir()
-	rallyDir := filepath.Join(workspaceDir, ".rally")
+	rallyDir := store.RallyDir(workspaceDir)
 	os.MkdirAll(rallyDir, 0o755)
 
 	s := newTestStore(t, rallyDir)
@@ -1695,15 +2063,18 @@ func TestHourlyRetryWithOtherAgentActive(t *testing.T) {
 		NowFunc:       func() time.Time { return baseTime },
 	}
 
-	if err := resilience.PauseAgent("claude", 1); err != nil {
+	if err := resilience.PauseAgent(ResilienceKey{Harness: "claude", Model: "test"}, 1); err != nil {
 		t.Fatalf("PauseAgent failed: %v", err)
 	}
 
 	resilience.NowFunc = func() time.Time { return baseTime.Add(2 * time.Hour) }
 
-	mix, err := ParseAgentMix([]string{"cc:2", "cx:1"}, Resolver(testResolver))
-	if err != nil {
-		t.Fatalf("ParseAgentMix failed: %v", err)
+	mix := AgentMix{
+		Cycle: []agent.ResolvedAgent{
+			{Harness: "claude", Model: "test"},
+			{Harness: "claude", Model: "test"},
+			{Harness: "codex", Model: "test"},
+		},
 	}
 
 	picked, nextRunIndex, isHourlyRetry, err := resilience.SelectActiveAgent(mix, 0)
@@ -1723,25 +2094,27 @@ func TestHourlyRetryWithOtherAgentActive(t *testing.T) {
 
 func TestAllAgentsFrozenEndsRelay(t *testing.T) {
 	workspaceDir := t.TempDir()
-	rallyDir := filepath.Join(workspaceDir, ".rally")
+	rallyDir := store.RallyDir(workspaceDir)
 	os.MkdirAll(rallyDir, 0o755)
 
 	s := newTestStore(t, rallyDir)
 	resilience := NewResilience(s)
 
-	if err := resilience.FreezeAgent("claude", 1); err != nil {
+	if err := resilience.FreezeAgent(ResilienceKey{Harness: "claude", Model: "test"}, 1, "test freeze"); err != nil {
 		t.Fatalf("FreezeAgent claude failed: %v", err)
 	}
-	if err := resilience.FreezeAgent("codex", 1); err != nil {
+	if err := resilience.FreezeAgent(ResilienceKey{Harness: "codex", Model: "test"}, 1, "test freeze"); err != nil {
 		t.Fatalf("FreezeAgent codex failed: %v", err)
 	}
 
-	mix, err := ParseAgentMix([]string{"cc:1", "cx:1"}, Resolver(testResolver))
-	if err != nil {
-		t.Fatalf("ParseAgentMix failed: %v", err)
+	mix := AgentMix{
+		Cycle: []agent.ResolvedAgent{
+			{Harness: "claude", Model: "test"},
+			{Harness: "codex", Model: "test"},
+		},
 	}
 
-	_, _, _, err = resilience.SelectActiveAgent(mix, 0)
+	_, _, _, err := resilience.SelectActiveAgent(mix, 0)
 	if err == nil {
 		t.Fatal("expected error from SelectActiveAgent")
 	}
@@ -1756,7 +2129,7 @@ func TestStubEntryOnIncompleteRun(t *testing.T) {
 	defer func() { headPullLap = oldHeadPull }()
 
 	workspaceDir := t.TempDir()
-	rallyDir := filepath.Join(workspaceDir, ".rally")
+	rallyDir := store.RallyDir(workspaceDir)
 	os.MkdirAll(rallyDir, 0o755)
 	initRepo(t, workspaceDir)
 
@@ -1784,26 +2157,57 @@ func TestStubEntryOnIncompleteRun(t *testing.T) {
 
 	_ = r.Run(context.Background())
 
-	pl, err := progress.LoadProgress(workspaceDir)
+	entries, err := progress.LoadSummaryEntries(workspaceDir)
 	if err != nil {
-		t.Fatalf("LoadProgress error: %v", err)
+		t.Fatalf("LoadSummaryEntries error: %v", err)
 	}
-	if len(pl.RecentRuns) == 0 {
-		t.Fatal("expected at least one stub entry in progress.yaml")
+	if len(entries) == 0 {
+		t.Fatal("expected at least one stub entry in summary.jsonl")
 	}
 	found := false
-	for _, entry := range pl.RecentRuns {
+	for _, entry := range entries {
 		if entry.Summary == "agent stopped early" {
 			found = true
 			break
 		}
 	}
 	if !found {
-		t.Errorf("expected a stub entry with summary 'agent stopped early', got %v", pl.RecentRuns)
+		t.Errorf("expected a stub entry with summary 'agent stopped early', got %v", entries)
 	}
 
 	if _, err := os.Stat(progress.RunStatePath(workspaceDir)); !os.IsNotExist(err) {
 		t.Fatal("expected run-state.json to be cleared")
+	}
+}
+
+func TestProgressLapsCompletedForRunReadsSummaryJSONL(t *testing.T) {
+	workspaceDir := t.TempDir()
+	if err := progress.AppendRunEntry(workspaceDir, progress.RunEntry{
+		RunID:         "run-1",
+		Summary:       "first",
+		LapsCompleted: []string{"lap-a", "lap-b"},
+	}); err != nil {
+		t.Fatalf("AppendRunEntry error: %v", err)
+	}
+	if err := progress.AppendRunEntry(workspaceDir, progress.RunEntry{
+		RunID:         "run-2",
+		Summary:       "other",
+		LapsCompleted: []string{"lap-c"},
+	}); err != nil {
+		t.Fatalf("AppendRunEntry error: %v", err)
+	}
+	if err := progress.AppendRunEntry(workspaceDir, progress.RunEntry{
+		RunID:         "run-1",
+		Summary:       "second",
+		LapsCompleted: "lap-d",
+	}); err != nil {
+		t.Fatalf("AppendRunEntry error: %v", err)
+	}
+
+	got := progressLapsCompletedForRun(workspaceDir, "run-1")
+	want := []string{"lap-a", "lap-b", "lap-d"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("progressLapsCompletedForRun() = %v, want %v", got, want)
 	}
 }
 
@@ -1961,15 +2365,16 @@ func TestResumeRoundTripWithRealResolver(t *testing.T) {
 	}
 }
 
-func TestPerHarnessPauseSkipsAllModels(t *testing.T) {
+func TestPerHarnessModelPauseIsolation(t *testing.T) {
 	workspaceDir := t.TempDir()
-	rallyDir := filepath.Join(workspaceDir, ".rally")
+	rallyDir := store.RallyDir(workspaceDir)
 	os.MkdirAll(rallyDir, 0o755)
 
 	s := newTestStore(t, rallyDir)
 	resilience := NewResilience(s)
 
-	if err := resilience.PauseAgent("claude", 1); err != nil {
+	// Pause only claude:opus — claude:sonnet should remain active.
+	if err := resilience.PauseAgent(ResilienceKey{Harness: "claude", Model: "opus"}, 1); err != nil {
 		t.Fatalf("PauseAgent failed: %v", err)
 	}
 
@@ -1985,9 +2390,23 @@ func TestPerHarnessPauseSkipsAllModels(t *testing.T) {
 		t.Fatalf("expected opus+sonnet models, got %+v", mix.Cycle)
 	}
 
+	// claude:sonnet is still active, so SelectActiveAgent should succeed.
+	picked, _, _, err := resilience.SelectActiveAgent(mix, 0)
+	if err != nil {
+		t.Fatalf("SelectActiveAgent should succeed with sonnet active: %v", err)
+	}
+	if picked.Model != "sonnet" {
+		t.Fatalf("expected sonnet (active model), got %s:%s", picked.Harness, picked.Model)
+	}
+
+	// Now pause sonnet too — all models paused.
+	if err := resilience.PauseAgent(ResilienceKey{Harness: "claude", Model: "sonnet"}, 1); err != nil {
+		t.Fatalf("PauseAgent(sonnet) failed: %v", err)
+	}
+
 	_, _, _, err = resilience.SelectActiveAgent(mix, 0)
 	if err == nil {
-		t.Fatal("expected error when all agents are paused")
+		t.Fatal("expected error when all agent models are paused")
 	}
 	if err.Error() != "all agents paused" {
 		t.Fatalf("expected 'all agents paused' error, got %q", err.Error())
@@ -2074,7 +2493,7 @@ func TestParseAgentMixAllFormsCombined(t *testing.T) {
 
 func TestLapsInstructionsFileUsed(t *testing.T) {
 	workspaceDir := t.TempDir()
-	rallyDir := filepath.Join(workspaceDir, ".rally")
+	rallyDir := store.RallyDir(workspaceDir)
 	os.MkdirAll(rallyDir, 0o755)
 	initRepo(t, workspaceDir)
 
@@ -2121,7 +2540,7 @@ func TestLapsInstructionsFileUsed(t *testing.T) {
 
 func TestLapsInstructionsFileFallsBackToDefault(t *testing.T) {
 	workspaceDir := t.TempDir()
-	rallyDir := filepath.Join(workspaceDir, ".rally")
+	rallyDir := store.RallyDir(workspaceDir)
 	os.MkdirAll(rallyDir, 0o755)
 	initRepo(t, workspaceDir)
 
@@ -2165,7 +2584,7 @@ func TestLapsInstructionsFileFallsBackToDefault(t *testing.T) {
 
 func TestLapsInstructionsNotUsedInNoBackendMode(t *testing.T) {
 	workspaceDir := t.TempDir()
-	rallyDir := filepath.Join(workspaceDir, ".rally")
+	rallyDir := store.RallyDir(workspaceDir)
 	os.MkdirAll(rallyDir, 0o755)
 	initRepo(t, workspaceDir)
 
@@ -2207,7 +2626,7 @@ func TestLapsInstructionsNotUsedInNoBackendMode(t *testing.T) {
 
 func TestLapsInstructionsUnconfiguredUsesDefault(t *testing.T) {
 	workspaceDir := t.TempDir()
-	rallyDir := filepath.Join(workspaceDir, ".rally")
+	rallyDir := store.RallyDir(workspaceDir)
 	os.MkdirAll(rallyDir, 0o755)
 	initRepo(t, workspaceDir)
 
@@ -2250,7 +2669,7 @@ func TestLapsInstructionsUnconfiguredUsesDefault(t *testing.T) {
 
 func TestRoleInstructionsLoadedForAssignee(t *testing.T) {
 	workspaceDir := t.TempDir()
-	rallyDir := filepath.Join(workspaceDir, ".rally")
+	rallyDir := store.RallyDir(workspaceDir)
 	agentsDir := filepath.Join(rallyDir, "agents")
 	if err := os.MkdirAll(agentsDir, 0o755); err != nil {
 		t.Fatal(err)
@@ -2299,7 +2718,7 @@ func TestRoleInstructionsLoadedForAssignee(t *testing.T) {
 
 func TestRoleInstructionsMissingFileIsSilent(t *testing.T) {
 	workspaceDir := t.TempDir()
-	rallyDir := filepath.Join(workspaceDir, ".rally")
+	rallyDir := store.RallyDir(workspaceDir)
 	if err := os.MkdirAll(rallyDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -2344,7 +2763,7 @@ func TestRoleInstructionsMissingFileIsSilent(t *testing.T) {
 
 func TestRoleInstructionsSkippedInNoBackendMode(t *testing.T) {
 	workspaceDir := t.TempDir()
-	rallyDir := filepath.Join(workspaceDir, ".rally")
+	rallyDir := store.RallyDir(workspaceDir)
 	agentsDir := filepath.Join(rallyDir, "agents")
 	if err := os.MkdirAll(agentsDir, 0o755); err != nil {
 		t.Fatal(err)
@@ -2388,7 +2807,7 @@ func TestRoleInstructionsSkippedInNoBackendMode(t *testing.T) {
 
 func TestFallbackInstructionsUsedInNoBackendMode(t *testing.T) {
 	workspaceDir := t.TempDir()
-	rallyDir := filepath.Join(workspaceDir, ".rally")
+	rallyDir := store.RallyDir(workspaceDir)
 	os.MkdirAll(rallyDir, 0o755)
 	initRepo(t, workspaceDir)
 
@@ -2428,7 +2847,7 @@ func TestFallbackInstructionsUsedInNoBackendMode(t *testing.T) {
 
 func TestFallbackInstructionsIgnoredWhenCLIPromptProvided(t *testing.T) {
 	workspaceDir := t.TempDir()
-	rallyDir := filepath.Join(workspaceDir, ".rally")
+	rallyDir := store.RallyDir(workspaceDir)
 	os.MkdirAll(rallyDir, 0o755)
 	initRepo(t, workspaceDir)
 
@@ -2473,7 +2892,7 @@ func TestFallbackInstructionsIgnoredInLapsMode(t *testing.T) {
 	defer func() { headPullLap = oldHeadPull }()
 
 	workspaceDir := t.TempDir()
-	rallyDir := filepath.Join(workspaceDir, ".rally")
+	rallyDir := store.RallyDir(workspaceDir)
 	os.MkdirAll(rallyDir, 0o755)
 	initRepo(t, workspaceDir)
 
@@ -2514,7 +2933,7 @@ func TestFallbackInstructionsIgnoredInLapsMode(t *testing.T) {
 
 func TestFallbackInstructionsMissingFileUsesBuiltInDefault(t *testing.T) {
 	workspaceDir := t.TempDir()
-	rallyDir := filepath.Join(workspaceDir, ".rally")
+	rallyDir := store.RallyDir(workspaceDir)
 	os.MkdirAll(rallyDir, 0o755)
 	initRepo(t, workspaceDir)
 
@@ -2551,7 +2970,7 @@ func TestFallbackInstructionsMissingFileUsesBuiltInDefault(t *testing.T) {
 
 func TestFallbackInstructionsUnconfiguredUsesBuiltInDefault(t *testing.T) {
 	workspaceDir := t.TempDir()
-	rallyDir := filepath.Join(workspaceDir, ".rally")
+	rallyDir := store.RallyDir(workspaceDir)
 	os.MkdirAll(rallyDir, 0o755)
 	initRepo(t, workspaceDir)
 
@@ -2587,7 +3006,7 @@ func TestFallbackInstructionsUnconfiguredUsesBuiltInDefault(t *testing.T) {
 
 func TestRunnerRouteIntegration_AssigneesQuotasFreezeAndRoleFiles(t *testing.T) {
 	workspaceDir := t.TempDir()
-	rallyDir := filepath.Join(workspaceDir, ".rally")
+	rallyDir := store.RallyDir(workspaceDir)
 	agentsDir := filepath.Join(rallyDir, "agents")
 	if err := os.MkdirAll(agentsDir, 0o755); err != nil {
 		t.Fatal(err)
@@ -2609,13 +3028,16 @@ func TestRunnerRouteIntegration_AssigneesQuotasFreezeAndRoleFiles(t *testing.T) 
 	}
 
 	var executions []execution
-	failSeniorClaudeAttempts := 3
+	failSeniorCheapAttempts := 3
 	changeCounter := 0
 	exec := &funcExecutor{
 		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
-			if opts.Persona == "claude" && opts.RoleInstructions == "Senior route guidance." && failSeniorClaudeAttempts > 0 {
-				failSeniorClaudeAttempts--
-				return &agent.TryResult{Completed: false, Summary: "simulated senior claude failure"}, nil
+			if opts.Persona == "opencode" && opts.Model == cheapTestModel && opts.RoleInstructions == "Senior route guidance." && failSeniorCheapAttempts > 0 {
+				if opts.LogPath != "" {
+					_ = os.WriteFile(opts.LogPath, []byte("fork/exec failed\n"), 0o644)
+				}
+				failSeniorCheapAttempts--
+				return &agent.TryResult{Completed: false, Summary: "simulated senior cheap-model failure"}, nil
 			}
 
 			executions = append(executions, execution{
@@ -2631,8 +3053,8 @@ func TestRunnerRouteIntegration_AssigneesQuotasFreezeAndRoleFiles(t *testing.T) 
 		},
 	}
 	executors := map[string]agent.Executor{
-		"claude": exec,
-		"codex":  exec,
+		"opencode": exec,
+		"codex":    exec,
 	}
 
 	oldHeadPull := headPullLap
@@ -2655,14 +3077,14 @@ func TestRunnerRouteIntegration_AssigneesQuotasFreezeAndRoleFiles(t *testing.T) 
 		DataDir:      t.TempDir(),
 		RouteSpecs: map[string][]string{
 			"default": []string{"cx:1"},
-			"SENIOR":  []string{"cc:1", "cx:1"},
+			"SENIOR":  []string{"op:dsf", "cx:1"},
 			"JUNIOR":  []string{"cx:2"},
 		},
 		TargetIterations: 4,
 		RetryBudget:      3,
 		LapsEnabled:      true,
 		Instructions:     "Base instructions.",
-		Resolver:         testResolver,
+		Resolver:         cheapTestResolver,
 	}, executors)
 	r.resilience = &Resilience{
 		Store:                     s,
@@ -2704,15 +3126,15 @@ func TestRunnerRouteIntegration_AssigneesQuotasFreezeAndRoleFiles(t *testing.T) 
 		}
 	}
 
-	st, _ := r.resilience.getState("claude")
+	st, _ := r.resilience.GetState(ResilienceKey{Harness: "opencode", Model: cheapTestModel})
 	if st != StatePaused {
-		t.Fatalf("claude state = %s, want %s after simulated freeze", st, StatePaused)
+		t.Fatalf("cheap model state = %s, want %s after simulated freeze", st, StatePaused)
 	}
 }
 
 func TestRunnerNoBackendUsesDefaultRouteAndFallbackPrompt(t *testing.T) {
 	workspaceDir := t.TempDir()
-	rallyDir := filepath.Join(workspaceDir, ".rally")
+	rallyDir := store.RallyDir(workspaceDir)
 	os.MkdirAll(rallyDir, 0o755)
 	initRepo(t, workspaceDir)
 
@@ -2767,9 +3189,43 @@ func writeRelayScript(t *testing.T, dir, name, scriptContent string) string {
 	return p
 }
 
+func TestBuildRecentContext_PerSummaryTruncation(t *testing.T) {
+	longSummary := strings.Repeat("abcdefghij", 20)
+
+	tries := []store.TryRecord{
+		{RunID: 1, AgentType: "claude", Completed: true, Summary: longSummary},
+		{RunID: 2, AgentType: "codex", Completed: false, Summary: longSummary},
+	}
+
+	result := buildRecentContext(tries, 50, 0)
+	for _, tr := range tries {
+		if !strings.Contains(result, fmt.Sprintf("Run %d (%s)", tr.RunID, tr.AgentType)) {
+			t.Errorf("expected mention of run %d", tr.RunID)
+		}
+	}
+	if !strings.Contains(result, "... [truncated] ...") {
+		t.Errorf("expected per-summary truncation marker in result: %q", result)
+	}
+}
+
+func TestBuildRecentContext_OverallTruncation(t *testing.T) {
+	mediumSummary := strings.Repeat("x", 200)
+	tries := []store.TryRecord{}
+	for i := 1; i <= 20; i++ {
+		tries = append(tries, store.TryRecord{
+			RunID: i, AgentType: "claude", Completed: true, Summary: mediumSummary,
+		})
+	}
+
+	result := buildRecentContext(tries, 0, 500)
+	if !strings.Contains(result, "... [truncated] ...") {
+		t.Errorf("expected overall truncation marker in result: %q", result)
+	}
+}
+
 func TestE2E_FullConfig_NamedModelsAndFallback(t *testing.T) {
 	workspaceDir := t.TempDir()
-	rallyDir := filepath.Join(workspaceDir, ".rally")
+	rallyDir := store.RallyDir(workspaceDir)
 	os.MkdirAll(rallyDir, 0o755)
 	initRepo(t, workspaceDir)
 
@@ -2855,7 +3311,7 @@ instructions_file = %q
 
 func TestE2E_UserDefinedHarness_ModelFlagSet(t *testing.T) {
 	workspaceDir := t.TempDir()
-	rallyDir := filepath.Join(workspaceDir, ".rally")
+	rallyDir := store.RallyDir(workspaceDir)
 	os.MkdirAll(rallyDir, 0o755)
 	initRepo(t, workspaceDir)
 
@@ -2908,7 +3364,7 @@ func TestE2E_UserDefinedHarness_ModelFlagSet(t *testing.T) {
 
 func TestE2E_UserDefinedHarness_BareAliasNoModel(t *testing.T) {
 	workspaceDir := t.TempDir()
-	rallyDir := filepath.Join(workspaceDir, ".rally")
+	rallyDir := store.RallyDir(workspaceDir)
 	os.MkdirAll(rallyDir, 0o755)
 	initRepo(t, workspaceDir)
 
@@ -2958,7 +3414,7 @@ func TestE2E_UserDefinedHarness_BareAliasNoModel(t *testing.T) {
 
 func TestE2E_UserDefinedHarness_ModelFlagEmpty(t *testing.T) {
 	workspaceDir := t.TempDir()
-	rallyDir := filepath.Join(workspaceDir, ".rally")
+	rallyDir := store.RallyDir(workspaceDir)
 	os.MkdirAll(rallyDir, 0o755)
 	initRepo(t, workspaceDir)
 
@@ -3011,7 +3467,7 @@ func TestE2E_UserDefinedHarness_ModelFlagEmpty(t *testing.T) {
 
 func TestE2E_UserDefinedHarness_ModelFlagUnset_InfoNote(t *testing.T) {
 	workspaceDir := t.TempDir()
-	rallyDir := filepath.Join(workspaceDir, ".rally")
+	rallyDir := store.RallyDir(workspaceDir)
 	os.MkdirAll(rallyDir, 0o755)
 	initRepo(t, workspaceDir)
 
@@ -3060,7 +3516,7 @@ func TestE2E_UserDefinedHarness_ModelFlagUnset_InfoNote(t *testing.T) {
 
 func TestE2E_BackwardsCompat_RootModelFields(t *testing.T) {
 	workspaceDir := t.TempDir()
-	rallyDir := filepath.Join(workspaceDir, ".rally")
+	rallyDir := store.RallyDir(workspaceDir)
 	os.MkdirAll(rallyDir, 0o755)
 	initRepo(t, workspaceDir)
 
@@ -3130,7 +3586,7 @@ run_hooks_on_autocommit = true
 
 func TestE2E_DefaultsSection_NoDeprecation(t *testing.T) {
 	workspaceDir := t.TempDir()
-	rallyDir := filepath.Join(workspaceDir, ".rally")
+	rallyDir := store.RallyDir(workspaceDir)
 	os.MkdirAll(rallyDir, 0o755)
 	initRepo(t, workspaceDir)
 
@@ -3204,7 +3660,7 @@ mix = "cc"
 
 func TestE2E_CheapRotationOpencodeGLMToKimi(t *testing.T) {
 	workspaceDir := t.TempDir()
-	rallyDir := filepath.Join(workspaceDir, ".rally")
+	rallyDir := store.RallyDir(workspaceDir)
 	os.MkdirAll(rallyDir, 0o755)
 	initRepo(t, workspaceDir)
 
@@ -3246,7 +3702,7 @@ func TestE2E_CheapRotationOpencodeGLMToKimi(t *testing.T) {
 
 func TestE2E_ClaudeRateLimitWaitAndResume(t *testing.T) {
 	workspaceDir := t.TempDir()
-	rallyDir := filepath.Join(workspaceDir, ".rally")
+	rallyDir := store.RallyDir(workspaceDir)
 	os.MkdirAll(rallyDir, 0o755)
 	initRepo(t, workspaceDir)
 
@@ -3302,7 +3758,7 @@ func TestE2E_ClaudeRateLimitWaitAndResume(t *testing.T) {
 
 func TestE2E_SimulatedFreezeGracefulKillResumeRecovery(t *testing.T) {
 	workspaceDir := t.TempDir()
-	rallyDir := filepath.Join(workspaceDir, ".rally")
+	rallyDir := store.RallyDir(workspaceDir)
 	os.MkdirAll(rallyDir, 0o755)
 	initRepo(t, workspaceDir)
 
@@ -3335,12 +3791,12 @@ func TestE2E_SimulatedFreezeGracefulKillResumeRecovery(t *testing.T) {
 	}, map[string]agent.Executor{"claude": exec})
 
 	controllerCount := 0
-	r.freezeControllerFactory = func(logPath string) reliability.FreezeController {
+	r.stallControllerFactory = func(logPath string) reliability.StallController {
 		_ = logPath
 		controllerCount++
 		if controllerCount == 1 {
 			triggered := false
-			return &fakeFreezeController{
+			return &fakeStallController{
 				check: func(context.Context) (bool, error) {
 					if triggered {
 						return false, nil
@@ -3351,12 +3807,12 @@ func TestE2E_SimulatedFreezeGracefulKillResumeRecovery(t *testing.T) {
 				},
 			}
 		}
-		return &fakeFreezeController{}
+		return &fakeStallController{}
 	}
 
-	oldInterval := freezeCheckInterval
-	freezeCheckInterval = time.Millisecond
-	defer func() { freezeCheckInterval = oldInterval }()
+	oldInterval := stallCheckInterval
+	stallCheckInterval = time.Millisecond
+	defer func() { stallCheckInterval = oldInterval }()
 
 	if err := r.Run(context.Background()); err != nil {
 		t.Fatalf("run failed: %v", err)
@@ -3373,7 +3829,7 @@ func TestE2E_SimulatedFreezeGracefulKillResumeRecovery(t *testing.T) {
 
 func TestE2E_LivenessProbeClearsFreezeFlag(t *testing.T) {
 	workspaceDir := t.TempDir()
-	rallyDir := filepath.Join(workspaceDir, ".rally")
+	rallyDir := store.RallyDir(workspaceDir)
 	os.MkdirAll(rallyDir, 0o755)
 	initRepo(t, workspaceDir)
 
@@ -3403,12 +3859,12 @@ func TestE2E_LivenessProbeClearsFreezeFlag(t *testing.T) {
 		TargetIterations: 1,
 		RetryBudget:      3,
 		LivenessProbe:    true,
-		FreezeThreshold:  50 * time.Millisecond,
+		StallThreshold:   50 * time.Millisecond,
 	}, map[string]agent.Executor{"codex": exec})
 
-	r.freezeControllerFactory = func(string) reliability.FreezeController {
+	r.stallControllerFactory = func(string) reliability.StallController {
 		probe := r.buildLivenessProbe(exec)
-		return &fakeFreezeController{
+		return &fakeStallController{
 			check: func(ctx context.Context) (bool, error) {
 				if probe == nil {
 					t.Fatal("expected liveness probe to be built for codex")
@@ -3421,9 +3877,9 @@ func TestE2E_LivenessProbeClearsFreezeFlag(t *testing.T) {
 		}
 	}
 
-	oldInterval := freezeCheckInterval
-	freezeCheckInterval = 30 * time.Millisecond
-	defer func() { freezeCheckInterval = oldInterval }()
+	oldInterval := stallCheckInterval
+	stallCheckInterval = 30 * time.Millisecond
+	defer func() { stallCheckInterval = oldInterval }()
 
 	if err := r.Run(context.Background()); err != nil {
 		t.Fatalf("run failed: %v", err)
@@ -3443,7 +3899,7 @@ func TestE2E_LivenessProbeClearsFreezeFlag(t *testing.T) {
 
 func TestE2E_LivenessProbeFailureConfirmsFreeze(t *testing.T) {
 	workspaceDir := t.TempDir()
-	rallyDir := filepath.Join(workspaceDir, ".rally")
+	rallyDir := store.RallyDir(workspaceDir)
 	os.MkdirAll(rallyDir, 0o755)
 	initRepo(t, workspaceDir)
 
@@ -3483,9 +3939,9 @@ func TestE2E_LivenessProbeFailureConfirmsFreeze(t *testing.T) {
 	}, map[string]agent.Executor{"codex": exec})
 
 	triggered := false
-	r.freezeControllerFactory = func(string) reliability.FreezeController {
+	r.stallControllerFactory = func(string) reliability.StallController {
 		probe := r.buildLivenessProbe(exec)
-		return &fakeFreezeController{
+		return &fakeStallController{
 			check: func(ctx context.Context) (bool, error) {
 				if triggered {
 					return false, nil
@@ -3503,9 +3959,9 @@ func TestE2E_LivenessProbeFailureConfirmsFreeze(t *testing.T) {
 		}
 	}
 
-	oldInterval := freezeCheckInterval
-	freezeCheckInterval = time.Millisecond
-	defer func() { freezeCheckInterval = oldInterval }()
+	oldInterval := stallCheckInterval
+	stallCheckInterval = time.Millisecond
+	defer func() { stallCheckInterval = oldInterval }()
 
 	if err := r.Run(context.Background()); err != nil {
 		t.Fatalf("run failed: %v", err)
@@ -3569,7 +4025,7 @@ func TestE2E_ErrorPatternStrategies(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			workspaceDir := t.TempDir()
-			rallyDir := filepath.Join(workspaceDir, ".rally")
+			rallyDir := store.RallyDir(workspaceDir)
 			os.MkdirAll(rallyDir, 0o755)
 			initRepo(t, workspaceDir)
 
@@ -3622,7 +4078,7 @@ func TestE2E_ErrorPatternStrategies(t *testing.T) {
 
 func TestE2E_ErrorPatternRotateAdvancesRoute(t *testing.T) {
 	workspaceDir := t.TempDir()
-	rallyDir := filepath.Join(workspaceDir, ".rally")
+	rallyDir := store.RallyDir(workspaceDir)
 	os.MkdirAll(rallyDir, 0o755)
 	initRepo(t, workspaceDir)
 
@@ -3679,7 +4135,7 @@ func TestE2E_ErrorPatternRotateAdvancesRoute(t *testing.T) {
 
 func TestE2E_RunStateClearedAtRelayStart(t *testing.T) {
 	workspaceDir := t.TempDir()
-	rallyDir := filepath.Join(workspaceDir, ".rally")
+	rallyDir := store.RallyDir(workspaceDir)
 	os.MkdirAll(rallyDir, 0o755)
 	initRepo(t, workspaceDir)
 
@@ -3726,27 +4182,31 @@ func TestE2E_RunStateClearedAtRelayStart(t *testing.T) {
 
 func TestE2E_WindowsFreezeDisabledRetryBudgetExhaustion(t *testing.T) {
 	workspaceDir := t.TempDir()
-	rallyDir := filepath.Join(workspaceDir, ".rally")
+	rallyDir := store.RallyDir(workspaceDir)
 	os.MkdirAll(rallyDir, 0o755)
 	initRepo(t, workspaceDir)
 
 	s := newTestStore(t, rallyDir)
 	exec := &funcExecutor{
 		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+			if opts.LogPath != "" {
+				_ = os.WriteFile(opts.LogPath, []byte("fork/exec failed\n"), 0o644)
+			}
 			return &agent.TryResult{Completed: false, Summary: "fail"}, nil
 		},
 	}
-	executors := map[string]agent.Executor{"claude": exec}
+	executors := map[string]agent.Executor{"opencode": exec}
 
 	r := NewRunner(s, Config{
 		WorkspaceDir:     workspaceDir,
 		DataDir:          t.TempDir(),
-		AgentMixSpecs:    []string{"cc:1"},
+		AgentMixSpecs:    []string{"op:dsf"},
 		TargetIterations: 1,
 		RetryBudget:      2,
+		Resolver:         cheapTestResolver,
 	}, executors)
-	// Simulate Windows path: freeze controller disabled
-	r.freezeControllerFactory = func(string) reliability.FreezeController { return nil }
+	// Simulate Windows path: stall controller disabled
+	r.stallControllerFactory = func(string) reliability.StallController { return nil }
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -3759,7 +4219,10 @@ func TestE2E_WindowsFreezeDisabledRetryBudgetExhaustion(t *testing.T) {
 	deadline := time.After(2 * time.Second)
 	for {
 		tries := s.AllTries()
-		status := s.GetAgentStatus("claude")
+		status, err := s.GetAgentStatus("opencode", cheapTestModel)
+		if err != nil {
+			t.Fatal(err)
+		}
 		foundPause := false
 		for _, e := range status {
 			if e.EventType == "paused" {
@@ -3787,7 +4250,10 @@ func TestE2E_WindowsFreezeDisabledRetryBudgetExhaustion(t *testing.T) {
 	if len(tries) != 2 {
 		t.Fatalf("expected 2 tries (retry budget exhausted), got %d", len(tries))
 	}
-	status := s.GetAgentStatus("claude")
+	status, err := s.GetAgentStatus("opencode", cheapTestModel)
+	if err != nil {
+		t.Fatal(err)
+	}
 	foundPause := false
 	for _, e := range status {
 		if e.EventType == "paused" {
@@ -3797,5 +4263,849 @@ func TestE2E_WindowsFreezeDisabledRetryBudgetExhaustion(t *testing.T) {
 	}
 	if !foundPause {
 		t.Fatal("expected agent paused after retry budget exhaustion")
+	}
+}
+
+// TestProbationIncompletePromotesToActive is an end-to-end test exercising the
+// full Run loop: an agent starts in probation (frozen > FreezeDuration ago),
+// produces an incomplete result (laps-backed run with file changes but no
+// finalization), and should be promoted back to active — not re-frozen.
+//
+// This catches the bug where the probation branch in Run() compared
+// failReason == "incomplete run", but runOne's ClassifyError had already
+// overwritten failReason to the classified string before returning. The fix
+// checks failureClass == reliability.FailureIncomplete instead.
+func TestProbationIncompletePromotesToActive(t *testing.T) {
+	oldHeadPull := headPullLap
+	pullCount := 0
+	headPullLap = func(context.Context, string) (laps.Lap, error) {
+		pullCount++
+		if pullCount == 1 {
+			return laps.Lap{ID: "lap-1", Title: "probation test", Assignee: "senior"}, nil
+		}
+		return laps.NoLap, nil
+	}
+	defer func() { headPullLap = oldHeadPull }()
+
+	workspaceDir := t.TempDir()
+	rallyDir := store.RallyDir(workspaceDir)
+	os.MkdirAll(rallyDir, 0o755)
+	initRepo(t, workspaceDir)
+
+	s := newTestStore(t, rallyDir)
+
+	// The executor writes a file (dirty tree) but never calls laps done →
+	// incomplete. All attempts behave identically so the run exhausts its
+	// retry budget as an incomplete failure.
+	exec := &funcExecutor{
+		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+			_ = os.WriteFile(filepath.Join(workspaceDir, "partial.txt"), []byte("partial"), 0o644)
+			return &agent.TryResult{Completed: true, Summary: "made progress but did not finalize"}, nil
+		},
+	}
+	executors := map[string]agent.Executor{"opencode": exec}
+
+	// Set up the agent as frozen long enough ago that it decays to probation.
+	baseTime := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	frozenAt := baseTime // frozen 6 hours before "now"
+	nowTime := baseTime.Add(6 * time.Hour)
+
+	r := NewRunner(s, Config{
+		WorkspaceDir:     workspaceDir,
+		DataDir:          t.TempDir(),
+		AgentMixSpecs:    []string{"op:dsf"},
+		TargetIterations: 1,
+		RetryBudget:      1,
+		LapsEnabled:      true,
+		Resolver:         cheapTestResolver,
+	}, executors)
+	r.sleepFunc = func(time.Duration) {}
+	r.resilience = &Resilience{
+		Store:                     s,
+		PauseDuration:             time.Hour,
+		FreezeDuration:            5 * time.Hour,
+		HourlyRetriesBeforeFreeze: 5,
+		NowFunc:                   func() time.Time { return nowTime },
+	}
+
+	// Seed a frozen event old enough to trigger probation.
+	if err := s.AppendAgentStatus(store.AgentStatusEvent{
+		AgentType: "opencode",
+		Model:     cheapTestModel,
+		EventType: "frozen",
+		Timestamp: frozenAt.UTC().Format(time.RFC3339),
+		RelayID:   1,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Confirm setup: agent should be in probation before the run.
+	key := ResilienceKey{Harness: "opencode", Model: cheapTestModel}
+	st, _ := r.resilience.GetState(key)
+	if st != StateProbation {
+		t.Fatalf("setup: expected probation, got %s", st)
+	}
+
+	_ = r.Run(context.Background())
+
+	// After the incomplete probation run, agent should be active (promoted),
+	// not re-frozen.
+	st, _ = r.resilience.GetState(key)
+	if st != StateActive {
+		t.Fatalf("expected active after probation incomplete, got %s", st)
+	}
+
+	// Verify the try was recorded as incomplete (not completed).
+	tries := s.AllTries()
+	if len(tries) == 0 {
+		t.Fatal("expected at least one try")
+	}
+	lastTry := tries[len(tries)-1]
+	if lastTry.Completed {
+		t.Fatal("incomplete try should be failed")
+	}
+
+	// Verify that no frozen event was written after the probation run
+	// (an "active"/"unfrozen" event should appear instead of another "frozen").
+	events, err := s.GetAgentStatus("opencode", cheapTestModel)
+	if err != nil {
+		t.Fatal(err)
+	}
+	lastEventType := ""
+	for _, e := range events {
+		lastEventType = e.EventType
+	}
+	if lastEventType == "frozen" {
+		t.Fatalf("last event should NOT be frozen after incomplete probation; got events: %v", events)
+	}
+}
+
+func TestStallRecovery_VerifyRoleExcluded(t *testing.T) {
+	workspaceDir := t.TempDir()
+	rallyDir := store.RallyDir(workspaceDir)
+	os.MkdirAll(rallyDir, 0o755)
+	initRepo(t, workspaceDir)
+	runGit(t, workspaceDir, "commit", "--allow-empty", "-m", "initial", "--no-verify")
+
+	s := newTestStore(t, rallyDir)
+	stallCh := make(chan struct{})
+	exec := &funcExecutor{
+		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+			os.WriteFile(filepath.Join(workspaceDir, "fix.txt"), []byte("trivial fix"), 0o644)
+			runGit(t, workspaceDir, "add", "fix.txt")
+			runGit(t, workspaceDir, "commit", "-m", "trivial fix", "--no-verify")
+			<-stallCh
+			return &agent.TryResult{Completed: false, Summary: "stalled"}, nil
+		},
+	}
+
+	r := NewRunner(s, Config{
+		WorkspaceDir:     workspaceDir,
+		DataDir:          t.TempDir(),
+		AgentMixSpecs:    []string{"cc:1"},
+		TargetIterations: 1,
+		RetryBudget:      1,
+	}, map[string]agent.Executor{"claude": exec})
+
+	r.stallControllerFactory = func(string) reliability.StallController {
+		triggered := false
+		return &fakeStallController{
+			check: func(context.Context) (bool, error) {
+				if triggered {
+					return false, nil
+				}
+				triggered = true
+				close(stallCh)
+				return true, nil
+			},
+		}
+	}
+
+	oldInterval := stallCheckInterval
+	stallCheckInterval = time.Millisecond
+	defer func() { stallCheckInterval = oldInterval }()
+
+	success, _, _, _, _, _, err := r.runOne(
+		context.Background(),
+		&store.RelayRecord{ID: 1, TargetIterations: 1},
+		0,
+		agent.ResolvedAgent{Harness: "claude"},
+		runTask{Name: "verify task", Prompt: "check correctness", Assignee: "verify", LapID: "lap-1", IsLapsBacked: true, LapsRemaining: 1},
+		nil,
+		nil,
+		false,
+		false,
+		nil,
+		nil,
+		io.Discard,
+	)
+	if err != nil {
+		t.Fatalf("runOne error = %v", err)
+	}
+	if success {
+		t.Fatal("expected failure for stalled VERIFY run despite committed files")
+	}
+}
+
+func TestStallRecovery_ImplementationRoleRecovers(t *testing.T) {
+	workspaceDir := t.TempDir()
+	rallyDir := store.RallyDir(workspaceDir)
+	os.MkdirAll(rallyDir, 0o755)
+	initRepo(t, workspaceDir)
+	runGit(t, workspaceDir, "commit", "--allow-empty", "-m", "initial", "--no-verify")
+
+	s := newTestStore(t, rallyDir)
+	stallCh := make(chan struct{})
+	exec := &funcExecutor{
+		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+			os.WriteFile(filepath.Join(workspaceDir, "impl.txt"), []byte("implementation"), 0o644)
+			runGit(t, workspaceDir, "add", "impl.txt")
+			runGit(t, workspaceDir, "commit", "-m", "implementation work", "--no-verify")
+			<-stallCh
+			return &agent.TryResult{Completed: false, Summary: "stalled"}, nil
+		},
+	}
+
+	r := NewRunner(s, Config{
+		WorkspaceDir:     workspaceDir,
+		DataDir:          t.TempDir(),
+		AgentMixSpecs:    []string{"cc:1"},
+		TargetIterations: 1,
+		RetryBudget:      1,
+	}, map[string]agent.Executor{"claude": exec})
+
+	r.stallControllerFactory = func(string) reliability.StallController {
+		triggered := false
+		return &fakeStallController{
+			check: func(context.Context) (bool, error) {
+				if triggered {
+					return false, nil
+				}
+				triggered = true
+				close(stallCh)
+				return true, nil
+			},
+		}
+	}
+
+	oldInterval := stallCheckInterval
+	stallCheckInterval = time.Millisecond
+	defer func() { stallCheckInterval = oldInterval }()
+
+	success, _, _, _, _, _, err := r.runOne(
+		context.Background(),
+		&store.RelayRecord{ID: 1, TargetIterations: 1},
+		0,
+		agent.ResolvedAgent{Harness: "claude"},
+		runTask{Name: "senior task", Prompt: "implement feature", Assignee: "senior", LapID: "lap-1", IsLapsBacked: true, LapsRemaining: 1},
+		nil,
+		nil,
+		false,
+		false,
+		nil,
+		nil,
+		io.Discard,
+	)
+	if err != nil {
+		t.Fatalf("runOne error = %v", err)
+	}
+	if !success {
+		t.Fatal("expected stall recovery success for SENIOR run with committed files")
+	}
+}
+
+func TestStallRecovery_VerifyStalledWithCommits_StaysFailed(t *testing.T) {
+	workspaceDir := t.TempDir()
+	rallyDir := store.RallyDir(workspaceDir)
+	os.MkdirAll(rallyDir, 0o755)
+	initRepo(t, workspaceDir)
+
+	s := newTestStore(t, rallyDir)
+	freezeCh := make(chan struct{})
+	exec := &funcExecutor{
+		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+			// Create a file so there are changes to auto-commit
+			f, _ := os.Create(filepath.Join(workspaceDir, "verify-fix.txt"))
+			f.WriteString("trivial fix")
+			f.Close()
+			<-freezeCh
+			return &agent.TryResult{Completed: false, Summary: "stalled"}, nil
+		},
+	}
+
+	r := NewRunner(s, Config{
+		WorkspaceDir:     workspaceDir,
+		DataDir:          t.TempDir(),
+		AgentMixSpecs:    []string{"cc:1"},
+		TargetIterations: 1,
+		RetryBudget:      1, // only 1 attempt
+	}, map[string]agent.Executor{"claude": exec})
+
+	controllerCount := 0
+	r.stallControllerFactory = func(logPath string) reliability.StallController {
+		controllerCount++
+		if controllerCount == 1 {
+			triggered := false
+			return &fakeStallController{
+				check: func(context.Context) (bool, error) {
+					if triggered {
+						return false, nil
+					}
+					triggered = true
+					close(freezeCh)
+					return true, nil
+				},
+			}
+		}
+		return &fakeStallController{}
+	}
+
+	oldInterval := stallCheckInterval
+	stallCheckInterval = time.Millisecond
+	defer func() { stallCheckInterval = oldInterval }()
+
+	success, _, _, _, _, _, err := r.runOne(
+		context.Background(),
+		&store.RelayRecord{ID: 1, TargetIterations: 1},
+		0,
+		agent.ResolvedAgent{Harness: "claude"},
+		runTask{Name: "verify run", Prompt: "verify test", Assignee: "verify"},
+		nil,
+		nil,
+		false,
+		false,
+		nil,
+		nil,
+		io.Discard,
+	)
+	if err != nil {
+		t.Fatalf("runOne error = %v", err)
+	}
+	if success {
+		t.Fatal("expected runOne to fail for stalled VERIFY even with commits")
+	}
+
+	tries := s.AllTries()
+	if len(tries) != 1 {
+		t.Fatalf("expected 1 try, got %d", len(tries))
+	}
+	if tries[0].Completed {
+		t.Fatal("stalled VERIFY try should not be auto-completed")
+	}
+	if tries[0].CommitHash == "" {
+		t.Fatal("expected auto-commit hash to be present")
+	}
+}
+
+func TestStallRecovery_ImplementationStalledWithCommits_Recovers(t *testing.T) {
+	workspaceDir := t.TempDir()
+	rallyDir := store.RallyDir(workspaceDir)
+	os.MkdirAll(rallyDir, 0o755)
+	initRepo(t, workspaceDir)
+
+	s := newTestStore(t, rallyDir)
+	freezeCh := make(chan struct{})
+	exec := &funcExecutor{
+		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+			f, _ := os.Create(filepath.Join(workspaceDir, "impl-fix.txt"))
+			f.WriteString("implementation fix")
+			f.Close()
+			<-freezeCh
+			return &agent.TryResult{Completed: false, Summary: "stalled"}, nil
+		},
+	}
+
+	r := NewRunner(s, Config{
+		WorkspaceDir:     workspaceDir,
+		DataDir:          t.TempDir(),
+		AgentMixSpecs:    []string{"cc:1"},
+		TargetIterations: 1,
+		RetryBudget:      1,
+	}, map[string]agent.Executor{"claude": exec})
+
+	controllerCount := 0
+	r.stallControllerFactory = func(logPath string) reliability.StallController {
+		controllerCount++
+		if controllerCount == 1 {
+			triggered := false
+			return &fakeStallController{
+				check: func(context.Context) (bool, error) {
+					if triggered {
+						return false, nil
+					}
+					triggered = true
+					close(freezeCh)
+					return true, nil
+				},
+			}
+		}
+		return &fakeStallController{}
+	}
+
+	oldInterval := stallCheckInterval
+	stallCheckInterval = time.Millisecond
+	defer func() { stallCheckInterval = oldInterval }()
+
+	success, _, _, _, _, _, err := r.runOne(
+		context.Background(),
+		&store.RelayRecord{ID: 1, TargetIterations: 1},
+		0,
+		agent.ResolvedAgent{Harness: "claude"},
+		runTask{Name: "impl run", Prompt: "impl test", Assignee: "senior"},
+		nil,
+		nil,
+		false,
+		false,
+		nil,
+		nil,
+		io.Discard,
+	)
+	if err != nil {
+		t.Fatalf("runOne error = %v", err)
+	}
+	if !success {
+		t.Fatal("expected runOne to succeed for stalled implementation with commits")
+	}
+
+	tries := s.AllTries()
+	if len(tries) != 1 {
+		t.Fatalf("expected 1 try, got %d", len(tries))
+	}
+	if !tries[0].Completed {
+		t.Fatal("stalled implementation try with commits should be auto-completed")
+	}
+	if tries[0].CommitHash == "" {
+		t.Fatal("expected auto-commit hash to be present")
+	}
+}
+
+func TestPromptBudget_PerSummaryTruncation(t *testing.T) {
+	longSummary := strings.Repeat("x", 500)
+	tries := []store.TryRecord{
+		{RunID: 1, AgentType: "claude", Completed: false, Summary: longSummary},
+	}
+	result := buildRecentContext(tries, 100, 0)
+	if !strings.Contains(result, "... [truncated] ...") {
+		t.Fatal("expected truncation marker in output")
+	}
+	if len(result) >= 500 {
+		t.Fatalf("expected output shorter than full summary, got %d chars", len(result))
+	}
+	headSize := 100 / 2
+	tailSize := 100 - headSize
+	if !strings.Contains(result, longSummary[:headSize]) {
+		t.Fatal("expected head of summary preserved")
+	}
+	if !strings.Contains(result, longSummary[len(longSummary)-tailSize:]) {
+		t.Fatal("expected tail of summary preserved")
+	}
+}
+
+func TestPromptBudget_ShortSummariesPassThrough(t *testing.T) {
+	tries := []store.TryRecord{
+		{RunID: 1, AgentType: "claude", Completed: true, Summary: "short"},
+		{RunID: 2, AgentType: "opencode", Completed: false, Summary: "also short"},
+	}
+	result := buildRecentContext(tries, 1000, 0)
+	if strings.Contains(result, "... [truncated] ...") {
+		t.Fatal("short summaries should not be truncated")
+	}
+	if !strings.Contains(result, "summary=short") {
+		t.Fatal("expected first summary present")
+	}
+	if !strings.Contains(result, "summary=also short") {
+		t.Fatal("expected second summary present")
+	}
+}
+
+func TestPromptBudget_CountHonored(t *testing.T) {
+	var tries []store.TryRecord
+	for i := 1; i <= 3; i++ {
+		tries = append(tries, store.TryRecord{RunID: i, AgentType: "claude", Completed: true, Summary: fmt.Sprintf("try %d", i)})
+	}
+	result := buildRecentContext(tries, 0, 0)
+	for i := 1; i <= 3; i++ {
+		if !strings.Contains(result, fmt.Sprintf("try %d", i)) {
+			t.Fatalf("expected try %d in output", i)
+		}
+	}
+}
+
+func TestPromptBudget_OverallLimit(t *testing.T) {
+	tries := []store.TryRecord{
+		{RunID: 1, AgentType: "claude", Completed: false, Summary: strings.Repeat("a", 200)},
+		{RunID: 2, AgentType: "claude", Completed: false, Summary: strings.Repeat("b", 200)},
+	}
+	result := buildRecentContext(tries, 0, 200)
+	if !strings.Contains(result, "... [truncated] ...") {
+		t.Fatal("expected overall truncation marker")
+	}
+	if len(result) > 250 {
+		t.Fatalf("expected output near 200 chars, got %d", len(result))
+	}
+	headSize := 200 / 2
+	if !strings.HasPrefix(result[:headSize], "Run 1") {
+		t.Fatal("expected head of overall context to start with first try")
+	}
+	if !strings.Contains(result[len(result)-headSize:], strings.Repeat("b", 10)) {
+		t.Fatal("expected tail of overall context to contain second summary")
+	}
+}
+
+func TestLapPinValidation_NormalPassThrough(t *testing.T) {
+	reason, mismatch := validatePinnedLap("lap-1", []string{"lap-1"})
+	if mismatch {
+		t.Fatalf("expected no mismatch for normal pass-through, got reason=%q", reason)
+	}
+}
+
+func TestLapPinValidation_WrongLapConsumed(t *testing.T) {
+	reason, mismatch := validatePinnedLap("lap-1", []string{"lap-9"})
+	if !mismatch {
+		t.Fatal("expected mismatch when consumed lap differs from pinned")
+	}
+	if reason != "wrong_lap_consumed" {
+		t.Fatalf("reason = %q, want %q", reason, "wrong_lap_consumed")
+	}
+}
+
+func TestLapPinValidation_MultiLapConsumed(t *testing.T) {
+	reason, mismatch := validatePinnedLap("lap-1", []string{"lap-1", "lap-2"})
+	if !mismatch {
+		t.Fatal("expected mismatch when multiple laps consumed")
+	}
+	if reason != "multi_lap_consumed" {
+		t.Fatalf("reason = %q, want %q", reason, "multi_lap_consumed")
+	}
+}
+
+func TestLapPinValidation_EmptyPinnedID(t *testing.T) {
+	reason, mismatch := validatePinnedLap("", []string{"lap-1"})
+	if mismatch {
+		t.Fatalf("expected no mismatch when pinned lap ID is empty, got reason=%q", reason)
+	}
+}
+
+func TestLapPinValidation_NoRecordedLaps(t *testing.T) {
+	reason, mismatch := validatePinnedLap("lap-1", nil)
+	if mismatch {
+		t.Fatalf("expected no mismatch when no laps recorded, got reason=%q", reason)
+	}
+	reason, mismatch = validatePinnedLap("lap-1", []string{})
+	if mismatch {
+		t.Fatalf("expected no mismatch when empty laps recorded, got reason=%q", reason)
+	}
+}
+
+func TestLapPinValidation_DuplicateSameLap(t *testing.T) {
+	reason, mismatch := validatePinnedLap("lap-1", []string{"lap-1", "lap-1"})
+	if mismatch {
+		t.Fatalf("expected no mismatch for duplicate same lap, got reason=%q", reason)
+	}
+}
+
+func TestLapPinRejectionInRunOne(t *testing.T) {
+	workspaceDir := t.TempDir()
+	rallyDir := store.RallyDir(workspaceDir)
+	os.MkdirAll(rallyDir, 0o755)
+	initRepo(t, workspaceDir)
+	runGit(t, workspaceDir, "commit", "--allow-empty", "-m", "initial", "--no-verify")
+
+	s := newTestStore(t, rallyDir)
+	exec := &funcExecutor{
+		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+			rs, _ := progress.LoadRunState(workspaceDir)
+			rs.RecordedLaps = []string{"other-lap"}
+			progress.SaveRunState(workspaceDir, rs)
+			return &agent.TryResult{Completed: true, Summary: "wrong lap"}, nil
+		},
+	}
+
+	r := NewRunner(s, Config{
+		WorkspaceDir:     workspaceDir,
+		DataDir:          t.TempDir(),
+		AgentMixSpecs:    []string{"op:dsf"},
+		TargetIterations: 1,
+		RetryBudget:      1,
+		LapsEnabled:      true,
+		Resolver:         cheapTestResolver,
+	}, map[string]agent.Executor{"opencode": exec})
+
+	success, _, _, _, _, _, err := r.runOne(
+		context.Background(),
+		&store.RelayRecord{ID: 1, TargetIterations: 1},
+		0,
+		agent.ResolvedAgent{Harness: "opencode", Model: cheapTestModel},
+		runTask{Name: "pinned task", Prompt: "do work", Assignee: "senior", LapID: "lap-1", IsLapsBacked: true, LapsRemaining: 1},
+		nil,
+		nil,
+		false,
+		false,
+		nil,
+		nil,
+		io.Discard,
+	)
+	if err != nil {
+		t.Fatalf("runOne error = %v", err)
+	}
+	if success {
+		t.Fatal("expected failure for wrong-lap consumption")
+	}
+
+	tries := s.AllTries()
+	if len(tries) == 0 {
+		t.Fatal("expected at least one try")
+	}
+	if tries[0].FailReason != "wrong_lap_consumed" {
+		t.Fatalf("FailReason = %q, want %q", tries[0].FailReason, "wrong_lap_consumed")
+	}
+}
+
+func TestLapPinMultiLapRejectionInRunOne(t *testing.T) {
+	workspaceDir := t.TempDir()
+	rallyDir := store.RallyDir(workspaceDir)
+	os.MkdirAll(rallyDir, 0o755)
+	initRepo(t, workspaceDir)
+	runGit(t, workspaceDir, "commit", "--allow-empty", "-m", "initial", "--no-verify")
+
+	s := newTestStore(t, rallyDir)
+	exec := &funcExecutor{
+		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+			rs, _ := progress.LoadRunState(workspaceDir)
+			rs.RecordedLaps = []string{"lap-1", "lap-2"}
+			progress.SaveRunState(workspaceDir, rs)
+			return &agent.TryResult{Completed: true, Summary: "multi lap"}, nil
+		},
+	}
+
+	r := NewRunner(s, Config{
+		WorkspaceDir:     workspaceDir,
+		DataDir:          t.TempDir(),
+		AgentMixSpecs:    []string{"op:dsf"},
+		TargetIterations: 1,
+		RetryBudget:      1,
+		LapsEnabled:      true,
+		Resolver:         cheapTestResolver,
+	}, map[string]agent.Executor{"opencode": exec})
+
+	success, _, _, _, _, _, err := r.runOne(
+		context.Background(),
+		&store.RelayRecord{ID: 1, TargetIterations: 1},
+		0,
+		agent.ResolvedAgent{Harness: "opencode", Model: cheapTestModel},
+		runTask{Name: "pinned task", Prompt: "do work", Assignee: "senior", LapID: "lap-1", IsLapsBacked: true, LapsRemaining: 1},
+		nil,
+		nil,
+		false,
+		false,
+		nil,
+		nil,
+		io.Discard,
+	)
+	if err != nil {
+		t.Fatalf("runOne error = %v", err)
+	}
+	if success {
+		t.Fatal("expected failure for multi-lap consumption")
+	}
+
+	tries := s.AllTries()
+	if len(tries) == 0 {
+		t.Fatal("expected at least one try")
+	}
+	if tries[0].FailReason != "multi_lap_consumed" {
+		t.Fatalf("FailReason = %q, want %q", tries[0].FailReason, "multi_lap_consumed")
+	}
+}
+
+func TestLapPinMismatchClearsFailureClass(t *testing.T) {
+	workspaceDir := t.TempDir()
+	rallyDir := store.RallyDir(workspaceDir)
+	os.MkdirAll(rallyDir, 0o755)
+	initRepo(t, workspaceDir)
+	runGit(t, workspaceDir, "commit", "--allow-empty", "-m", "initial", "--no-verify")
+
+	s := newTestStore(t, rallyDir)
+	callCount := 0
+	exec := &funcExecutor{
+		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+			callCount++
+			if opts.LogPath != "" {
+				_ = os.WriteFile(opts.LogPath, []byte("fork/exec failed\n"), 0o644)
+			}
+			if callCount >= 3 {
+				rs, _ := progress.LoadRunState(workspaceDir)
+				rs.RecordedLaps = []string{"wrong-lap"}
+				progress.SaveRunState(workspaceDir, rs)
+			}
+			return &agent.TryResult{Completed: false, Summary: "failed"}, nil
+		},
+	}
+
+	r := NewRunner(s, Config{
+		WorkspaceDir:     workspaceDir,
+		DataDir:          t.TempDir(),
+		AgentMixSpecs:    []string{"op:dsf"},
+		TargetIterations: 1,
+		RetryBudget:      3,
+		LapsEnabled:      true,
+		Resolver:         cheapTestResolver,
+	}, map[string]agent.Executor{"opencode": exec})
+
+	_, _, _, _, failureClass, _, _ := r.runOne(
+		context.Background(),
+		&store.RelayRecord{ID: 1, TargetIterations: 1},
+		0,
+		agent.ResolvedAgent{Harness: "opencode", Model: cheapTestModel},
+		runTask{Name: "pinned task", Prompt: "do work", Assignee: "senior", LapID: "lap-1", IsLapsBacked: true, LapsRemaining: 1},
+		nil,
+		nil,
+		false,
+		false,
+		nil,
+		nil,
+		io.Discard,
+	)
+
+	if failureClass != reliability.FailureAgent {
+		t.Fatalf("failureClass = %v, want FailureAgent", failureClass)
+	}
+}
+
+func TestLapPinNormalPassThroughInRunOne(t *testing.T) {
+	workspaceDir := t.TempDir()
+	rallyDir := store.RallyDir(workspaceDir)
+	os.MkdirAll(rallyDir, 0o755)
+	initRepo(t, workspaceDir)
+	runGit(t, workspaceDir, "commit", "--allow-empty", "-m", "initial", "--no-verify")
+
+	s := newTestStore(t, rallyDir)
+	exec := &funcExecutor{
+		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+			rs, _ := progress.LoadRunState(workspaceDir)
+			rs.RecordedLaps = []string{"lap-1"}
+			progress.SaveRunState(workspaceDir, rs)
+			os.WriteFile(filepath.Join(workspaceDir, "work.txt"), []byte("done"), 0o644)
+			runGit(t, workspaceDir, "add", "work.txt")
+			runGit(t, workspaceDir, "commit", "-m", "completed work", "--no-verify")
+			return &agent.TryResult{Completed: true, Summary: "done"}, nil
+		},
+	}
+
+	r := NewRunner(s, Config{
+		WorkspaceDir:     workspaceDir,
+		DataDir:          t.TempDir(),
+		AgentMixSpecs:    []string{"op:dsf"},
+		TargetIterations: 1,
+		RetryBudget:      1,
+		LapsEnabled:      true,
+		Resolver:         cheapTestResolver,
+	}, map[string]agent.Executor{"opencode": exec})
+
+	success, _, _, _, _, _, err := r.runOne(
+		context.Background(),
+		&store.RelayRecord{ID: 1, TargetIterations: 1},
+		0,
+		agent.ResolvedAgent{Harness: "opencode", Model: cheapTestModel},
+		runTask{Name: "pinned task", Prompt: "do work", Assignee: "senior", LapID: "lap-1", IsLapsBacked: true, LapsRemaining: 1},
+		nil,
+		nil,
+		false,
+		false,
+		nil,
+		nil,
+		io.Discard,
+	)
+	if err != nil {
+		t.Fatalf("runOne error = %v", err)
+	}
+	if !success {
+		t.Fatal("expected success for normal single-lap pass-through")
+	}
+
+	tries := s.AllTries()
+	if len(tries) == 0 {
+		t.Fatal("expected at least one try")
+	}
+	if tries[0].FailReason != "" {
+		t.Fatalf("FailReason = %q, want empty", tries[0].FailReason)
+	}
+	if tries[0].LapID != "lap-1" {
+		t.Fatalf("LapID = %q, want %q", tries[0].LapID, "lap-1")
+	}
+	if len(tries[0].RecordedLaps) != 1 || tries[0].RecordedLaps[0] != "lap-1" {
+		t.Fatalf("RecordedLaps = %v, want [lap-1]", tries[0].RecordedLaps)
+	}
+}
+
+func TestLapAttemptRecordedInTryRecord(t *testing.T) {
+	workspaceDir := t.TempDir()
+	rallyDir := store.RallyDir(workspaceDir)
+	os.MkdirAll(rallyDir, 0o755)
+	initRepo(t, workspaceDir)
+	runGit(t, workspaceDir, "commit", "--allow-empty", "-m", "initial", "--no-verify")
+
+	s := newTestStore(t, rallyDir)
+	exec := &funcExecutor{
+		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+			progress.RecordLap(workspaceDir, "lap-1")
+			os.WriteFile(filepath.Join(workspaceDir, "work.txt"), []byte("done"), 0o644)
+			runGit(t, workspaceDir, "add", "work.txt")
+			runGit(t, workspaceDir, "commit", "-m", "completed work", "--no-verify")
+			return &agent.TryResult{Completed: true, Summary: "done"}, nil
+		},
+	}
+
+	r := NewRunner(s, Config{
+		WorkspaceDir:     workspaceDir,
+		DataDir:          t.TempDir(),
+		AgentMixSpecs:    []string{"op:dsf"},
+		TargetIterations: 1,
+		RetryBudget:      1,
+		LapsEnabled:      true,
+		Resolver:         cheapTestResolver,
+	}, map[string]agent.Executor{"opencode": exec})
+
+	success, _, _, _, _, _, err := r.runOne(
+		context.Background(),
+		&store.RelayRecord{ID: 1, TargetIterations: 1},
+		0,
+		agent.ResolvedAgent{Harness: "opencode", Model: cheapTestModel},
+		runTask{Name: "pinned task", Prompt: "do work", Assignee: "senior", LapID: "lap-1", IsLapsBacked: true, LapsRemaining: 1},
+		nil,
+		nil,
+		false,
+		false,
+		nil,
+		nil,
+		io.Discard,
+	)
+	if err != nil {
+		t.Fatalf("runOne error = %v", err)
+	}
+	if !success {
+		t.Fatal("expected success")
+	}
+
+	tries := s.AllTries()
+	if len(tries) == 0 {
+		t.Fatal("expected at least one try")
+	}
+	attempts := tries[0].LapsAttempted
+	if len(attempts) == 0 {
+		t.Fatal("expected laps_attempted to be recorded on TryRecord")
+	}
+	found := false
+	for _, a := range attempts {
+		if a.LapID == "lap-1" {
+			found = true
+			if a.Timestamp == "" {
+				t.Fatal("expected non-empty timestamp in lap attempt")
+			}
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("laps_attempted = %v, want lap-1 present", attempts)
 	}
 }

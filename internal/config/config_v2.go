@@ -14,6 +14,7 @@ import (
 	toml "github.com/pelletier/go-toml/v2"
 
 	"github.com/mitchell-wallace/rally/internal/agent"
+	"github.com/mitchell-wallace/rally/internal/store"
 )
 
 const ExpectedSchemaVersion = 2
@@ -71,14 +72,17 @@ type FallbackConfig struct {
 }
 
 type ReliabilityConfig struct {
-	FreezeThresholdSecs int  `toml:"freeze_threshold_secs,omitempty"`
-	LivenessProbe       bool `toml:"liveness_probe,omitempty"`
-	RetryBudget         int  `toml:"retry_budget,omitempty"`
+	StallThresholdSecs      int  `toml:"stall_threshold_secs,omitempty"`
+	LivenessProbe           bool `toml:"liveness_probe,omitempty"`
+	RetryBudget             int  `toml:"retry_budget,omitempty"`
+	RecentTryCount          int  `toml:"recent_try_count,omitempty"`
+	RecentTryCharLimit      int  `toml:"recent_try_char_limit,omitempty"`
+	RecentContextCharLimit  int  `toml:"recent_context_char_limit,omitempty"`
 }
 
-func (r ReliabilityConfig) FreezeThreshold() time.Duration {
-	if r.FreezeThresholdSecs > 0 {
-		return time.Duration(r.FreezeThresholdSecs) * time.Second
+func (r ReliabilityConfig) StallThreshold() time.Duration {
+	if r.StallThresholdSecs > 0 {
+		return time.Duration(r.StallThresholdSecs) * time.Second
 	}
 	return 0
 }
@@ -90,6 +94,10 @@ type HarnessConfig struct {
 	OutputStrategy string            `toml:"output_strategy,omitempty"`
 	OutputLines    int               `toml:"output_lines,omitempty"`
 	TailStream     string            `toml:"tail_stream,omitempty"`
+}
+
+type TelemetryConfig struct {
+	SentryDSN string `toml:"sentry_dsn,omitempty"`
 }
 
 type V2Config struct {
@@ -109,6 +117,7 @@ type V2Config struct {
 	Reliability ReliabilityConfig
 	Harnesses   map[string]*HarnessConfig
 	Routes      map[string][]string
+	Telemetry   TelemetryConfig
 
 	DeprecationNotes []string
 	SchemaWarning    string
@@ -131,10 +140,11 @@ type rawConfig struct {
 	Reliability ReliabilityConfig         `toml:"reliability"`
 	Harnesses   map[string]*HarnessConfig `toml:"harness"`
 	Routes      map[string][]string       `toml:"routes"`
+	Telemetry   TelemetryConfig           `toml:"telemetry,omitempty"`
 }
 
 func V2Path(workspaceDir string) string {
-	return filepath.Join(workspaceDir, ".rally", "config.toml")
+	return store.ConfigPath(workspaceDir)
 }
 
 func LoadV2(workspaceDir string) (V2Config, error) {
@@ -163,19 +173,23 @@ func LoadV2(workspaceDir string) (V2Config, error) {
 		Reliability:          raw.Reliability,
 		Harnesses:            raw.Harnesses,
 		Routes:               raw.Routes,
+		Telemetry:            raw.Telemetry,
 	}
 
-	if cfg.Reliability.FreezeThresholdSecs == 0 {
+	if cfg.Reliability.StallThresholdSecs == 0 {
 		// 120s: opencode agents typically complete in 25-30s then hold the process
 		// open; connections drop to 0 around 120s of log silence, so 120s lets the
-		// freeze fire as soon as the connection check is satisfied. npm install
-		// silence is ~35s max (well below 120s). The `DefaultFreezeThreshold`
+		// stall fire as soon as the connection check is satisfied. npm install
+		// silence is ~35s max (well below 120s). The `DefaultStallThreshold`
 		// constant in the reliability package stays at 180s as a bare-code fallback
 		// when no config is loaded.
-		cfg.Reliability.FreezeThresholdSecs = 120
+		cfg.Reliability.StallThresholdSecs = 120
 	}
 	if cfg.Reliability.RetryBudget == 0 {
 		cfg.Reliability.RetryBudget = 5
+	}
+	if cfg.Reliability.RecentTryCount == 0 {
+		cfg.Reliability.RecentTryCount = 5
 	}
 	if cfg.Harnesses == nil {
 		cfg.Harnesses = make(map[string]*HarnessConfig)
@@ -523,6 +537,7 @@ func SaveV2(workspaceDir string, cfg V2Config) error {
 		Reliability: cfg.Reliability,
 		Harnesses:   cfg.Harnesses,
 		Routes:      cfg.Routes,
+		Telemetry:   cfg.Telemetry,
 	}
 
 	data, err := toml.Marshal(raw)
