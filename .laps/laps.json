@@ -16,10 +16,10 @@
       "title": "Add migration fixture tests",
       "description": "Context: VERIFY on tidy-rally-runtime-data-storage found the highest-risk slice still lacks automated migration coverage (tasks 8.1 / spec store: Runtime data layout migration). Manual verification passed for the happy path, but there is no regression test locking in flat-\u003estate moves, legacy dir cleanup, no-overwrite behavior, idempotency, and progress.yaml untouched semantics.\n\nOutcome: Add table-style tests around runInit or store.MigrateRallyStateLayout using a fixture .rally/ with flat jsonl files, progress.yaml, batches/, relays/, and at least one pre-existing state target. Assert moved files land in .rally/state/, batches/ and relays/ are removed, existing state targets are not overwritten, rerunning migration is a no-op, and progress.yaml is preserved verbatim and never recreated by summary writes.\n\nAcceptance: go test ./cmd/rally ./internal/store ./internal/progress passes; tests fail if migration regresses on no-overwrite, legacy cleanup, or idempotency.",
       "assignee": "JUNIOR",
-      "isDone": false,
+      "isDone": true,
       "createdAt": "2026-05-31T06:26:58.99804999Z",
-      "updatedAt": "2026-05-31T06:26:58.99804999Z",
-      "completedAt": null
+      "updatedAt": "2026-05-31T06:31:14.121614301Z",
+      "completedAt": "2026-05-31T06:31:14.121614301Z"
     },
     {
       "id": "work-d97f",
