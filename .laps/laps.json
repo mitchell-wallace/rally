@@ -26,10 +26,10 @@
       "title": "VERIFY: tidy runtime storage follow-up",
       "description": "Re-run final verification for tidy-rally-runtime-data-storage after the queued follow-up laps land. Focus on migration conflict handling plus the missing telemetry/distribution regression coverage, then re-check go build ./..., go test ./..., openspec validate tidy-rally-runtime-data-storage --strict, tracked .rally contents, and git diff feat/harden-relay-run-lifecycle...HEAD.",
       "assignee": "VERIFY",
-      "isDone": false,
+      "isDone": true,
       "createdAt": "2026-05-31T10:10:00.716177229Z",
-      "updatedAt": "2026-05-31T10:10:00.716177229Z",
-      "completedAt": null
+      "updatedAt": "2026-05-31T10:30:13.765086551Z",
+      "completedAt": "2026-05-31T10:30:13.765086551Z"
     },
     {
       "id": "work-298a",
