@@ -103,7 +103,7 @@ Do not delegate just to feel busy. Keep the local agent responsible for integrat
 
 If the friend stalls, rate-limits, or exits strangely:
 
-- Check `.rally/relays/relay-N.log`, `.rally/tries.jsonl`, `.rally/agent_status.jsonl`, and `rally tail`.
+- Check relay logs, `.rally/state/tries.jsonl`, `.rally/state/agent_status.jsonl`, and `rally tail`.
 - Classify whether this is auth, rate limit, freeze, bad model slug, bad custom harness config, or a genuine task failure.
 - If the failure signature is new or recurring, update `model-notes.md` with the exact symptom and recommended response.
 - Try a cheaper/faster model only when that still answers the original question. Otherwise report the degraded state.

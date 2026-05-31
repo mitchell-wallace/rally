@@ -320,12 +320,12 @@ Run and observe:
   - **Connected-frozen** (`connectedFrozen`): log silent ≥ threshold AND connections > 0 AND no syscall I/O (`rchar+wchar`) for 5 minutes. Catches rate-limited agents keeping a connection alive but sending no data.
 - On **non-Linux**: only log silence is checked; `❄ frozen` fires at threshold.
 
-The per-try netstat log at `.rally/data/tries/REPO/try-N.netstat.jsonl` records `{ts, log_silent_s, connections, io_bytes, syscall_bytes}` each tick. Typical baselines:
+The per-try netstat log at `~/.local/share/rally/tries/<repo>/try-N.netstat.jsonl` records `{ts, log_silent_s, connections, io_bytes, syscall_bytes}` each tick. Typical baselines:
 - Simple task (file creation): connections 2-6, syscall delta 2-5 MB total
 - npm install: connections 1-2 with massive syscall delta (400 MB–2 GB), sporadic "No I/O" warnings during download wait phases
 - Rate-limited idle: connections > 0, syscall bytes plateau (< 1 MB/min), log silent
 
-Check `.rally/relays/relay-N.log` for "freeze detected" vs no freeze.
+Check `~/.local/share/rally/relays/<repo>/relay-N.log` for "freeze detected" vs no freeze.
 
 ---
 
@@ -363,7 +363,7 @@ After testing, compile a concise report:
 - Weighted mix cc:2: ✓ (2 claude iterations completed)
 - Log scoping: ✓ (tries in data_dir/tries/REPOKEY/ per-workspace)
 - [N/M] header: ✓ (shows iteration-within-relay / target, e.g. [1/3])
-- Rally progress command: ✓ (progress.yaml updated)
+- Rally progress command: ✓ (summary.jsonl updated)
 
 ### Failed / Degraded
 - OpenCode rate-limited models: hang silently; `classicFrozen` fires ~130s after connections drop, agent paused (working as intended)

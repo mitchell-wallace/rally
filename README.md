@@ -499,9 +499,26 @@ rally version            # print version (vX.Y.Z, vX.Y.Z-dev for source builds)
 
 Rally includes opt-in error reporting via Sentry to help improve reliability. It captures infrastructure and agent-class errors (e.g. rate limits, crashes, stall timeouts) but rigorously scrubs sensitive data.
 
-- **To opt in:** Set `SENTRY_DSN` in your environment, or configure it via the `sentry_dsn` field in your config if supported.
-- **Kill switch:** You can forcefully disable all telemetry by setting `RALLY_TELEMETRY=0`.
-- **Privacy:** Rally NEVER sends your task description, codebase context, or agent transcripts. All large string fields and potential sensitive keys (`prompt`, `output`, `transcript`) are aggressively dropped or truncated before transmission.
+- **To opt in:** Configure your DSN in `.rally/config.toml` or set the `SENTRY_DSN` environment variable:
+  ```toml
+  [telemetry]
+  sentry_dsn = "https://your-dsn-key@sentry.io/project-id"
+  ```
+  The `SENTRY_DSN` environment variable takes precedence over the config file if both are set.
+- **Kill switch:** You can forcefully disable all telemetry by setting `RALLY_TELEMETRY=0` in your environment.
+- **What is sent:** Rally sends structured error signals for operator-worthy failures (e.g., panics, non-zero command exits, agent pause events, freeze detections, stall timeouts, and lap-integrity violations). Spans include execution metadata like `relay_id`, `run_id`, `try_id`, `role`, `runner`, `repo`, `lap_id`, and prompt metrics (total prompt size and a per-source breakdown of tokens).
+- **What is NOT sent:** Rally NEVER sends your task description, codebase context, file contents, or agent transcripts. All potentially sensitive string fields (such as `prompt`, `output`, `transcript`, and the contents of `current_task.md`) are aggressively dropped or scrubbed locally before transmission.
+
+## Self-Updates
+
+Rally features a built-in updater to fetch the latest binaries directly from GitHub Releases.
+To upgrade Rally to the latest release, run:
+
+```sh
+rally update
+```
+
+If the companion `laps` binary is installed next to `rally` (the default for new installations), `rally update` will automatically upgrade `laps` to its corresponding compatible release as well.
 
 ## Architecture
 
