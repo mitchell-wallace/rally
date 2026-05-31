@@ -126,6 +126,10 @@ func runRelay(cmd *cobra.Command, args []string) error {
 		fmt.Fprintln(os.Stderr, "warning:", note)
 	}
 
+	if w := laps.VersionWarning(workspaceDir); w != "" {
+		fmt.Fprintln(os.Stderr, w)
+	}
+
 	lapsEnabled := laps.Detect(workspaceDir)
 
 	if !cmd.Flags().Changed("iterations") {
@@ -549,7 +553,10 @@ var versionCmd = &cobra.Command{
 
 var updateCmd = &cobra.Command{
 	Use:   "update",
-	Short: "Update Rally to the latest release",
+	Short: "Update rally and the bundled laps binary to their latest releases",
+	Long: `Update rally to the latest release and upgrade the bundled laps
+companion binary alongside it. Laps is installed next to the rally
+executable so the two travel together; laps remains independently usable.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		exePath, err := os.Executable()
 		if err != nil {
@@ -561,9 +568,28 @@ var updateCmd = &cobra.Command{
 		}
 		if !updated {
 			fmt.Printf("%s is already up to date (%s)\n", app.BinaryName, newVersion)
+		} else {
+			fmt.Printf("Updated %s from %s to %s\n", app.BinaryName, oldVersion, newVersion)
+		}
+
+		// Upgrade the bundled laps binary alongside rally. A laps failure is
+		// non-fatal: rally itself is already updated, and laps stays
+		// independently installable.
+		lapsDest := filepath.Join(filepath.Dir(exePath), release.Laps.BinaryName)
+		lapsCurrent, _ := laps.InstalledVersion()
+		oldLaps, newLaps, lapsUpdated, err := release.UpdateTool(release.Laps, lapsCurrent, lapsDest)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "warning: could not update laps: %v\n", err)
 			return nil
 		}
-		fmt.Printf("Updated %s from %s to %s\n", app.BinaryName, oldVersion, newVersion)
+		switch {
+		case lapsCurrent == "" && lapsUpdated:
+			fmt.Printf("Installed %s %s\n", release.Laps.BinaryName, newLaps)
+		case !lapsUpdated:
+			fmt.Printf("%s is already up to date (%s)\n", release.Laps.BinaryName, newLaps)
+		default:
+			fmt.Printf("Updated %s from %s to %s\n", release.Laps.BinaryName, oldLaps, newLaps)
+		}
 		return nil
 	},
 }

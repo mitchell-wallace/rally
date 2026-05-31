@@ -1,22 +1,16 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Tool-specific env var name
-TOOL_NAME="rally"
-ENV_VAR="${TOOL_NAME^^}_VERSION"
-REPO="mitchell-wallace/${TOOL_NAME}"
+# Rally is distributed with its companion work-queue binary, laps. This
+# installer fetches both so laps is available as a first-class companion
+# alongside rally. Laps remains independently usable.
+RALLY_REPO="mitchell-wallace/rally"
+LAPS_REPO="mitchell-wallace/laps"
 
-# Version resolution: positional arg > env var > latest
-VERSION="${1:-${!ENV_VAR:-}}"
-
-if [ -z "${VERSION}" ]; then
-  # Fetch latest release tag from GitHub API
-  VERSION="$(curl -fsSL "https://api.github.com/repos/${REPO}/releases/latest" \
-    | grep '"tag_name"' | sed 's/.*"v\?\([^"]*\)".*/\1/')"
-fi
-
-# Strip leading 'v' if present for consistency
-VERSION="${VERSION#v}"
+# Version resolution for rally: positional arg > RALLY_VERSION env var > latest.
+RALLY_VERSION="${1:-${RALLY_VERSION:-}}"
+# Laps tracks its own latest release unless pinned via LAPS_VERSION.
+LAPS_VERSION="${LAPS_VERSION:-}"
 
 os_name="$(uname -s)"
 arch_name="$(uname -m)"
@@ -40,24 +34,54 @@ case "$arch_name" in
 esac
 
 dest_dir="${HOME}/.local/bin"
-dest_path="${dest_dir}/${TOOL_NAME}"
 tmp_dir="$(mktemp -d)"
-archive_path="${tmp_dir}/${TOOL_NAME}.tar.gz"
-DOWNLOAD_URL="https://github.com/${REPO}/releases/download/v${VERSION}/${TOOL_NAME}_${os}_${arch}.tar.gz"
 
 cleanup() {
   rm -rf "$tmp_dir"
 }
 trap cleanup EXIT INT TERM
 
-echo "Installing ${TOOL_NAME} v${VERSION}..."
-
 mkdir -p "$dest_dir"
-curl -fsSL "$DOWNLOAD_URL" -o "$archive_path"
-tar -xzf "$archive_path" -C "$tmp_dir"
-install -m 0755 "${tmp_dir}/${TOOL_NAME}" "$dest_path"
-if "$dest_path" version >/dev/null 2>&1; then
-  "$dest_path" version
+
+# resolve_version <repo> <requested>: echo a concrete version, falling back to
+# the latest GitHub release when none was requested.
+resolve_version() {
+  local repo="$1" requested="$2" version
+  version="$requested"
+  if [ -z "$version" ]; then
+    version="$(curl -fsSL "https://api.github.com/repos/${repo}/releases/latest" \
+      | grep '"tag_name"' | sed 's/.*"v\?\([^"]*\)".*/\1/')"
+  fi
+  # Strip leading 'v' if present for consistency.
+  echo "${version#v}"
+}
+
+# install_tool <name> <repo> <version>: download and install a release binary.
+install_tool() {
+  local name="$1" repo="$2" version="$3"
+  local dest_path="${dest_dir}/${name}"
+  local archive_path="${tmp_dir}/${name}.tar.gz"
+  local url="https://github.com/${repo}/releases/download/v${version}/${name}_${os}_${arch}.tar.gz"
+
+  echo "Installing ${name} v${version}..."
+  curl -fsSL "$url" -o "$archive_path"
+  tar -xzf "$archive_path" -C "$tmp_dir"
+  install -m 0755 "${tmp_dir}/${name}" "$dest_path"
+  if "$dest_path" version >/dev/null 2>&1; then
+    "$dest_path" version
+  else
+    "$dest_path" --version
+  fi
+}
+
+rally_version="$(resolve_version "$RALLY_REPO" "$RALLY_VERSION")"
+install_tool "rally" "$RALLY_REPO" "$rally_version"
+
+# Install the bundled laps companion. A laps failure is non-fatal: rally is
+# already installed, and laps can be installed independently later.
+if laps_version="$(resolve_version "$LAPS_REPO" "$LAPS_VERSION")" && [ -n "$laps_version" ]; then
+  install_tool "laps" "$LAPS_REPO" "$laps_version" || \
+    echo "warning: could not install laps; run 'rally update' to retry" >&2
 else
-  "$dest_path" --version
+  echo "warning: could not resolve a laps release; run 'rally update' to retry" >&2
 fi

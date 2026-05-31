@@ -47,9 +47,9 @@
 
 ## 7. Bundle laps alongside rally
 
-- [ ] 7.1 Update `install.sh` to fetch and install a compatible `laps` binary next to `rally` (from https://github.com/mitchell-wallace/laps)
-- [ ] 7.2 Extend the existing `rally update` command (`cmd/rally/main.go:505`) to also upgrade `laps` alongside `rally`
-- [ ] 7.3 Add a startup minimum-laps-version check that warns (not hard-fail) and advises `rally update`
+- [x] 7.1 Update `install.sh` to fetch and install a compatible `laps` binary next to `rally` (from https://github.com/mitchell-wallace/laps)
+- [x] 7.2 Extend the existing `rally update` command (`cmd/rally/main.go:505`) to also upgrade `laps` alongside `rally`
+- [x] 7.3 Add a startup minimum-laps-version check that warns (not hard-fail) and advises `rally update`
 
 ## 8. Tests
 

@@ -155,20 +155,20 @@
       "title": "Wire telemetry emit points, tagging, failures, scrubber",
       "description": "Context: OpenSpec change tidy-rally-runtime-data-storage (specs/telemetry). Builds on the sink scaffolding.\n\nOutcome: Per-try structured log emitted at store.AppendTry (runner.go:1045); relay/run/try modelled as a trace with spans; recognized failures (non-zero exit, panic, agent-exited-without-finalizing, laps-done-as-text, lap-integrity violations) captured as Sentry Issues. Route fallback (rotating to a backup runner) logged as a common recovery event, NOT an Issue. Every event tagged relay_id/run_id/try_id/role/runner/repo/lap_id. A before_send scrubber NEVER ships current_task.md contents or full transcripts (summaries + metadata only).\n\nFiles \u0026 scope: internal/relay/runner.go (emit at try append ~1045 + relay start/end), internal/telemetry (tagging helpers, before_send scrubber). Avoid passing the 120KB current_task.md into any event payload.\n\nDesign: Tags drive filterability (replacing jq over committed jsonl). Scrubber is defense-in-depth even though we already avoid sending the prompt. Relay = transaction, run = span, try = child span; trace id correlates to relay id.\n\nAcceptance: `go build ./...`; with a dummy/disabled sink the emit calls are exercised in tests later; manual review confirms no current_task.md or transcript bytes can reach an event payload.",
       "assignee": "SENIOR",
-      "isDone": false,
+      "isDone": true,
       "createdAt": "2026-05-26T12:42:23.241462233Z",
-      "updatedAt": "2026-05-26T12:42:23.241462233Z",
-      "completedAt": null
+      "updatedAt": "2026-05-31T08:04:55.971296761Z",
+      "completedAt": "2026-05-31T08:04:55.971296761Z"
     },
     {
       "id": "rall-94e4",
       "title": "VERIFY: telemetry sink and instrumentation",
       "description": "Use the openspec-verify-change skill against tidy-rally-runtime-data-storage, then focus on the telemetry capability: opt-in gating, tagging, failure capture, scrubbing, and bounded flush.\n\nBefore diffing: confirm merge target and the batch's first lap; earlier work is baseline.\n\nChecks: confirm no-DSN = no-op/no network; SENTRY_DSN overrides config; RALLY_TELEMETRY=0 kills it; every emit path carries the required tags; the before_send scrubber removes current_task.md/transcripts; flush is bounded; route fallback is logged as common event not Issue. `go build ./...` and `go test ./...`. Report findings first; `laps add head` focused fixes for substantive gaps (tiny one-liners only here). Do not rewrite git history.",
       "assignee": "VERIFY",
-      "isDone": false,
+      "isDone": true,
       "createdAt": "2026-05-26T12:42:23.252865758Z",
-      "updatedAt": "2026-05-26T12:42:23.252865758Z",
-      "completedAt": null
+      "updatedAt": "2026-05-31T08:11:11.830373405Z",
+      "completedAt": "2026-05-31T08:11:11.830373405Z"
     },
     {
       "id": "rall-3e96",
