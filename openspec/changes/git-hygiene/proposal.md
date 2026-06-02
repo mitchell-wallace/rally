@@ -45,8 +45,8 @@ streaks) are dropped as moot.
   separate `rally: update state` commit in the common path by folding the
   `summary.jsonl` append into the run's work commit (the `autoCommit` function's
   `git add -A` at finalization already stages it). Keep a minimal amend-fallback
-  for no-code runs: if HEAD is a rally-authored commit (by the
-  `GitUserFallbackConfig` identity), amend HEAD; otherwise create a single
+  for no-code runs: if HEAD's commit message has the `rally:` prefix, amend HEAD
+  with `[+state]` appended to the message; otherwise create a single
   `rally: update state` commit (no stacking).
 
 ## Capabilities
@@ -58,8 +58,8 @@ streaks) are dropped as moot.
 
 ## Impact
 
-- **Code**: `cmd/rally/main.go` and `internal/cli/hooks.go` (post-init /
-  post-hook-install commit), `internal/laps/laps-done-hook.sh` and
+- **Code**: `cmd/rally/main.go` (post-init commit at `runInit`, post-hook-install
+  commit after `laps.InstallHooks`), `internal/laps/laps-done-hook.sh` and
   `internal/laps/laps-handoff-hook.sh` (wrapup commit instruction),
   `internal/relay/runner.go` (leftover-work detection at run start,
   `autoCommit` at finalization, `CommitRallyState` call-site removal),
@@ -69,7 +69,7 @@ streaks) are dropped as moot.
 - **Coordination with `tidy-rally-runtime-data-storage` (#2)**: #2 owns the
   `.rally/.gitignore` template (`state/`), removal of the stray `.laps/.gitignore`,
   and tracking `.laps/laps.json`. After #2's relocation, `CommitRallyState`'s
-  `.rally/*.jsonl` glob matches only `summary.jsonl` — the implementer SHALL retire
+  tracked-path set contains only `summary.jsonl` among churning data files — the implementer SHALL retire
   `CommitRallyState` entirely (its only remaining purpose, the standalone
   `rally: update state` commit, is superseded by the fold + amend-fallback).
 - **Out of scope**: `.gitattributes` diff-suppression (there is no tracked log

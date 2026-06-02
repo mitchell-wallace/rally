@@ -8,7 +8,7 @@ Three things write to git in a rally workspace today, and all three are untidy:
 2. **Agent work** — agents commit ad-hoc (or not), and the `laps done`/`laps handoff`
    wrapup prompt never tells them to commit, so lap boundaries are not reliable
    commit points.
-3. **Rally state** — `CommitRallyState` (`gitx/git.go`, stages `.rally/*.jsonl`,
+3. **Rally state** — `CommitRallyState` (`gitx/git.go`, stages explicit paths from
    message `rally: update state`), plus the window truncate/archive commits
    (`store/window.go`), interleave with the real work commit
    (`rally: run N attempt M`, `runner.autoCommit`).
@@ -55,31 +55,36 @@ on handoff. This rides the existing hook-script path rather than adding a rally-
 git call, keeping the agent's working tree and rally's view consistent (the agent
 commits its own work in its own process).
 
-**2b. Leftover-work commit guidance at run start.**
+**3. Leftover-work commit guidance at run start.**
 When `internal/relay/runner.go` starts a run, it shall check for uncommitted changes
-via `git status --porcelain`. If the working tree is dirty (leftovers from a previous
-agent that did not finish its run), the initial prompt shall dynamically instruct the
-agent to commit those changes first before beginning its assigned work. This guidance
-is omitted when the tree is clean.
+using `IsWorkspaceDirty` (which excludes rally-tracked files under `.rally/`). If the
+working tree is dirty outside of rally's own files (leftovers from a previous agent
+that did not finish its run), the initial prompt shall dynamically instruct the agent
+to commit those changes first before beginning its assigned work. This guidance is
+omitted when the tree is clean or only rally-tracked files are dirty.
 
-**3. Fold state into the work commit; amend-fallback only.**
+**4. Fold state into the work commit; amend-fallback only.**
 Eliminate the separate state commit rather than squash it. The run's work commit
 (`runner.autoCommit`) already runs `git add -A` at finalization, which stages the
 `summary.jsonl` append, so there is no standalone `rally: update state` commit in the
 common path. Keep one cheap insurance path for no-code runs where only state changes
-remain: check HEAD's author. If HEAD is a rally-authored commit (author matches
-`GitUserFallbackConfig` identity), amend HEAD with the new state, reusing the
-existing commit message. If HEAD is not rally-authored, create a single
-`rally: update state` commit (no stacking of consecutive state commits). This
-replaces the original elaborate auto-squash. A "rally-authored commit" is any commit
-whose author equals the `GitUserFallbackConfig` identity. Alternative considered:
-keep `CommitRallyState` as-is and squash streaks post-hoc — rejected; after #2 there
-are no streaks to squash, and folding is simpler and leaves linear history.
+remain: check HEAD's commit message. If HEAD's message has the `rally:` prefix,
+amend HEAD with the new state and append ` [+state]` to the commit message (e.g.
+`rally: run 3 attempt 1 (claude) [+state]`). If HEAD is not a `rally:`-prefixed
+commit, create a single `rally: update state` commit (no stacking of consecutive
+state commits). This replaces the original elaborate auto-squash. Using the
+`rally:` message prefix is simpler and more reliable than author-identity matching
+(because `GitUserFallbackConfig` is a fallback — in repos with configured
+`user.name`/`user.email`, rally-authored commits use the user's identity and would
+not match the fallback). Alternative considered: keep `CommitRallyState` as-is and
+squash streaks post-hoc — rejected; after #2 there are no streaks to squash, and
+folding is simpler and leaves linear history.
 
-**4. Retire `CommitRallyState`.**
-After #2's relocation, `CommitRallyState`'s `.rally/*.jsonl` glob matches only
-`summary.jsonl`, which the fold (Decision 3) already stages. The implementer SHALL
-remove `CommitRallyState` entirely — the amend-fallback is a simpler conditional at
+**5. Retire `CommitRallyState`.**
+After #2's relocation, `CommitRallyState`'s tracked-path set contains only
+`summary.jsonl` among churning data files — which the fold (Decision 4) already
+stages. The implementer SHALL remove `CommitRallyState` entirely — the amend-fallback
+is a simpler conditional at
 the single call site (`runner.go` in the run-attempt loop) and does not need a
 separate function. Do not leave a glob that silently does almost nothing.
 
@@ -93,9 +98,10 @@ separate function. Do not leave a glob that silently does almost nothing.
   `git add -A` in `autoCommit`, so worst case is a less granular history, not lost work.
   Downstream tooling that expects per-lap commits must tolerate gaps.
 - **Leftover-work detection false positives** → a dirty tree at run start may be the
-  user's own intentional changes, not agent leftovers. The prompt shall instruct the
-  agent to commit them (the agent can decide if it's appropriate); the user can
-  always revert.
+  user's own intentional changes, not agent leftovers. The prompt gives advisory
+  guidance: code changes must be committed (upfront or folded into the end-of-run
+  commit); docs/config-only changes are optional. Using `IsWorkspaceDirty` excludes
+  rally's own tracked files from triggering the guidance.
 - **Fold changes when `summary.jsonl` lands in history** → it now appears in the work
   commit instead of a dedicated state commit; documented, and acceptable since it is
   the same content under a clearer message.

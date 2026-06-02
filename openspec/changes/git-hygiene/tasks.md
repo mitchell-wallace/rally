@@ -1,7 +1,7 @@
 ## 1. Auto-commit on init and hook install
 
 - [ ] 1.1 After `rally init` (`cmd/rally/main.go` `runInit`), stage the tracked setup files and commit `rally: initialize workspace` with `--no-verify`, only if something is staged
-- [ ] 1.2 After laps-hook install (`internal/cli/hooks.go`), stage `.laps/hooks.json` / `.laps/laps.json` (and any modified tracked files) and commit `rally: install laps hooks` with `--no-verify`, only if something is staged
+- [ ] 1.2 After laps-hook install (`cmd/rally/main.go`, near the `laps.InstallHooks` call in `rally start`), stage `.laps/hooks.json` / `.laps/laps.json` (and any modified tracked files) and commit `rally: install laps hooks` with `--no-verify`, only if something is staged
 - [ ] 1.3 Stage against the file set / gitignore that `tidy-rally-runtime-data-storage` declares tracked — do not redefine the gitignore or file list here
 - [ ] 1.4 Tests: init in a clean repo produces exactly one setup commit; re-running init is a no-op (nothing staged → no commit); concurrent `rally start` instances do not produce duplicate commits
 
@@ -10,21 +10,21 @@
 - [ ] 2.1 Add a commit instruction to the `laps done` hook script (`internal/laps/laps-done-hook.sh`) with message `<lap-description>: done`
 - [ ] 2.2 Add a commit instruction to the `laps handoff` hook script (`internal/laps/laps-handoff-hook.sh`) with message `<lap-description>: in progress (handoff)`
 - [ ] 2.3 Tests/fixtures: assert each hook script's wrapup output contains the commit instruction with the correct message form
-- [ ] 2.4 Leftover-work detection: at run start in `internal/relay/runner.go`, check for uncommitted changes via `git status --porcelain`; when dirty, inject a commit-first instruction into the initial prompt; when clean, omit it
-- [ ] 2.5 Tests: dirty tree at run start → prompt contains leftover-work commit guidance; clean tree → prompt does not contain it
+- [ ] 2.4 Leftover-work detection: at run start in `internal/relay/runner.go`, check for uncommitted non-rally changes via `IsWorkspaceDirty` (excludes `.rally/`); when dirty, inject an advisory commit-first instruction into the initial prompt (code changes must be committed; docs/config-only may be left); when clean, omit it
+- [ ] 2.5 Tests: dirty tree outside `.rally/` → prompt contains leftover-work commit guidance; clean tree → prompt does not contain it; only `.rally/` files dirty → no guidance
 
 ## 3. Fold state into the work commit
 
 - [ ] 3.1 Confirm `runner.autoCommit`'s `git add -A` stages the `summary.jsonl` append, so no standalone state commit is needed in the common path
 - [ ] 3.2 Remove the `CommitRallyState` call from the common finalization path in `runner.go` (run-attempt loop)
-- [ ] 3.3 Add the amend-fallback for no-code runs: at finalization, if HEAD is a rally-authored commit (author matches `GitUserFallbackConfig` identity), amend HEAD reusing its message; otherwise create a single `rally: update state` commit
-- [ ] 3.4 Remove `CommitRallyState` from `internal/gitx/git.go` — its `.rally/*.jsonl` glob matches only `summary.jsonl` after #2 and the amend-fallback handles the remaining case inline
+- [ ] 3.3 Add the amend-fallback for no-code runs: at finalization, if HEAD's commit message has the `rally:` prefix, amend HEAD appending ` [+state]` to its message; otherwise create a single `rally: update state` commit. Also handle the no-changes case: skip both amend and new commit if nothing is staged
+- [ ] 3.4 Remove `CommitRallyState` and `rallyTrackedStatePaths` from `internal/gitx/git.go` — the variable has no other callers and the amend-fallback handles the remaining case inline
 - [ ] 3.5 Tests: a code-producing run yields one work commit containing the `summary.jsonl` line and no separate state commit; a no-code run with rally-authored HEAD amends; a no-code run with non-rally HEAD creates a single `rally: update state` commit
 
 ## 4. Docs, tests & coordination
 
 - [ ] 4.1 Document the commit conventions (setup, lap-boundary, folded state, leftover-work guidance) in `AGENTS.md`/`README.md`
-- [ ] 4.2 Confirm sequencing: this change lands after `tidy-rally-runtime-data-storage` so the gitignore/state layout it commits against exists. Verify `rallyTrackedStatePaths` in `gitx/git.go` contains only `summary.jsonl` and no legacy JSONL paths.
+- [ ] 4.2 Confirm sequencing: this change lands after `tidy-rally-runtime-data-storage` so the gitignore/state layout it commits against exists. Verify the tracked-file set correctly reflects all files #2 declares tracked (`.rally/.gitignore`, `.rally/README.md`, `.rally/config.toml`, `.rally/instructions.md`, `.rally/agents`, `.rally/summary.jsonl`) with no missing, extra, or legacy state files
 - [ ] 4.3 Tests: init in a dirty working tree (user has unstaged changes) does not accidentally commit them
 - [ ] 4.4 Tests: hook install re-run is idempotent (no duplicate commit)
 - [ ] 4.5 Tests: commit messages with special characters (quotes, newlines) in lap descriptions are handled safely
