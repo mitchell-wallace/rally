@@ -2,3 +2,4 @@
 {"agent_type":"claude","event_type":"paused","timestamp":"2026-06-03T05:23:48Z","relay_id":14,"reason":"3 consecutive try failures"}
 {"agent_type":"opencode","event_type":"paused","timestamp":"2026-06-03T05:23:49Z","relay_id":14,"reason":"3 consecutive try failures"}
 {"agent_type":"codex","event_type":"paused","timestamp":"2026-06-03T06:19:10Z","relay_id":14,"reason":"3 consecutive try failures"}
+{"agent_type":"antigravity","event_type":"retry_failed","timestamp":"2026-06-03T06:21:16Z","relay_id":14,"reason":"hourly retry failed"}

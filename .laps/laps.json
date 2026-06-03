@@ -72,11 +72,11 @@
       "title": "Verify final-snippet parsing normalization and persistence",
       "description": "Context: Review the completed rally-083-polish OpenCode parsing, runner normalization, and persistence-cap slices. Use the openspec-verify-change skill against rally-083-polish, focusing on tasks 3.1-4.4 and the executor, relay-runner, and store specs.\\n\\nVerification: Identify the intended branch target/base before diffing and identify the first lap/try in this batch; treat earlier branch work as pre-existing. Inspect the diff, run focused tests, and confirm raw transcripts cannot reach Summary through the covered paths.\\n\\nConstraints: Do not rewrite git history. Fix only tiny safe one-liners; add focused head laps for substantive gaps.",
       "assignee": "VERIFY",
-      "isDone": false,
+      "isDone": true,
       "order": 327680,
       "createdAt": "2026-06-03T03:56:54.690567192Z",
-      "updatedAt": "2026-06-03T03:56:54.690567192Z",
-      "completedAt": null
+      "updatedAt": "2026-06-03T06:26:53.501838576Z",
+      "completedAt": "2026-06-03T06:26:53.501838576Z"
     },
     {
       "id": "rall-3649",
