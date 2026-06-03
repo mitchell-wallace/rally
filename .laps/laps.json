@@ -6,11 +6,11 @@
       "title": "Raise stall threshold and verify slowing window",
       "description": "Context: Implement OpenSpec change rally-083-polish tasks 2.1-2.3. Read proposal.md, design.md, specs/relay-runner/spec.md, and tasks.md.\\n\\nOutcome: Unset stall_threshold_secs defaults to 900 seconds, the monitor slowing indicator remains derived at 0.6x, and reliability.DefaultStallThreshold remains unchanged.\\n\\nFiles \u0026 scope: Focus on internal/config/config_v2.go, internal/monitor/monitor.go, and their existing tests. Document the accepted global-15m/opencode-idle trade-off in the config comment.\\n\\nAcceptance: Add or update focused tests for the config default and slowing window, run relevant Go tests, and mark tasks 2.1-2.3 complete in tasks.md.",
       "assignee": "JUNIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 65536,
       "createdAt": "2026-06-03T03:56:54.626643483Z",
-      "updatedAt": "2026-06-03T03:56:54.626643483Z",
-      "completedAt": null
+      "updatedAt": "2026-06-03T04:31:57.984016173Z",
+      "completedAt": "2026-06-03T04:31:57.984016173Z"
     },
     {
       "id": "rall-6d37",
