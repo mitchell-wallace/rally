@@ -111,10 +111,19 @@ func CommitRallyState(dir string) error {
 			}
 			return err
 		}
-		existingTrackedPaths = append(existingTrackedPaths, path)
 		if _, err := GitOutput(dir, "add", path); err != nil {
+			// Tolerate operator-gitignored .rally operational paths: skip the
+			// path silently (never `-f`, never abort) so the remaining tracked
+			// state still commits. Confirm the add actually failed because the
+			// path is gitignored before swallowing the error, so unrelated git
+			// failures still surface. This tolerance is scoped to these .rally
+			// operational paths and never applies to .laps/laps.json.
+			if pathIsGitIgnored(dir, path) {
+				continue
+			}
 			return err
 		}
+		existingTrackedPaths = append(existingTrackedPaths, path)
 	}
 	if len(existingTrackedPaths) == 0 {
 		return nil
@@ -138,6 +147,16 @@ func CommitRallyState(dir string) error {
 		return err
 	}
 	return nil
+}
+
+// pathIsGitIgnored reports whether path is excluded by a .gitignore rule.
+// It uses `git check-ignore`, which exits 0 when the path is ignored, 1 when it
+// is not, and 2 on error. Only a clean exit 0 is treated as ignored, so an
+// unrelated git failure (exit 2) does not get mistaken for the ignored
+// condition and continues to surface to the caller.
+func pathIsGitIgnored(dir, path string) bool {
+	cmd := exec.Command("git", "-C", dir, "check-ignore", "-q", "--", path)
+	return cmd.Run() == nil
 }
 
 var rallyTrackedStatePaths = []string{

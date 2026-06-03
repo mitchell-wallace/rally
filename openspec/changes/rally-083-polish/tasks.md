@@ -33,9 +33,9 @@
 
 ## 6. gitx gitignore tolerance (item 4)
 
-- [ ] 6.1 In `CommitRallyState` (`internal/gitx/git.go`), detect the "paths are ignored by .gitignore" condition on `git add` for `.rally` operational paths and skip that path silently (no `-f`, no error), continuing with remaining tracked paths
-- [ ] 6.2 Ensure default tracked `.rally` paths explicitly include `.rally/config.toml` and `.rally/summary.jsonl`; do not extend this skip behavior to `.laps/laps.json`
-- [ ] 6.3 Add a test that a gitignored `.rally` tracked path is skipped without error and other `.rally` paths still commit
+- [x] 6.1 In `CommitRallyState` (`internal/gitx/git.go`), detect the "paths are ignored by .gitignore" condition on `git add` for `.rally` operational paths and skip that path silently (no `-f`, no error), continuing with remaining tracked paths
+- [x] 6.2 Ensure default tracked `.rally` paths explicitly include `.rally/config.toml` and `.rally/summary.jsonl`; do not extend this skip behavior to `.laps/laps.json`
+- [x] 6.3 Add a test that a gitignored `.rally` tracked path is skipped without error and other `.rally` paths still commit
 
 ## 7. Agent prompt restructure (item 7 + headless)
 
