@@ -39,11 +39,11 @@
       "title": "Cap persisted final-snippet fields at 3000 runes",
       "description": "Context: Implement OpenSpec change rally-083-polish tasks 4.1-4.4. Read design.md and specs/store/spec.md.\\n\\nOutcome: Try and progress persistence cap each specified free-text field to 3000 runes with head+tail truncation and an explicit marker, while preserving within-cap text verbatim.\\n\\nFiles \u0026 scope: Cover internal/store TryRecord Summary and RemainingWork plus internal/progress RunEntry Summary, HandoffEntry Summary, and each Followups string. Reuse or extract the recent-context marker style.\\n\\nDesign: Enforce the durable cap at write boundaries and keep summary.jsonl append-only.\\n\\nAcceptance: Add store and progress tests for oversized Unicode/rune-aware fields and unchanged small fields, run relevant Go tests, and mark tasks 4.1-4.4 complete in tasks.md.",
       "assignee": "SENIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 262144,
       "createdAt": "2026-06-03T03:56:54.675991721Z",
-      "updatedAt": "2026-06-03T03:56:54.675991721Z",
-      "completedAt": null
+      "updatedAt": "2026-06-03T05:52:32.574301353Z",
+      "completedAt": "2026-06-03T05:52:32.574301353Z"
     },
     {
       "id": "rall-9180",
