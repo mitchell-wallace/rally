@@ -112,6 +112,12 @@ var stallCheckInterval = monitor.TickInterval
 const builtInDefaultFallback = "Continue the relay run. Review the current state of the codebase and continue making progress on the project."
 const incompleteRetryGuidance = "The last run was incomplete. Check any current git changes, finish anything not done, verify correctness, commit when good, then run `laps done`."
 
+const (
+	finalSnippetFallbackRuneLimit = 1000
+	finalSnippetTailMarker        = "... [tail truncated] ..."
+	noFinalSnippetIndicator       = "(agent produced no final summary)"
+)
+
 // waitOutcome enumerates how a waitWithCountdown call ended.
 type waitOutcome int
 
@@ -670,6 +676,7 @@ func (r *Runner) runOne(
 ) (bool, bool, bool, string, reliability.FailureClass, int, error) {
 	// Initialize run-state for this run.
 	runID := fmt.Sprintf("relay-%d-run-%d", relay.ID, runIndex+1)
+	summaryEntryCountBeforeRun := progressSummaryEntryCount(r.cfg.WorkspaceDir)
 	_ = progress.SaveRunState(r.cfg.WorkspaceDir, newProgressRunState(runID, task.LapID))
 
 	inbox := ""
@@ -916,6 +923,12 @@ attemptLoop:
 
 		headAfter, _ := r.headHash()
 
+		normalizedSummary := r.normalizeFinalSnippet(runID, tryLogPath, summaryEntryCountBeforeRun, result, execErr)
+		if result == nil {
+			result = &agent.TryResult{}
+		}
+		result.Summary = normalizedSummary
+
 		runStateAfter, _ := progress.LoadRunState(r.cfg.WorkspaceDir)
 		recordedLaps := []string{}
 		lapsAttempted := []store.LapAttempt{}
@@ -1117,9 +1130,6 @@ attemptLoop:
 				// Prefer the agent-reported list if it gave one.
 				tryRecord.FilesChanged = result.FilesChanged
 			}
-		}
-		if execErr != nil && tryRecord.Summary == "" {
-			tryRecord.Summary = execErr.Error()
 		}
 		fmt.Fprintf(log, "relay %d run %d attempt %d result: completed=%v fail_reason=%q runtime=%s files_changed=%d tool_calls=%d commit=%q lap_id=%q assignee=%q recorded_laps=%v laps_attempted=%v handoff_state=%d\n",
 			relay.ID, runIndex+1, attempt, !failed, failReason, runtime, filesChangedCount, tryRecord.ToolCalls, shortHash, task.LapID, task.Assignee, recordedLaps, lapsAttempted, handoffState)
@@ -1535,6 +1545,97 @@ func progressLapsCompletedForRun(workspaceDir, runID string) []string {
 	return out
 }
 
+// normalizeFinalSnippet selects the one summary value used by retry prompts,
+// try records, and synthesized summary entries. An explicit progress wrapup is
+// authoritative; executor summaries are the next-best structured source.
+func (r *Runner) normalizeFinalSnippet(runID, tryLogPath string, summaryEntryCountBefore int, result *agent.TryResult, execErr error) string {
+	if summary := recordedWrapupSummaryForRun(r.cfg.WorkspaceDir, runID, summaryEntryCountBefore); summary != "" {
+		return summary
+	}
+	if result != nil && strings.TrimSpace(result.Summary) != "" {
+		return result.Summary
+	}
+	if tail := boundedFinalSnippetTail(readTryLog(tryLogPath), finalSnippetFallbackRuneLimit); tail != "" {
+		return tail
+	}
+	if execErr != nil {
+		return finalSnippetErrorIndicator(execErr)
+	}
+	return noFinalSnippetIndicator
+}
+
+func progressSummaryEntryCount(workspaceDir string) int {
+	entries, err := progress.LoadSummaryEntries(workspaceDir)
+	if err != nil {
+		return 0
+	}
+	return len(entries)
+}
+
+func recordedWrapupSummaryForRun(workspaceDir, runID string, firstNewEntry int) string {
+	if runID == "" {
+		return ""
+	}
+	entries, err := progress.LoadSummaryEntries(workspaceDir)
+	if err != nil {
+		return ""
+	}
+	if firstNewEntry < 0 {
+		firstNewEntry = 0
+	}
+	for i := len(entries) - 1; i >= firstNewEntry; i-- {
+		entry := entries[i]
+		if entry.RunID != runID {
+			continue
+		}
+		if strings.TrimSpace(entry.Summary) != "" {
+			return entry.Summary
+		}
+		if entry.Handoff != nil && strings.TrimSpace(entry.Handoff.Summary) != "" {
+			return entry.Handoff.Summary
+		}
+	}
+	return ""
+}
+
+func readTryLog(path string) string {
+	if path == "" {
+		return ""
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return ""
+	}
+	return string(data)
+}
+
+func boundedFinalSnippetTail(text string, maxRunes int) string {
+	text = strings.TrimSpace(text)
+	if text == "" || maxRunes <= 0 {
+		return ""
+	}
+	runes := []rune(text)
+	if len(runes) <= maxRunes {
+		return text
+	}
+
+	marker := []rune(finalSnippetTailMarker)
+	if maxRunes <= len(marker) {
+		return string(marker[:maxRunes])
+	}
+	tailSize := maxRunes - len(marker)
+	return string(marker) + string(runes[len(runes)-tailSize:])
+}
+
+func finalSnippetErrorIndicator(err error) string {
+	const prefix = "harness error: "
+	detail := strings.Join(strings.Fields(err.Error()), " ")
+	if detail == "" {
+		return strings.TrimSpace(prefix)
+	}
+	return prefix + boundedFinalSnippetTail(detail, finalSnippetFallbackRuneLimit-len([]rune(prefix)))
+}
+
 func validatePinnedLap(pinnedLapID string, recordedLaps []string) (string, bool) {
 	if pinnedLapID == "" || len(recordedLaps) == 0 {
 		return "", false
@@ -1591,13 +1692,6 @@ func containsInt(slice []int, val int) bool {
 	return false
 }
 
-func truncate(s string, n int) string {
-	if len(s) <= n {
-		return s
-	}
-	return s[:n]
-}
-
 // maybeWriteStubAndClearState writes a stub progress entry when the agent left
 // run-state on disk (i.e. it never finalized via `laps done`/`laps handoff`).
 // It returns wroteUnfinalized=true whenever it had to synthesize that stub so
@@ -1630,7 +1724,7 @@ func (r *Runner) maybeWriteStubAndClearState(lastOutput string) (bool, error) {
 
 	entry := progress.RunEntry{
 		RunID:         rs.RunID,
-		Summary:       truncate(summary, 160),
+		Summary:       summary,
 		LapsCompleted: lapsCompleted,
 	}
 	_ = progress.AppendRunEntry(r.cfg.WorkspaceDir, entry)

@@ -14,9 +14,9 @@
 
 - [x] 3.1 In `parseOpenCodeOutput` (`internal/agent/opencode.go`), stop emitting raw stdout as `Summary`; on empty/unparseable output return `Completed=false` with a short bounded indicator
 - [x] 3.2 Apply the corrected event extraction from task 1.3: ordered `text` / `part.text`, tool counting, `step_finish` completion detection, process exit status, and top-level `error` events with bounded `error.data.message` / `ref`
-- [ ] 3.3 Add a runner-level final-snippet normalization path so persisted `TryResult.Summary` uses `laps wrapup` summary when recorded, otherwise parsed final assistant / structured summary text, otherwise a bounded tail or explicit no-finalization/error indicator
-- [ ] 3.4 Ensure retry context, `tries.jsonl`, and `summary.jsonl` use the normalized final snippet consistently; preserve append-only JSONL storage for `summary.jsonl`
-- [ ] 3.5 Add tests covering opencode no-text/error fallback (no raw dump), wrapup-as-golden-source, parsed-final-message fallback, bounded-tail fallback, and consistency across retry context / persisted records
+- [x] 3.3 Add a runner-level final-snippet normalization path so persisted `TryResult.Summary` uses `laps wrapup` summary when recorded, otherwise parsed final assistant / structured summary text, otherwise a bounded tail or explicit no-finalization/error indicator
+- [x] 3.4 Ensure retry context, `tries.jsonl`, and `summary.jsonl` use the normalized final snippet consistently; preserve append-only JSONL storage for `summary.jsonl`
+- [x] 3.5 Add tests covering opencode no-text/error fallback (no raw dump), wrapup-as-golden-source, parsed-final-message fallback, bounded-tail fallback, and consistency across retry context / persisted records
 
 ## 4. Persisted field cap (item 3)
 
