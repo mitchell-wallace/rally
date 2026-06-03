@@ -46,6 +46,28 @@
       "completedAt": "2026-06-03T05:52:32.574301353Z"
     },
     {
+      "id": "work-eaf2",
+      "title": "Harden non-opencode executor summary fallbacks",
+      "description": "Context: Follow up rally-083-polish tasks 3.3-3.5. The verify pass found that  and  still return raw command output on malformed or missing structured results, and  currently treats any non-empty executor summary as trusted final text. That means raw transcripts can still persist through , retry context, and  outside the OpenCode path.\n\nOutcome: Claude/Gemini malformed/no-result paths no longer leak raw transcript output into persisted summaries. Use bounded final text or explicit indicators that satisfy the executor + relay-runner final-snippet semantics without regressing successful structured summaries.\n\nFiles \u0026 scope: Focus on , , and  only if runner-side discrimination is the cleanest fix. Add focused tests proving malformed/missing structured output cannot persist raw transcripts through retry context, try records, or summary.jsonl.\n\nAcceptance: ok  \tgithub.com/mitchell-wallace/rally/internal/agent\t(cached)\nok  \tgithub.com/mitchell-wallace/rally/internal/relay\t(cached)\nok  \tgithub.com/mitchell-wallace/rally/internal/progress\t(cached) passes and the new tests explicitly cover the raw-transcript regression path for non-opencode executors.",
+      "assignee": "SENIOR",
+      "isDone": false,
+      "order": 196608,
+      "createdAt": "2026-06-03T06:00:18.062572101Z",
+      "updatedAt": "2026-06-03T06:00:18.062572101Z",
+      "completedAt": null
+    },
+    {
+      "id": "work-dd06",
+      "title": "Verify non-opencode summary fallback hardening",
+      "description": "Context: Follow up rally-083-polish final-snippet normalization after the executor-summary gap found in verification. Review the implementation lap that hardens malformed Claude/Gemini fallback summaries so raw command output cannot flow into TryRecord.Summary, retry context, or summary.jsonl through runner normalization.\n\nVerification: Diff only the new follow-up work, run focused executor/runner/progress tests, and confirm malformed or missing structured output now falls back to bounded final text or explicit indicators instead of raw transcripts.\n\nConstraints: Do not rewrite git history. Fix only tiny safe one-liners; otherwise add another focused lap if a substantive gap remains.",
+      "assignee": "VERIFY",
+      "isDone": false,
+      "order": 262144,
+      "createdAt": "2026-06-03T06:00:08.970342375Z",
+      "updatedAt": "2026-06-03T06:00:08.970342375Z",
+      "completedAt": null
+    },
+    {
       "id": "rall-9180",
       "title": "Verify final-snippet parsing normalization and persistence",
       "description": "Context: Review the completed rally-083-polish OpenCode parsing, runner normalization, and persistence-cap slices. Use the openspec-verify-change skill against rally-083-polish, focusing on tasks 3.1-4.4 and the executor, relay-runner, and store specs.\\n\\nVerification: Identify the intended branch target/base before diffing and identify the first lap/try in this batch; treat earlier branch work as pre-existing. Inspect the diff, run focused tests, and confirm raw transcripts cannot reach Summary through the covered paths.\\n\\nConstraints: Do not rewrite git history. Fix only tiny safe one-liners; add focused head laps for substantive gaps.",
