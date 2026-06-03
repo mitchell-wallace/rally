@@ -125,6 +125,60 @@ func TestRenderStatusExtIndicators(t *testing.T) {
 	}
 }
 
+func TestRenderStatusExtRetryField(t *testing.T) {
+	got := RenderStatusExt(
+		2*time.Minute, 1, 5*time.Second, nil, Indicators{Retry: "retry 3/5"},
+	)
+	if !containsString(got, "retry 3/5") {
+		t.Errorf("expected status line to contain inline retry field, got %q", got)
+	}
+
+	// No retry field on a plain status line.
+	plain := RenderStatusExt(2*time.Minute, 1, 5*time.Second, nil, Indicators{})
+	if containsString(plain, "retry") {
+		t.Errorf("expected no retry field when unset, got %q", plain)
+	}
+}
+
+func TestMonitorSetRetry(t *testing.T) {
+	dir := t.TempDir()
+	initGitRepo(t, dir)
+	logPath := filepath.Join(dir, "try.log")
+	os.WriteFile(logPath, []byte("data"), 0o644)
+
+	m := NewMonitor(dir, logPath, 0)
+
+	// First attempt: no retry field.
+	m.SetRetry(1, 5)
+	line, err := m.Tick()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if containsString(line, "retry") {
+		t.Errorf("expected no retry field on attempt 1, got %q", line)
+	}
+
+	// Retrying: inline retry N/M field appears.
+	m.SetRetry(2, 5)
+	line, err = m.Tick()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !containsString(line, "retry 2/5") {
+		t.Errorf("expected inline 'retry 2/5' field, got %q", line)
+	}
+
+	// A non-positive budget clears the field.
+	m.SetRetry(3, 0)
+	line, err = m.Tick()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if containsString(line, "retry") {
+		t.Errorf("expected retry field cleared for non-positive budget, got %q", line)
+	}
+}
+
 func TestMonitorSlowingIndicator(t *testing.T) {
 	dir := t.TempDir()
 	initGitRepo(t, dir)

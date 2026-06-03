@@ -27,9 +27,9 @@
 
 ## 5. Retry console + run-level tally (item 2)
 
-- [ ] 5.1 Add an inline `retry N/M` field to the live status line (`internal/monitor`) driven by the current attempt/budget; remove any per-retry console block
-- [ ] 5.2 Change the final relay summary tally (`internal/relay/runner.go` ~600-609) to count each run once — pass if it ever completed, fail only if retries exhausted — aggregating over runs, not raw `TryRecord`s
-- [ ] 5.3 Add tests for the run-level tally (retry-then-success ⇒ 1 pass; all-exhausted ⇒ 1 fail) and the status-line retry field
+- [x] 5.1 Add an inline `retry N/M` field to the live status line (`internal/monitor`) driven by the current attempt/budget; remove any per-retry console block
+- [x] 5.2 Change the final relay summary tally (`internal/relay/runner.go` ~600-609) to count each run once — pass if it ever completed, fail only if retries exhausted — aggregating over runs, not raw `TryRecord`s
+- [x] 5.3 Add tests for the run-level tally (retry-then-success ⇒ 1 pass; all-exhausted ⇒ 1 fail) and the status-line retry field
 
 ## 6. gitx gitignore tolerance (item 4)
 

@@ -20,6 +20,7 @@ const TickInterval = 1 * time.Second
 // Zero value means "nothing to show".
 type Indicators struct {
 	Reliability string // e.g. "❄ stalled", "⚠ slowing", "↻ recovered"
+	Retry       string // e.g. "retry 2/5"; empty on the first attempt
 }
 
 // RenderStatus formats a status line.
@@ -40,6 +41,9 @@ func RenderStatusExt(elapsed time.Duration, dirtyCount int, lastActivity time.Du
 		fmt.Sprintf("⏱ %s", elapsedStr),
 		fmt.Sprintf("📁 %d file%s", dirtyCount, plural(dirtyCount)),
 		fmt.Sprintf("last activity: %s", activityStr),
+	}
+	if ind.Retry != "" {
+		parts = append(parts, ind.Retry)
 	}
 
 	line := strings.Join(parts, "  │  ")
@@ -360,6 +364,9 @@ type Monitor struct {
 	recovered      bool
 	recoveredTicks int // counts steady ticks after recovery; clears indicator
 
+	// Retry state: rendered inline as "retry N/M" when set.
+	retry string
+
 	ticker *time.Ticker
 	stopCh chan struct{}
 	mu     sync.Mutex
@@ -438,6 +445,8 @@ func (m *Monitor) Tick() (string, error) {
 func (m *Monitor) computeIndicators(lastActivity time.Duration) Indicators {
 	var ind Indicators
 
+	ind.Retry = m.retry
+
 	// Reliability indicator priority: stalled > recovered > slowing
 	if m.stalled {
 		ind.Reliability = "❄ stalled"
@@ -506,6 +515,20 @@ func (m *Monitor) SetProcessGroupID(pgid int) {
 func (m *Monitor) SetStallThreshold(d time.Duration) {
 	m.mu.Lock()
 	m.stallThreshold = d
+	m.mu.Unlock()
+}
+
+// SetRetry sets the inline "retry N/M" status field from the current attempt
+// and retry budget. The field is shown only while retrying (attempt > 1); the
+// first attempt and any non-positive budget clear it. This replaces printing a
+// separate console block per retry attempt.
+func (m *Monitor) SetRetry(attempt, maxAttempts int) {
+	m.mu.Lock()
+	if attempt > 1 && maxAttempts > 0 {
+		m.retry = fmt.Sprintf("retry %d/%d", attempt, maxAttempts)
+	} else {
+		m.retry = ""
+	}
 	m.mu.Unlock()
 }
 

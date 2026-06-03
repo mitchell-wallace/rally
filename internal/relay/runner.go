@@ -601,23 +601,44 @@ func (r *Runner) Run(ctx context.Context) error {
 	// Print relay summary
 	totalRuns := relay.CompletedIterations
 	if totalRuns > 0 {
-		passCount := 0
-		failCount := 0
-		for _, tr := range r.store.AllTries() {
-			if tr.RelayID == relay.ID {
-				if tr.Completed {
-					passCount++
-				} else {
-					failCount++
-				}
-			}
-		}
+		passCount, failCount := tallyRuns(r.store.AllTries(), relay.ID)
 		totalDuration := time.Since(r.relayStart)
 		summary := style.RenderSummary(totalRuns, passCount, failCount, totalDuration)
 		fmt.Println(summary)
 	}
 
 	return nil
+}
+
+// tallyRuns aggregates try records into a run-level pass/fail count for the
+// given relay. Each run (identified by RunID) is counted exactly once: it passes
+// if any of its attempts ultimately completed, and fails only if every attempt
+// in its retry budget was exhausted without completion. A retry-then-success run
+// is therefore one pass and zero failures; an exhausted run is one failure.
+func tallyRuns(tries []store.TryRecord, relayID int) (passCount, failCount int) {
+	completedByRun := make(map[int]bool)
+	order := make([]int, 0)
+	for _, tr := range tries {
+		if tr.RelayID != relayID {
+			continue
+		}
+		if _, seen := completedByRun[tr.RunID]; !seen {
+			order = append(order, tr.RunID)
+		}
+		if tr.Completed {
+			completedByRun[tr.RunID] = true
+		} else if _, seen := completedByRun[tr.RunID]; !seen {
+			completedByRun[tr.RunID] = false
+		}
+	}
+	for _, runID := range order {
+		if completedByRun[runID] {
+			passCount++
+		} else {
+			failCount++
+		}
+	}
+	return passCount, failCount
 }
 
 func (r *Runner) prepareExecutorForSelection(relayID, runIndex int, selection routeSelection, log io.Writer) {
@@ -796,19 +817,24 @@ attemptLoop:
 			lapsStarted = runIndex + 1
 			lapsTotal = runIndex + task.LapsRemaining
 		}
-		header := style.RenderHeader(style.HeaderOptions{
-			RunIndex:     runIndex,
-			TotalRuns:    relay.TargetIterations,
-			AgentName:    picked.Harness,
-			Attempt:      attempt,
-			StartTime:    startedAt,
-			IsLapsBacked: task.IsLapsBacked,
-			LapTitle:     task.Name,
-			LapsStarted:  lapsStarted,
-			LapsTotal:    lapsTotal,
-			Model:        picked.Model,
-		})
-		fmt.Println(header)
+		// Retries are surfaced inline as a `retry N/M` field on the live status
+		// line (see mon.SetRetry below) rather than re-announcing the run with a
+		// fresh header block per attempt.
+		if attempt == 1 {
+			header := style.RenderHeader(style.HeaderOptions{
+				RunIndex:     runIndex,
+				TotalRuns:    relay.TargetIterations,
+				AgentName:    picked.Harness,
+				Attempt:      attempt,
+				StartTime:    startedAt,
+				IsLapsBacked: task.IsLapsBacked,
+				LapTitle:     task.Name,
+				LapsStarted:  lapsStarted,
+				LapsTotal:    lapsTotal,
+				Model:        picked.Model,
+			})
+			fmt.Println(header)
+		}
 
 		kb := keyboard.NewKeyboard(os.Stdin, os.Stdout)
 		_ = kb.SetRawMode()
@@ -824,6 +850,7 @@ attemptLoop:
 			stallThreshold = reliability.DefaultStallThreshold
 		}
 		mon.SetStallThreshold(stallThreshold)
+		mon.SetRetry(attempt, maxAttempts)
 
 		initialStatus, _ := mon.Tick()
 		// Skip empty/whitespace status to avoid an extra blank line below the
