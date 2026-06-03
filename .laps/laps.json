@@ -1,211 +1,13 @@
 {
-  "version": 1,
+  "version": 2,
   "tasks": [
-    {
-      "id": "work-ee45",
-      "title": "Make rally state migration conflict-safe",
-      "description": "Rework `.rally` layout migration so an existing `.rally/state/*` target does not cause the legacy top-level file to be deleted blindly. Preserve or surface the conflict safely without data loss, keep the migration idempotent, and add tests for partially migrated workspaces where source and destination both exist with different contents.",
-      "assignee": "SENIOR",
-      "isDone": true,
-      "createdAt": "2026-05-31T10:36:57.187673253Z",
-      "updatedAt": "2026-05-31T10:46:00.427550163Z",
-      "completedAt": "2026-05-31T10:46:00.427550163Z"
-    },
-    {
-      "id": "work-21f5",
-      "title": "Capture full CommitHistory per try",
-      "description": "Implement task 3.6/8.6 end-to-end in the runner, not just in Store.AppendTry. Persist the full ordered commit list produced during a try (manual + auto commits), keep CommitHash as the last element for backward compatibility, and add an integration-style runner test that proves multiple commits in one try survive into tries.jsonl in order.",
-      "assignee": "SENIOR",
-      "isDone": true,
-      "createdAt": "2026-05-31T10:36:53.327111264Z",
-      "updatedAt": "2026-05-31T10:48:51.842002775Z",
-      "completedAt": "2026-05-31T10:48:51.842002775Z"
-    },
-    {
-      "id": "work-5bdb",
-      "title": "Fix bundled laps version detection",
-      "description": "Make bundled laps handling sibling-aware instead of PATH-only. `rally update` and the startup min-version warning should inspect the laps binary next to the current rally executable, falling back to PATH only when appropriate, so an unrelated PATH copy cannot cause the bundled companion to be skipped or misreported. Add tests covering missing or stale sibling laps with an up-to-date PATH copy.",
-      "assignee": "SENIOR",
-      "isDone": true,
-      "createdAt": "2026-05-31T10:36:48.851255197Z",
-      "updatedAt": "2026-05-31T10:53:20.595100042Z",
-      "completedAt": "2026-05-31T10:53:20.595100042Z"
-    },
-    {
-      "id": "work-6d97",
-      "title": "Re-verify tidy runtime-data-storage follow-ups",
-      "description": "After the implementation follow-up laps land, rerun full VERIFY for tidy-rally-runtime-data-storage: inspect git diff against target, run go build ./..., go test ./..., openspec validate tidy-rally-runtime-data-storage --strict, and confirm migration conflict safety, bundled laps version/update behavior, and end-to-end CommitHistory capture.",
-      "assignee": "VERIFY",
-      "isDone": true,
-      "createdAt": "2026-05-31T10:36:43.850183373Z",
-      "updatedAt": "2026-05-31T10:57:41.905555205Z",
-      "completedAt": "2026-05-31T10:57:41.905555205Z"
-    },
-    {
-      "id": "work-7729",
-      "title": "Fix migration conflict convergence for pre-existing state targets",
-      "description": "Context: final VERIFY found internal/store/migration.go still returns early when .rally/state/\u003cfile\u003e already exists, leaving the legacy top-level source behind forever. internal/store/migration_test.go even calls this out in the NoOverwrite case without asserting a resolution. Outcome: make migration conflict handling intentional and regression-tested when both legacy and state files exist. Safe options: remove the legacy file when contents are redundant, or emit a clear marker/warning when they differ and automatic cleanup is unsafe. Acceptance: re-running migration on a partially migrated .rally no longer silently leaves stale top-level machine files without explanation; tests cover idempotency, no-overwrite, and the chosen conflict behavior.",
-      "assignee": "SENIOR",
-      "isDone": true,
-      "createdAt": "2026-05-31T10:10:12.419015488Z",
-      "updatedAt": "2026-05-31T10:10:41.704014244Z",
-      "completedAt": "2026-05-31T10:10:41.704014244Z"
-    },
-    {
-      "id": "work-02d6",
-      "title": "Complete telemetry/distribution regression coverage",
-      "description": "Context: final VERIFY found tasks 8.5 and 8.7 are still not fully satisfied. cmd/rally/telemetry_test.go only asserts prompt_bytes, prompt_task_bytes, one captured issue, and route_fallback non-Issue behavior; it does not cover the full per-source prompt breakdown, agent-class retry =\u003e no Issue, or distinguish infra/stall issue capture. There is also version-warning coverage in internal/laps/version_test.go, but no command-level test that rally update wiring upgrades or installs laps or reports laps failures non-fatally. Outcome: add focused regression tests for the missing 8.5 and 8.7 acceptance points and then mark only the truly completed task boxes in openspec/changes/tidy-rally-runtime-data-storage/tasks.md. Acceptance: targeted tests fail before the fix and pass after; go test ./cmd/rally ./internal/laps ./internal/telemetry ./internal/store passes.",
-      "assignee": "JUNIOR",
-      "isDone": true,
-      "createdAt": "2026-05-31T10:10:06.892444614Z",
-      "updatedAt": "2026-05-31T10:21:07.015529545Z",
-      "completedAt": "2026-05-31T10:21:07.015529545Z"
-    },
-    {
-      "id": "work-8dab",
-      "title": "VERIFY: tidy runtime storage follow-up",
-      "description": "Re-run final verification for tidy-rally-runtime-data-storage after the queued follow-up laps land. Focus on migration conflict handling plus the missing telemetry/distribution regression coverage, then re-check go build ./..., go test ./..., openspec validate tidy-rally-runtime-data-storage --strict, tracked .rally contents, and git diff feat/harden-relay-run-lifecycle...HEAD.",
-      "assignee": "VERIFY",
-      "isDone": true,
-      "createdAt": "2026-05-31T10:10:00.716177229Z",
-      "updatedAt": "2026-05-31T10:30:13.765086551Z",
-      "completedAt": "2026-05-31T10:30:13.765086551Z"
-    },
-    {
-      "id": "work-298a",
-      "title": "Converge migration with pre-existing state targets",
-      "description": "Context: VERIFY on tidy-rally-runtime-data-storage manually exercised a legacy .rally fixture where .rally/state/tries.jsonl already existed before runInit, while the legacy top-level .rally/tries.jsonl was still present. Current migration preserves the existing state file, but it leaves the legacy top-level file behind forever, so partially migrated repos never converge to the clean top-level .rally layout.\n\nOutcome: Define and implement explicit conflict semantics for MigrateRallyStateLayout when both legacy and state paths exist. Preferred: if the files are redundant, remove the legacy source after confirming the state target wins; if they differ and automatic cleanup is unsafe, emit an explicit marker/warning and cover that behavior in tests. Update migration tests so this scenario is asserted rather than silently accepted.\n\nAcceptance: running rally init twice on a fixture with both legacy and state files no longer silently leaves stale top-level machine files without explanation; tests cover the chosen conflict behavior along with existing no-overwrite and idempotency expectations.",
-      "assignee": "SENIOR",
-      "isDone": true,
-      "createdAt": "2026-05-31T06:35:19.377701944Z",
-      "updatedAt": "2026-05-31T06:35:29.572799368Z",
-      "completedAt": "2026-05-31T06:35:29.572799368Z"
-    },
-    {
-      "id": "work-d47e",
-      "title": "Harden migration conflict handling",
-      "description": "Context: VERIFY on tidy-rally-runtime-data-storage exercised a legacy .rally/ fixture where  already existed before Rally workspace initialized., while legacy  was still present. Current behavior preserves the existing state target as intended, but it also leaves the legacy top-level file in place forever, so the migration does not fully converge to the clean  layout in this partially migrated state.\n\nOutcome: Decide and implement explicit conflict semantics for migration when both legacy and state paths exist. At minimum, make the behavior intentional and regression-tested. Preferred: converge safely (for example remove the legacy file when it is redundant, or emit a clear warning / marker when contents differ and automatic cleanup is unsafe).\n\nAcceptance: A fixture covering pre-existing state targets proves the chosen behavior; the top-level .rally/ layout no longer silently retains stale machine files in partially migrated repos without an explicit reason.",
-      "assignee": "SENIOR",
-      "isDone": true,
-      "createdAt": "2026-05-31T06:27:15.389524639Z",
-      "updatedAt": "2026-05-31T06:28:01.142217947Z",
-      "completedAt": "2026-05-31T06:28:01.142217947Z"
-    },
-    {
-      "id": "work-71bf",
-      "title": "Add migration fixture tests",
-      "description": "Context: VERIFY on tidy-rally-runtime-data-storage found the highest-risk slice still lacks automated migration coverage (tasks 8.1 / spec store: Runtime data layout migration). Manual verification passed for the happy path, but there is no regression test locking in flat-\u003estate moves, legacy dir cleanup, no-overwrite behavior, idempotency, and progress.yaml untouched semantics.\n\nOutcome: Add table-style tests around runInit or store.MigrateRallyStateLayout using a fixture .rally/ with flat jsonl files, progress.yaml, batches/, relays/, and at least one pre-existing state target. Assert moved files land in .rally/state/, batches/ and relays/ are removed, existing state targets are not overwritten, rerunning migration is a no-op, and progress.yaml is preserved verbatim and never recreated by summary writes.\n\nAcceptance: go test ./cmd/rally ./internal/store ./internal/progress passes; tests fail if migration regresses on no-overwrite, legacy cleanup, or idempotency.",
-      "assignee": "JUNIOR",
-      "isDone": true,
-      "createdAt": "2026-05-31T06:26:58.99804999Z",
-      "updatedAt": "2026-05-31T06:31:14.121614301Z",
-      "completedAt": "2026-05-31T06:31:14.121614301Z"
-    },
-    {
-      "id": "work-d97f",
-      "title": "Add migration regression coverage",
-      "description": "Add automated tests for the tidy-rally-runtime-data-storage migration slice. Cover a legacy .rally fixture with flat jsonl files + progress.yaml + batches/ + relays/, run rally init twice, and assert: flat files move into .rally/state/, existing state targets are never overwritten, legacy batches/ and relays/ are removed, progress.yaml is left untouched and not recreated, config.toml.bak is untouched, and the second run is a full no-op/idempotent snapshot match.",
-      "isDone": true,
-      "createdAt": "2026-05-31T06:19:06.770888007Z",
-      "updatedAt": "2026-05-31T06:19:28.80201371Z",
-      "completedAt": "2026-05-31T06:19:28.80201371Z"
-    },
-    {
-      "id": "work-c779",
-      "title": "Remove repo-local relay log churn from .rally/",
-      "description": "The state relocation slice still writes relay logs to both dataDir/relays/... and .rally/relays/relay-*.log, but runInit now templates .rally/.gitignore as only state/. This reintroduces unignored machine churn under top-level .rally/, conflicting with the tidy-runtime-data layout. Update the runtime to stop creating .rally/relays/ (or relocate it under gitignored state if intentionally kept), remove obsolete pruning/helpers if appropriate, and add regression coverage that a relay run does not leave .rally/relays/ behind when .rally/.gitignore is just state/.",
-      "assignee": "senior",
-      "isDone": true,
-      "createdAt": "2026-05-31T05:06:55.631081724Z",
-      "updatedAt": "2026-05-31T05:15:53.8661242Z",
-      "completedAt": "2026-05-31T05:15:53.8661242Z"
-    },
-    {
-      "id": "work-c2eb",
-      "title": "Remove repo-local relay log churn from .rally/",
-      "description": "The state relocation slice still writes relay logs to both dataDir/relays/... and .rally/relays/relay-*.log, but runInit now templates .rally/.gitignore as only state/. This reintroduces unignored machine churn under top-level .rally/, conflicting with the tidy-runtime-data layout. Update the runtime to stop creating .rally/relays/ (or relocate it under gitignored state if intentionally kept), remove obsolete pruning/helpers if appropriate, and add regression coverage that a relay run does not leave .rally/relays/ behind when .rally/.gitignore is just state/.",
-      "assignee": "senior",
-      "isDone": true,
-      "createdAt": "2026-05-31T05:05:21.565527921Z",
-      "updatedAt": "2026-05-31T05:06:17.442941136Z",
-      "completedAt": "2026-05-31T05:06:17.442941136Z"
-    },
-    {
-      "id": "work-93aa",
-      "title": "Fix rally tail after state relocation",
-      "description": "Update cmd/rally/tail.go to read the relocated tries index under .rally/state/ (or rely on store.NewStore consistently) instead of probing top-level .rally/tries.jsonl, and add command-level coverage so the relocation is exercised end-to-end.",
-      "assignee": "senior",
-      "isDone": true,
-      "createdAt": "2026-05-29T06:49:12.96260908Z",
-      "updatedAt": "2026-05-29T06:49:33.855758719Z",
-      "completedAt": "2026-05-29T06:49:33.855758719Z"
-    },
-    {
-      "id": "rall-2ce5",
-      "title": "Add .laps/.gitignore regression test",
-      "description": "Context: OpenSpec change tidy-rally-runtime-data-storage (specs/tooling-distribution). The stray .laps/.gitignore was already removed and laps.json already tracked as of commit 33d288e. This lap adds a regression test to prevent recurrence.\n\nOutcome: A regression test proves rally never writes a .laps/.gitignore. Grep confirms no code path creates one.\n\nFiles \u0026 scope: Add a test near laps.InstallHooks (internal, in the rally repo) asserting no .gitignore is created under .laps/. Do not touch .laps/hooks.json or the hooks/ dir.\n\nAcceptance: New test passes; grep confirms no code path writes a .laps/.gitignore.",
-      "assignee": "JUNIOR",
-      "isDone": true,
-      "createdAt": "2026-05-26T12:42:23.185861464Z",
-      "updatedAt": "2026-05-29T06:23:08.685031322Z",
-      "completedAt": "2026-05-29T06:23:08.685031322Z"
-    },
-    {
-      "id": "rall-179a",
-      "title": "Centralise .rally/ path construction behind helpers",
-      "description": "Context: OpenSpec change tidy-rally-runtime-data-storage (specs/store, design Decision 1). Paths are built ad-hoc with filepath.Join(..., \".rally\", ...) across packages. This lap establishes the path contract that every later lap builds on; no behavior change yet.\n\nOutcome: A single set of helpers (e.g. store.RallyDir, store.StateDir(workspaceDir), store.SummaryPath) own all .rally/ path building, and existing call sites use them. Files still resolve to their current locations (the move happens in the next lap).\n\nFiles \u0026 scope: internal/store/{store,cache}.go, internal/progress/ (store.go, runstate.go), internal/cli/hooks.go, internal/relay/runner.go (current_task.md at ~698). Add helpers in internal/store (or a small paths file) and route joins through them.\n\nDesign: Keep helpers dependency-light so laps/other packages need not import heavy deps. Do not yet introduce state/ — just funnel the joins so the relocation lap is a one-line change per helper.\n\nAcceptance: `go build ./...` and `go test ./...` pass; grep shows no remaining ad-hoc `\".rally\"` joins outside the helpers.",
-      "assignee": "SENIOR",
-      "isDone": true,
-      "createdAt": "2026-05-26T12:42:23.189855868Z",
-      "updatedAt": "2026-05-29T06:31:16.580655922Z",
-      "completedAt": "2026-05-29T06:31:16.580655922Z"
-    },
-    {
-      "id": "rall-35d6",
-      "title": "Move machine data into .rally/state/; local windowing; gitignore+README templates",
-      "description": "Context: OpenSpec change tidy-rally-runtime-data-storage (specs/store MODIFIED, design Decisions 1-2). Builds on the path helpers. BREAKING: machine data leaves the top level and is no longer git-tracked.\n\nOutcome: tries/relays/agent_status/messages.jsonl, hook-audit.jsonl, run-state.json, and current_task.md all resolve under .rally/state/. The .rally/.gitignore template is a single `state/` line. Windowing truncates in place locally (no git commit). README template describes the new layout and drops the false git-tracked-JSONL claim.\n\nFiles \u0026 scope: internal/store/{store,cache,window}.go (state/ paths + truncation), internal/progress/runstate.go, internal/cli/hooks.go, internal/relay/runner.go, internal/gitx/git.go (CommitRallyState + IsWorkspaceDirty), cmd/rally/main.go (gitignore template ~355 + README template ~398).\n\nDesign: Replace commit-then-truncate-to-git: append-only log files (tries.jsonl, relays.jsonl) are never pruned — they grow unbounded. agent_status.jsonl (500 events) and messages.jsonl (200 resolved; pending exempt) use in-place truncation with conservative limits. No git operations in the windowing path. Migration of EXISTING files is a later lap — here just make new writes land in state/ and create the dir on write.\n\nAcceptance: `go build ./...`; fresh `rally init` in a temp dir produces .rally/.gitignore containing only `state/` and writes records under .rally/state/; existing store tests updated to new paths pass.",
-      "assignee": "SENIOR",
-      "isDone": true,
-      "createdAt": "2026-05-26T12:42:23.194523217Z",
-      "updatedAt": "2026-05-29T06:45:43.869985029Z",
-      "completedAt": "2026-05-29T06:45:43.869985029Z"
-    },
-    {
-      "id": "rall-92d3",
-      "title": "VERIFY: gitignore fix, path helpers, state/ relocation",
-      "description": "Use the openspec-verify-change skill against tidy-rally-runtime-data-storage, then focus the report on the work so far: the .laps/.gitignore regression test, centralised path helpers, and the .rally/state/ relocation with local windowing.\n\nBefore diffing: identify the intended merge target (ask the user, or infer from PR metadata/repo docs/branch config/recent history) and identify the first lap/try in this batch; treat earlier branch work as pre-existing baseline.\n\nChecks: `git diff \u003ctarget\u003e...HEAD` for the relocation; confirm no ad-hoc `\".rally\"` joins remain; confirm the gitignore template is just `state/`; confirm windowing no longer runs git; `go build ./...` and `go test ./...`. Report findings first. For substantive gaps, `laps add head` a focused fix lap rather than fixing it here (only tiny one-liners allowed). Do not rewrite git history.",
-      "assignee": "VERIFY",
-      "isDone": true,
-      "createdAt": "2026-05-26T12:42:23.199267996Z",
-      "updatedAt": "2026-05-31T05:06:44.341449596Z",
-      "completedAt": "2026-05-31T05:06:44.341449596Z"
-    },
-    {
-      "id": "rall-7162",
-      "title": "Replace progress.yaml with append-only summary.jsonl",
-      "description": "Context: OpenSpec change tidy-rally-runtime-data-storage (specs/run-summary, design Decision 2). summary.jsonl becomes the sole tracked top-level data file.\\n\\nOutcome: internal/progress writes one JSON line per finalized run/handoff to .rally/summary.jsonl, preserving the RunEntry/HandoffEntry shape and the AppendRunEntry signature (so runner.go:1460 is untouched). progress.yaml is no longer written; history_window trimming and YAML read/write paths are removed. The ProgressLog struct, LoadProgress, and SaveProgress functions are removed. Update progressLapsCompletedForRun in runner.go:1339 to read from summary.jsonl. Verify internal/progress/cli.go (which drives the `rally progress` command) still works — it calls AppendRunEntry whose signature is preserved, and verify its `laps add head` subprocess interaction with the new summary path.\\n\\nFiles \\u0026 scope: internal/progress/store.go (reimplement as JSONL appender), internal/progress/cli.go (update to use new API), internal/relay/runner.go (progressLapsCompletedForRun ~1339). Do not change the AppendRunEntry call site in internal/relay/runner.go.\\n\\nDesign: Append-only, no rewrite/merge. Keep records small (summary text + ids + timestamps). RFC3339 updated_at. Existing progress.yaml is left as-is (not converted).\\n\\nAcceptance: `go build ./...`; finalizing a run appends a parseable JSON line to .rally/summary.jsonl; no progress.yaml is created; `tail -1 .rally/summary.jsonl | jq .` works.",
-      "assignee": "SENIOR",
-      "isDone": true,
-      "createdAt": "2026-05-26T12:42:23.205232171Z",
-      "updatedAt": "2026-05-31T05:26:22.135050903Z",
-      "completedAt": "2026-05-31T05:26:22.135050903Z"
-    },
-    {
-      "id": "rall-1fdd",
-      "title": "One-time idempotent .rally/ migration",
-      "description": "Context: OpenSpec change tidy-rally-runtime-data-storage (specs/store ADDED: Runtime data layout migration, design Decision 5). High-risk: moves real user data.\\n\\nOutcome: On `rally init`, an idempotent migration: creates .rally/state/, moves legacy flat files in WITHOUT overwriting existing targets. Removes legacy .rally/batches/ and top-level .rally/relays/ log dir (if present). Existing progress.yaml is left as-is (NOT converted to summary.jsonl — new writes go to summary.jsonl only). config.toml.bak is never touched (user-managed backup). Re-running is a no-op.\\n\\nFiles \\u0026 scope: cmd/rally/main.go (runInit ~332) and/or a migration helper in internal/store or internal/progress.\\n\\nDesign: Move-don't-copy with existence checks; never clobber an existing state/ target; guard every step so a partially-migrated dir converges cleanly. No git history rewriting.\\n\\nAcceptance: `go build ./...`; manual run against a fixture legacy .rally/ migrates correctly and a second run changes nothing (tests come in a later lap).",
-      "assignee": "SENIOR",
-      "isDone": true,
-      "createdAt": "2026-05-26T12:42:23.212913423Z",
-      "updatedAt": "2026-05-31T05:31:02.302285195Z",
-      "completedAt": "2026-05-31T05:31:02.302285195Z"
-    },
     {
       "id": "rall-00a1",
       "title": "VERIFY: summary.jsonl and migration",
       "description": "Use the openspec-verify-change skill against tidy-rally-runtime-data-storage, then focus on the summary.jsonl replacement and the one-time migration (the highest-risk slice).\\n\\nBefore diffing: confirm the merge target with the user/PR/repo signals and the batch's first lap; earlier work is pre-existing baseline.\\n\\nChecks: build a fixture legacy .rally/ (flat jsonl + progress.yaml + batches/ + relays/) and run migration twice — verify correct moves, no-overwrite behavior, legacy dir cleanup, and full idempotency. Confirm progress.yaml is left untouched (not converted) and never re-created on subsequent runs. Confirm internal/progress/cli.go still works (AppendRunEntry signature preserved; laps add head subprocess with new summary path; progressLapsCompletedForRun reads from summary.jsonl). `go build ./...`. Report findings first; `laps add head` focused fixes for substantive gaps (tiny one-liners only here). Do not rewrite git history.",
       "assignee": "VERIFY",
       "isDone": true,
+      "order": 1376256,
       "createdAt": "2026-05-26T12:42:23.220578196Z",
       "updatedAt": "2026-05-26T12:42:23.220578196Z",
       "completedAt": null
@@ -216,9 +18,163 @@
       "description": "Context: OpenSpec change tidy-rally-runtime-data-storage (specs/telemetry, design Decision 3). New external dependency and new pattern.\n\nOutcome: A telemetry.Sink interface with a default no-op impl and a Sentry-backed impl that activates ONLY when a DSN is configured. Config precedence: SENTRY_DSN env overrides [telemetry] sentry_dsn in config.toml; RALLY_TELEMETRY=0 force-disables. Sink is initialised once in cmd/rally/main.go with `defer sentry.Flush(2s)` before exit; flush is bounded so an unreachable network never hangs exit.\n\nFiles \u0026 scope: new internal/telemetry package; go.mod (add github.com/getsentry/sentry-go); config struct (V2Config + rawConfig + SaveV2 assignment in internal/config/config_v2.go); config.toml template (cmd/rally/main.go); cmd/rally/main.go init+flush. Ensure cmd/rally/init_roles.go preserves the [telemetry] section.\n\nDesign: Keep the Sink interface narrow (emit-try, relay/run/try spans, capture-failure) so an OTel impl could swap in later. No-op must be allocation-cheap and never touch the network. Do not wire emit points yet (next lap).\n\nAcceptance: `go build ./...` and `go test ./...` pass; with no DSN nothing is sent and there is no network access; RALLY_TELEMETRY=0 disables even when a DSN is present.",
       "assignee": "SENIOR",
       "isDone": true,
+      "order": 1441792,
       "createdAt": "2026-05-26T12:42:23.230241489Z",
       "updatedAt": "2026-05-26T12:42:23.230241489Z",
       "completedAt": null
+    },
+    {
+      "id": "rall-1bf0",
+      "title": "VERIFY: full change",
+      "description": "Final verification for tidy-rally-runtime-data-storage. Run the complete openspec-verify-change skill against the change and inspect the whole diff.\n\nBefore diffing: confirm the intended merge target with the user (or infer from PR metadata/repo docs/branch config/recent history) and identify the first lap/try in this batch; treat earlier branch work as pre-existing baseline, flag but do not remove it unless the user asks.\n\nChecks across the whole outcome: `git diff \u003ctarget\u003e...HEAD`; `go build ./...` and `go test ./...`; confirm tracked .rally/ is limited to config.toml/agents/README.md/summary.jsonl with state/ gitignored; migration idempotent; telemetry opt-in and scrubbed; laps bundled with extended `rally update` + version check; regression test proves no .laps/.gitignore is written; CommitHistory field on TryRecord with CommitHash backward compat; route fallback logged as common event not Issue. `openspec validate tidy-rally-runtime-data-storage --strict`. Report findings first; `laps add head` focused laps for substantive gaps (tiny one-liners only here). Do not rewrite git history.",
+      "assignee": "VERIFY",
+      "isDone": true,
+      "order": 1900544,
+      "createdAt": "2026-05-26T12:42:23.283147318Z",
+      "updatedAt": "2026-05-26T12:42:23.283147318Z",
+      "completedAt": null
+    },
+    {
+      "id": "rall-2ce5",
+      "title": "Add .laps/.gitignore regression test",
+      "description": "Context: OpenSpec change tidy-rally-runtime-data-storage (specs/tooling-distribution). The stray .laps/.gitignore was already removed and laps.json already tracked as of commit 33d288e. This lap adds a regression test to prevent recurrence.\n\nOutcome: A regression test proves rally never writes a .laps/.gitignore. Grep confirms no code path creates one.\n\nFiles \u0026 scope: Add a test near laps.InstallHooks (internal, in the rally repo) asserting no .gitignore is created under .laps/. Do not touch .laps/hooks.json or the hooks/ dir.\n\nAcceptance: New test passes; grep confirms no code path writes a .laps/.gitignore.",
+      "assignee": "JUNIOR",
+      "isDone": true,
+      "order": 983040,
+      "createdAt": "2026-05-26T12:42:23.185861464Z",
+      "updatedAt": "2026-05-29T06:23:08.685031322Z",
+      "completedAt": "2026-05-29T06:23:08.685031322Z"
+    },
+    {
+      "id": "rall-179a",
+      "title": "Centralise .rally/ path construction behind helpers",
+      "description": "Context: OpenSpec change tidy-rally-runtime-data-storage (specs/store, design Decision 1). Paths are built ad-hoc with filepath.Join(..., \".rally\", ...) across packages. This lap establishes the path contract that every later lap builds on; no behavior change yet.\n\nOutcome: A single set of helpers (e.g. store.RallyDir, store.StateDir(workspaceDir), store.SummaryPath) own all .rally/ path building, and existing call sites use them. Files still resolve to their current locations (the move happens in the next lap).\n\nFiles \u0026 scope: internal/store/{store,cache}.go, internal/progress/ (store.go, runstate.go), internal/cli/hooks.go, internal/relay/runner.go (current_task.md at ~698). Add helpers in internal/store (or a small paths file) and route joins through them.\n\nDesign: Keep helpers dependency-light so laps/other packages need not import heavy deps. Do not yet introduce state/ — just funnel the joins so the relocation lap is a one-line change per helper.\n\nAcceptance: `go build ./...` and `go test ./...` pass; grep shows no remaining ad-hoc `\".rally\"` joins outside the helpers.",
+      "assignee": "SENIOR",
+      "isDone": true,
+      "order": 1048576,
+      "createdAt": "2026-05-26T12:42:23.189855868Z",
+      "updatedAt": "2026-05-29T06:31:16.580655922Z",
+      "completedAt": "2026-05-29T06:31:16.580655922Z"
+    },
+    {
+      "id": "rall-35d6",
+      "title": "Move machine data into .rally/state/; local windowing; gitignore+README templates",
+      "description": "Context: OpenSpec change tidy-rally-runtime-data-storage (specs/store MODIFIED, design Decisions 1-2). Builds on the path helpers. BREAKING: machine data leaves the top level and is no longer git-tracked.\n\nOutcome: tries/relays/agent_status/messages.jsonl, hook-audit.jsonl, run-state.json, and current_task.md all resolve under .rally/state/. The .rally/.gitignore template is a single `state/` line. Windowing truncates in place locally (no git commit). README template describes the new layout and drops the false git-tracked-JSONL claim.\n\nFiles \u0026 scope: internal/store/{store,cache,window}.go (state/ paths + truncation), internal/progress/runstate.go, internal/cli/hooks.go, internal/relay/runner.go, internal/gitx/git.go (CommitRallyState + IsWorkspaceDirty), cmd/rally/main.go (gitignore template ~355 + README template ~398).\n\nDesign: Replace commit-then-truncate-to-git: append-only log files (tries.jsonl, relays.jsonl) are never pruned — they grow unbounded. agent_status.jsonl (500 events) and messages.jsonl (200 resolved; pending exempt) use in-place truncation with conservative limits. No git operations in the windowing path. Migration of EXISTING files is a later lap — here just make new writes land in state/ and create the dir on write.\n\nAcceptance: `go build ./...`; fresh `rally init` in a temp dir produces .rally/.gitignore containing only `state/` and writes records under .rally/state/; existing store tests updated to new paths pass.",
+      "assignee": "SENIOR",
+      "isDone": true,
+      "order": 1114112,
+      "createdAt": "2026-05-26T12:42:23.194523217Z",
+      "updatedAt": "2026-05-29T06:45:43.869985029Z",
+      "completedAt": "2026-05-29T06:45:43.869985029Z"
+    },
+    {
+      "id": "work-93aa",
+      "title": "Fix rally tail after state relocation",
+      "description": "Update cmd/rally/tail.go to read the relocated tries index under .rally/state/ (or rely on store.NewStore consistently) instead of probing top-level .rally/tries.jsonl, and add command-level coverage so the relocation is exercised end-to-end.",
+      "assignee": "senior",
+      "isDone": true,
+      "order": 917504,
+      "createdAt": "2026-05-29T06:49:12.96260908Z",
+      "updatedAt": "2026-05-29T06:49:33.855758719Z",
+      "completedAt": "2026-05-29T06:49:33.855758719Z"
+    },
+    {
+      "id": "work-c2eb",
+      "title": "Remove repo-local relay log churn from .rally/",
+      "description": "The state relocation slice still writes relay logs to both dataDir/relays/... and .rally/relays/relay-*.log, but runInit now templates .rally/.gitignore as only state/. This reintroduces unignored machine churn under top-level .rally/, conflicting with the tidy-runtime-data layout. Update the runtime to stop creating .rally/relays/ (or relocate it under gitignored state if intentionally kept), remove obsolete pruning/helpers if appropriate, and add regression coverage that a relay run does not leave .rally/relays/ behind when .rally/.gitignore is just state/.",
+      "assignee": "senior",
+      "isDone": true,
+      "order": 851968,
+      "createdAt": "2026-05-31T05:05:21.565527921Z",
+      "updatedAt": "2026-05-31T05:06:17.442941136Z",
+      "completedAt": "2026-05-31T05:06:17.442941136Z"
+    },
+    {
+      "id": "rall-92d3",
+      "title": "VERIFY: gitignore fix, path helpers, state/ relocation",
+      "description": "Use the openspec-verify-change skill against tidy-rally-runtime-data-storage, then focus the report on the work so far: the .laps/.gitignore regression test, centralised path helpers, and the .rally/state/ relocation with local windowing.\n\nBefore diffing: identify the intended merge target (ask the user, or infer from PR metadata/repo docs/branch config/recent history) and identify the first lap/try in this batch; treat earlier branch work as pre-existing baseline.\n\nChecks: `git diff \u003ctarget\u003e...HEAD` for the relocation; confirm no ad-hoc `\".rally\"` joins remain; confirm the gitignore template is just `state/`; confirm windowing no longer runs git; `go build ./...` and `go test ./...`. Report findings first. For substantive gaps, `laps add head` a focused fix lap rather than fixing it here (only tiny one-liners allowed). Do not rewrite git history.",
+      "assignee": "VERIFY",
+      "isDone": true,
+      "order": 1179648,
+      "createdAt": "2026-05-26T12:42:23.199267996Z",
+      "updatedAt": "2026-05-31T05:06:44.341449596Z",
+      "completedAt": "2026-05-31T05:06:44.341449596Z"
+    },
+    {
+      "id": "work-c779",
+      "title": "Remove repo-local relay log churn from .rally/",
+      "description": "The state relocation slice still writes relay logs to both dataDir/relays/... and .rally/relays/relay-*.log, but runInit now templates .rally/.gitignore as only state/. This reintroduces unignored machine churn under top-level .rally/, conflicting with the tidy-runtime-data layout. Update the runtime to stop creating .rally/relays/ (or relocate it under gitignored state if intentionally kept), remove obsolete pruning/helpers if appropriate, and add regression coverage that a relay run does not leave .rally/relays/ behind when .rally/.gitignore is just state/.",
+      "assignee": "senior",
+      "isDone": true,
+      "order": 786432,
+      "createdAt": "2026-05-31T05:06:55.631081724Z",
+      "updatedAt": "2026-05-31T05:15:53.8661242Z",
+      "completedAt": "2026-05-31T05:15:53.8661242Z"
+    },
+    {
+      "id": "rall-7162",
+      "title": "Replace progress.yaml with append-only summary.jsonl",
+      "description": "Context: OpenSpec change tidy-rally-runtime-data-storage (specs/run-summary, design Decision 2). summary.jsonl becomes the sole tracked top-level data file.\\n\\nOutcome: internal/progress writes one JSON line per finalized run/handoff to .rally/summary.jsonl, preserving the RunEntry/HandoffEntry shape and the AppendRunEntry signature (so runner.go:1460 is untouched). progress.yaml is no longer written; history_window trimming and YAML read/write paths are removed. The ProgressLog struct, LoadProgress, and SaveProgress functions are removed. Update progressLapsCompletedForRun in runner.go:1339 to read from summary.jsonl. Verify internal/progress/cli.go (which drives the `rally progress` command) still works — it calls AppendRunEntry whose signature is preserved, and verify its `laps add head` subprocess interaction with the new summary path.\\n\\nFiles \\u0026 scope: internal/progress/store.go (reimplement as JSONL appender), internal/progress/cli.go (update to use new API), internal/relay/runner.go (progressLapsCompletedForRun ~1339). Do not change the AppendRunEntry call site in internal/relay/runner.go.\\n\\nDesign: Append-only, no rewrite/merge. Keep records small (summary text + ids + timestamps). RFC3339 updated_at. Existing progress.yaml is left as-is (not converted).\\n\\nAcceptance: `go build ./...`; finalizing a run appends a parseable JSON line to .rally/summary.jsonl; no progress.yaml is created; `tail -1 .rally/summary.jsonl | jq .` works.",
+      "assignee": "SENIOR",
+      "isDone": true,
+      "order": 1245184,
+      "createdAt": "2026-05-26T12:42:23.205232171Z",
+      "updatedAt": "2026-05-31T05:26:22.135050903Z",
+      "completedAt": "2026-05-31T05:26:22.135050903Z"
+    },
+    {
+      "id": "rall-1fdd",
+      "title": "One-time idempotent .rally/ migration",
+      "description": "Context: OpenSpec change tidy-rally-runtime-data-storage (specs/store ADDED: Runtime data layout migration, design Decision 5). High-risk: moves real user data.\\n\\nOutcome: On `rally init`, an idempotent migration: creates .rally/state/, moves legacy flat files in WITHOUT overwriting existing targets. Removes legacy .rally/batches/ and top-level .rally/relays/ log dir (if present). Existing progress.yaml is left as-is (NOT converted to summary.jsonl — new writes go to summary.jsonl only). config.toml.bak is never touched (user-managed backup). Re-running is a no-op.\\n\\nFiles \\u0026 scope: cmd/rally/main.go (runInit ~332) and/or a migration helper in internal/store or internal/progress.\\n\\nDesign: Move-don't-copy with existence checks; never clobber an existing state/ target; guard every step so a partially-migrated dir converges cleanly. No git history rewriting.\\n\\nAcceptance: `go build ./...`; manual run against a fixture legacy .rally/ migrates correctly and a second run changes nothing (tests come in a later lap).",
+      "assignee": "SENIOR",
+      "isDone": true,
+      "order": 1310720,
+      "createdAt": "2026-05-26T12:42:23.212913423Z",
+      "updatedAt": "2026-05-31T05:31:02.302285195Z",
+      "completedAt": "2026-05-31T05:31:02.302285195Z"
+    },
+    {
+      "id": "work-d97f",
+      "title": "Add migration regression coverage",
+      "description": "Add automated tests for the tidy-rally-runtime-data-storage migration slice. Cover a legacy .rally fixture with flat jsonl files + progress.yaml + batches/ + relays/, run rally init twice, and assert: flat files move into .rally/state/, existing state targets are never overwritten, legacy batches/ and relays/ are removed, progress.yaml is left untouched and not recreated, config.toml.bak is untouched, and the second run is a full no-op/idempotent snapshot match.",
+      "isDone": true,
+      "order": 720896,
+      "createdAt": "2026-05-31T06:19:06.770888007Z",
+      "updatedAt": "2026-05-31T06:19:28.80201371Z",
+      "completedAt": "2026-05-31T06:19:28.80201371Z"
+    },
+    {
+      "id": "work-d47e",
+      "title": "Harden migration conflict handling",
+      "description": "Context: VERIFY on tidy-rally-runtime-data-storage exercised a legacy .rally/ fixture where  already existed before Rally workspace initialized., while legacy  was still present. Current behavior preserves the existing state target as intended, but it also leaves the legacy top-level file in place forever, so the migration does not fully converge to the clean  layout in this partially migrated state.\n\nOutcome: Decide and implement explicit conflict semantics for migration when both legacy and state paths exist. At minimum, make the behavior intentional and regression-tested. Preferred: converge safely (for example remove the legacy file when it is redundant, or emit a clear warning / marker when contents differ and automatic cleanup is unsafe).\n\nAcceptance: A fixture covering pre-existing state targets proves the chosen behavior; the top-level .rally/ layout no longer silently retains stale machine files in partially migrated repos without an explicit reason.",
+      "assignee": "SENIOR",
+      "isDone": true,
+      "order": 589824,
+      "createdAt": "2026-05-31T06:27:15.389524639Z",
+      "updatedAt": "2026-05-31T06:28:01.142217947Z",
+      "completedAt": "2026-05-31T06:28:01.142217947Z"
+    },
+    {
+      "id": "work-71bf",
+      "title": "Add migration fixture tests",
+      "description": "Context: VERIFY on tidy-rally-runtime-data-storage found the highest-risk slice still lacks automated migration coverage (tasks 8.1 / spec store: Runtime data layout migration). Manual verification passed for the happy path, but there is no regression test locking in flat-\u003estate moves, legacy dir cleanup, no-overwrite behavior, idempotency, and progress.yaml untouched semantics.\n\nOutcome: Add table-style tests around runInit or store.MigrateRallyStateLayout using a fixture .rally/ with flat jsonl files, progress.yaml, batches/, relays/, and at least one pre-existing state target. Assert moved files land in .rally/state/, batches/ and relays/ are removed, existing state targets are not overwritten, rerunning migration is a no-op, and progress.yaml is preserved verbatim and never recreated by summary writes.\n\nAcceptance: go test ./cmd/rally ./internal/store ./internal/progress passes; tests fail if migration regresses on no-overwrite, legacy cleanup, or idempotency.",
+      "assignee": "JUNIOR",
+      "isDone": true,
+      "order": 655360,
+      "createdAt": "2026-05-31T06:26:58.99804999Z",
+      "updatedAt": "2026-05-31T06:31:14.121614301Z",
+      "completedAt": "2026-05-31T06:31:14.121614301Z"
+    },
+    {
+      "id": "work-298a",
+      "title": "Converge migration with pre-existing state targets",
+      "description": "Context: VERIFY on tidy-rally-runtime-data-storage manually exercised a legacy .rally fixture where .rally/state/tries.jsonl already existed before runInit, while the legacy top-level .rally/tries.jsonl was still present. Current migration preserves the existing state file, but it leaves the legacy top-level file behind forever, so partially migrated repos never converge to the clean top-level .rally layout.\n\nOutcome: Define and implement explicit conflict semantics for MigrateRallyStateLayout when both legacy and state paths exist. Preferred: if the files are redundant, remove the legacy source after confirming the state target wins; if they differ and automatic cleanup is unsafe, emit an explicit marker/warning and cover that behavior in tests. Update migration tests so this scenario is asserted rather than silently accepted.\n\nAcceptance: running rally init twice on a fixture with both legacy and state files no longer silently leaves stale top-level machine files without explanation; tests cover the chosen conflict behavior along with existing no-overwrite and idempotency expectations.",
+      "assignee": "SENIOR",
+      "isDone": true,
+      "order": 524288,
+      "createdAt": "2026-05-31T06:35:19.377701944Z",
+      "updatedAt": "2026-05-31T06:35:29.572799368Z",
+      "completedAt": "2026-05-31T06:35:29.572799368Z"
     },
     {
       "id": "rall-3b05",
@@ -226,6 +182,7 @@
       "description": "Context: OpenSpec change tidy-rally-runtime-data-storage (specs/telemetry). Builds on the sink scaffolding.\n\nOutcome: Per-try structured log emitted at store.AppendTry (runner.go:1045); relay/run/try modelled as a trace with spans; recognized failures (non-zero exit, panic, agent-exited-without-finalizing, laps-done-as-text, lap-integrity violations) captured as Sentry Issues. Route fallback (rotating to a backup runner) logged as a common recovery event, NOT an Issue. Every event tagged relay_id/run_id/try_id/role/runner/repo/lap_id. A before_send scrubber NEVER ships current_task.md contents or full transcripts (summaries + metadata only).\n\nFiles \u0026 scope: internal/relay/runner.go (emit at try append ~1045 + relay start/end), internal/telemetry (tagging helpers, before_send scrubber). Avoid passing the 120KB current_task.md into any event payload.\n\nDesign: Tags drive filterability (replacing jq over committed jsonl). Scrubber is defense-in-depth even though we already avoid sending the prompt. Relay = transaction, run = span, try = child span; trace id correlates to relay id.\n\nAcceptance: `go build ./...`; with a dummy/disabled sink the emit calls are exercised in tests later; manual review confirms no current_task.md or transcript bytes can reach an event payload.",
       "assignee": "SENIOR",
       "isDone": true,
+      "order": 1507328,
       "createdAt": "2026-05-26T12:42:23.241462233Z",
       "updatedAt": "2026-05-31T08:04:55.971296761Z",
       "completedAt": "2026-05-31T08:04:55.971296761Z"
@@ -236,6 +193,7 @@
       "description": "Use the openspec-verify-change skill against tidy-rally-runtime-data-storage, then focus on the telemetry capability: opt-in gating, tagging, failure capture, scrubbing, and bounded flush.\n\nBefore diffing: confirm merge target and the batch's first lap; earlier work is baseline.\n\nChecks: confirm no-DSN = no-op/no network; SENTRY_DSN overrides config; RALLY_TELEMETRY=0 kills it; every emit path carries the required tags; the before_send scrubber removes current_task.md/transcripts; flush is bounded; route fallback is logged as common event not Issue. `go build ./...` and `go test ./...`. Report findings first; `laps add head` focused fixes for substantive gaps (tiny one-liners only here). Do not rewrite git history.",
       "assignee": "VERIFY",
       "isDone": true,
+      "order": 1572864,
       "createdAt": "2026-05-26T12:42:23.252865758Z",
       "updatedAt": "2026-05-31T08:11:11.830373405Z",
       "completedAt": "2026-05-31T08:11:11.830373405Z"
@@ -246,6 +204,7 @@
       "description": "Context: OpenSpec change tidy-rally-runtime-data-storage (specs/tooling-distribution, design Decision 4 + AGENTS.md release process). Distribution/release-sensitive.\n\nOutcome: install.sh fetches and installs a compatible laps binary next to rally (from https://github.com/mitchell-wallace/laps). The existing `rally update` command (cmd/rally/main.go:505) is extended to also upgrade laps. A startup minimum-laps-version check warns (not hard-fail) and advises `rally update` when laps is too old. .laps/ stays a separate top-level dir; laps must not read .rally/.\n\nFiles \u0026 scope: install.sh, cmd/rally (extend existing update command ~505 + version-check at startup), wherever laps hooks are installed (laps.InstallHooks call in main.go ~169 for reference). Respect the auto-tag/GoReleaser release flow described in AGENTS.md (do not hand-tag).\n\nDesign: Pin/declare a minimum laps version the hooks contract needs. `rally update` should be the single entry point that re-runs the install/upgrade for both binaries. Keep laps independently installable.\n\nAcceptance: `go build ./...`; `rally update --help` exists and mentions laps; running rally with an old/missing laps prints a warning and continues; install.sh references both binaries.",
       "assignee": "SENIOR",
       "isDone": true,
+      "order": 1638400,
       "createdAt": "2026-05-26T12:42:23.263523027Z",
       "updatedAt": "2026-05-31T08:21:10.548053715Z",
       "completedAt": "2026-05-31T08:21:10.548053715Z"
@@ -256,6 +215,7 @@
       "description": "Context: OpenSpec change tidy-rally-runtime-data-storage (tasks 8.1-8.3). Follow existing table-test patterns in internal/store and internal/progress.\n\nOutcome: Tests covering (a) migration on a fixture legacy .rally/ — flat-\u003estate move, no-overwrite, legacy cleanup (batches/, relays/ log dir), idempotency, progress.yaml left untouched; (b) store/cache read+write under .rally/state/ and local-only truncation windowing (tries/relays never pruned; agent_status/messages with conservative limits); (c) summary.jsonl append shape and that progress.yaml is never written.\n\nFiles \u0026 scope: *_test.go in internal/store, internal/progress, and cmd/rally as appropriate. Use t.TempDir fixtures.\n\nAcceptance: `go test ./internal/store/... ./internal/progress/... ./cmd/...` passes; tests fail if migration is non-idempotent or if progress.yaml reappears.",
       "assignee": "JUNIOR",
       "isDone": true,
+      "order": 1703936,
       "createdAt": "2026-05-26T12:42:23.270911121Z",
       "updatedAt": "2026-05-31T08:24:50.690146887Z",
       "completedAt": "2026-05-31T08:24:50.690146887Z"
@@ -266,6 +226,7 @@
       "description": "Context: OpenSpec change tidy-rally-runtime-data-storage (tasks 8.4-8.7).\n\nOutcome: Tests covering (a) the telemetry sink: no-op without DSN, RALLY_TELEMETRY=0 kill switch, SENTRY_DSN-over-config precedence, required tags present on emitted events, before_send scrubber drops current_task.md, route fallback logged as common event not Issue; (b) prompt-size fields: total + per-source breakdown present on the try log, Issue criteria (infra failure + relay stall → Issue; agent-class retry → no Issue); (c) try commit history: multiple commits retained in order, single commit as one-element list, CommitHash backward compat set to last element; (d) distribution: `rally update` wiring and the min-version check warning vs silent paths.\n\nFiles \u0026 scope: *_test.go in internal/telemetry, internal/store, and cmd/rally. Use a fake/in-memory transport or a captured-event hook rather than real network calls.\n\nAcceptance: `go test ./internal/telemetry/... ./internal/store/... ./cmd/...` passes; a test asserts a current_task.md payload never survives before_send; a test asserts the version check warns on old laps and is silent on a compatible version; a test asserts CommitHistory ordering and CommitHash backward compat.",
       "assignee": "JUNIOR",
       "isDone": true,
+      "order": 1769472,
       "createdAt": "2026-05-26T12:42:23.274003812Z",
       "updatedAt": "2026-05-31T08:34:32.459622587Z",
       "completedAt": "2026-05-31T08:34:32.459622587Z"
@@ -276,18 +237,218 @@
       "description": "Context: OpenSpec change tidy-rally-runtime-data-storage (tasks 9.1-9.3).\n\nOutcome: Docs reflect the new layout: AGENTS.md/README.md and skill references (test-driving-rally, post-relay-review including post-relay-review/references/prayer-app-2.md) that mention progress.yaml or flat .rally/*.jsonl paths now point to .rally/state/ + summary.jsonl. Telemetry opt-in is documented (DSN config, SENTRY_DSN, RALLY_TELEMETRY kill switch, what is/ is not sent) along with `rally update`. internal/buildinfo/VERSION is bumped per the release process in AGENTS.md (patch bump unless told otherwise).\n\nFiles \u0026 scope: README.md, AGENTS.md, .rally/README.md template (if not already done), .claude/skills/test-driving-rally/SKILL.md, .claude/skills/post-relay-review/SKILL.md, .claude/skills/post-relay-review/references/prayer-app-2.md, internal/buildinfo/VERSION.\n\nAcceptance: grep finds no stale progress.yaml / flat-jsonl path guidance; telemetry + update docs present; VERSION incremented.",
       "assignee": "JUNIOR",
       "isDone": true,
+      "order": 1835008,
       "createdAt": "2026-05-26T12:42:23.277983758Z",
       "updatedAt": "2026-05-31T10:03:33.231072392Z",
       "completedAt": "2026-05-31T10:03:33.231072392Z"
     },
     {
-      "id": "rall-1bf0",
-      "title": "VERIFY: full change",
-      "description": "Final verification for tidy-rally-runtime-data-storage. Run the complete openspec-verify-change skill against the change and inspect the whole diff.\n\nBefore diffing: confirm the intended merge target with the user (or infer from PR metadata/repo docs/branch config/recent history) and identify the first lap/try in this batch; treat earlier branch work as pre-existing baseline, flag but do not remove it unless the user asks.\n\nChecks across the whole outcome: `git diff \u003ctarget\u003e...HEAD`; `go build ./...` and `go test ./...`; confirm tracked .rally/ is limited to config.toml/agents/README.md/summary.jsonl with state/ gitignored; migration idempotent; telemetry opt-in and scrubbed; laps bundled with extended `rally update` + version check; regression test proves no .laps/.gitignore is written; CommitHistory field on TryRecord with CommitHash backward compat; route fallback logged as common event not Issue. `openspec validate tidy-rally-runtime-data-storage --strict`. Report findings first; `laps add head` focused laps for substantive gaps (tiny one-liners only here). Do not rewrite git history.",
+      "id": "work-7729",
+      "title": "Fix migration conflict convergence for pre-existing state targets",
+      "description": "Context: final VERIFY found internal/store/migration.go still returns early when .rally/state/\u003cfile\u003e already exists, leaving the legacy top-level source behind forever. internal/store/migration_test.go even calls this out in the NoOverwrite case without asserting a resolution. Outcome: make migration conflict handling intentional and regression-tested when both legacy and state files exist. Safe options: remove the legacy file when contents are redundant, or emit a clear marker/warning when they differ and automatic cleanup is unsafe. Acceptance: re-running migration on a partially migrated .rally no longer silently leaves stale top-level machine files without explanation; tests cover idempotency, no-overwrite, and the chosen conflict behavior.",
+      "assignee": "SENIOR",
+      "isDone": true,
+      "order": 327680,
+      "createdAt": "2026-05-31T10:10:12.419015488Z",
+      "updatedAt": "2026-05-31T10:10:41.704014244Z",
+      "completedAt": "2026-05-31T10:10:41.704014244Z"
+    },
+    {
+      "id": "work-02d6",
+      "title": "Complete telemetry/distribution regression coverage",
+      "description": "Context: final VERIFY found tasks 8.5 and 8.7 are still not fully satisfied. cmd/rally/telemetry_test.go only asserts prompt_bytes, prompt_task_bytes, one captured issue, and route_fallback non-Issue behavior; it does not cover the full per-source prompt breakdown, agent-class retry =\u003e no Issue, or distinguish infra/stall issue capture. There is also version-warning coverage in internal/laps/version_test.go, but no command-level test that rally update wiring upgrades or installs laps or reports laps failures non-fatally. Outcome: add focused regression tests for the missing 8.5 and 8.7 acceptance points and then mark only the truly completed task boxes in openspec/changes/tidy-rally-runtime-data-storage/tasks.md. Acceptance: targeted tests fail before the fix and pass after; go test ./cmd/rally ./internal/laps ./internal/telemetry ./internal/store passes.",
+      "assignee": "JUNIOR",
+      "isDone": true,
+      "order": 393216,
+      "createdAt": "2026-05-31T10:10:06.892444614Z",
+      "updatedAt": "2026-05-31T10:21:07.015529545Z",
+      "completedAt": "2026-05-31T10:21:07.015529545Z"
+    },
+    {
+      "id": "work-8dab",
+      "title": "VERIFY: tidy runtime storage follow-up",
+      "description": "Re-run final verification for tidy-rally-runtime-data-storage after the queued follow-up laps land. Focus on migration conflict handling plus the missing telemetry/distribution regression coverage, then re-check go build ./..., go test ./..., openspec validate tidy-rally-runtime-data-storage --strict, tracked .rally contents, and git diff feat/harden-relay-run-lifecycle...HEAD.",
       "assignee": "VERIFY",
       "isDone": true,
-      "createdAt": "2026-05-26T12:42:23.283147318Z",
-      "updatedAt": "2026-05-26T12:42:23.283147318Z",
+      "order": 458752,
+      "createdAt": "2026-05-31T10:10:00.716177229Z",
+      "updatedAt": "2026-05-31T10:30:13.765086551Z",
+      "completedAt": "2026-05-31T10:30:13.765086551Z"
+    },
+    {
+      "id": "work-ee45",
+      "title": "Make rally state migration conflict-safe",
+      "description": "Rework `.rally` layout migration so an existing `.rally/state/*` target does not cause the legacy top-level file to be deleted blindly. Preserve or surface the conflict safely without data loss, keep the migration idempotent, and add tests for partially migrated workspaces where source and destination both exist with different contents.",
+      "assignee": "SENIOR",
+      "isDone": true,
+      "order": 65536,
+      "createdAt": "2026-05-31T10:36:57.187673253Z",
+      "updatedAt": "2026-05-31T10:46:00.427550163Z",
+      "completedAt": "2026-05-31T10:46:00.427550163Z"
+    },
+    {
+      "id": "work-21f5",
+      "title": "Capture full CommitHistory per try",
+      "description": "Implement task 3.6/8.6 end-to-end in the runner, not just in Store.AppendTry. Persist the full ordered commit list produced during a try (manual + auto commits), keep CommitHash as the last element for backward compatibility, and add an integration-style runner test that proves multiple commits in one try survive into tries.jsonl in order.",
+      "assignee": "SENIOR",
+      "isDone": true,
+      "order": 131072,
+      "createdAt": "2026-05-31T10:36:53.327111264Z",
+      "updatedAt": "2026-05-31T10:48:51.842002775Z",
+      "completedAt": "2026-05-31T10:48:51.842002775Z"
+    },
+    {
+      "id": "work-5bdb",
+      "title": "Fix bundled laps version detection",
+      "description": "Make bundled laps handling sibling-aware instead of PATH-only. `rally update` and the startup min-version warning should inspect the laps binary next to the current rally executable, falling back to PATH only when appropriate, so an unrelated PATH copy cannot cause the bundled companion to be skipped or misreported. Add tests covering missing or stale sibling laps with an up-to-date PATH copy.",
+      "assignee": "SENIOR",
+      "isDone": true,
+      "order": 196608,
+      "createdAt": "2026-05-31T10:36:48.851255197Z",
+      "updatedAt": "2026-05-31T10:53:20.595100042Z",
+      "completedAt": "2026-05-31T10:53:20.595100042Z"
+    },
+    {
+      "id": "work-6d97",
+      "title": "Re-verify tidy runtime-data-storage follow-ups",
+      "description": "After the implementation follow-up laps land, rerun full VERIFY for tidy-rally-runtime-data-storage: inspect git diff against target, run go build ./..., go test ./..., openspec validate tidy-rally-runtime-data-storage --strict, and confirm migration conflict safety, bundled laps version/update behavior, and end-to-end CommitHistory capture.",
+      "assignee": "VERIFY",
+      "isDone": true,
+      "order": 262144,
+      "createdAt": "2026-05-31T10:36:43.850183373Z",
+      "updatedAt": "2026-05-31T10:57:41.905555205Z",
+      "completedAt": "2026-05-31T10:57:41.905555205Z"
+    },
+    {
+      "id": "rall-b75d",
+      "title": "Raise stall threshold and verify slowing window",
+      "description": "Context: Implement OpenSpec change rally-083-polish tasks 2.1-2.3. Read proposal.md, design.md, specs/relay-runner/spec.md, and tasks.md.\\n\\nOutcome: Unset stall_threshold_secs defaults to 900 seconds, the monitor slowing indicator remains derived at 0.6x, and reliability.DefaultStallThreshold remains unchanged.\\n\\nFiles \u0026 scope: Focus on internal/config/config_v2.go, internal/monitor/monitor.go, and their existing tests. Document the accepted global-15m/opencode-idle trade-off in the config comment.\\n\\nAcceptance: Add or update focused tests for the config default and slowing window, run relevant Go tests, and mark tasks 2.1-2.3 complete in tasks.md.",
+      "assignee": "JUNIOR",
+      "isDone": false,
+      "order": 65536,
+      "createdAt": "2026-06-03T03:56:54.626643483Z",
+      "updatedAt": "2026-06-03T03:56:54.626643483Z",
+      "completedAt": null
+    },
+    {
+      "id": "rall-6d37",
+      "title": "Harden OpenCode JSON parsing and fallback summaries",
+      "description": "Context: Implement OpenSpec change rally-083-polish tasks 3.1-3.2 using spike-opencode-json.md and spike-evidence/ as the schema authority. Read specs/executor/spec.md and design.md.\\n\\nOutcome: parseOpenCodeOutput never emits raw stdout as Summary, parses ordered text/tool/step_finish events, handles top-level error events, and uses short bounded failure indicators.\\n\\nFiles \u0026 scope: Focus on internal/agent/opencode.go and internal/agent tests. Do not add early process reaping or per-harness stall behavior.\\n\\nDesign: Completion requires exit status semantics plus text or step_finish and no error event. Error summaries should use message/ref/name without transcript leakage.\\n\\nAcceptance: Add tests based on captured event families, run relevant Go tests, and mark tasks 3.1-3.2 complete in tasks.md.",
+      "assignee": "SENIOR",
+      "isDone": false,
+      "order": 131072,
+      "createdAt": "2026-06-03T03:56:54.643063908Z",
+      "updatedAt": "2026-06-03T03:56:54.643063908Z",
+      "completedAt": null
+    },
+    {
+      "id": "rall-9f94",
+      "title": "Normalize runner final snippets across retry and progress records",
+      "description": "Context: Implement OpenSpec change rally-083-polish tasks 3.3-3.5. Read design.md and specs/relay-runner/spec.md after the OpenCode parser lap.\\n\\nOutcome: The runner uses laps wrapup summary as the golden source when available, otherwise executor final text, otherwise a bounded fallback; retry context, tries.jsonl, and summary.jsonl agree on the normalized snippet.\\n\\nFiles \u0026 scope: Focus on internal/relay runner flow and existing store/progress integration points. Preserve append-only summary.jsonl behavior.\\n\\nDesign: Keep one explicit normalization path and avoid storing raw transcripts or start-of-run narration.\\n\\nAcceptance: Add focused tests for wrapup precedence, executor fallback, bounded fallback, and persisted/retry-context consistency; run relevant Go tests; mark tasks 3.3-3.5 complete in tasks.md.",
+      "assignee": "SENIOR",
+      "isDone": false,
+      "order": 196608,
+      "createdAt": "2026-06-03T03:56:54.659382183Z",
+      "updatedAt": "2026-06-03T03:56:54.659382183Z",
+      "completedAt": null
+    },
+    {
+      "id": "rall-fb3f",
+      "title": "Cap persisted final-snippet fields at 3000 runes",
+      "description": "Context: Implement OpenSpec change rally-083-polish tasks 4.1-4.4. Read design.md and specs/store/spec.md.\\n\\nOutcome: Try and progress persistence cap each specified free-text field to 3000 runes with head+tail truncation and an explicit marker, while preserving within-cap text verbatim.\\n\\nFiles \u0026 scope: Cover internal/store TryRecord Summary and RemainingWork plus internal/progress RunEntry Summary, HandoffEntry Summary, and each Followups string. Reuse or extract the recent-context marker style.\\n\\nDesign: Enforce the durable cap at write boundaries and keep summary.jsonl append-only.\\n\\nAcceptance: Add store and progress tests for oversized Unicode/rune-aware fields and unchanged small fields, run relevant Go tests, and mark tasks 4.1-4.4 complete in tasks.md.",
+      "assignee": "SENIOR",
+      "isDone": false,
+      "order": 262144,
+      "createdAt": "2026-06-03T03:56:54.675991721Z",
+      "updatedAt": "2026-06-03T03:56:54.675991721Z",
+      "completedAt": null
+    },
+    {
+      "id": "rall-9180",
+      "title": "Verify final-snippet parsing normalization and persistence",
+      "description": "Context: Review the completed rally-083-polish OpenCode parsing, runner normalization, and persistence-cap slices. Use the openspec-verify-change skill against rally-083-polish, focusing on tasks 3.1-4.4 and the executor, relay-runner, and store specs.\\n\\nVerification: Identify the intended branch target/base before diffing and identify the first lap/try in this batch; treat earlier branch work as pre-existing. Inspect the diff, run focused tests, and confirm raw transcripts cannot reach Summary through the covered paths.\\n\\nConstraints: Do not rewrite git history. Fix only tiny safe one-liners; add focused head laps for substantive gaps.",
+      "assignee": "VERIFY",
+      "isDone": false,
+      "order": 327680,
+      "createdAt": "2026-06-03T03:56:54.690567192Z",
+      "updatedAt": "2026-06-03T03:56:54.690567192Z",
+      "completedAt": null
+    },
+    {
+      "id": "rall-3649",
+      "title": "Add inline retry status and run-level final tally",
+      "description": "Context: Implement OpenSpec change rally-083-polish tasks 5.1-5.3. Read design.md and specs/relay-runner/spec.md.\\n\\nOutcome: Retry progress appears as an inline retry N/M field on the existing live status line without a per-retry console block, and final stats count each run once based on ultimate completion.\\n\\nFiles \u0026 scope: Focus on internal/monitor and internal/relay/runner.go with their existing tests.\\n\\nDesign: A retry-then-success run is one pass and zero failures; an exhausted run is one failure. Keep the retry display minimal.\\n\\nAcceptance: Add tests for status-line retry rendering and both tally scenarios, run relevant Go tests, and mark tasks 5.1-5.3 complete in tasks.md.",
+      "assignee": "SENIOR",
+      "isDone": false,
+      "order": 393216,
+      "createdAt": "2026-06-03T03:56:54.699610689Z",
+      "updatedAt": "2026-06-03T03:56:54.699610689Z",
+      "completedAt": null
+    },
+    {
+      "id": "rall-c36a",
+      "title": "Make Rally state commits tolerate ignored operational paths",
+      "description": "Context: Implement OpenSpec change rally-083-polish tasks 6.1-6.3. Read design.md and specs/relay-runner/spec.md.\\n\\nOutcome: CommitRallyState silently skips operator-gitignored .rally operational paths, continues with other paths, and explicitly tracks .rally/config.toml and .rally/summary.jsonl by default.\\n\\nFiles \u0026 scope: Focus on internal/gitx/git.go and tests. This tolerance must not apply to .laps/laps.json, and git add -f is forbidden.\\n\\nDesign: Detect only the specific ignored-path git add condition without masking unrelated git failures.\\n\\nAcceptance: Add a repository-level test proving one ignored .rally path is skipped while another commits, run relevant Go tests, and mark tasks 6.1-6.3 complete in tasks.md.",
+      "assignee": "SENIOR",
+      "isDone": false,
+      "order": 458752,
+      "createdAt": "2026-06-03T03:56:54.70830995Z",
+      "updatedAt": "2026-06-03T03:56:54.70830995Z",
+      "completedAt": null
+    },
+    {
+      "id": "rall-1890",
+      "title": "Create embedded agent prompt sources and rename user prompts",
+      "description": "Context: Implement OpenSpec change rally-083-polish tasks 7.1-7.4 and 7.7. Read design.md and specs/agent-prompt/spec.md.\\n\\nOutcome: internal/prompt becomes internal/user_prompt, a new internal/agent_prompt embeds general/ and roles/ markdown sources, embedded role defaults are migrated from current role docs without repeated shared finalize guidance, and AGENTS.md documents the naming convention.\\n\\nFiles \u0026 scope: Update all imports for the internal package rename. Do not rewrite operator-owned custom role files as a migration step.\\n\\nDesign: Package names reflect who is being prompted. General finalize and headless guidance must be reusable embedded sources; role markdown must remain role-specific.\\n\\nAcceptance: Add focused package tests for embedded source loading, run relevant Go tests, and mark tasks 7.1-7.4 and 7.7 complete in tasks.md.",
+      "assignee": "SENIOR",
+      "isDone": false,
+      "order": 524288,
+      "createdAt": "2026-06-03T03:56:54.716625095Z",
+      "updatedAt": "2026-06-03T03:56:54.716625095Z",
+      "completedAt": null
+    },
+    {
+      "id": "rall-1c7a",
+      "title": "Compose agent prompts with role overrides and shared guidance",
+      "description": "Context: Implement OpenSpec change rally-083-polish task 7.5 using the embedded sources from the prior lap. Read specs/agent-prompt/spec.md and design.md.\\n\\nOutcome: Normal agent prompts compose shared general snippets, an on-disk role override or embedded role default, then existing task context, while explicit RunOptions.Prompt override semantics remain intact.\\n\\nFiles \u0026 scope: Focus on role loading, runner prompt preparation, and internal/agent prompt building. Preserve all existing RunOptions-derived sections and no-backend behavior where applicable.\\n\\nDesign: On-disk .rally/agents/\u003crole\u003e.md overrides only the role slot and never suppresses shared finalize/headless guidance.\\n\\nAcceptance: Add tests for default loading, override precedence, shared guidance inclusion, prompt ordering, and preserved explicit override/task sections; run relevant Go tests; mark task 7.5 complete in tasks.md.",
+      "assignee": "SENIOR",
+      "isDone": false,
+      "order": 589824,
+      "createdAt": "2026-06-03T03:56:54.725630177Z",
+      "updatedAt": "2026-06-03T03:56:54.725630177Z",
+      "completedAt": null
+    },
+    {
+      "id": "rall-81a5",
+      "title": "Add role prompt diagnostics to routes check",
+      "description": "Context: Implement OpenSpec change rally-083-polish tasks 7.6 and the routes-check portion of 7.8. Read specs/agent-prompt/spec.md and design.md.\\n\\nOutcome: rally routes check always lists detected roles with approximate prompt token counts and emits non-failing advisory overlap diagnostics for custom role files mentioning laps done, laps handoff, laps wrapup, or headless, including embedded general snippets for comparison.\\n\\nFiles \u0026 scope: Focus on internal/cli/routes_check.go and tests, using internal/agent_prompt APIs. Leave custom prompt files untouched.\\n\\nAcceptance: Add tests for role/token output, advisory conflict output, and unchanged success status; run relevant Go tests; mark tasks 7.6 and 7.8 complete in tasks.md once all prompt test expectations are covered.",
+      "assignee": "JUNIOR",
+      "isDone": false,
+      "order": 655360,
+      "createdAt": "2026-06-03T03:56:54.737505375Z",
+      "updatedAt": "2026-06-03T03:56:54.737505375Z",
+      "completedAt": null
+    },
+    {
+      "id": "rall-287a",
+      "title": "Verify agent prompt restructure and operational polish",
+      "description": "Context: Review rally-083-polish tasks 2.1-7.8 after the operational and prompt slices. Use the openspec-verify-change skill against rally-083-polish, focusing on agent-prompt composition, routes diagnostics, retry/tally behavior, and gitignore tolerance.\\n\\nVerification: Identify the intended branch target/base before diffing and the first lap/try in this batch; treat earlier work as pre-existing. Inspect package-rename fallout, run focused and broad tests, and compare implementation to all changed specs.\\n\\nConstraints: Do not rewrite git history. Fix only tiny safe one-liners; add focused head laps for substantive gaps.",
+      "assignee": "VERIFY",
+      "isDone": false,
+      "order": 720896,
+      "createdAt": "2026-06-03T03:56:54.755104681Z",
+      "updatedAt": "2026-06-03T03:56:54.755104681Z",
+      "completedAt": null
+    },
+    {
+      "id": "rall-8933",
+      "title": "Finish rally 0.8.3 release wiring and full verification",
+      "description": "Context: Complete OpenSpec change rally-083-polish tasks 8.1-8.3 after all implementation laps. Use the openspec-verify-change skill against rally-083-polish and read the release instructions in AGENTS.md.\\n\\nOutcome: Formatting and the full test suite pass, internal/buildinfo/VERSION is 0.8.3, and a short real relay validates the specified runtime behavior.\\n\\nVerification: Identify the intended branch target/base before diffing and the first lap/try in this batch; treat earlier branch work as pre-existing. Run just fmt, the full test suite, and a realistic short relay using test-driving-rally guidance. Confirm no false slowing during ordinary reasoning, inline retry N/M, run-level tally, bounded tries.jsonl/summary.jsonl, and wrapup-summary consistency. Mark tasks 8.1-8.3 complete and ensure the full OpenSpec verification passes.\\n\\nConstraints: Do not create or push a version tag by hand and do not rewrite git history. Add focused head laps for substantive gaps.",
+      "assignee": "VERIFY",
+      "isDone": false,
+      "order": 786432,
+      "createdAt": "2026-06-03T03:56:54.770935963Z",
+      "updatedAt": "2026-06-03T03:56:54.770935963Z",
       "completedAt": null
     }
   ]
