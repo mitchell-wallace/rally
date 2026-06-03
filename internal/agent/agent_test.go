@@ -1,10 +1,8 @@
 package agent
 
 import (
-	"bufio"
 	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -325,8 +323,8 @@ func TestParseGeminiOutput_MalformedJSON(t *testing.T) {
 }
 
 func TestParseOpenCodeOutput_Valid(t *testing.T) {
-	parts := []string{`{"completed":true,"summary":"text1"}`}
-	tr, err := parseOpenCodeOutput(nil, parts)
+	out := []byte(`{"type":"text","part":{"type":"text","text":"{\"completed\":true,\"summary\":\"text1\"}"}}`)
+	tr, err := parseOpenCodeOutput(out, true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -339,21 +337,50 @@ func TestParseOpenCodeOutput_Valid(t *testing.T) {
 }
 
 func TestParseOpenCodeOutput_MissingText(t *testing.T) {
-	tr, err := parseOpenCodeOutput([]byte("some output"), []string{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if tr.Completed {
-		t.Error("expected not completed")
-	}
-	if tr.Summary != "some output" {
-		t.Errorf("expected raw output in summary, got %q", tr.Summary)
+	for _, tc := range []struct {
+		name        string
+		out         []byte
+		wantSummary string
+	}{
+		{
+			name:        "empty",
+			wantSummary: "opencode produced no output",
+		},
+		{
+			name:        "unparseable",
+			out:         []byte("raw transcript that must not leak"),
+			wantSummary: "opencode produced no parseable JSON events",
+		},
+		{
+			name:        "events without result",
+			out:         []byte(`{"type":"step_start","part":{"type":"step-start"}}`),
+			wantSummary: "opencode produced no parseable result",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			tr, err := parseOpenCodeOutput(tc.out, true)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if tr.Completed {
+				t.Error("expected not completed")
+			}
+			if tr.Summary != tc.wantSummary {
+				t.Errorf("Summary = %q, want %q", tr.Summary, tc.wantSummary)
+			}
+			if strings.Contains(tr.Summary, "raw transcript") {
+				t.Errorf("summary leaked raw output: %q", tr.Summary)
+			}
+			if len([]rune(tr.Summary)) > openCodeFailureSummaryLimit {
+				t.Errorf("summary length = %d, want <= %d", len([]rune(tr.Summary)), openCodeFailureSummaryLimit)
+			}
+		})
 	}
 }
 
 func TestParseOpenCodeOutput_CompletedFalse(t *testing.T) {
-	parts := []string{`{"completed":false,"summary":"not yet"}`}
-	tr, err := parseOpenCodeOutput(nil, parts)
+	out := []byte(`{"type":"text","part":{"type":"text","text":"{\"completed\":false,\"summary\":\"not yet\"}"}}`)
+	tr, err := parseOpenCodeOutput(out, true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -365,17 +392,17 @@ func TestParseOpenCodeOutput_CompletedFalse(t *testing.T) {
 	}
 }
 
-func TestParseOpenCodeOutput_MalformedJSON(t *testing.T) {
-	parts := []string{`garbled output`}
-	tr, err := parseOpenCodeOutput(nil, parts)
+func TestParseOpenCodeOutput_PlainText(t *testing.T) {
+	out := []byte(`{"type":"text","part":{"type":"text","text":"garbled output"}}`)
+	tr, err := parseOpenCodeOutput(out, true)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !tr.Completed {
-		t.Error("expected completed fallback for malformed JSON")
+		t.Error("expected completed fallback for plain text")
 	}
 	if tr.Summary != "garbled output" {
-		t.Errorf("expected raw text in summary, got %q", tr.Summary)
+		t.Errorf("expected assistant text in summary, got %q", tr.Summary)
 	}
 }
 
@@ -384,8 +411,10 @@ func TestParseOpenCodeOutput_MalformedJSON(t *testing.T) {
 // final answer. The streamed parts get joined verbatim, so the fallback
 // summary used to start with ~11 newlines. We trim them.
 func TestParseOpenCodeOutput_TrimsWhitespace(t *testing.T) {
-	parts := []string{"\n\n\n", "\n\n\n", "\n\nDone! file created."}
-	tr, err := parseOpenCodeOutput(nil, parts)
+	out := []byte(`{"type":"text","part":{"type":"text","text":"\n\n\n"}}
+{"type":"text","part":{"type":"text","text":"\n\n\n"}}
+{"type":"text","part":{"type":"text","text":"\n\nDone! file created."}}`)
+	tr, err := parseOpenCodeOutput(out, true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -397,42 +426,160 @@ func TestParseOpenCodeOutput_TrimsWhitespace(t *testing.T) {
 	}
 }
 
-// TestOpenCodeJSONEventExtraction verifies that text is read from part.text
-// (not the top-level text field, which is always absent in the opencode JSONL stream).
-func TestOpenCodeJSONEventExtraction(t *testing.T) {
-	jsonl := `{"type":"step_start","part":{"type":"step-start"}}
-{"type":"text","part":{"type":"text","text":"{\"completed\":true,\"summary\":\"task done\"}"}}
-{"type":"step_finish","part":{"type":"step-finish","reason":"stop"}}`
+// TestParseOpenCodeOutput_CapturedToolUseEventFamily follows the live
+// opencode 1.15.11 event family recorded in spike-evidence.
+func TestParseOpenCodeOutput_CapturedToolUseEventFamily(t *testing.T) {
+	out := []byte(`{"type":"step_start","part":{"type":"step-start"}}
+{"type":"tool_use","part":{"type":"tool","tool":"write"}}
+{"type":"step_finish","part":{"type":"step-finish","reason":"tool-calls"}}
+{"type":"step_start","part":{"type":"step-start"}}
+{"type":"text","part":{"type":"text","text":"DONE_TOOLS"}}`)
 
-	var textParts []string
-	scanner := bufio.NewScanner(strings.NewReader(jsonl))
-	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-		if line == "" {
-			continue
-		}
-		var ev opencodeJSONEvent
-		if err := json.Unmarshal([]byte(line), &ev); err != nil {
-			continue
-		}
-		if ev.Type == "text" && ev.Part.Text != "" {
-			textParts = append(textParts, ev.Part.Text)
-		}
-	}
-
-	if len(textParts) != 1 {
-		t.Fatalf("expected 1 text part, got %d", len(textParts))
-	}
-	tr, err := parseOpenCodeOutput(nil, textParts)
+	tr, err := parseOpenCodeOutput(out, true)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !tr.Completed {
-		t.Error("expected completed=true")
+		t.Error("expected completed")
 	}
-	if tr.Summary != "task done" {
-		t.Errorf("expected summary 'task done', got %q", tr.Summary)
+	if tr.Summary != "DONE_TOOLS" {
+		t.Errorf("Summary = %q, want %q", tr.Summary, "DONE_TOOLS")
 	}
+	if tr.ToolCalls != 1 {
+		t.Errorf("ToolCalls = %d, want 1", tr.ToolCalls)
+	}
+}
+
+func TestParseOpenCodeOutput_ConcatenatesTextInEventOrder(t *testing.T) {
+	out := []byte(`{"type":"text","part":{"type":"text","text":"first "}}
+{"type":"tool_use","part":{"type":"tool","tool":"read"}}
+{"type":"text","part":{"type":"text","text":"second"}}
+{"type":"step_finish","part":{"type":"step-finish","reason":"stop"}}`)
+
+	tr, err := parseOpenCodeOutput(out, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !tr.Completed {
+		t.Error("expected completed")
+	}
+	if tr.Summary != "first second" {
+		t.Errorf("Summary = %q, want %q", tr.Summary, "first second")
+	}
+	if tr.ToolCalls != 1 {
+		t.Errorf("ToolCalls = %d, want 1", tr.ToolCalls)
+	}
+}
+
+func TestParseOpenCodeOutput_StepFinishCompletionRequiresSuccessfulProcess(t *testing.T) {
+	out := []byte(`{"type":"step_finish","part":{"type":"step-finish","reason":"stop"}}`)
+
+	tr, err := parseOpenCodeOutput(out, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !tr.Completed {
+		t.Error("expected exit-0 step_finish to complete")
+	}
+	if tr.Summary != "opencode completed without assistant text" {
+		t.Errorf("Summary = %q, want no-text completion indicator", tr.Summary)
+	}
+
+	tr, err = parseOpenCodeOutput(out, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tr.Completed {
+		t.Error("expected non-zero exit to remain incomplete")
+	}
+	if tr.Summary != "opencode process exited unsuccessfully without a parseable result" {
+		t.Errorf("Summary = %q, want unsuccessful-process indicator", tr.Summary)
+	}
+}
+
+func TestParseOpenCodeOutput_TextCompletionRequiresSuccessfulProcess(t *testing.T) {
+	out := []byte(`{"type":"text","part":{"type":"text","text":"partial result"}}`)
+
+	tr, err := parseOpenCodeOutput(out, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tr.Completed {
+		t.Error("expected non-zero exit to keep parsed text incomplete")
+	}
+	if tr.Summary != "partial result" {
+		t.Errorf("Summary = %q, want parsed assistant text", tr.Summary)
+	}
+}
+
+// TestParseOpenCodeOutput_CapturedErrorEventFamily follows the top-level error
+// event recorded in spike-evidence/opencode-error-event-try167.jsonl.
+func TestParseOpenCodeOutput_CapturedErrorEventFamily(t *testing.T) {
+	out := []byte(`raw transcript that must not leak
+{"type":"error","timestamp":1780285834220,"sessionID":"ses_17eb1fcb4ffeaM4Hrx1qJbTQHa","error":{"name":"UnknownError","data":{"message":"Unexpected server error. Check server logs for details.","ref":"err_e558e8ba"}}}`)
+
+	tr, err := parseOpenCodeOutput(out, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tr.Completed {
+		t.Error("expected error event to remain incomplete")
+	}
+	want := "opencode error: Unexpected server error. Check server logs for details. (err_e558e8ba)"
+	if tr.Summary != want {
+		t.Errorf("Summary = %q, want %q", tr.Summary, want)
+	}
+	if strings.Contains(tr.Summary, "raw transcript") {
+		t.Errorf("summary leaked raw output: %q", tr.Summary)
+	}
+}
+
+func TestParseOpenCodeOutput_ErrorSummaryFallbackAndBound(t *testing.T) {
+	t.Run("name fallback", func(t *testing.T) {
+		out := []byte(`{"type":"error","error":{"name":"UnknownError","data":{}}}`)
+		tr, err := parseOpenCodeOutput(out, true)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if tr.Summary != "opencode error: UnknownError" {
+			t.Errorf("Summary = %q, want name fallback", tr.Summary)
+		}
+	})
+
+	t.Run("missing payload", func(t *testing.T) {
+		out := []byte(`{"type":"error"}`)
+		tr, err := parseOpenCodeOutput(out, true)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if tr.Completed {
+			t.Error("expected error event to remain incomplete")
+		}
+		if tr.Summary != "opencode error: unknown error" {
+			t.Errorf("Summary = %q, want generic error fallback", tr.Summary)
+		}
+	})
+
+	t.Run("bounded message and ref", func(t *testing.T) {
+		out := []byte(fmt.Sprintf(
+			`{"type":"error","error":{"name":"UnknownError","data":{"message":"%s","ref":"%s"}}}`,
+			strings.Repeat("m", 2000),
+			strings.Repeat("r", 1000),
+		))
+		tr, err := parseOpenCodeOutput(out, true)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := len([]rune(tr.Summary)); got > openCodeFailureSummaryLimit {
+			t.Errorf("summary length = %d, want <= %d", got, openCodeFailureSummaryLimit)
+		}
+		if !strings.HasPrefix(tr.Summary, "opencode error: ") {
+			t.Errorf("Summary = %q, want error prefix", tr.Summary)
+		}
+		if !strings.HasSuffix(tr.Summary, "...)") {
+			t.Errorf("Summary = %q, want bounded ref suffix", tr.Summary)
+		}
+	})
 }
 
 func TestParseCodexResult_Valid(t *testing.T) {
@@ -715,32 +862,49 @@ func TestGeminiAdapter_CountsToolCallsFromStats(t *testing.T) {
 
 func TestOpenCodeAdapter_CountsToolUseEvents(t *testing.T) {
 	out := []byte(`{"type":"tool_use","part":{"type":"tool","tool":"read"}}
-{"type":"tool_use","part":{"type":"tool","tool":"write"}}
+{"type":"other","part":{"type":"tool","tool":"write"}}
 {"type":"text","part":{"type":"text","text":"done"}}`)
-	// parseOpenCodeOutput doesn't take a tool count; the count is done in Execute.
-	// Simulate the Execute loop logic.
-	textParts := []string{"done"}
-	toolCalls := 0
-	// The opencode adapter increments on type=tool_use OR part.type=tool.
-	// Count by hand here mirroring the implementation, then verify parser works.
-	for _, line := range []string{
-		`{"type":"tool_use","part":{"type":"tool","tool":"read"}}`,
-		`{"type":"tool_use","part":{"type":"tool","tool":"write"}}`,
-		`{"type":"text","part":{"type":"text","text":"done"}}`,
-	} {
-		var ev opencodeJSONEvent
-		_ = json.Unmarshal([]byte(line), &ev)
-		if ev.Type == "tool_use" || ev.Part.Type == "tool" {
-			toolCalls++
-		}
+	tr, err := parseOpenCodeOutput(out, true)
+	if err != nil {
+		t.Fatal(err)
 	}
-	if toolCalls != 2 {
-		t.Errorf("toolCalls counted = %d, want 2", toolCalls)
+	if tr.ToolCalls != 2 {
+		t.Errorf("ToolCalls = %d, want 2", tr.ToolCalls)
 	}
-	// Parser still works.
-	tr, err := parseOpenCodeOutput(out, textParts)
-	if err != nil || tr == nil {
-		t.Fatalf("parse failed: %v", err)
+}
+
+func TestOpenCodeExecutor_NonZeroExitReturnsParsedIncompleteResult(t *testing.T) {
+	tmp := t.TempDir()
+	binDir := filepath.Join(tmp, "bin")
+	if err := os.MkdirAll(binDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	scriptPath := filepath.Join(binDir, "opencode")
+	script := `#!/bin/sh
+printf '%s\n' '{"type":"text","part":{"type":"text","text":"partial result"}}'
+exit 7
+`
+	if err := os.WriteFile(scriptPath, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	exec := &OpenCodeExecutor{}
+	tr, err := exec.Execute(context.Background(), RunOptions{Prompt: "do work"})
+	if err == nil {
+		t.Fatal("expected non-zero exit error")
+	}
+	if tr == nil {
+		t.Fatal("expected parsed result alongside process error")
+	}
+	if tr.Completed {
+		t.Error("expected non-zero exit to keep result incomplete")
+	}
+	if tr.Summary != "partial result" {
+		t.Errorf("Summary = %q, want parsed assistant text", tr.Summary)
+	}
+	if strings.Contains(err.Error(), "partial result") {
+		t.Errorf("executor error leaked subprocess output: %q", err)
 	}
 }
 

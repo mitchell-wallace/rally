@@ -14,12 +14,28 @@ type OpenCodeExecutor struct {
 	Model string
 }
 
+const (
+	// These are parser-local safety bounds for failure indicators. Persisted
+	// final snippets have a separate cap at the storage boundary.
+	openCodeFailureSummaryLimit = 512
+	openCodeErrorRefLimit       = 96
+)
+
 type opencodeJSONEvent struct {
 	Type string `json:"type"`
 	Part struct {
 		Type string `json:"type"`
 		Text string `json:"text"`
 	} `json:"part"`
+	Error *opencodeJSONError `json:"error,omitempty"`
+}
+
+type opencodeJSONError struct {
+	Name string `json:"name"`
+	Data struct {
+		Message string `json:"message"`
+		Ref     string `json:"ref"`
+	} `json:"data"`
 }
 
 func (o *OpenCodeExecutor) ResumeSupported() bool        { return true }
@@ -52,13 +68,26 @@ func (o *OpenCodeExecutor) Execute(ctx context.Context, opts RunOptions) (*TryRe
 	}
 	cmd.Env = append(os.Environ(), `OPENCODE_PERMISSION={"*":"allow"}`)
 	SetProcessGroup(cmd)
-	out, err := runLoggedCommand(cmd, opts.LogPath, true, opts.OnStart)
-	if err != nil {
-		return nil, fmt.Errorf("opencode exec failed: %w\noutput: %s", err, string(out))
-	}
+	out, runErr := runLoggedCommand(cmd, opts.LogPath, true, opts.OnStart)
 
+	tr, err := parseOpenCodeOutput(out, runErr == nil)
+	if err != nil {
+		return nil, err
+	}
+	if runErr != nil {
+		return tr, fmt.Errorf("opencode exec failed: %w", runErr)
+	}
+	return tr, nil
+}
+
+func parseOpenCodeOutput(out []byte, processSucceeded bool) (*TryResult, error) {
 	var textParts []string
 	toolCalls := 0
+	sawJSONEvent := false
+	sawStepFinish := false
+	sawErrorEvent := false
+	var eventError *opencodeJSONError
+
 	scanner := bufio.NewScanner(strings.NewReader(string(out)))
 	scanner.Buffer(make([]byte, 0, 64*1024), 16*1024*1024)
 	for scanner.Scan() {
@@ -70,30 +99,114 @@ func (o *OpenCodeExecutor) Execute(ctx context.Context, opts RunOptions) (*TryRe
 		if err := json.Unmarshal([]byte(line), &ev); err != nil {
 			continue
 		}
+		sawJSONEvent = true
 		if ev.Type == "text" && ev.Part.Text != "" {
 			textParts = append(textParts, ev.Part.Text)
 		}
 		if ev.Type == "tool_use" || ev.Part.Type == "tool" {
 			toolCalls++
 		}
+		if ev.Type == "step_finish" {
+			sawStepFinish = true
+		}
+		if ev.Type == "error" {
+			sawErrorEvent = true
+			if eventError == nil && ev.Error != nil {
+				eventError = ev.Error
+			}
+		}
 	}
 
-	tr, err := parseOpenCodeOutput(out, textParts)
-	if err == nil && tr != nil {
-		tr.ToolCalls = toolCalls
-	}
-	return tr, err
-}
-
-func parseOpenCodeOutput(out []byte, textParts []string) (*TryResult, error) {
+	scanFailed := scanner.Err() != nil
 	combined := strings.TrimSpace(strings.Join(textParts, ""))
+	cleanCompletion := processSucceeded && !scanFailed && !sawErrorEvent && (combined != "" || sawStepFinish)
+
+	if sawErrorEvent {
+		return &TryResult{
+			Completed: false,
+			Summary:   formatOpenCodeError(eventError),
+			ToolCalls: toolCalls,
+		}, nil
+	}
 	if combined == "" {
-		return &TryResult{Completed: false, Summary: string(out)}, nil
+		return &TryResult{
+			Completed: cleanCompletion,
+			Summary:   openCodeNoTextSummary(out, sawJSONEvent, sawStepFinish, scanFailed, processSucceeded),
+			ToolCalls: toolCalls,
+		}, nil
 	}
 
 	var tr TryResult
 	if err := json.Unmarshal([]byte(combined), &tr); err != nil {
-		return &TryResult{Completed: true, Summary: combined}, nil
+		return &TryResult{
+			Completed: cleanCompletion,
+			Summary:   combined,
+			ToolCalls: toolCalls,
+		}, nil
 	}
+	tr.Completed = tr.Completed && cleanCompletion
+	tr.ToolCalls = toolCalls
 	return &tr, nil
+}
+
+func openCodeNoTextSummary(out []byte, sawJSONEvent, sawStepFinish, scanFailed, processSucceeded bool) string {
+	switch {
+	case !processSucceeded:
+		return "opencode process exited unsuccessfully without a parseable result"
+	case scanFailed:
+		return "opencode output could not be fully parsed"
+	case sawStepFinish:
+		return "opencode completed without assistant text"
+	case strings.TrimSpace(string(out)) == "":
+		return "opencode produced no output"
+	case !sawJSONEvent:
+		return "opencode produced no parseable JSON events"
+	default:
+		return "opencode produced no parseable result"
+	}
+}
+
+func formatOpenCodeError(eventError *opencodeJSONError) string {
+	if eventError == nil {
+		return "opencode error: unknown error"
+	}
+
+	detail := compactOpenCodeIndicator(eventError.Data.Message)
+	if detail == "" {
+		detail = compactOpenCodeIndicator(eventError.Name)
+	}
+	if detail == "" {
+		detail = "unknown error"
+	}
+
+	const prefix = "opencode error: "
+	ref := truncateOpenCodeIndicator(compactOpenCodeIndicator(eventError.Data.Ref), openCodeErrorRefLimit)
+	if ref == "" {
+		return truncateOpenCodeIndicator(prefix+detail, openCodeFailureSummaryLimit)
+	}
+
+	suffix := " (" + ref + ")"
+	detailLimit := openCodeFailureSummaryLimit - len([]rune(prefix)) - len([]rune(suffix))
+	detail = truncateOpenCodeIndicator(detail, detailLimit)
+	return prefix + detail + suffix
+}
+
+func compactOpenCodeIndicator(s string) string {
+	return strings.Join(strings.Fields(s), " ")
+}
+
+func truncateOpenCodeIndicator(s string, maxRunes int) string {
+	runes := []rune(s)
+	if len(runes) <= maxRunes {
+		return s
+	}
+	if maxRunes <= 0 {
+		return ""
+	}
+
+	marker := []rune("...")
+	if maxRunes <= len(marker) {
+		return string(marker[:maxRunes])
+	}
+	return string(runes[:maxRunes-len(marker)]) + string(marker)
 }
