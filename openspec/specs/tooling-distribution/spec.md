@@ -22,7 +22,7 @@ The system SHALL provide a `rally update` command that upgrades both the `rally`
 - **THEN** the command SHALL upgrade both `rally` and `laps` to their latest compatible versions
 
 ### Requirement: Minimum laps version check
-On startup the system SHALL check the installed laps version against a minimum required by the hooks contract and SHALL warn (without hard-failing) when laps is too old.
+On startup the system SHALL check the installed laps version against the minimum required by Rally's companion contract, including installed hooks and checked-in agent workflows, and SHALL warn (without hard-failing) when laps is too old. The minimum supported release for current Rally source SHALL be laps v0.7.0.
 
 #### Scenario: Outdated laps warns
 - **WHEN** rally starts and detects a laps version below the minimum
@@ -42,4 +42,3 @@ The repository SHALL track `.laps/laps.json` so the work queue travels between c
 #### Scenario: rally never writes .laps/.gitignore
 - **WHEN** rally initializes or installs laps hooks
 - **THEN** it SHALL NOT create a `.gitignore` inside `.laps/`
-

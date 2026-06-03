@@ -177,13 +177,17 @@ func LoadV2(workspaceDir string) (V2Config, error) {
 	}
 
 	if cfg.Reliability.StallThresholdSecs == 0 {
-		// 120s: opencode agents typically complete in 25-30s then hold the process
-		// open; connections drop to 0 around 120s of log silence, so 120s lets the
-		// stall fire as soon as the connection check is satisfied. npm install
-		// silence is ~35s max (well below 120s). The `DefaultStallThreshold`
-		// constant in the reliability package stays at 180s as a bare-code fallback
-		// when no config is loaded.
-		cfg.Reliability.StallThresholdSecs = 120
+		// 900s (15m): a global threshold that avoids false "slowing"/stall signals
+		// during multi-minute reasoning bursts from models like opus/glm/kimi/qwen/
+		// deepseek. The slowing indicator (0.6× threshold) now fires at ~9m of log
+		// silence, so both the warning and the kill move together from one knob.
+		//
+		// Trade-off accepted: opencode runs that finish fast (~25-30s) then hold the
+		// process open now idle ~15m before the stall reaps them. A future
+		// completion-detection change (early opencode process reaping) will remove
+		// this trade-off. The `DefaultStallThreshold` constant in the reliability
+		// package stays at 180s as a bare-code fallback when no config is loaded.
+		cfg.Reliability.StallThresholdSecs = 900
 	}
 	if cfg.Reliability.RetryBudget == 0 {
 		cfg.Reliability.RetryBudget = 5

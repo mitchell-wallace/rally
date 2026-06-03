@@ -11,7 +11,7 @@ metadata:
 
 Turn a plan into a Rally-native Laps queue that another agent can execute one lap at a time. The output should be concrete enough to keep agents on track, but not so prescriptive that it steals ownership of the fine implementation details.
 
-Requires the `laps` CLI. Rally injects per-role guidance from `.rally/agents/<assignee>.md` at run time — do not duplicate role intros inside lap descriptions.
+Requires the `laps` CLI v0.7.0 or newer for batch JSON task creation. Rally injects per-role guidance from `.rally/agents/<assignee>.md` at run time — do not duplicate role intros inside lap descriptions.
 
 ## Core Rules
 
@@ -67,8 +67,9 @@ Requires the `laps` CLI. Rally injects per-role guidance from `.rally/agents/<as
    - **Acceptance** — tests, commands, smoke checks, docs updates, observable behavior. Almost always include.
 
 5. **Add tasks**
-   - Use `laps add tail` for planned work in execution order. Use `--json '{"title":"...","description":"...","assignee":"..."}'` by default — most lap descriptions contain quotes, backticks, or special characters that make shell quoting painful. Use `--title`/`--description` flags for short ad-hoc laps where the description is a plain sentence.
-   - For urgent blockers, use `laps add head` (reverse execution order for multiple) or `laps add after <id>`.
+   - Use one `laps add tail --json '[...]'` call for planned work in execution order. JSON array input is validated and written as one queue update, preserves array order, and avoids leaving a partially-created plan if one lap is invalid. For large generated payloads, pipe the array with `laps add tail --json -` to avoid shell quoting and argument-length problems.
+   - For urgent blockers, use `laps add head --json '[...]'` or `laps add after <id> --json '[...]'`; array order is preserved for every position, so do not reverse it manually.
+   - Use a single JSON object for one planned lap. Use `--title`/`--description` flags only for short ad-hoc laps where the description is a plain sentence.
    - Always set `--assignee`; rally routes from it.
    - Run `laps list` at the end and sanity-check role order, VERIFY placement, and the final full-outcome verification lap.
 

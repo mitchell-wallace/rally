@@ -88,12 +88,12 @@ func lapsBinaryPresent() bool {
 
 // VersionWarning returns a non-empty advisory message when the workspace uses
 // laps (a .laps/laps.json exists) but the laps binary rally relies on is
-// missing or older than the minimum required by the hooks contract. It inspects
-// the bundled companion next to the rally executable first, falling back to a
-// PATH copy only when no companion is present, so an unrelated PATH copy cannot
-// hide a stale companion. It returns an empty string when laps is absent from
-// the workspace, when the binary is compatible, or when the version cannot be
-// determined (we do not nag on unknowns).
+// missing or older than the minimum required by Rally's companion contract. It
+// inspects the bundled companion next to the rally executable first, falling
+// back to a PATH copy only when no companion is present, so an unrelated PATH
+// copy cannot hide a stale companion. It returns an empty string when laps is
+// absent from the workspace, when the binary is compatible, or when the version
+// cannot be determined (we do not nag on unknowns).
 func VersionWarning(workspaceDir string) string {
 	lapsJSON := filepath.Join(workspaceDir, ".laps", "laps.json")
 	if _, err := os.Stat(lapsJSON); err != nil {

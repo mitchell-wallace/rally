@@ -147,7 +147,7 @@ func TestLoadV2_ReliabilityDefaults(t *testing.T) {
 		t.Fatalf("LoadV2 failed: %v", err)
 	}
 
-	if got, want := cfg.Reliability.StallThresholdSecs, 120; got != want {
+	if got, want := cfg.Reliability.StallThresholdSecs, 900; got != want {
 		t.Errorf("Default StallThresholdSecs = %d, want %d", got, want)
 	}
 	if got, want := cfg.Reliability.RetryBudget, 5; got != want {

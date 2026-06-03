@@ -49,6 +49,9 @@ The intended flow is:
 - **Laps is Rally's permanent backend**, not one work-queue option among many.
   Rally always drives laps; the two ship and version together. Code may assume
   laps is present.
+- **Current Rally source supports laps v0.7.0 or newer.** Checked-in workflows
+  such as `prepare-laps` use the batch JSON add interface introduced in v0.7.0.
+  Run `rally update` to install or upgrade the bundled companion.
 - **Commit `.laps/laps.json`**: The work queue state file `.laps/laps.json` tracks
   the campaign's progress and must be committed and pushed to Git. Do not
   gitignore, delete, or omit it from commits.

@@ -520,6 +520,11 @@ rally update
 
 If the companion `laps` binary is installed next to `rally` (the default for new installations), `rally update` will automatically upgrade `laps` to its corresponding compatible release as well.
 
+Current Rally source and its checked-in agent workflows support `laps v0.7.0`
+or newer. In particular, `prepare-laps` uses the batch JSON task-creation
+interface introduced in `v0.7.0`. Run `rally update` to install or upgrade the
+bundled companion.
+
 ## Architecture
 
 Rally is built around a few focused internal packages:

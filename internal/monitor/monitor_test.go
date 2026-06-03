@@ -129,16 +129,15 @@ func TestMonitorSlowingIndicator(t *testing.T) {
 	dir := t.TempDir()
 	initGitRepo(t, dir)
 
-	// Create a log file with a stale mtime to simulate silence.
 	logPath := filepath.Join(dir, "try.log")
 	os.WriteFile(logPath, []byte("data"), 0o644)
 
-	// Set mtime 120s in the past (≥60% of 180s threshold = 108s)
-	past := time.Now().Add(-120 * time.Second)
+	// Set mtime 560s in the past (≥60% of 900s threshold = 540s)
+	past := time.Now().Add(-560 * time.Second)
 	os.Chtimes(logPath, past, past)
 
 	m := NewMonitor(dir, logPath, 0)
-	m.SetStallThreshold(180 * time.Second)
+	m.SetStallThreshold(900 * time.Second)
 
 	line, err := m.Tick()
 	if err != nil {
@@ -146,6 +145,64 @@ func TestMonitorSlowingIndicator(t *testing.T) {
 	}
 	if !containsString(line, "⚠ slowing") {
 		t.Errorf("expected slowing indicator, got %q", line)
+	}
+}
+
+func TestMonitorSlowingWindowDerivedAt06x(t *testing.T) {
+	dir := t.TempDir()
+	initGitRepo(t, dir)
+
+	logPath := filepath.Join(dir, "try.log")
+	os.WriteFile(logPath, []byte("data"), 0o644)
+
+	m := NewMonitor(dir, logPath, 0)
+	m.SetStallThreshold(900 * time.Second)
+
+	// 0.6 × 900s = 540s. Activity at 530s should NOT trigger slowing.
+	past := time.Now().Add(-530 * time.Second)
+	os.Chtimes(logPath, past, past)
+
+	line, err := m.Tick()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if containsString(line, "⚠ slowing") {
+		t.Errorf("slowing should NOT appear at 530s (below 540s window), got %q", line)
+	}
+
+	// Activity at 550s SHOULD trigger slowing (≥540s).
+	past = time.Now().Add(-550 * time.Second)
+	os.Chtimes(logPath, past, past)
+
+	line, err = m.Tick()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !containsString(line, "⚠ slowing") {
+		t.Errorf("expected slowing indicator at 550s (≥540s = 0.6×900s), got %q", line)
+	}
+}
+
+func TestMonitorSlowingNotShownDuringNormalReasoning(t *testing.T) {
+	dir := t.TempDir()
+	initGitRepo(t, dir)
+
+	logPath := filepath.Join(dir, "try.log")
+	os.WriteFile(logPath, []byte("data"), 0o644)
+
+	m := NewMonitor(dir, logPath, 0)
+	m.SetStallThreshold(900 * time.Second)
+
+	// 4m silence (240s) is well within a normal reasoning burst (≪ 540s window).
+	past := time.Now().Add(-240 * time.Second)
+	os.Chtimes(logPath, past, past)
+
+	line, err := m.Tick()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if containsString(line, "⚠ slowing") {
+		t.Errorf("slowing should NOT appear during normal reasoning (240s < 540s), got %q", line)
 	}
 }
 

@@ -22,11 +22,11 @@ import (
 
 const latestReleaseURL = "https://api.github.com/repos/" + app.ReleaseOwner + "/" + app.ReleaseRepo + "/releases/latest"
 
-// MinLapsVersion is the minimum laps release the installed hooks contract
-// (the rally-keyed entries written by laps.InstallHooks) depends on. Bump this
-// when a new hooks feature requires a newer laps. It is advisory: rally warns
-// but never hard-fails when the installed laps is older.
-const MinLapsVersion = "0.1.0"
+// MinLapsVersion is the minimum laps release supported by Rally's companion
+// contract, including installed hooks and checked-in agent workflows. Bump this
+// when Rally starts relying on a newer laps CLI feature. It is advisory: rally
+// warns but never hard-fails when the installed laps is older.
+const MinLapsVersion = "0.7.0"
 
 // Tool describes a GitHub-released binary that rally knows how to install and
 // upgrade. Rally ships laps as a first-class companion, so the install/upgrade

@@ -82,7 +82,7 @@ func TestVersionWarningMissingBinary(t *testing.T) {
 
 func TestVersionWarningOldLaps(t *testing.T) {
 	ws := withLapsWorkspace(t)
-	// One patch below the minimum the hooks contract requires.
+	// A release below the minimum companion contract.
 	old := release.CompareVersions(release.MinLapsVersion, "0.0.1")
 	if old <= 0 {
 		t.Skipf("MinLapsVersion %s too low to construct an older version", release.MinLapsVersion)
@@ -99,6 +99,14 @@ func TestVersionWarningCompatibleLaps(t *testing.T) {
 	writeFakeLaps(t, release.MinLapsVersion)
 	if w := VersionWarning(ws); w != "" {
 		t.Fatalf("expected no warning for compatible laps, got %q", w)
+	}
+}
+
+func TestVersionWarningRequiresLaps070(t *testing.T) {
+	ws := withLapsWorkspace(t)
+	writeFakeLaps(t, "0.6.1")
+	if w := VersionWarning(ws); !strings.Contains(w, "required v0.7.0") {
+		t.Fatalf("expected v0.7.0 requirement warning, got %q", w)
 	}
 }
 

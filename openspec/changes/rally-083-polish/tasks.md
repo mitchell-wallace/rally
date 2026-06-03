@@ -6,9 +6,9 @@
 
 ## 2. Stall / slowing threshold (item 1)
 
-- [ ] 2.1 Change the unset default for `stall_threshold_secs` in `internal/config/config_v2.go` from 120 to 900, updating the explanatory comment to record the global-15m rationale and the accepted opencode-idle trade-off
-- [ ] 2.2 Confirm the slowing indicator in `internal/monitor/monitor.go` derives from the threshold (`0.6×`) so it now warns at ~9m; leave `reliability.DefaultStallThreshold` (180s) as the bare-code fallback
-- [ ] 2.3 Update/extend tests for the config default and the slowing-indicator window
+- [x] 2.1 Change the unset default for `stall_threshold_secs` in `internal/config/config_v2.go` from 120 to 900, updating the explanatory comment to record the global-15m rationale and the accepted opencode-idle trade-off
+- [x] 2.2 Confirm the slowing indicator in `internal/monitor/monitor.go` derives from the threshold (`0.6×`) so it now warns at ~9m; leave `reliability.DefaultStallThreshold` (180s) as the bare-code fallback
+- [x] 2.3 Update/extend tests for the config default and the slowing-indicator window
 
 ## 3. opencode safe fallback + summary normalization (items 5, 6)
 
