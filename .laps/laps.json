@@ -116,22 +116,22 @@
       "title": "Compose agent prompts with role overrides and shared guidance",
       "description": "Context: Implement OpenSpec change rally-083-polish task 7.5 using the embedded sources from the prior lap. Read specs/agent-prompt/spec.md and design.md.\\n\\nOutcome: Normal agent prompts compose shared general snippets, an on-disk role override or embedded role default, then existing task context, while explicit RunOptions.Prompt override semantics remain intact.\\n\\nFiles \u0026 scope: Focus on role loading, runner prompt preparation, and internal/agent prompt building. Preserve all existing RunOptions-derived sections and no-backend behavior where applicable.\\n\\nDesign: On-disk .rally/agents/\u003crole\u003e.md overrides only the role slot and never suppresses shared finalize/headless guidance.\\n\\nAcceptance: Add tests for default loading, override precedence, shared guidance inclusion, prompt ordering, and preserved explicit override/task sections; run relevant Go tests; mark task 7.5 complete in tasks.md.",
       "assignee": "SENIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 589824,
       "createdAt": "2026-06-03T03:56:54.725630177Z",
-      "updatedAt": "2026-06-03T03:56:54.725630177Z",
-      "completedAt": null
+      "updatedAt": "2026-06-03T06:44:50.070246068Z",
+      "completedAt": "2026-06-03T06:44:50.070246068Z"
     },
     {
       "id": "rall-81a5",
       "title": "Add role prompt diagnostics to routes check",
       "description": "Context: Implement OpenSpec change rally-083-polish tasks 7.6 and the routes-check portion of 7.8. Read specs/agent-prompt/spec.md and design.md.\\n\\nOutcome: rally routes check always lists detected roles with approximate prompt token counts and emits non-failing advisory overlap diagnostics for custom role files mentioning laps done, laps handoff, laps wrapup, or headless, including embedded general snippets for comparison.\\n\\nFiles \u0026 scope: Focus on internal/cli/routes_check.go and tests, using internal/agent_prompt APIs. Leave custom prompt files untouched.\\n\\nAcceptance: Add tests for role/token output, advisory conflict output, and unchanged success status; run relevant Go tests; mark tasks 7.6 and 7.8 complete in tasks.md once all prompt test expectations are covered.",
       "assignee": "JUNIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 655360,
       "createdAt": "2026-06-03T03:56:54.737505375Z",
-      "updatedAt": "2026-06-03T03:56:54.737505375Z",
-      "completedAt": null
+      "updatedAt": "2026-06-03T06:52:00.749752541Z",
+      "completedAt": "2026-06-03T06:52:00.749752541Z"
     },
     {
       "id": "rall-287a",
