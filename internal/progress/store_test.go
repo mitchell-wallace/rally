@@ -7,8 +7,10 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/mitchell-wallace/rally/internal/store"
+	"github.com/mitchell-wallace/rally/internal/textutil"
 )
 
 func TestSummaryPath(t *testing.T) {
@@ -93,6 +95,86 @@ func TestAppendRunEntryWritesParseableJSONL(t *testing.T) {
 	}
 	if entries[1].Handoff.CreatedLapIDs[0] != "lap-new" {
 		t.Errorf("CreatedLapIDs = %v, want [lap-new]", entries[1].Handoff.CreatedLapIDs)
+	}
+}
+
+func TestAppendRunEntryCapsFinalSnippetFields(t *testing.T) {
+	tmp := t.TempDir()
+
+	longRunSummary := strings.Repeat("始", store.FinalSnippetRuneLimit) + "middle" + strings.Repeat("終", store.FinalSnippetRuneLimit)
+	longHandoffSummary := strings.Repeat("前", store.FinalSnippetRuneLimit) + "middle" + strings.Repeat("後", store.FinalSnippetRuneLimit)
+	longFollowup := strings.Repeat("次", store.FinalSnippetRuneLimit) + "middle" + strings.Repeat("完", store.FinalSnippetRuneLimit)
+	smallRunSummary := "short run summary\nkept verbatim"
+	smallHandoffSummary := "short handoff summary"
+	smallFollowup := "short followup"
+
+	if err := AppendRunEntry(tmp, RunEntry{
+		RunID:   "run-long",
+		Summary: longRunSummary,
+		Handoff: &HandoffEntry{
+			Summary:   longHandoffSummary,
+			Followups: []string{longFollowup},
+		},
+	}); err != nil {
+		t.Fatalf("AppendRunEntry oversized record: %v", err)
+	}
+	if err := AppendRunEntry(tmp, RunEntry{
+		RunID:   "run-small",
+		Summary: smallRunSummary,
+		Handoff: &HandoffEntry{
+			Summary:   smallHandoffSummary,
+			Followups: []string{smallFollowup},
+		},
+	}); err != nil {
+		t.Fatalf("AppendRunEntry small record: %v", err)
+	}
+
+	entries, err := LoadSummaryEntries(tmp)
+	if err != nil {
+		t.Fatalf("LoadSummaryEntries error: %v", err)
+	}
+	if len(entries) != 2 {
+		t.Fatalf("entry count = %d, want 2", len(entries))
+	}
+
+	assertCappedSummaryText(t, entries[0].Summary, "始", "終")
+	if entries[0].Handoff == nil {
+		t.Fatal("oversized entry handoff is nil")
+	}
+	assertCappedSummaryText(t, entries[0].Handoff.Summary, "前", "後")
+	assertCappedSummaryText(t, entries[0].Handoff.Followups[0], "次", "完")
+
+	if entries[1].Summary != smallRunSummary {
+		t.Fatalf("small run summary = %q, want verbatim %q", entries[1].Summary, smallRunSummary)
+	}
+	if entries[1].Handoff == nil {
+		t.Fatal("small entry handoff is nil")
+	}
+	if entries[1].Handoff.Summary != smallHandoffSummary {
+		t.Fatalf("small handoff summary = %q, want verbatim %q", entries[1].Handoff.Summary, smallHandoffSummary)
+	}
+	if entries[1].Handoff.Followups[0] != smallFollowup {
+		t.Fatalf("small followup = %q, want verbatim %q", entries[1].Handoff.Followups[0], smallFollowup)
+	}
+}
+
+func assertCappedSummaryText(t *testing.T, got, wantHead, wantTail string) {
+	t.Helper()
+
+	if !utf8.ValidString(got) {
+		t.Fatalf("capped text is not valid UTF-8: %q", got)
+	}
+	if gotRunes := len([]rune(got)); gotRunes != store.FinalSnippetRuneLimit {
+		t.Fatalf("capped text rune length = %d, want %d", gotRunes, store.FinalSnippetRuneLimit)
+	}
+	if !strings.Contains(got, textutil.HeadTailTruncationMarker) {
+		t.Fatalf("capped text is missing marker %q", textutil.HeadTailTruncationMarker)
+	}
+	if !strings.HasPrefix(got, wantHead) {
+		t.Fatalf("capped text does not preserve head %q", wantHead)
+	}
+	if !strings.HasSuffix(got, wantTail) {
+		t.Fatalf("capped text does not preserve tail %q", wantTail)
 	}
 }
 

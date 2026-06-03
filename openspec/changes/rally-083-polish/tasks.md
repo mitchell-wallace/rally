@@ -20,10 +20,10 @@
 
 ## 4. Persisted field cap (item 3)
 
-- [ ] 4.1 Add a named final-snippet cap constant of 3000 runes and a head+tail truncation helper (reuse/extract the marker style from `buildRecentContext` in `internal/relay/runner.go`)
-- [ ] 4.2 Apply the cap to `TryRecord.Summary` and `TryRecord.RemainingWork` when writing try records in `internal/store`
-- [ ] 4.3 Apply the cap to `summary.jsonl` writes (`internal/progress/store.go` `AppendRunEntry`): `RunEntry.Summary`, `HandoffEntry.Summary`, and each free-text `HandoffEntry.Followups` string
-- [ ] 4.4 Add tests asserting oversized fields are capped to <= 3000 runes with the marker and within-cap fields are written verbatim
+- [x] 4.1 Add a named final-snippet cap constant of 3000 runes and a head+tail truncation helper (reuse/extract the marker style from `buildRecentContext` in `internal/relay/runner.go`)
+- [x] 4.2 Apply the cap to `TryRecord.Summary` and `TryRecord.RemainingWork` when writing try records in `internal/store`
+- [x] 4.3 Apply the cap to `summary.jsonl` writes (`internal/progress/store.go` `AppendRunEntry`): `RunEntry.Summary`, `HandoffEntry.Summary`, and each free-text `HandoffEntry.Followups` string
+- [x] 4.4 Add tests asserting oversized fields are capped to <= 3000 runes with the marker and within-cap fields are written verbatim
 
 ## 5. Retry console + run-level tally (item 2)
 

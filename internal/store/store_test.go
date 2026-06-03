@@ -4,8 +4,12 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
+
+	"github.com/mitchell-wallace/rally/internal/textutil"
 )
 
 func setupTempStore(t *testing.T) (string, *Store) {
@@ -94,6 +98,72 @@ func TestCacheReload(t *testing.T) {
 	}
 	if store2.GetRelay(1) == nil {
 		t.Fatal("GetRelay(1) returned nil")
+	}
+}
+
+func TestAppendTryCapsFinalSnippetFields(t *testing.T) {
+	rallyDir, store := setupTempStore(t)
+
+	longSummary := strings.Repeat("界", FinalSnippetRuneLimit) + "middle" + strings.Repeat("終", FinalSnippetRuneLimit)
+	longRemainingWork := strings.Repeat("前", FinalSnippetRuneLimit) + "middle" + strings.Repeat("後", FinalSnippetRuneLimit)
+	smallSummary := "short summary\nkept verbatim"
+	smallRemainingWork := "small remaining work"
+
+	if err := store.AppendTry(TryRecord{
+		ID:            1,
+		Summary:       longSummary,
+		RemainingWork: longRemainingWork,
+	}); err != nil {
+		t.Fatalf("AppendTry oversized record: %v", err)
+	}
+	if err := store.AppendTry(TryRecord{
+		ID:            2,
+		Summary:       smallSummary,
+		RemainingWork: smallRemainingWork,
+	}); err != nil {
+		t.Fatalf("AppendTry small record: %v", err)
+	}
+
+	stored, err := readJSONL[TryRecord](filepath.Join(rallyDir, "state", "tries.jsonl"))
+	if err != nil {
+		t.Fatalf("read tries.jsonl: %v", err)
+	}
+	if len(stored) != 2 {
+		t.Fatalf("stored try count = %d, want 2", len(stored))
+	}
+
+	assertCappedFinalSnippet(t, stored[0].Summary, "界", "終")
+	assertCappedFinalSnippet(t, stored[0].RemainingWork, "前", "後")
+	if stored[1].Summary != smallSummary {
+		t.Fatalf("small summary = %q, want verbatim %q", stored[1].Summary, smallSummary)
+	}
+	if stored[1].RemainingWork != smallRemainingWork {
+		t.Fatalf("small remaining work = %q, want verbatim %q", stored[1].RemainingWork, smallRemainingWork)
+	}
+
+	cached := store.AllTries()
+	if cached[0].Summary != stored[0].Summary || cached[0].RemainingWork != stored[0].RemainingWork {
+		t.Fatal("cached try fields do not match the capped persisted values")
+	}
+}
+
+func assertCappedFinalSnippet(t *testing.T, got, wantHead, wantTail string) {
+	t.Helper()
+
+	if !utf8.ValidString(got) {
+		t.Fatalf("capped text is not valid UTF-8: %q", got)
+	}
+	if gotRunes := len([]rune(got)); gotRunes != FinalSnippetRuneLimit {
+		t.Fatalf("capped text rune length = %d, want %d", gotRunes, FinalSnippetRuneLimit)
+	}
+	if !strings.Contains(got, textutil.HeadTailTruncationMarker) {
+		t.Fatalf("capped text is missing marker %q", textutil.HeadTailTruncationMarker)
+	}
+	if !strings.HasPrefix(got, wantHead) {
+		t.Fatalf("capped text does not preserve head %q", wantHead)
+	}
+	if !strings.HasSuffix(got, wantTail) {
+		t.Fatalf("capped text does not preserve tail %q", wantTail)
 	}
 }
 

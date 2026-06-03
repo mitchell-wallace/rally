@@ -43,6 +43,8 @@ func (s *Store) AppendTry(t TryRecord) error {
 	} else if t.CommitHash != "" {
 		t.CommitHistory = []string{t.CommitHash}
 	}
+	t.Summary = TruncateFinalSnippet(t.Summary)
+	t.RemainingWork = TruncateFinalSnippet(t.RemainingWork)
 
 	if err := os.MkdirAll(s.stateDir, 0o755); err != nil {
 		return err

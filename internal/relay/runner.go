@@ -24,6 +24,7 @@ import (
 	"github.com/mitchell-wallace/rally/internal/store"
 	"github.com/mitchell-wallace/rally/internal/style"
 	"github.com/mitchell-wallace/rally/internal/telemetry"
+	"github.com/mitchell-wallace/rally/internal/textutil"
 )
 
 type Config struct {
@@ -647,7 +648,7 @@ func buildRecentContext(tries []store.TryRecord, perSummaryLimit, overallLimit i
 		if perSummaryLimit > 0 && len(summary) > perSummaryLimit {
 			headSize := perSummaryLimit / 2
 			tailSize := perSummaryLimit - headSize
-			summary = summary[:headSize] + "... [truncated] ..." + summary[len(summary)-tailSize:]
+			summary = summary[:headSize] + textutil.HeadTailTruncationMarker + summary[len(summary)-tailSize:]
 		}
 		fmt.Fprintf(&buf, "Run %d (%s): completed=%v summary=%s\n", t.RunID, t.AgentType, t.Completed, summary)
 	}
@@ -655,7 +656,7 @@ func buildRecentContext(tries []store.TryRecord, perSummaryLimit, overallLimit i
 		result := buf.String()
 		headSize := overallLimit / 2
 		tailSize := overallLimit - headSize
-		return result[:headSize] + "... [truncated] ..." + result[len(result)-tailSize:]
+		return result[:headSize] + textutil.HeadTailTruncationMarker + result[len(result)-tailSize:]
 	}
 	return buf.String()
 }

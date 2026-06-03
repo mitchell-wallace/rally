@@ -88,7 +88,12 @@ func AppendRunEntry(workspaceDir string, entry RunEntry) error {
 	}
 
 	entry.UpdatedAt = time.Now().UTC().Format(time.RFC3339)
+	entry.Summary = store.TruncateFinalSnippet(entry.Summary)
 	if entry.Handoff != nil {
+		entry.Handoff.Summary = store.TruncateFinalSnippet(entry.Handoff.Summary)
+		for i := range entry.Handoff.Followups {
+			entry.Handoff.Followups[i] = store.TruncateFinalSnippet(entry.Handoff.Followups[i])
+		}
 		if entry.Handoff.Followups == nil {
 			entry.Handoff.Followups = []string{}
 		}
