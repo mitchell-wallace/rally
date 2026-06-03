@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -166,6 +167,147 @@ func TestRunOneFinalSnippetExecutorFallbackConsistentAcrossRetryAndRecords(t *te
 	}
 	if entries[0].Summary != executorSummary {
 		t.Fatalf("summary.jsonl summary = %q, want %q", entries[0].Summary, executorSummary)
+	}
+}
+
+func TestRunOneNonOpenCodeInvalidStructuredResultDoesNotPersistTranscript(t *testing.T) {
+	const rawTranscript = "RAW_TRANSCRIPT_THAT_MUST_NOT_PERSIST"
+
+	tests := []struct {
+		name        string
+		harness     string
+		script      string
+		wantSummary string
+		newExecutor func() agent.Executor
+	}{
+		{
+			name:    "claude missing result event",
+			harness: "claude",
+			script: "#!/bin/sh\n" +
+				"printf '%s\\n' '{\"type\":\"assistant\",\"message\":{\"content\":[{\"type\":\"text\",\"text\":\"" + rawTranscript + "\"}]}}'\n",
+			wantSummary: "claude produced no structured result",
+			newExecutor: func() agent.Executor { return &agent.ClaudeExecutor{} },
+		},
+		{
+			name:    "claude result missing summary",
+			harness: "claude",
+			script: "#!/bin/sh\n" +
+				"printf '%s\\n' '{\"type\":\"result\",\"result\":{\"transcript\":\"" + rawTranscript + "\"}}'\n",
+			wantSummary: "claude structured result contained no summary",
+			newExecutor: func() agent.Executor { return &agent.ClaudeExecutor{} },
+		},
+		{
+			name:        "gemini malformed wrapper",
+			harness:     "gemini",
+			script:      "#!/bin/sh\nprintf '%s\\n' '" + rawTranscript + "'\n",
+			wantSummary: "gemini produced no parseable JSON result",
+			newExecutor: func() agent.Executor { return &agent.GeminiExecutor{} },
+		},
+		{
+			name:    "gemini missing response",
+			harness: "gemini",
+			script: "#!/bin/sh\n" +
+				"printf '%s\\n' '{\"session_id\":\"gem-session\",\"transcript\":\"" + rawTranscript + "\",\"stats\":{}}'\n",
+			wantSummary: "gemini produced no structured response",
+			newExecutor: func() agent.Executor { return &agent.GeminiExecutor{} },
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			workspaceDir := t.TempDir()
+			rallyDir := store.RallyDir(workspaceDir)
+			if err := os.MkdirAll(rallyDir, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			s := newTestStore(t, rallyDir)
+
+			binDir := filepath.Join(t.TempDir(), "bin")
+			if err := os.MkdirAll(binDir, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(filepath.Join(binDir, tc.harness), []byte(tc.script), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+			attempt := 0
+			retryPreviousSummary := ""
+			delegate := tc.newExecutor()
+			exec := &funcExecutor{
+				fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+					attempt++
+					if attempt == 2 {
+						retryPreviousSummary = opts.PreviousSummary
+					}
+					return delegate.Execute(ctx, opts)
+				},
+			}
+			r := NewRunner(s, Config{
+				WorkspaceDir: workspaceDir,
+				DataDir:      t.TempDir(),
+				RetryBudget:  2,
+			}, map[string]agent.Executor{tc.harness: exec})
+
+			_, _, _, _, _, _, err := r.runOne(
+				context.Background(),
+				&store.RelayRecord{ID: 1, TargetIterations: 1},
+				0,
+				agent.ResolvedAgent{Harness: tc.harness},
+				runTask{Name: "missing structured result task"},
+				nil,
+				nil,
+				false,
+				false,
+				nil,
+				nil,
+				io.Discard,
+			)
+			if err != nil {
+				t.Fatalf("runOne error = %v", err)
+			}
+
+			if retryPreviousSummary != tc.wantSummary {
+				t.Fatalf("retry previous summary = %q, want %q", retryPreviousSummary, tc.wantSummary)
+			}
+			if strings.Contains(retryPreviousSummary, rawTranscript) {
+				t.Fatalf("retry context leaked raw transcript: %q", retryPreviousSummary)
+			}
+
+			tries := s.AllTries()
+			if len(tries) != 2 {
+				t.Fatalf("tries = %d, want 2", len(tries))
+			}
+			logData, err := os.ReadFile(tries[0].LogPath)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !strings.Contains(string(logData), rawTranscript) {
+				t.Fatalf("test setup did not place raw transcript in try log: %q", string(logData))
+			}
+			for i, tr := range tries {
+				if tr.Summary != tc.wantSummary {
+					t.Fatalf("try %d summary = %q, want %q", i+1, tr.Summary, tc.wantSummary)
+				}
+				if strings.Contains(tr.Summary, rawTranscript) {
+					t.Fatalf("try %d summary leaked raw transcript: %q", i+1, tr.Summary)
+				}
+			}
+
+			entries, err := progress.LoadSummaryEntries(workspaceDir)
+			if err != nil {
+				t.Fatalf("LoadSummaryEntries error = %v", err)
+			}
+			if len(entries) != 1 {
+				t.Fatalf("summary entries = %d, want 1", len(entries))
+			}
+			if entries[0].Summary != tc.wantSummary {
+				t.Fatalf("summary.jsonl summary = %q, want %q", entries[0].Summary, tc.wantSummary)
+			}
+			if strings.Contains(entries[0].Summary, rawTranscript) {
+				t.Fatalf("summary.jsonl leaked raw transcript: %q", entries[0].Summary)
+			}
+		})
 	}
 }
 

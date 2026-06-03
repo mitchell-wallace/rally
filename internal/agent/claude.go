@@ -13,6 +13,12 @@ type ClaudeExecutor struct {
 	Model string
 }
 
+const (
+	claudeNoResultSummary        = "claude produced no structured result"
+	claudeMalformedResultSummary = "claude produced an unparseable structured result"
+	claudeMissingSummary         = "claude structured result contained no summary"
+)
+
 type claudeJSONEvent struct {
 	Type      string          `json:"type"`
 	SessionID string          `json:"session_id,omitempty"`
@@ -104,15 +110,37 @@ func scanClaudeOutput(out []byte) (resultRaw []byte, sessionID string, toolCalls
 	return resultRaw, sessionID, toolCalls
 }
 
-func parseClaudeResult(out, resultRaw []byte) (*TryResult, error) {
-	if resultRaw == nil {
-		return &TryResult{Completed: false, Summary: string(out)}, nil
+func parseClaudeResult(_ []byte, resultRaw []byte) (*TryResult, error) {
+	if strings.TrimSpace(string(resultRaw)) == "" {
+		return &TryResult{Completed: false, Summary: claudeNoResultSummary}, nil
 	}
 
 	var tr TryResult
-	if err := json.Unmarshal(resultRaw, &tr); err != nil {
-		return &TryResult{Completed: true, Summary: string(resultRaw)}, nil
+	if err := json.Unmarshal(resultRaw, &tr); err == nil {
+		if strings.TrimSpace(tr.Summary) == "" {
+			tr.Completed = false
+			tr.Summary = claudeMissingSummary
+		}
+		return &tr, nil
 	}
 
-	return &tr, nil
+	// Claude may return the final assistant message as a JSON string instead
+	// of the requested TryResult object. That string is final text, not the
+	// stream-json transcript, so retain a bounded version as a useful fallback.
+	var finalText string
+	if err := json.Unmarshal(resultRaw, &finalText); err == nil {
+		var nested TryResult
+		if err := json.Unmarshal([]byte(finalText), &nested); err == nil {
+			if strings.TrimSpace(nested.Summary) == "" {
+				nested.Completed = false
+				nested.Summary = claudeMissingSummary
+			}
+			return &nested, nil
+		}
+		if summary := boundedExecutorFinalText(finalText); summary != "" {
+			return &TryResult{Completed: true, Summary: summary}, nil
+		}
+	}
+
+	return &TryResult{Completed: false, Summary: claudeMalformedResultSummary}, nil
 }

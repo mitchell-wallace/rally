@@ -1,6 +1,19 @@
 package agent
 
-import "context"
+import (
+	"context"
+	"strings"
+
+	"github.com/mitchell-wallace/rally/internal/textutil"
+)
+
+const executorFinalTextRuneLimit = 1000
+
+// boundedExecutorFinalText keeps unstructured final assistant text useful
+// without allowing it to become a transcript-sized summary.
+func boundedExecutorFinalText(text string) string {
+	return textutil.TruncateHeadTailRunes(strings.TrimSpace(text), executorFinalTextRuneLimit)
+}
 
 type ResolvedAgent struct {
 	Harness string

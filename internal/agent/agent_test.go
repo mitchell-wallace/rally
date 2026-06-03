@@ -3,6 +3,7 @@ package agent
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -202,6 +203,9 @@ func TestParseClaudeOutput_Valid(t *testing.T) {
 		// because resultRaw was nil, completed should be false
 		t.Error("expected incomplete when no resultRaw")
 	}
+	if tr.Summary != claudeNoResultSummary {
+		t.Errorf("summary = %q, want %q", tr.Summary, claudeNoResultSummary)
+	}
 
 	// Now with resultRaw
 	tr, err = parseClaudeResult(out, []byte(`{"completed":true,"summary":"ok"}`))
@@ -225,8 +229,11 @@ func TestParseClaudeOutput_Malformed(t *testing.T) {
 	if tr.Completed {
 		t.Error("expected not completed")
 	}
-	if !strings.Contains(tr.Summary, "not json") {
-		t.Errorf("expected raw output in summary, got %q", tr.Summary)
+	if tr.Summary != claudeNoResultSummary {
+		t.Errorf("summary = %q, want %q", tr.Summary, claudeNoResultSummary)
+	}
+	if strings.Contains(tr.Summary, "not json") {
+		t.Errorf("summary leaked raw output: %q", tr.Summary)
 	}
 }
 
@@ -238,6 +245,9 @@ func TestParseClaudeOutput_MissingResultField(t *testing.T) {
 	}
 	if tr.Completed {
 		t.Error("expected not completed")
+	}
+	if tr.Summary != claudeNoResultSummary {
+		t.Errorf("summary = %q, want %q", tr.Summary, claudeNoResultSummary)
 	}
 }
 
@@ -261,11 +271,49 @@ func TestParseClaudeOutput_MalformedJSON(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !tr.Completed {
-		t.Error("expected completed fallback for malformed JSON")
+	if tr.Completed {
+		t.Error("expected malformed structured result to remain incomplete")
 	}
-	if tr.Summary != "not-json-at-all" {
-		t.Errorf("expected raw result in summary, got %q", tr.Summary)
+	if tr.Summary != claudeMalformedResultSummary {
+		t.Errorf("summary = %q, want %q", tr.Summary, claudeMalformedResultSummary)
+	}
+	if strings.Contains(tr.Summary, "not-json-at-all") {
+		t.Errorf("summary leaked raw result: %q", tr.Summary)
+	}
+}
+
+func TestParseClaudeOutput_MissingStructuredSummary(t *testing.T) {
+	tr, err := parseClaudeResult(nil, []byte(`{"completed":true}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tr.Completed {
+		t.Error("expected result without summary to remain incomplete")
+	}
+	if tr.Summary != claudeMissingSummary {
+		t.Errorf("summary = %q, want %q", tr.Summary, claudeMissingSummary)
+	}
+}
+
+func TestParseClaudeOutput_BoundsFinalTextFallback(t *testing.T) {
+	finalText := strings.Repeat("start ", executorFinalTextRuneLimit) + "useful tail"
+	resultRaw, err := json.Marshal(finalText)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	tr, err := parseClaudeResult(nil, resultRaw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !tr.Completed {
+		t.Error("expected final assistant text fallback to be completed")
+	}
+	if got := len([]rune(tr.Summary)); got > executorFinalTextRuneLimit {
+		t.Fatalf("summary rune length = %d, want <= %d", got, executorFinalTextRuneLimit)
+	}
+	if !strings.Contains(tr.Summary, "useful tail") {
+		t.Errorf("summary = %q, want useful tail", tr.Summary)
 	}
 }
 
@@ -291,6 +339,9 @@ func TestParseGeminiOutput_MissingResponse(t *testing.T) {
 	}
 	if tr.Completed {
 		t.Error("expected not completed")
+	}
+	if tr.Summary != geminiMissingResponseSummary {
+		t.Errorf("summary = %q, want %q", tr.Summary, geminiMissingResponseSummary)
 	}
 }
 
@@ -318,7 +369,63 @@ func TestParseGeminiOutput_MalformedJSON(t *testing.T) {
 		t.Error("expected completed fallback for malformed inner JSON")
 	}
 	if tr.Summary != "not json content" {
-		t.Errorf("expected raw response in summary, got %q", tr.Summary)
+		t.Errorf("expected final response text in summary, got %q", tr.Summary)
+	}
+}
+
+func TestParseGeminiOutput_MalformedWrapperDoesNotLeakRawOutput(t *testing.T) {
+	out := []byte(`raw transcript that must not leak`)
+	tr, err := parseGeminiOutput(out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tr.Completed {
+		t.Error("expected malformed wrapper to remain incomplete")
+	}
+	if tr.Summary != geminiUnparseableOutputSummary {
+		t.Errorf("summary = %q, want %q", tr.Summary, geminiUnparseableOutputSummary)
+	}
+	if strings.Contains(tr.Summary, "raw transcript") {
+		t.Errorf("summary leaked raw output: %q", tr.Summary)
+	}
+}
+
+func TestParseGeminiOutput_MissingStructuredSummary(t *testing.T) {
+	out := []byte(`{"response":"{\"completed\":true}","session_id":"abc","stats":{"tools":{"totalCalls":2}}}`)
+	tr, err := parseGeminiOutput(out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tr.Completed {
+		t.Error("expected response without summary to remain incomplete")
+	}
+	if tr.Summary != geminiMissingSummary {
+		t.Errorf("summary = %q, want %q", tr.Summary, geminiMissingSummary)
+	}
+	if tr.ToolCalls != 2 {
+		t.Errorf("tool calls = %d, want 2", tr.ToolCalls)
+	}
+}
+
+func TestParseGeminiOutput_BoundsFinalTextFallback(t *testing.T) {
+	finalText := strings.Repeat("start ", executorFinalTextRuneLimit) + "useful tail"
+	out, err := json.Marshal(geminiWrapper{Response: finalText, SessionID: "abc"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	tr, err := parseGeminiOutput(out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !tr.Completed {
+		t.Error("expected final assistant text fallback to be completed")
+	}
+	if got := len([]rune(tr.Summary)); got > executorFinalTextRuneLimit {
+		t.Fatalf("summary rune length = %d, want <= %d", got, executorFinalTextRuneLimit)
+	}
+	if !strings.Contains(tr.Summary, "useful tail") {
+		t.Errorf("summary = %q, want useful tail", tr.Summary)
 	}
 }
 

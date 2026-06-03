@@ -15,6 +15,12 @@ type GeminiExecutor struct {
 	Model string
 }
 
+const (
+	geminiUnparseableOutputSummary = "gemini produced no parseable JSON result"
+	geminiMissingResponseSummary   = "gemini produced no structured response"
+	geminiMissingSummary           = "gemini structured response contained no summary"
+)
+
 type geminiWrapper struct {
 	Response  string       `json:"response"`
 	SessionID string       `json:"session_id"`
@@ -130,7 +136,7 @@ func appendStderrToLog(path, stderr string) error {
 func parseGeminiOutput(out []byte) (*TryResult, error) {
 	var wrap geminiWrapper
 	if err := json.Unmarshal(out, &wrap); err != nil {
-		return &TryResult{Completed: false, Summary: string(out)}, nil
+		return &TryResult{Completed: false, Summary: geminiUnparseableOutputSummary}, nil
 	}
 
 	toolCalls := 0
@@ -138,13 +144,22 @@ func parseGeminiOutput(out []byte) (*TryResult, error) {
 		toolCalls = wrap.Stats.Tools.TotalCalls
 	}
 
-	if wrap.Response == "" {
-		return &TryResult{Completed: false, Summary: string(out), SessionID: wrap.SessionID, ToolCalls: toolCalls}, nil
+	if strings.TrimSpace(wrap.Response) == "" {
+		return &TryResult{Completed: false, Summary: geminiMissingResponseSummary, SessionID: wrap.SessionID, ToolCalls: toolCalls}, nil
 	}
 
 	var tr TryResult
 	if err := json.Unmarshal([]byte(wrap.Response), &tr); err != nil {
-		return &TryResult{Completed: true, Summary: wrap.Response, SessionID: wrap.SessionID, ToolCalls: toolCalls}, nil
+		return &TryResult{
+			Completed: true,
+			Summary:   boundedExecutorFinalText(wrap.Response),
+			SessionID: wrap.SessionID,
+			ToolCalls: toolCalls,
+		}, nil
+	}
+	if strings.TrimSpace(tr.Summary) == "" {
+		tr.Completed = false
+		tr.Summary = geminiMissingSummary
 	}
 	tr.SessionID = wrap.SessionID
 	if tr.ToolCalls == 0 {
