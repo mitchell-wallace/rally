@@ -17,11 +17,11 @@
       "title": "Harden OpenCode JSON parsing and fallback summaries",
       "description": "Context: Implement OpenSpec change rally-083-polish tasks 3.1-3.2 using spike-opencode-json.md and spike-evidence/ as the schema authority. Read specs/executor/spec.md and design.md.\\n\\nOutcome: parseOpenCodeOutput never emits raw stdout as Summary, parses ordered text/tool/step_finish events, handles top-level error events, and uses short bounded failure indicators.\\n\\nFiles \u0026 scope: Focus on internal/agent/opencode.go and internal/agent tests. Do not add early process reaping or per-harness stall behavior.\\n\\nDesign: Completion requires exit status semantics plus text or step_finish and no error event. Error summaries should use message/ref/name without transcript leakage.\\n\\nAcceptance: Add tests based on captured event families, run relevant Go tests, and mark tasks 3.1-3.2 complete in tasks.md.",
       "assignee": "SENIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 131072,
       "createdAt": "2026-06-03T03:56:54.643063908Z",
-      "updatedAt": "2026-06-03T03:56:54.643063908Z",
-      "completedAt": null
+      "updatedAt": "2026-06-03T05:33:44.783195955Z",
+      "completedAt": "2026-06-03T05:33:44.783195955Z"
     },
     {
       "id": "rall-9f94",
