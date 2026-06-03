@@ -138,11 +138,11 @@
       "title": "Verify agent prompt restructure and operational polish",
       "description": "Context: Review rally-083-polish tasks 2.1-7.8 after the operational and prompt slices. Use the openspec-verify-change skill against rally-083-polish, focusing on agent-prompt composition, routes diagnostics, retry/tally behavior, and gitignore tolerance.\\n\\nVerification: Identify the intended branch target/base before diffing and the first lap/try in this batch; treat earlier work as pre-existing. Inspect package-rename fallout, run focused and broad tests, and compare implementation to all changed specs.\\n\\nConstraints: Do not rewrite git history. Fix only tiny safe one-liners; add focused head laps for substantive gaps.",
       "assignee": "VERIFY",
-      "isDone": false,
+      "isDone": true,
       "order": 720896,
       "createdAt": "2026-06-03T03:56:54.755104681Z",
-      "updatedAt": "2026-06-03T03:56:54.755104681Z",
-      "completedAt": null
+      "updatedAt": "2026-06-03T07:57:08.574525839Z",
+      "completedAt": "2026-06-03T07:57:08.574525839Z"
     },
     {
       "id": "rall-8933",
