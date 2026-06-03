@@ -176,3 +176,74 @@ SENIOR = ["cc"]
 		t.Fatalf("output = %q, want missing default warning", output)
 	}
 }
+
+func TestRoutesCheckRolePromptDiagnosticsEmbedded(t *testing.T) {
+	workspaceDir := t.TempDir()
+	writeRoutesConfig(t, workspaceDir, `schema_version = 2
+
+[routes]
+default = ["cc"]
+`)
+
+	output, err := executeRoutesCheck(t, workspaceDir)
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+
+	if !strings.Contains(output, "role prompt diagnostics:") {
+		t.Fatalf("output = %q, want role prompt diagnostics header", output)
+	}
+	if !strings.Contains(output, "- junior: ~") || !strings.Contains(output, "(embedded)") {
+		t.Fatalf("output = %q, want embedded junior role count", output)
+	}
+}
+
+func TestRoutesCheckRolePromptDiagnosticsCustomAndOverlap(t *testing.T) {
+	workspaceDir := t.TempDir()
+	writeRoutesConfig(t, workspaceDir, `schema_version = 2
+
+[routes]
+default = ["cc"]
+`)
+	agentsDir := filepath.Join(workspaceDir, ".rally", "agents")
+	if err := os.MkdirAll(agentsDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// Custom role with overlap term
+	if err := os.WriteFile(filepath.Join(agentsDir, "senior.md"), []byte("This is a custom senior role. laps done is great."), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// Custom role without overlap
+	if err := os.WriteFile(filepath.Join(agentsDir, "qa.md"), []byte("Just a custom QA role, no overlap here."), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// Custom role with headless overlap
+	if err := os.WriteFile(filepath.Join(agentsDir, "script.md"), []byte("Headless script execution context."), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	output, err := executeRoutesCheck(t, workspaceDir)
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+
+	if !strings.Contains(output, "- senior: ~") || !strings.Contains(output, "(custom, .rally/agents/senior.md)") {
+		t.Fatalf("output = %q, want custom senior role count", output)
+	}
+	if !strings.Contains(output, "- qa: ~") || !strings.Contains(output, "(custom, .rally/agents/qa.md)") {
+		t.Fatalf("output = %q, want custom qa role count", output)
+	}
+	if !strings.Contains(output, "- script: ~") || !strings.Contains(output, "(custom, .rally/agents/script.md)") {
+		t.Fatalf("output = %q, want custom script role count", output)
+	}
+
+	if !strings.Contains(output, `advisory: custom role prompt .rally/agents/senior.md references "laps done"`) {
+		t.Fatalf("output = %q, want advisory for laps done overlap", output)
+	}
+	if !strings.Contains(output, `advisory: custom role prompt .rally/agents/script.md references "headless"`) {
+		t.Fatalf("output = %q, want advisory for headless overlap", output)
+	}
+	if strings.Contains(output, `advisory: custom role prompt .rally/agents/qa.md`) {
+		t.Fatalf("output = %q, want NO advisory for qa role", output)
+	}
+}

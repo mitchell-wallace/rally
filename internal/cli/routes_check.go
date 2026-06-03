@@ -10,9 +10,11 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/mitchell-wallace/rally/internal/agent_prompt"
 	"github.com/mitchell-wallace/rally/internal/config"
 	"github.com/mitchell-wallace/rally/internal/gitx"
 	"github.com/mitchell-wallace/rally/internal/routing"
+	"github.com/mitchell-wallace/rally/internal/user_prompt/roleloader"
 	"github.com/spf13/cobra"
 )
 
@@ -22,9 +24,23 @@ var resolveWorkspaceDir = defaultResolveWorkspaceDir
 var loadConfig = config.LoadV2
 
 type RouteCheckResult struct {
-	Summaries []RouteSummary
-	Warnings  []string
-	Infos     []string
+	Summaries       []RouteSummary
+	RoleDiagnostics []RoleDiagnostic
+	Overlaps        []RoleOverlap
+	Warnings        []string
+	Infos           []string
+}
+
+type RoleDiagnostic struct {
+	Role       string
+	TokenCount int
+	IsCustom   bool
+}
+
+type RoleOverlap struct {
+	Role       string
+	MatchTerm  string
+	IsHeadless bool
 }
 
 type RouteSummary struct {
@@ -112,7 +128,92 @@ func CheckRoutes(workspaceDir string, cfg config.V2Config) (RouteCheckResult, er
 			fmt.Sprintf("info: route %q is declared but not referenced by any current lap assignee", name))
 	}
 
+	diags, overlaps, err := checkRoles(workspaceDir)
+	if err != nil {
+		return result, fmt.Errorf("routes check: %w", err)
+	}
+	result.RoleDiagnostics = diags
+	result.Overlaps = overlaps
+
 	return result, nil
+}
+
+func checkRoles(workspaceDir string) ([]RoleDiagnostic, []RoleOverlap, error) {
+	rolesMap := map[string]struct{}{}
+	for _, r := range agent_prompt.Roles() {
+		rolesMap[strings.ToLower(r)] = struct{}{}
+	}
+
+	agentsDir := filepath.Join(workspaceDir, ".rally", "agents")
+	entries, err := os.ReadDir(agentsDir)
+	if err == nil {
+		for _, e := range entries {
+			if e.IsDir() {
+				continue
+			}
+			name := e.Name()
+			if strings.HasSuffix(name, ".md") {
+				base := strings.TrimSuffix(name, ".md")
+				rolesMap[strings.ToLower(base)] = struct{}{}
+			}
+		}
+	} else if !os.IsNotExist(err) {
+		return nil, nil, fmt.Errorf("read agents dir: %w", err)
+	}
+
+	names := make([]string, 0, len(rolesMap))
+	for name := range rolesMap {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+
+	var diags []RoleDiagnostic
+	var overlaps []RoleOverlap
+
+	for _, name := range names {
+		var content string
+		isCustom := false
+
+		customPath := filepath.Join(agentsDir, name+".md")
+		if data, err := os.ReadFile(customPath); err == nil {
+			content = string(data)
+			isCustom = true
+		} else {
+			// case-variant fallback (like roleloader does, but simplified here; we can use roleloader.Loader)
+			loaded, err := roleloader.Loader{WorkspaceDir: workspaceDir}.Load(name)
+			if err != nil {
+				return nil, nil, fmt.Errorf("load role %q: %w", name, err)
+			}
+			if loaded != "" {
+				content = loaded
+				isCustom = true
+			} else {
+				content, _ = agent_prompt.Role(name)
+			}
+		}
+
+		tokCount := len(content) / 4
+		diags = append(diags, RoleDiagnostic{
+			Role:       name,
+			TokenCount: tokCount,
+			IsCustom:   isCustom,
+		})
+
+		if isCustom {
+			lowerContent := strings.ToLower(content)
+			if strings.Contains(lowerContent, "laps done") {
+				overlaps = append(overlaps, RoleOverlap{Role: name, MatchTerm: "laps done", IsHeadless: false})
+			} else if strings.Contains(lowerContent, "laps handoff") {
+				overlaps = append(overlaps, RoleOverlap{Role: name, MatchTerm: "laps handoff", IsHeadless: false})
+			} else if strings.Contains(lowerContent, "laps wrapup") {
+				overlaps = append(overlaps, RoleOverlap{Role: name, MatchTerm: "laps wrapup", IsHeadless: false})
+			} else if strings.Contains(lowerContent, "headless") {
+				overlaps = append(overlaps, RoleOverlap{Role: name, MatchTerm: "headless", IsHeadless: true})
+			}
+		}
+	}
+
+	return diags, overlaps, nil
 }
 
 func renderRouteCheckResult(w io.Writer, result RouteCheckResult) {
@@ -124,11 +225,44 @@ func renderRouteCheckResult(w io.Writer, result RouteCheckResult) {
 			fmt.Fprintf(w, "- %s: %d %s\n", summary.Name, summary.EntryCount, pluralize(summary.EntryCount, "entry", "entries"))
 		}
 	}
+
+	if len(result.RoleDiagnostics) > 0 {
+		fmt.Fprintln(w, "\nrole prompt diagnostics:")
+		for _, diag := range result.RoleDiagnostics {
+			src := "embedded"
+			if diag.IsCustom {
+				src = fmt.Sprintf("custom, .rally/agents/%s.md", diag.Role)
+			}
+			fmt.Fprintf(w, "- %s: ~%d tokens (%s)\n", diag.Role, diag.TokenCount, src)
+		}
+	}
+
+	if len(result.Warnings) > 0 || len(result.Infos) > 0 {
+		fmt.Fprintln(w)
+	}
+
 	for _, warning := range result.Warnings {
 		fmt.Fprintln(w, warning)
 	}
 	for _, info := range result.Infos {
 		fmt.Fprintln(w, info)
+	}
+
+	for _, overlap := range result.Overlaps {
+		fmt.Fprintf(w, "\nadvisory: custom role prompt .rally/agents/%s.md references %q.\n", overlap.Role, overlap.MatchTerm)
+		fmt.Fprintln(w, "This may overlap with the shared guidance which is automatically injected.")
+
+		snippetName := "finalize.md"
+		snippetText := agent_prompt.Finalize()
+		if overlap.IsHeadless {
+			snippetName = "headless.md"
+			snippetText = agent_prompt.Headless()
+		}
+
+		fmt.Fprintf(w, "For comparison, the embedded general/%s snippet is:\n", snippetName)
+		fmt.Fprintln(w, "---")
+		fmt.Fprintln(w, snippetText)
+		fmt.Fprintln(w, "---")
 	}
 }
 

@@ -44,9 +44,9 @@
 - [x] 7.3 Add `general/finalize.md` (commit + `laps done`/`laps handoff` + up-front `laps wrapup`) and `general/headless.md` (non-interactive; take intent from referenced planning docs)
 - [x] 7.4 Migrate `.rally/agents/{junior,senior,ui,verify}.md` content into `roles/*.md` as embedded defaults, stripping the shared finalize block now provided by `general/`
 - [x] 7.5 Document and implement prompt composition as a template: shared `general/` snippets are always included, the role slot is filled by on-disk `.rally/agents/<role>.md` when present or embedded `roles/<role>.md` otherwise, then existing task context is appended; preserve explicit `RunOptions.Prompt` override semantics and existing prompt sections for project instructions, role/persona guidance, task name/requirements, inbox/relay messages, previous summary, and recent try context
-- [ ] 7.6 Extend `rally routes check` so it always lists detected roles and approximate token count per role prompt, leaves custom prompts untouched, and emits advisory overlap diagnostics when custom role files reference `laps done`, `laps handoff`, `laps wrapup`, or `headless`, printing the embedded finalize/headless snippets for comparison
+- [x] 7.6 Extend `rally routes check` so it always lists detected roles and approximate token count per role prompt, leaves custom prompts untouched, and emits advisory overlap diagnostics when custom role files reference `laps done`, `laps handoff`, `laps wrapup`, or `headless`, printing the embedded finalize/headless snippets for comparison
 - [x] 7.7 Add a note to `AGENTS.md` that prompt package naming reflects who is being prompted (`user_prompt` vs `agent_prompt`)
-- [ ] 7.8 Add tests for embedded-default loading, on-disk override precedence, composed-prompt inclusion of finalize + headless guidance, preserved `RunOptions` prompt sections, and `rally routes check` role/token diagnostics plus advisory conflict output
+- [x] 7.8 Add tests for embedded-default loading, on-disk override precedence, composed-prompt inclusion of finalize + headless guidance, preserved `RunOptions` prompt sections, and `rally routes check` role/token diagnostics plus advisory conflict output
 
 ## 8. Release wiring & verification
 
