@@ -105,11 +105,11 @@
       "title": "Create embedded agent prompt sources and rename user prompts",
       "description": "Context: Implement OpenSpec change rally-083-polish tasks 7.1-7.4 and 7.7. Read design.md and specs/agent-prompt/spec.md.\\n\\nOutcome: internal/prompt becomes internal/user_prompt, a new internal/agent_prompt embeds general/ and roles/ markdown sources, embedded role defaults are migrated from current role docs without repeated shared finalize guidance, and AGENTS.md documents the naming convention.\\n\\nFiles \u0026 scope: Update all imports for the internal package rename. Do not rewrite operator-owned custom role files as a migration step.\\n\\nDesign: Package names reflect who is being prompted. General finalize and headless guidance must be reusable embedded sources; role markdown must remain role-specific.\\n\\nAcceptance: Add focused package tests for embedded source loading, run relevant Go tests, and mark tasks 7.1-7.4 and 7.7 complete in tasks.md.",
       "assignee": "SENIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 524288,
       "createdAt": "2026-06-03T03:56:54.716625095Z",
-      "updatedAt": "2026-06-03T03:56:54.716625095Z",
-      "completedAt": null
+      "updatedAt": "2026-06-03T06:39:38.66555718Z",
+      "completedAt": "2026-06-03T06:39:38.66555718Z"
     },
     {
       "id": "rall-1c7a",

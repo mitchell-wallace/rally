@@ -17,8 +17,10 @@ func TestBuildPrompt_LapsEnabled(t *testing.T) {
 	if !strings.Contains(p, "laps handoff") {
 		t.Error("expected prompt to contain 'laps handoff'")
 	}
-	if strings.Contains(p, "laps wrapup") {
-		t.Error("expected prompt NOT to contain 'laps wrapup'")
+	// The shared finalize guidance now surfaces the laps wrapup reminder up
+	// front, in addition to the hook-triggered reminder after laps done/handoff.
+	if !strings.Contains(p, "laps wrapup") {
+		t.Error("expected prompt to contain 'laps wrapup'")
 	}
 	if strings.Contains(p, "rally progress") {
 		t.Error("expected prompt NOT to contain 'rally progress'")

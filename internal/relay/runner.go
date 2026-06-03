@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/mitchell-wallace/rally/internal/agent"
+	"github.com/mitchell-wallace/rally/internal/agent_prompt"
 	"github.com/mitchell-wallace/rally/internal/gitx"
 	"github.com/mitchell-wallace/rally/internal/keyboard"
 	"github.com/mitchell-wallace/rally/internal/laps"
@@ -1371,12 +1372,29 @@ func (r *Runner) resolveRunTask(ctx context.Context) (runTask, error) {
 	return task, nil
 }
 
+// resolveRoleInstructions fills the role slot of the composed agent prompt.
+// An on-disk .rally/agents/<role>.md file overrides only this slot; when none
+// exists, the embedded roles/<role>.md default is used. Either way the shared
+// general/ finalize and headless guidance is added separately by BuildPrompt
+// and is never suppressed by an on-disk override.
 func (r *Runner) resolveRoleInstructions(assignee string) (string, error) {
 	if !r.cfg.LapsEnabled || strings.TrimSpace(assignee) == "" {
 		return "", nil
 	}
 
-	return roleloader.Loader{WorkspaceDir: r.cfg.WorkspaceDir}.Load(assignee)
+	onDisk, err := roleloader.Loader{WorkspaceDir: r.cfg.WorkspaceDir}.Load(assignee)
+	if err != nil {
+		return "", err
+	}
+	if strings.TrimSpace(onDisk) != "" {
+		return onDisk, nil
+	}
+
+	// No operator override — fall back to the embedded role default.
+	if embedded, ok := agent_prompt.Role(assignee); ok {
+		return embedded, nil
+	}
+	return "", nil
 }
 
 func (r *Runner) executeTry(ctx context.Context, picked agent.ResolvedAgent, opts agent.RunOptions) (*agent.TryResult, error) {

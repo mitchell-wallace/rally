@@ -3,9 +3,14 @@ package agent
 import (
 	"fmt"
 	"strings"
+
+	"github.com/mitchell-wallace/rally/internal/agent_prompt"
 )
 
 func BuildPrompt(opts RunOptions) string {
+	// An explicit prompt override wins outright: the reusable agent-prompt
+	// template (general snippets, role slot, task context) is neither prepended
+	// nor appended, preserving the existing executor prompt contract.
 	if opts.Prompt != "" {
 		return opts.Prompt
 	}
@@ -14,6 +19,21 @@ func BuildPrompt(opts RunOptions) string {
 
 	if opts.Persona != "" {
 		fmt.Fprintf(&b, "Persona: %s\n\n", opts.Persona)
+	}
+
+	// Shared general/ guidance is reusable across every role and is always
+	// included up front when rally drives the run via laps. It sits ahead of the
+	// task context so the wrapup reminder is present up front (in addition to the
+	// hook-triggered reminder after laps done/handoff in the exit-conditions
+	// block below). The role slot itself is supplied via opts.RoleInstructions
+	// (on-disk override or embedded default) and rendered with the task context.
+	if opts.LapsEnabled {
+		if hl := agent_prompt.Headless(); hl != "" {
+			fmt.Fprintf(&b, "## Headless Operation\n%s\n\n", hl)
+		}
+		if fin := agent_prompt.Finalize(); fin != "" {
+			fmt.Fprintf(&b, "## Finalizing Your Work\n%s\n\n", fin)
+		}
 	}
 
 	if opts.TaskName != "" {

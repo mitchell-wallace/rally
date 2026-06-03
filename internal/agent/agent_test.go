@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/mitchell-wallace/rally/internal/agent_prompt"
 	"github.com/mitchell-wallace/rally/internal/gitx"
 	"github.com/mitchell-wallace/rally/internal/testutil"
 )
@@ -118,6 +119,91 @@ func TestBuildPrompt_TaskPrompt(t *testing.T) {
 	}
 	if !strings.Contains(p, "Fix the race condition.") {
 		t.Error("expected task prompt text")
+	}
+}
+
+func TestBuildPrompt_SharedGuidanceIncludedWhenLapsEnabled(t *testing.T) {
+	opts := RunOptions{
+		TaskName:         "Do the thing",
+		RoleInstructions: "Role instructions.",
+		LapsEnabled:      true,
+	}
+	p := BuildPrompt(opts)
+
+	// The shared general/ snippets must always be composed into a laps-driven
+	// agent prompt, sourced verbatim from the embedded agent_prompt package.
+	if !strings.Contains(p, agent_prompt.Headless()) {
+		t.Errorf("prompt missing shared headless guidance:\n%s", p)
+	}
+	if !strings.Contains(p, agent_prompt.Finalize()) {
+		t.Errorf("prompt missing shared finalize guidance:\n%s", p)
+	}
+	// The role slot and existing task context survive alongside the snippets.
+	if !strings.Contains(p, "## Role Instructions\nRole instructions.") {
+		t.Errorf("prompt missing role slot:\n%s", p)
+	}
+	if !strings.Contains(p, "## Run Exit Conditions") {
+		t.Errorf("prompt missing existing exit-conditions section:\n%s", p)
+	}
+}
+
+func TestBuildPrompt_SharedGuidanceOmittedInNoBackendMode(t *testing.T) {
+	opts := RunOptions{
+		TaskName:    "Do the thing",
+		LapsEnabled: false,
+	}
+	p := BuildPrompt(opts)
+
+	// No-backend behavior is preserved: the laps-specific shared snippets are
+	// not injected, and the documented `rally progress` exit action remains.
+	if strings.Contains(p, agent_prompt.Finalize()) {
+		t.Errorf("no-backend prompt should not include finalize guidance:\n%s", p)
+	}
+	if strings.Contains(p, agent_prompt.Headless()) {
+		t.Errorf("no-backend prompt should not include headless guidance:\n%s", p)
+	}
+	if !strings.Contains(p, "rally progress --summary") {
+		t.Errorf("no-backend prompt missing rally progress exit action:\n%s", p)
+	}
+}
+
+func TestBuildPrompt_ExplicitOverrideSkipsSharedGuidance(t *testing.T) {
+	opts := RunOptions{
+		Prompt:      "CUSTOM PROMPT",
+		LapsEnabled: true,
+	}
+	p := BuildPrompt(opts)
+	if p != "CUSTOM PROMPT" {
+		t.Fatalf("explicit override not preserved verbatim, got %q", p)
+	}
+}
+
+func TestBuildPrompt_SharedGuidanceOrdering(t *testing.T) {
+	opts := RunOptions{
+		Persona:          "claude",
+		TaskName:         "Do the thing",
+		RoleInstructions: "Role instructions.",
+		TaskPrompt:       "Task body.",
+		LapsEnabled:      true,
+	}
+	p := BuildPrompt(opts)
+
+	headlessIndex := strings.Index(p, agent_prompt.Headless())
+	finalizeIndex := strings.Index(p, agent_prompt.Finalize())
+	taskNameIndex := strings.Index(p, "Task: Do the thing")
+	taskBodyIndex := strings.Index(p, "## Task\nTask body.")
+	exitIndex := strings.Index(p, "## Run Exit Conditions")
+	if headlessIndex == -1 || finalizeIndex == -1 || taskNameIndex == -1 || taskBodyIndex == -1 || exitIndex == -1 {
+		t.Fatalf("prompt missing expected sections:\n%s", p)
+	}
+
+	// Reusable general snippets are appended ahead of the task context, and the
+	// up-front finalize guidance precedes the exit-conditions block.
+	if !(headlessIndex < taskNameIndex && finalizeIndex < taskNameIndex) {
+		t.Fatalf("expected shared general snippets before task context:\n%s", p)
+	}
+	if !(finalizeIndex < exitIndex) {
+		t.Fatalf("expected finalize wrapup guidance up front, before exit conditions:\n%s", p)
 	}
 }
 
