@@ -61,11 +61,11 @@
       "title": "Verify non-opencode summary fallback hardening",
       "description": "Context: Follow up rally-083-polish final-snippet normalization after the executor-summary gap found in verification. Review the implementation lap that hardens malformed Claude/Gemini fallback summaries so raw command output cannot flow into TryRecord.Summary, retry context, or summary.jsonl through runner normalization.\n\nVerification: Diff only the new follow-up work, run focused executor/runner/progress tests, and confirm malformed or missing structured output now falls back to bounded final text or explicit indicators instead of raw transcripts.\n\nConstraints: Do not rewrite git history. Fix only tiny safe one-liners; otherwise add another focused lap if a substantive gap remains.",
       "assignee": "VERIFY",
-      "isDone": false,
+      "isDone": true,
       "order": 262144,
       "createdAt": "2026-06-03T06:00:08.970342375Z",
-      "updatedAt": "2026-06-03T06:00:08.970342375Z",
-      "completedAt": null
+      "updatedAt": "2026-06-03T06:15:55.833008773Z",
+      "completedAt": "2026-06-03T06:15:55.833008773Z"
     },
     {
       "id": "rall-9180",
