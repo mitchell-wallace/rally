@@ -28,11 +28,11 @@
       "title": "Normalize runner final snippets across retry and progress records",
       "description": "Context: Implement OpenSpec change rally-083-polish tasks 3.3-3.5. Read design.md and specs/relay-runner/spec.md after the OpenCode parser lap.\\n\\nOutcome: The runner uses laps wrapup summary as the golden source when available, otherwise executor final text, otherwise a bounded fallback; retry context, tries.jsonl, and summary.jsonl agree on the normalized snippet.\\n\\nFiles \u0026 scope: Focus on internal/relay runner flow and existing store/progress integration points. Preserve append-only summary.jsonl behavior.\\n\\nDesign: Keep one explicit normalization path and avoid storing raw transcripts or start-of-run narration.\\n\\nAcceptance: Add focused tests for wrapup precedence, executor fallback, bounded fallback, and persisted/retry-context consistency; run relevant Go tests; mark tasks 3.3-3.5 complete in tasks.md.",
       "assignee": "SENIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 196608,
       "createdAt": "2026-06-03T03:56:54.659382183Z",
-      "updatedAt": "2026-06-03T03:56:54.659382183Z",
-      "completedAt": null
+      "updatedAt": "2026-06-03T05:46:04.149842309Z",
+      "completedAt": "2026-06-03T05:46:04.149842309Z"
     },
     {
       "id": "rall-fb3f",
