@@ -7,3 +7,4 @@
 {"agent_type":"claude","event_type":"paused","timestamp":"2026-06-03T06:54:35Z","relay_id":14,"reason":"3 consecutive try failures"}
 {"agent_type":"opencode","event_type":"retry_failed","timestamp":"2026-06-03T06:54:35Z","relay_id":14,"reason":"hourly retry failed"}
 {"agent_type":"codex","event_type":"retry_failed","timestamp":"2026-06-03T07:19:21Z","relay_id":14,"reason":"hourly retry failed"}
+{"agent_type":"antigravity","event_type":"active","timestamp":"2026-06-03T07:31:27Z","relay_id":14,"reason":"hourly retry succeeded"}
