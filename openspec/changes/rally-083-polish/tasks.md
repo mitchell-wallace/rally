@@ -50,6 +50,6 @@
 
 ## 8. Release wiring & verification
 
-- [ ] 8.1 Run `just fmt` and the full test suite; fix fallout from the package rename
-- [ ] 8.2 Bump `internal/buildinfo/VERSION` to 0.8.3
-- [ ] 8.3 Manually verify a short relay: confirm no false "slowing" during reasoning, `retry N/M` shows inline, final tally counts runs once, `tries.jsonl`/`summary.jsonl` entries are bounded, and `TryResult.Summary` matches the `laps wrapup` summary when wrapup was recorded
+- [x] 8.1 Run `just fmt` and the full test suite; fix fallout from the package rename
+- [x] 8.2 Bump `internal/buildinfo/VERSION` to 0.8.3
+- [x] 8.3 Manually verify a short relay: confirm no false "slowing" during reasoning, `retry N/M` shows inline, final tally counts runs once, `tries.jsonl`/`summary.jsonl` entries are bounded, and `TryResult.Summary` matches the `laps wrapup` summary when wrapup was recorded
