@@ -50,11 +50,11 @@
       "title": "Harden non-opencode executor summary fallbacks",
       "description": "Context: Follow up rally-083-polish tasks 3.3-3.5. The verify pass found that  and  still return raw command output on malformed or missing structured results, and  currently treats any non-empty executor summary as trusted final text. That means raw transcripts can still persist through , retry context, and  outside the OpenCode path.\n\nOutcome: Claude/Gemini malformed/no-result paths no longer leak raw transcript output into persisted summaries. Use bounded final text or explicit indicators that satisfy the executor + relay-runner final-snippet semantics without regressing successful structured summaries.\n\nFiles \u0026 scope: Focus on , , and  only if runner-side discrimination is the cleanest fix. Add focused tests proving malformed/missing structured output cannot persist raw transcripts through retry context, try records, or summary.jsonl.\n\nAcceptance: ok  \tgithub.com/mitchell-wallace/rally/internal/agent\t(cached)\nok  \tgithub.com/mitchell-wallace/rally/internal/relay\t(cached)\nok  \tgithub.com/mitchell-wallace/rally/internal/progress\t(cached) passes and the new tests explicitly cover the raw-transcript regression path for non-opencode executors.",
       "assignee": "SENIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 196608,
       "createdAt": "2026-06-03T06:00:18.062572101Z",
-      "updatedAt": "2026-06-03T06:00:18.062572101Z",
-      "completedAt": null
+      "updatedAt": "2026-06-03T06:11:59.308536987Z",
+      "completedAt": "2026-06-03T06:11:59.308536987Z"
     },
     {
       "id": "work-dd06",
