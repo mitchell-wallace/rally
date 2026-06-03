@@ -18,12 +18,12 @@ import (
 	"github.com/mitchell-wallace/rally/internal/gitx"
 	"github.com/mitchell-wallace/rally/internal/laps"
 	"github.com/mitchell-wallace/rally/internal/progress"
-	"github.com/mitchell-wallace/rally/internal/prompt"
 	"github.com/mitchell-wallace/rally/internal/relay"
 	"github.com/mitchell-wallace/rally/internal/release"
 	"github.com/mitchell-wallace/rally/internal/routing"
 	"github.com/mitchell-wallace/rally/internal/store"
 	"github.com/mitchell-wallace/rally/internal/telemetry"
+	"github.com/mitchell-wallace/rally/internal/user_prompt"
 	"github.com/spf13/cobra"
 )
 
@@ -269,11 +269,11 @@ func runRelay(cmd *cobra.Command, args []string) error {
 		if len(relays) > 0 && relays[0].EndedAt == "" {
 			storedMix = relays[0].AgentMix
 			resumedRelay = true
-			choice, err := prompt.Select(
+			choice, err := user_prompt.Select(
 				os.Stdin, os.Stderr,
 				fmt.Sprintf("Unfinished relay #%d at iteration %d/%d (mix: %s)", relays[0].ID, relays[0].CompletedIterations, relays[0].TargetIterations, relay.FormatMixLabel(relays[0].AgentMix)),
 				"Resume the existing relay or discard it and start a new one?",
-				[]prompt.Option{
+				[]user_prompt.Option{
 					{Label: "Resume", Value: "resume"},
 					{Label: "Start new", Value: "new"},
 				},
@@ -299,11 +299,11 @@ func runRelay(cmd *cobra.Command, args []string) error {
 				runnerCfg.OverwriteMixOnResume = true
 			}
 		} else if hasNewAgents {
-			choice, err := prompt.Select(
+			choice, err := user_prompt.Select(
 				os.Stdin, os.Stderr,
 				"New --agent flags detected",
 				fmt.Sprintf("Keep stored mix (%s) or overwrite with the new mix?", relay.FormatMixLabel(storedMix)),
-				[]prompt.Option{
+				[]user_prompt.Option{
 					{Label: "Keep stored", Value: "keep"},
 					{Label: "Overwrite", Value: "overwrite"},
 				},

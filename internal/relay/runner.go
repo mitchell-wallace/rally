@@ -19,12 +19,12 @@ import (
 	"github.com/mitchell-wallace/rally/internal/laps"
 	"github.com/mitchell-wallace/rally/internal/monitor"
 	"github.com/mitchell-wallace/rally/internal/progress"
-	"github.com/mitchell-wallace/rally/internal/prompt/roleloader"
 	"github.com/mitchell-wallace/rally/internal/reliability"
 	"github.com/mitchell-wallace/rally/internal/store"
 	"github.com/mitchell-wallace/rally/internal/style"
 	"github.com/mitchell-wallace/rally/internal/telemetry"
 	"github.com/mitchell-wallace/rally/internal/textutil"
+	"github.com/mitchell-wallace/rally/internal/user_prompt/roleloader"
 )
 
 type Config struct {

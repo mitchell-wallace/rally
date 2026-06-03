@@ -1,8 +1,12 @@
-// Package prompt centralises rally's user-facing CLI prompts. It uses
+// Package user_prompt centralises rally's user-facing CLI prompts. It uses
 // charmbracelet/huh for interactive TUI prompts when stdin is a terminal, and
 // falls back to a plain bufio reader otherwise so unit tests and piped
 // invocations keep working unchanged.
-package prompt
+//
+// The package name reflects who is being prompted: user_prompt holds prompts
+// authored for the *user*, as opposed to agent_prompt which holds prompts fed
+// to the *agent*.
+package user_prompt
 
 import (
 	"bufio"

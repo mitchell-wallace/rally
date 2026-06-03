@@ -83,22 +83,22 @@
       "title": "Add inline retry status and run-level final tally",
       "description": "Context: Implement OpenSpec change rally-083-polish tasks 5.1-5.3. Read design.md and specs/relay-runner/spec.md.\\n\\nOutcome: Retry progress appears as an inline retry N/M field on the existing live status line without a per-retry console block, and final stats count each run once based on ultimate completion.\\n\\nFiles \u0026 scope: Focus on internal/monitor and internal/relay/runner.go with their existing tests.\\n\\nDesign: A retry-then-success run is one pass and zero failures; an exhausted run is one failure. Keep the retry display minimal.\\n\\nAcceptance: Add tests for status-line retry rendering and both tally scenarios, run relevant Go tests, and mark tasks 5.1-5.3 complete in tasks.md.",
       "assignee": "SENIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 393216,
       "createdAt": "2026-06-03T03:56:54.699610689Z",
-      "updatedAt": "2026-06-03T03:56:54.699610689Z",
-      "completedAt": null
+      "updatedAt": "2026-06-03T06:31:29.592347048Z",
+      "completedAt": "2026-06-03T06:31:29.592347048Z"
     },
     {
       "id": "rall-c36a",
       "title": "Make Rally state commits tolerate ignored operational paths",
       "description": "Context: Implement OpenSpec change rally-083-polish tasks 6.1-6.3. Read design.md and specs/relay-runner/spec.md.\\n\\nOutcome: CommitRallyState silently skips operator-gitignored .rally operational paths, continues with other paths, and explicitly tracks .rally/config.toml and .rally/summary.jsonl by default.\\n\\nFiles \u0026 scope: Focus on internal/gitx/git.go and tests. This tolerance must not apply to .laps/laps.json, and git add -f is forbidden.\\n\\nDesign: Detect only the specific ignored-path git add condition without masking unrelated git failures.\\n\\nAcceptance: Add a repository-level test proving one ignored .rally path is skipped while another commits, run relevant Go tests, and mark tasks 6.1-6.3 complete in tasks.md.",
       "assignee": "SENIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 458752,
       "createdAt": "2026-06-03T03:56:54.70830995Z",
-      "updatedAt": "2026-06-03T03:56:54.70830995Z",
-      "completedAt": null
+      "updatedAt": "2026-06-03T06:33:44.761190246Z",
+      "completedAt": "2026-06-03T06:33:44.761190246Z"
     },
     {
       "id": "rall-1890",

@@ -8,8 +8,8 @@ import (
 
 	"github.com/mitchell-wallace/rally/internal/config"
 	"github.com/mitchell-wallace/rally/internal/laps"
-	"github.com/mitchell-wallace/rally/internal/prompt"
 	"github.com/mitchell-wallace/rally/internal/routing"
+	"github.com/mitchell-wallace/rally/internal/user_prompt"
 )
 
 // continueRoutesPrompt is the substring tests assert against; it must appear
@@ -139,7 +139,7 @@ func promptContinueRoutes(in io.Reader, out io.Writer) bool {
 	if out == nil {
 		out = io.Discard
 	}
-	ok, err := prompt.Confirm(in, out,
+	ok, err := user_prompt.Confirm(in, out,
 		"Continue anyway?",
 		"Invalid roles will fall back to DEFAULT.",
 		false,

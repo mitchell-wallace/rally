@@ -66,6 +66,19 @@ The intended flow is:
   off the relevant `tasks.md` boxes"). Smoothing the integration with
   OpenSpec-specific references is expected there — and only there.
 
+### Prompt package naming
+
+Prompt content lives in packages whose names reflect *who* is being prompted:
+
+- **`internal/user_prompt`** holds prompts authored *for the user* — rally's
+  interactive CLI prompts (confirmations, selects, free-text input).
+- **`internal/agent_prompt`** holds prompts fed *to the agent* — the embedded
+  `general/` (shared finalize/headless snippets) and `roles/` (per-role
+  guidance) `.md` sources composed into each agent session prompt.
+
+When adding new prompt content, pick the package by audience, not by feature
+area, and keep the distinction intact.
+
 ## Releasing
 
 Rally uses GoReleaser via GitHub Actions to publish releases. The workflow
