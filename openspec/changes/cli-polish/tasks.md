@@ -14,16 +14,16 @@
 
 ## 3. `rally init` subcommands
 
-- [ ] 3.1 Add `rally init roles` (existing role init) and `rally init all` (workspace + roles); keep bare `rally init` as workspace init
-- [ ] 3.2 Make each subcommand independently re-runnable (idempotent merge into existing config)
-- [ ] 3.3 Tests: `init all` runs the two in sequence; `init roles` only touches the roles configuration
+- [x] 3.1 Add `rally init roles` (existing role init) and `rally init all` (workspace + roles); keep bare `rally init` as workspace init
+- [x] 3.2 Make each subcommand independently re-runnable (idempotent merge into existing config)
+- [x] 3.3 Tests: `init all` runs the two in sequence; `init roles` only touches the roles configuration
 
 ## 4. Rename `FallbackConfig` → `FreeRunPrompt`
 
-- [ ] 4.1 Rename `FallbackConfig.InstructionsFile`→`FreeRunPromptFile`, `loadFallbackInstructions()`→`loadFreeRunPrompt()`, `builtInDefaultFallback`→`builtInDefaultFreeRunPrompt`
-- [ ] 4.2 Change the config key to `[free_run] prompt_file`; accept the old `[fallback] instructions_file` as a deprecated alias for one release, warning on use
-- [ ] 4.3 Confirm the free-run behavior at `loadFallbackInstructions()` / `resolveRunTask()` in `runner.go` is unchanged (name-only refactor)
-- [ ] 4.4 Tests: new key loads; old key still loads with a deprecation warning; both resolve to the same prompt
+- [x] 4.1 Rename `FallbackConfig.InstructionsFile`→`FreeRunPromptFile`, `loadFallbackInstructions()`→`loadFreeRunPrompt()`, `builtInDefaultFallback`→`builtInDefaultFreeRunPrompt`
+- [x] 4.2 Change the config key to `[free_run] prompt_file`; accept the old `[fallback] instructions_file` as a deprecated alias for one release, warning on use
+- [x] 4.3 Confirm the free-run behavior at `loadFallbackInstructions()` / `resolveRunTask()` in `runner.go` is unchanged (name-only refactor)
+- [x] 4.4 Tests: new key loads; old key still loads with a deprecation warning; both resolve to the same prompt
 
 ## 5. Activity age bounded by try runtime
 
@@ -45,6 +45,6 @@
 
 ## 8. Docs & coordination
 
-- [ ] 8.1 Document the `init` subcommands and the `[free_run]` key (with the deprecation note) in `README.md`/config docs
-- [ ] 8.2 Coordinate `style.ShortcutHint()` edits with `agent-lifecycle` (label renames) so the layout and label work don't clobber each other
-- [ ] 8.3 Bump `internal/buildinfo/VERSION` (per release process) as part of the change
+- [x] 8.1 Document the `init` subcommands and the `[free_run]` key (with the deprecation note) in `README.md`/config docs
+- [x] 8.2 Coordinate `style.ShortcutHint()` edits with `agent-lifecycle` (label renames) so the layout and label work don't clobber each other
+- [x] 8.3 Bump `internal/buildinfo/VERSION` (per release process) as part of the change

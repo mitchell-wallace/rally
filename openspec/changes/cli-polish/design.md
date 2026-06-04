@@ -58,14 +58,15 @@ Detect terminal width and pick the widest tier that fits on one line. Use
 detection on first render (the hint tier never changes mid-run, so one-shot is
 sufficient for the redraw fix). SIGWINCH can be tested via `tmux` (resize a
 pane and verify the hint tier updates). Tiers:
-- Full: `[Ctrl+S skip] [Ctrl+P pause] [Ctrl+X graceful stop] [Ctrl+C quit now]`
+- Full: `[Ctrl+S skip] [Ctrl+P pause] [Ctrl+X stop] [Ctrl+C quit]`
 - Medium: `[^S skip] [^P pause] [^X stop] [^C quit]`
 - Narrow: `^S skip · ^P pause · ^X stop · ^C quit`
 - Minimal: `^S·^P·^X·^C`
 
 Guaranteeing a single line is what fixes the countdown-redraw accumulation; the redraw
-logic itself is unchanged once the hint never wraps. The full/medium labels assume the
-`agent-lifecycle` renames ("graceful stop" / "quit now").
+logic itself is unchanged once the hint never wraps. The relabel to "graceful stop" /
+"quit now" remains owned by `agent-lifecycle`; this change preserves the current
+"stop" / "quit" labels while making the layout width-aware.
 
 **2. Full-width headers in `style`.**
 Make header/footer/summary lines fill the terminal width (capped at 80) with

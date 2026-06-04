@@ -98,6 +98,6 @@ because each is polish:
   - Config-TUI tabs/sections — deferred to a future `build-new-tui` change; noted, not
     built here.
 - **Coordination**: `style.ShortcutHint()` is also edited by `agent-lifecycle` (label
-  renames "graceful stop" / "quit now"). The narrow/medium tiers here assume those
-  renamed labels — co-implement or sequence so the two changes don't clobber each
-  other.
+  renames "graceful stop" / "quit now"). This change keeps the current
+  "stop" / "quit" labels and limits itself to layout/tier work so the later relabel
+  can land independently without clobbering the width changes.

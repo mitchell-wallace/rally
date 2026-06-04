@@ -215,33 +215,33 @@
       "title": "Rename FallbackConfig to FreeRunPrompt with back-compat alias",
       "description": "Context: cli-polish task §4 + design Decision 7. `FallbackConfig` only sets the task prompt for a laps-less, promptless (\"free\") run, but \"fallback\" reads like runner failover (a different mechanism). Pure naming/config clarity — no behavior change.\n\nOutcome: type/methods/defaults and the config key are renamed to free-run naming; the old `[fallback] instructions_file` still loads (deprecated, warns) for one release; behavior is unchanged.\n\nFiles \u0026 scope: internal/config/config_v2.go (`FallbackConfig.InstructionsFile`→`FreeRunPromptFile`; alias in `LoadV2`), internal/relay/runner.go (`loadFallbackInstructions()`→`loadFreeRunPrompt()`, `builtInDefaultFallback`→`builtInDefaultFreeRunPrompt`), config_v2_test.go. Do NOT add a `[fallback]` section to the generated config template — it never had one; only deserialization (`LoadV2`) needs the alias.\n\nDesign: config key becomes `[free_run] prompt_file`. In `LoadV2`, accept the old `[fallback] instructions_file` as a deprecated alias, emit a deprecation warning when it is read, both resolving to the same value. The `loadFreeRunPrompt()` body and the `resolveRunTask()` call site are untouched (name-only).\n\nAcceptance: tests — new key loads; old key still loads with a deprecation warning; both resolve to the same prompt. `go test ./internal/config/ ./internal/relay/`. Do not tick tasks.md.",
       "assignee": "JUNIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 589824,
       "createdAt": "2026-06-04T11:13:52.686149713Z",
-      "updatedAt": "2026-06-04T11:13:52.686149713Z",
-      "completedAt": null
+      "updatedAt": "2026-06-04T13:49:44.358709768Z",
+      "completedAt": "2026-06-04T13:49:44.358709768Z"
     },
     {
       "id": "rall-83fa",
       "title": "Document init subcommands and free-run key; bump VERSION",
       "description": "Context: cli-polish task §8.1 and §8.3.\n\nOutcome: README/config docs document the `init` subcommands (`init`, `init roles`, `init all`) and the `[free_run] prompt_file` key with the one-release `[fallback]` deprecation note; the build version is bumped per the release process.\n\nFiles \u0026 scope: README.md (and any config docs) and internal/buildinfo/VERSION.\n\nDesign: document the three init subcommands and the free-run key plus its deprecation window. Bump the patch version in internal/buildinfo/VERSION — do NOT create or push a git tag (auto-tag handles tagging on main).\n\nAcceptance: docs reflect the new commands and key; VERSION is incremented. Do not tick tasks.md.",
       "assignee": "JUNIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 655360,
       "createdAt": "2026-06-04T11:13:52.686150722Z",
-      "updatedAt": "2026-06-04T11:13:52.686150722Z",
-      "completedAt": null
+      "updatedAt": "2026-06-04T13:51:58.138054413Z",
+      "completedAt": "2026-06-04T13:51:58.138054413Z"
     },
     {
       "id": "rall-1beb",
       "title": "Final full-change verification",
       "description": "Whole-change verification for cli-polish.\n\nRun the complete openspec-verify-change skill against change `cli-polish` and inspect the entire diff. Identify the intended merge target (do NOT assume `main`; use user / PR metadata / branch config / recent history) and the first lap/try of this batch; treat earlier branch work as pre-existing unless the user asks to include it. `git diff \u003ctarget\u003e...HEAD`.\n\nCover every capability: cli-display (hint tiers, full-width headers, activity-age clamp, collapsed retry + terminal-only colour), cli-config (init subcommands, FreeRunPrompt rename + back-compat alias), and the relay-runner MODIFIED incomplete class. Confirm the coordination note held — `ShortcutHint` kept the current \"stop\"/\"quit\" labels and left the relabel to agent-lifecycle. Run the full suite `go test ./...` and `go build ./...`; confirm the VERSION bump.\n\nCheck off any remaining tasks.md boxes (including §8) verified correct and thorough. Substantive gaps → focused head lap; only tiny safe one-liners fixed in place. Do not rewrite git history.",
       "assignee": "VERIFY",
-      "isDone": false,
+      "isDone": true,
       "order": 720896,
       "createdAt": "2026-06-04T11:13:52.686151716Z",
-      "updatedAt": "2026-06-04T11:13:52.686151716Z",
-      "completedAt": null
+      "updatedAt": "2026-06-04T22:34:56.24199984Z",
+      "completedAt": "2026-06-04T22:34:56.24199984Z"
     }
   ]
 }
