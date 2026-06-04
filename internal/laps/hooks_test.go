@@ -246,9 +246,17 @@ func TestDoneHookScript(t *testing.T) {
 		t.Fatalf("top-level hook-audit.jsonl should not exist, stat err=%v", err)
 	}
 
-	// Verify passback message.
 	output := string(out)
-	if !strings.Contains(output, "Wrap up this run before exiting") {
+	if !strings.Contains(output, "Commit your work and wrap up this run before exiting") {
+		t.Errorf("expected commit+wrapup instruction in output, got %q", output)
+	}
+	if !strings.Contains(output, "<lap-description>: done") {
+		t.Errorf("expected done commit message form in output, got %q", output)
+	}
+	if !strings.Contains(output, "replace <lap-description> with this lap's description") {
+		t.Errorf("expected lap-description placeholder guidance in output, got %q", output)
+	}
+	if !strings.Contains(output, "Wrapup: laps wrapup") {
 		t.Errorf("expected wrapup instruction in output, got %q", output)
 	}
 }
@@ -298,6 +306,12 @@ func TestHandoffHookScript(t *testing.T) {
 	output := string(out)
 	if !strings.Contains(output, "Handoff signaled") {
 		t.Errorf("expected handoff message in output, got %q", output)
+	}
+	if !strings.Contains(output, "<lap-description>: in progress (handoff)") {
+		t.Errorf("expected handoff commit message form in output, got %q", output)
+	}
+	if !strings.Contains(output, "replace <lap-description> with this lap's description") {
+		t.Errorf("expected lap-description placeholder guidance in output, got %q", output)
 	}
 }
 

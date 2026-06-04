@@ -6,22 +6,22 @@
       "title": "Auto-commit rally init and laps-hook install",
       "description": "OpenSpec change git-hygiene, Phase 1 (tasks 1.1-1.3). Dependency #2 (tidy-rally-runtime-data-storage) is archived/merged and the workspace tracked-file set has been cleaned, so `summary.jsonl` is the only churning tracked data file.\n\nContext: openspec/changes/git-hygiene/proposal.md, design.md (Decision 1), specs/git-hygiene/spec.md (\"Setup auto-commit\"). Sites: cmd/rally/main.go runInit (~L367) and the laps.InstallHooks call (~L203).\n\nOutcome: After `rally init`, the staged setup files commit once as `rally: initialize workspace`. After laps-hook install, affected files commit as `rally: install laps hooks`. Both use `--no-verify` and commit ONLY when something is actually staged (re-running init on a clean repo is a no-op).\n\nFiles \u0026 scope: cmd/rally/main.go only. Reuse existing gitx helpers (GitOutput, GitRepoRoot, GitUserFallbackConfig); do not shell out raw. Do not redefine the gitignore or the tracked-file set.\n\nDesign / risk: MUST NOT sweep the user's pre-existing unstaged changes into the setup commit — stage only the specific paths setup created/modified and commit just those (`git commit -- \u003cpaths\u003e` or a staged-set guard), never a blanket `git add -A`. Skip the commit when the staged set is empty. Tolerate non-git repos and git failures gracefully (warn, do not abort init). Write the stage+commit step as a small testable helper that returns whether it committed.\n\nAcceptance: `go build ./...` passes; `rally init` in a fresh git repo creates exactly one setup commit and a second run creates none. Tests are the next lap. Do not tick tasks.md (VERIFY owns checkoff).",
       "assignee": "SENIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 65536,
       "createdAt": "2026-06-04T01:25:29.433435347Z",
-      "updatedAt": "2026-06-04T01:25:29.433435347Z",
-      "completedAt": null
+      "updatedAt": "2026-06-04T01:49:14.247485105Z",
+      "completedAt": "2026-06-04T01:49:14.247485105Z"
     },
     {
       "id": "rall-04bc",
       "title": "Tests: setup auto-commit behavior",
       "description": "OpenSpec change git-hygiene, Phase 1 (tasks 1.4, 4.3, 4.4). Follows the previous lap's code in cmd/rally/main.go.\n\nOutcome: Tests for setup auto-commit, following existing repo patterns (see internal/gitx/git_test.go for temp-git-repo style). Cover:\n- init in a clean repo produces exactly one `rally: initialize workspace` commit (1.4).\n- re-running init with nothing changed creates no commit (1.4).\n- init in a dirty working tree (user has unrelated unstaged changes) does NOT commit those changes — assert they remain unstaged after init (4.3).\n- laps-hook install produces a `rally: install laps hooks` commit; re-running hook install does not duplicate it (4.4).\n\nFiles \u0026 scope: test files only. Do not change production code; if a behavior is untestable, add a head lap describing the needed seam instead of forcing it.\n\nAcceptance: `go test ./cmd/... ./internal/gitx/...` (and whatever package holds the new code) passes. Concurrent-`rally start` duplicate-commit coverage (part of 1.4) is best-effort; if it can't be made deterministic, say so in the wrapup rather than skipping silently. Do not tick tasks.md (VERIFY owns checkoff).",
       "assignee": "JUNIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 131072,
       "createdAt": "2026-06-04T01:25:29.433440439Z",
-      "updatedAt": "2026-06-04T01:25:29.433440439Z",
-      "completedAt": null
+      "updatedAt": "2026-06-04T02:01:05.949910325Z",
+      "completedAt": "2026-06-04T02:01:05.949910325Z"
     },
     {
       "id": "rall-3164",

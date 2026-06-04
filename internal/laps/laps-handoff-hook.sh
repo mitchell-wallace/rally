@@ -9,7 +9,9 @@ TS=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 printf '{"ts":"%s","hook":"laps-handoff","args":"%s","pid":%d}\n' "$TS" "$*" "$$" >> "$AUDIT_FILE" 2>/dev/null || true
 
 rally progress --set-handoff
-echo "Handoff signaled. Before exiting, call:"
-echo '  laps wrapup --summary "<why blocked>" --followup "<unblocker task>"'
+echo "Handoff signaled. Commit your work and wrap up before exiting:"
+echo "  Commit (replace <lap-description> with this lap's description):"
+echo '    git commit -m "<lap-description>: in progress (handoff)"'
+echo '  Wrapup: laps wrapup --summary "<why blocked>" --followup "<unblocker task>"'
 echo "Each followup will be created as a new lap at the head of the queue."
 echo "For the summary, include what you tried, what failed, what you suspect, relevant current-state findings, and any test assertions you changed."
