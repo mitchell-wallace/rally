@@ -4,9 +4,7 @@ package gitx
 import (
 	"errors"
 	"fmt"
-	"os"
 	"os/exec"
-	"path/filepath"
 	"strings"
 )
 
@@ -90,83 +88,75 @@ func IsWorkspaceDirty(dir string) (bool, error) {
 	return false, nil
 }
 
-// CommitRallyState commits Rally's non-state operational files (config, instructions, etc).
-// State files under .rally/state/ are gitignored and never committed.
-func CommitRallyState(dir string) error {
+// FoldRallyState folds Rally's own bookkeeping (state under .rally/ and the
+// .laps/ queue) into the run's history without ever emitting a standalone state
+// commit in the common path. The run's work commit already stages the working
+// tree via `git add -A`, which folds the summary.jsonl append in; this is the
+// insurance path for no-code runs where only state churn remains.
+//
+// It stages only Rally's own paths — never user code — then:
+//   - if nothing is staged, does nothing;
+//   - else if HEAD is a rally-authored commit (its message has the `rally:`
+//     prefix), amends HEAD in place and appends ` [+state]` to the message,
+//     preserving authorship;
+//   - else creates a single `rally: update state` commit.
+//
+// Deciding amend-vs-new by the `rally:` message prefix (not author identity) is
+// deliberate: GitUserFallbackConfig is only a fallback, so a rally commit made
+// in a repo with a configured user.name carries the user's identity and would
+// not match an identity check. Amends never touch a non-rally HEAD and never
+// stack consecutive state commits.
+func FoldRallyState(dir string) error {
 	_, inGit, err := GitRepoRoot(dir)
 	if err != nil || !inGit {
 		return nil
 	}
 
-	out, err := GitOutput(dir, "status", "--porcelain", ".rally/")
-	if err != nil {
+	// Stage only Rally's own bookkeeping. A directory pathspec silently skips
+	// gitignored entries (unlike naming an ignored file), so operator-ignored
+	// .rally operational paths do not error here, and user code is never staged
+	// — preserving any intentionally-uncommitted work tree from an incomplete
+	// run.
+	if _, err := GitOutput(dir, "add", "--", ".rally", ".laps"); err != nil {
 		return err
 	}
-	if strings.TrimSpace(string(out)) == "" {
-		return nil
-	}
 
-	var existingTrackedPaths []string
-	for _, path := range rallyTrackedStatePaths {
-		if _, err := os.Stat(filepath.Join(dir, path)); err != nil {
-			if os.IsNotExist(err) {
-				continue
-			}
+	// `git diff --cached --quiet` exits 0 when nothing is staged and 1 when
+	// something is. Anything else is a real error and surfaces.
+	if _, err := GitOutput(dir, "diff", "--cached", "--quiet"); err == nil {
+		return nil
+	} else {
+		var exitErr *exec.ExitError
+		if !errors.As(err, &exitErr) || exitErr.ExitCode() != 1 {
 			return err
 		}
-		if _, err := GitOutput(dir, "add", path); err != nil {
-			// Tolerate operator-gitignored .rally operational paths: skip the
-			// path silently (never `-f`, never abort) so the remaining tracked
-			// state still commits. Confirm the add actually failed because the
-			// path is gitignored before swallowing the error, so unrelated git
-			// failures still surface. This tolerance is scoped to these .rally
-			// operational paths and never applies to .laps/laps.json.
-			if pathIsGitIgnored(dir, path) {
-				continue
-			}
+	}
+
+	headMsg := ""
+	if out, err := GitOutput(dir, "log", "-1", "--format=%s"); err == nil {
+		headMsg = strings.TrimSpace(string(out))
+	}
+
+	if strings.HasPrefix(headMsg, "rally:") {
+		// Fold into the existing rally-authored HEAD. `--amend` preserves the
+		// original author; --no-verify skips hooks. Mark the message once.
+		newMsg := headMsg
+		if !strings.HasSuffix(newMsg, " [+state]") {
+			newMsg += " [+state]"
+		}
+		args := append(GitUserFallbackConfig(dir), "commit", "--amend", "--no-verify", "-m", newMsg)
+		if _, err := GitOutput(dir, args...); err != nil {
 			return err
 		}
-		existingTrackedPaths = append(existingTrackedPaths, path)
-	}
-	if len(existingTrackedPaths) == 0 {
 		return nil
 	}
 
-	diffArgs := append([]string{"diff", "--cached", "--name-only", "--"}, existingTrackedPaths...)
-	cached, err := GitOutput(dir, diffArgs...)
-	if err != nil {
-		return err
-	}
-	if strings.TrimSpace(string(cached)) == "" {
-		return nil
-	}
-
-	args := append(GitUserFallbackConfig(dir), "commit", "--no-verify", "-m", "rally: update state", "--")
-	args = append(args, existingTrackedPaths...)
-	if commitOut, err := GitOutput(dir, args...); err != nil {
-		if strings.Contains(string(commitOut), "nothing to commit") || strings.Contains(string(commitOut), "no changes added") {
-			return nil
-		}
+	// HEAD is not rally-authored (or the repo has no commits yet): create a
+	// single state commit. A later state-only run will amend this one rather
+	// than stack another.
+	args := append(GitUserFallbackConfig(dir), "commit", "--no-verify", "-m", "rally: update state")
+	if _, err := GitOutput(dir, args...); err != nil {
 		return err
 	}
 	return nil
-}
-
-// pathIsGitIgnored reports whether path is excluded by a .gitignore rule.
-// It uses `git check-ignore`, which exits 0 when the path is ignored, 1 when it
-// is not, and 2 on error. Only a clean exit 0 is treated as ignored, so an
-// unrelated git failure (exit 2) does not get mistaken for the ignored
-// condition and continues to surface to the caller.
-func pathIsGitIgnored(dir, path string) bool {
-	cmd := exec.Command("git", "-C", dir, "check-ignore", "-q", "--", path)
-	return cmd.Run() == nil
-}
-
-var rallyTrackedStatePaths = []string{
-	".rally/.gitignore",
-	".rally/README.md",
-	".rally/config.toml",
-	".rally/instructions.md",
-	".rally/agents",
-	".rally/summary.jsonl",
 }

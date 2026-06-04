@@ -1130,8 +1130,12 @@ attemptLoop:
 		})
 		fmt.Println(footer)
 
-		if err := gitx.CommitRallyState(r.cfg.WorkspaceDir); err != nil {
-			fmt.Fprintf(log, "relay %d run %d attempt %d rally state commit warning: %v\n", relay.ID, runIndex+1, attempt, err)
+		// Fold any remaining Rally state churn into history. The work commit
+		// above already staged summary.jsonl via `git add -A`; this only fires
+		// for no-code runs, amending a rally-authored HEAD or creating a single
+		// `rally: update state` commit. User code is never staged here.
+		if err := gitx.FoldRallyState(r.cfg.WorkspaceDir); err != nil {
+			fmt.Fprintf(log, "relay %d run %d attempt %d rally state fold warning: %v\n", relay.ID, runIndex+1, attempt, err)
 		}
 
 		tryRecord := store.TryRecord{

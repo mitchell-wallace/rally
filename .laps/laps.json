@@ -28,33 +28,33 @@
       "title": "Lap-boundary commit instruction in done/handoff hook scripts",
       "description": "OpenSpec change git-hygiene, Phase 2 (tasks 2.1-2.3). Spec: specs/git-hygiene/spec.md \"Lap-boundary commit instruction\".\n\nContext: internal/laps/laps-done-hook.sh (13 lines) and internal/laps/laps-handoff-hook.sh (15 lines) emit wrapup guidance the agent reads after `laps done` / `laps handoff`.\n\nOutcome: Each script's wrapup output additionally instructs the agent to commit its work:\n- done: message form `\u003clap-description\u003e: done`\n- handoff: message form `\u003clap-description\u003e: in progress (handoff)`\nKeep it advisory and consistent with the existing `echo` lines. `\u003clap-description\u003e` is a placeholder the agent fills with the current lap's description; phrase the instruction so that is clear.\n\nFiles \u0026 scope: the two hook scripts plus their fixture/assertion tests (internal/laps/hooks_test.go is the likely home — match its assertion style). Do not alter the audit-trail or `rally progress` lines. If these scripts are embedded (go:embed) and installed, confirm the embedded copy is what tests read.\n\nAcceptance: tests assert each script's output contains the commit instruction with the correct message form (2.3); `go test ./internal/laps/...` passes. Do not tick tasks.md (VERIFY owns checkoff).",
       "assignee": "JUNIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 196608,
       "createdAt": "2026-06-04T01:25:29.433441845Z",
-      "updatedAt": "2026-06-04T01:25:29.433441845Z",
-      "completedAt": null
+      "updatedAt": "2026-06-04T02:04:12.222495552Z",
+      "completedAt": "2026-06-04T02:04:12.222495552Z"
     },
     {
       "id": "rall-419c",
       "title": "Leftover-work commit guidance at run start",
       "description": "OpenSpec change git-hygiene, Phase 2 (tasks 2.4-2.5). Spec: specs/git-hygiene/spec.md \"Leftover-work commit guidance\"; design Decision 3.\n\nContext: internal/relay/runner.go builds the agent prompt via agent.BuildPrompt(opts) (~L797); BuildPromptOptions lives in internal/agent (see TaskPrompt handling ~L791 and the conditional incompleteRetryGuidance pattern ~L790). gitx.IsWorkspaceDirty (internal/gitx/git.go:67) already excludes `.rally/` paths.\n\nOutcome: At run start, when the working tree has uncommitted NON-rally changes (IsWorkspaceDirty == true), the initial prompt dynamically includes advisory guidance to review and commit those changes before starting assigned work — code changes MUST be committed (upfront or folded into the end-of-run commit); docs/config-only MAY be left. When the tree is clean (or only `.rally/` files dirty), the guidance is omitted entirely.\n\nDesign / risk: Follow the existing conditional-prompt-text pattern (cf. incompleteRetryGuidance). Thread the dirty-check result into BuildPromptOptions cleanly; keep the guidance string with the other agent_prompt snippets rather than concatenating in the wrong layer. Reuse IsWorkspaceDirty — do not write a second porcelain parser. Tolerate IsWorkspaceDirty errors (treat as clean / omit guidance, never crash the run).\n\nAcceptance: `go build ./...` passes. Tests (2.5): dirty tree outside `.rally/` -\u003e prompt contains the guidance; clean tree -\u003e omitted; only `.rally/` files dirty -\u003e omitted. Add to internal/relay/*_test.go following runner_test.go patterns. Do not tick tasks.md (VERIFY owns checkoff).",
       "assignee": "SENIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 262144,
       "createdAt": "2026-06-04T01:25:29.433442921Z",
-      "updatedAt": "2026-06-04T01:25:29.433442921Z",
-      "completedAt": null
+      "updatedAt": "2026-06-04T02:20:43.681322608Z",
+      "completedAt": "2026-06-04T02:20:43.681322608Z"
     },
     {
       "id": "rall-b661",
       "title": "Verify phases 1-2 (setup commit + lap-boundary/leftover guidance)",
       "description": "OpenSpec change git-hygiene. Verify the work so far (Phases 1-2): setup auto-commit, lap-boundary hook commit instructions, leftover-work run-start guidance.\n\nUse the `openspec-verify-change` skill against change `git-hygiene`, then focus the report on tasks 1.1-1.4, 2.1-2.5, 4.3, 4.4.\n\nBranch awareness: current branch is `dev`. Do NOT assume `main` is the merge target — determine it from the user, PR metadata, repo docs, or recent history, then diff with `git diff \u003ctarget\u003e...HEAD`. Identify the first lap/try of THIS batch; treat earlier branch work as pre-existing baseline (flag, do not remove). Do not rewrite git history.\n\nReview with depth, not just green tests: confirm the setup commit stages only setup paths (open the commit, check it did not sweep user changes); `--no-verify` and the staged-set guard are present; both hook scripts emit the exact message forms; the leftover-work guidance actually toggles on dirty/clean/.rally-only trees (trace the prompt-assembly path). Report findings first; create head laps for substantive gaps; fix only tiny safe one-liners.\n\nCheck off the tasks.md boxes for the tasks you verified as correctly and thoroughly done; leave the rest unchecked and say why.",
       "assignee": "VERIFY",
-      "isDone": false,
+      "isDone": true,
       "order": 327680,
       "createdAt": "2026-06-04T01:25:29.433443833Z",
-      "updatedAt": "2026-06-04T01:25:29.433443833Z",
-      "completedAt": null
+      "updatedAt": "2026-06-04T02:26:33.790973417Z",
+      "completedAt": "2026-06-04T02:26:33.790973417Z"
     },
     {
       "id": "rall-8be5",
