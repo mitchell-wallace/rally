@@ -29,6 +29,8 @@ Requires the `laps` CLI v0.7.0 or newer for batch JSON task creation. Rally inje
 - For lightweight greenfield examples or Rally role-routing smoke tests, a single final `VERIFY` is enough. Spend saved laps on implementation depth.
 - Verification laps may fix only tiny, safe one-liners. Anything larger becomes a new focused lap added to the head of the queue.
 - If any lap uncovers a blocker, the assigned agent should `laps add head ...` for it before marking the lap done.
+- Every lap should instruct its agent to surface meaningful uncertainties and apparent plan problems — circular or contradictory task dependencies, work that does not map cleanly onto a lap, missing prerequisites, a plan claim that contradicts the tree — rather than silently working around them. Route these to a head lap (`laps add head`) or the wrapup summary so they reach a human or the VERIFY role.
+- For OpenSpec work, only `VERIFY` laps check off `tasks.md` boxes, and only after verifying the work is done correctly and with sufficient thoroughness and quality. Implementation laps (`JUNIOR`/`SENIOR`/`UI`) do the work and report it but must not tick `tasks.md`; a checked box means "verified done," not "attempted."
 - Diff and cleanup instructions must be branch-target aware. Do not assume `main`; tell VERIFY laps to identify the intended merge target from the user, PR metadata, repo docs, branch config, or recent history before using `git diff <target>...HEAD`.
 - Work that predates the first lap in the current batch is valid baseline context, even when it is not part of the current request. VERIFY may flag it as pre-existing, but must not add cleanup laps that remove it unless the user explicitly asks.
 - Never ask a lap to rewrite git history (`reset`, `rebase`, squash, amend-away, force-push) as a cleanup strategy. Prefer additive commits, explicit revert commits, or a user-approved recovery branch so reverted work remains backtrackable.
@@ -38,11 +40,14 @@ Requires the `laps` CLI v0.7.0 or newer for batch JSON task creation. Rally inje
 
 1. **Orient**
    - Check existing work with `laps list`.
+   - If the queue still holds laps from a previous, already-committed batch, clear them before adding the new batch. Laps are intermediate state; OpenSpec and git history are the durable record, so completed laps already preserved in git are safe to remove. Use `laps prune 0` to drop done laps and `laps delete <id>` for stale todo laps, leaving only the current batch. (Laps has no edit command — to revise a lap, delete and re-add it.)
+   - If the change path or name you were given does not resolve (e.g. a typo), do not fail: list `openspec/changes/` (and `openspec/changes/archive/`) and confirm the intended change before planning. Never silently plan a different change.
    - Confirm `.rally/agents/<role>.md` exists for the roles you plan to assign. If missing, instruct the user to run `rally init roles`, or add an early setup lap that runs it. Do not paste role definitions into the skill or into laps.
    - Confirm Rally route support if relevant: `.rally/config.toml`, `rally routes check`.
    - If the input is an OpenSpec change with tasks/specs already written, run `openspec status --change "<name>" --json` and `openspec instructions apply --change "<name>" --json`, then read the returned `contextFiles`.
    - If the input is a proposal **without** tasks/specs, either (a) plan directly from the proposal — fine when the work is light or already well-explored in conversation, or (b) nudge the user to run `opsx:ff` first when scope or risk is unclear. Default to (a) for ≤10 laps of well-understood work and (b) for larger or hazier work.
    - If no change name is provided and multiple active OpenSpec changes exist, ask or use the user's latest context. Do not silently plan the wrong change.
+   - If the change declares a dependency on another change ("depends on #N", "after `<change>`", or a "post-`<change>` world"), verify during prepare-laps that the dependency has actually landed **and** that the working tree matches the end-state it promised — inspect the tree, do not trust the proposal's narrative. Resolve or report any mismatch to the user now. Do not embed dependency-detective instructions into individual laps: pre-change dependency checking belongs here, and mid-change dependency verification is the standing job of the `VERIFY` role.
    - For non-OpenSpec input, inspect the provided plan/files and explore the codebase just enough to identify phases, risks, dependencies, and verification commands.
    - For small ad-hoc requests, missing plan files, or very short specs, fold relevant facts directly into each lap description instead of pointing at a file.
 
@@ -71,6 +76,18 @@ Requires the `laps` CLI v0.7.0 or newer for batch JSON task creation. Rally inje
    - For urgent blockers, use `laps add head --json '[...]'` or `laps add after <id> --json '[...]'`; array order is preserved for every position, so do not reverse it manually.
    - Use a single JSON object for one planned lap. Use `--title`/`--description` flags only for short ad-hoc laps where the description is a plain sentence.
    - Always set `--assignee`; rally routes from it.
+   - **Format skeleton** — the object *shape* only, not a content template. Do not mimic these placeholder values, section counts, or phrasing; write real Context/Outcome/Files & scope/Design/Acceptance prose per the "Write each lap" guidance.
+
+     ```json
+     [
+       {
+         "title": "<short imperative lap title, no role prefix>",
+         "assignee": "JUNIOR | SENIOR | UI | VERIFY",
+         "description": "<multi-section prose: Context, Outcome, Files & scope, Design, Acceptance>"
+       }
+     ]
+     ```
+
    - Run `laps list` at the end and sanity-check role order, VERIFY placement, and the final full-outcome verification lap.
 
 ## Testing Laps
@@ -93,6 +110,9 @@ Verification lap descriptions should include:
 - Identify the branch target/base before diffing; use that target in diff commands.
 - Identify the first lap/try in the current batch and treat earlier branch work as pre-existing unless the user asks to include it in scope.
 - Do not rewrite git history. If scope cleanup is needed, add a focused lap that uses additive/revert commits or asks the user for an explicit recovery strategy.
+- Review with appropriate depth: trace the core lines of dependency — key call sites, the symbols actually added or removed, the prompt/string actually emitted, the commit actually produced — not just whether tests pass. "Tests are green" is not sufficient verification for a high-risk lap.
+- Report meaningful uncertainties and any apparent plan problems found while verifying (contradictory tasks, scope that does not map onto the change, premises that no longer hold), and create head laps for substantive gaps.
+- For OpenSpec work, check off the `tasks.md` boxes for the tasks this lap verified as correctly and thoroughly done. Do not check boxes for work the implementation laps merely attempted — verification is the gate for ticking a box.
 
 ## Skill Maintenance
 
