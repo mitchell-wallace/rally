@@ -732,6 +732,10 @@ func (r *Runner) runOne(
 		return false, false, false, "", failureClass, infraFailures, err
 	}
 
+	// Check for uncommitted non-rally changes at run start. Errors are
+	// tolerated (treat as clean) so a broken git setup never crashes the run.
+	leftoverWork, _ := gitx.IsWorkspaceDirty(r.cfg.WorkspaceDir)
+
 	exec := r.executors[picked.Harness]
 
 	maxAttempts := r.cfg.RetryBudget
@@ -784,6 +788,7 @@ attemptLoop:
 			PreviousSummary:  previousSummary,
 			RecentTryContext: recentContext,
 			LapsEnabled:      r.cfg.LapsEnabled,
+			LeftoverWork:     leftoverWork,
 			ResumeSessionID:  sessionID,
 			WorkspaceDir:     r.cfg.WorkspaceDir,
 		}

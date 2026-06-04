@@ -36,6 +36,12 @@ func BuildPrompt(opts RunOptions) string {
 		}
 	}
 
+	if opts.LeftoverWork {
+		if lw := agent_prompt.LeftoverWork(); lw != "" {
+			fmt.Fprintf(&b, "## Leftover Changes\n%s\n\n", lw)
+		}
+	}
+
 	if opts.TaskName != "" {
 		fmt.Fprintf(&b, "Task: %s\n", opts.TaskName)
 	}

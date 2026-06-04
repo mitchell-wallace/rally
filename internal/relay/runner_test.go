@@ -5109,3 +5109,162 @@ func TestLapAttemptRecordedInTryRecord(t *testing.T) {
 		t.Fatalf("laps_attempted = %v, want lap-1 present", attempts)
 	}
 }
+
+// --- Leftover-work commit guidance tests (task 2.4-2.5) ---
+
+func TestLeftoverWorkGuidance_DirtyTree(t *testing.T) {
+	oldHeadPull := headPullLap
+	headPullLap = func(context.Context, string) (laps.Lap, error) {
+		return laps.Lap{ID: "lap-1", Title: "test", Description: "test task", Assignee: "senior"}, nil
+	}
+	defer func() { headPullLap = oldHeadPull }()
+
+	workspaceDir := t.TempDir()
+	rallyDir := store.RallyDir(workspaceDir)
+	os.MkdirAll(rallyDir, 0o755)
+	initRepo(t, workspaceDir)
+
+	// Create an initial commit so the repo is not empty.
+	runGit(t, workspaceDir, "commit", "--allow-empty", "-m", "initial")
+
+	// Create a dirty file outside .rally/ (simulating leftover work).
+	os.WriteFile(filepath.Join(workspaceDir, "leftover.go"), []byte("package leftover\n"), 0o644)
+
+	s := newTestStore(t, rallyDir)
+	var capturedPrompt string
+	exec := &funcExecutor{
+		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+			capturedPrompt = agent.BuildPrompt(opts)
+			if err := progress.RecordLap(workspaceDir, "lap-1"); err != nil {
+				return nil, err
+			}
+			return &agent.TryResult{Completed: true, Summary: "done"}, nil
+		},
+	}
+
+	r := NewRunner(s, Config{
+		WorkspaceDir:     workspaceDir,
+		DataDir:          t.TempDir(),
+		AgentMixSpecs:    []string{"op:dsf"},
+		TargetIterations: 1,
+		RetryBudget:      1,
+		LapsEnabled:      true,
+		Resolver:         cheapTestResolver,
+	}, map[string]agent.Executor{"opencode": exec})
+
+	if err := r.Run(context.Background()); err != nil {
+		t.Fatalf("Run error = %v", err)
+	}
+	if !strings.Contains(capturedPrompt, "## Leftover Changes") {
+		t.Fatalf("expected leftover-work guidance in prompt when tree is dirty, got:\n%s", capturedPrompt)
+	}
+	if !strings.Contains(capturedPrompt, "uncommitted changes left over") {
+		t.Fatalf("expected leftover-work body text in prompt, got:\n%s", capturedPrompt)
+	}
+}
+
+func TestLeftoverWorkGuidance_CleanTree(t *testing.T) {
+	oldHeadPull := headPullLap
+	headPullLap = func(context.Context, string) (laps.Lap, error) {
+		return laps.Lap{ID: "lap-1", Title: "test", Description: "test task", Assignee: "senior"}, nil
+	}
+	defer func() { headPullLap = oldHeadPull }()
+
+	workspaceDir := t.TempDir()
+	rallyDir := store.RallyDir(workspaceDir)
+	os.MkdirAll(rallyDir, 0o755)
+	initRepo(t, workspaceDir)
+
+	// Create an initial commit so the repo is not empty, tree is clean.
+	runGit(t, workspaceDir, "commit", "--allow-empty", "-m", "initial")
+
+	s := newTestStore(t, rallyDir)
+	var capturedPrompt string
+	exec := &funcExecutor{
+		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+			capturedPrompt = agent.BuildPrompt(opts)
+			// Produce a real user-file change so the run is not flagged as
+			// "no changes made". The leftover-work check already ran at run
+			// start (captured in opts), so this write does not affect it.
+			if err := os.WriteFile(filepath.Join(workspaceDir, "result.go"), []byte("package result\n"), 0o644); err != nil {
+				return nil, err
+			}
+			if err := progress.RecordLap(workspaceDir, "lap-1"); err != nil {
+				return nil, err
+			}
+			return &agent.TryResult{Completed: true, Summary: "done"}, nil
+		},
+	}
+
+	r := NewRunner(s, Config{
+		WorkspaceDir:     workspaceDir,
+		DataDir:          t.TempDir(),
+		AgentMixSpecs:    []string{"op:dsf"},
+		TargetIterations: 1,
+		RetryBudget:      1,
+		LapsEnabled:      true,
+		Resolver:         cheapTestResolver,
+	}, map[string]agent.Executor{"opencode": exec})
+
+	if err := r.Run(context.Background()); err != nil {
+		t.Fatalf("Run error = %v", err)
+	}
+	if strings.Contains(capturedPrompt, "## Leftover Changes") {
+		t.Fatalf("expected NO leftover-work guidance for clean tree, got:\n%s", capturedPrompt)
+	}
+}
+
+func TestLeftoverWorkGuidance_OnlyRallyDirty(t *testing.T) {
+	oldHeadPull := headPullLap
+	headPullLap = func(context.Context, string) (laps.Lap, error) {
+		return laps.Lap{ID: "lap-1", Title: "test", Description: "test task", Assignee: "senior"}, nil
+	}
+	defer func() { headPullLap = oldHeadPull }()
+
+	workspaceDir := t.TempDir()
+	rallyDir := store.RallyDir(workspaceDir)
+	os.MkdirAll(rallyDir, 0o755)
+	initRepo(t, workspaceDir)
+
+	// Create an initial commit so the repo is not empty.
+	runGit(t, workspaceDir, "commit", "--allow-empty", "-m", "initial")
+
+	// Only dirty rally-owned state — these should be excluded by
+	// IsWorkspaceDirty. .laps/ is created and churned by the runner itself.
+	os.WriteFile(filepath.Join(rallyDir, "summary.jsonl"), []byte("{}\n"), 0o644)
+
+	s := newTestStore(t, rallyDir)
+	var capturedPrompt string
+	exec := &funcExecutor{
+		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+			capturedPrompt = agent.BuildPrompt(opts)
+			// Produce a real user-file change so the run is not flagged as
+			// "no changes made". The leftover-work check already ran at run
+			// start (captured in opts), so this write does not affect it.
+			if err := os.WriteFile(filepath.Join(workspaceDir, "result.go"), []byte("package result\n"), 0o644); err != nil {
+				return nil, err
+			}
+			if err := progress.RecordLap(workspaceDir, "lap-1"); err != nil {
+				return nil, err
+			}
+			return &agent.TryResult{Completed: true, Summary: "done"}, nil
+		},
+	}
+
+	r := NewRunner(s, Config{
+		WorkspaceDir:     workspaceDir,
+		DataDir:          t.TempDir(),
+		AgentMixSpecs:    []string{"op:dsf"},
+		TargetIterations: 1,
+		RetryBudget:      1,
+		LapsEnabled:      true,
+		Resolver:         cheapTestResolver,
+	}, map[string]agent.Executor{"opencode": exec})
+
+	if err := r.Run(context.Background()); err != nil {
+		t.Fatalf("Run error = %v", err)
+	}
+	if strings.Contains(capturedPrompt, "## Leftover Changes") {
+		t.Fatalf("expected NO leftover-work guidance when only .rally/ is dirty, got:\n%s", capturedPrompt)
+	}
+}

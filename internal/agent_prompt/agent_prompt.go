@@ -33,8 +33,9 @@ var sources embed.FS
 // so callers (prompt composition, `rally routes check`) can reference the
 // shared snippets by a stable name rather than a literal string.
 const (
-	GeneralFinalize = "finalize"
-	GeneralHeadless = "headless"
+	GeneralFinalize     = "finalize"
+	GeneralHeadless     = "headless"
+	GeneralLeftoverWork = "leftover_work"
 )
 
 // General returns the embedded general/<name>.md snippet content and whether
@@ -55,6 +56,13 @@ func Finalize() string {
 // always embedded.
 func Headless() string {
 	s, _ := General(GeneralHeadless)
+	return s
+}
+
+// LeftoverWork returns the advisory guidance shown when the working tree has
+// uncommitted non-rally changes at run start. It is always embedded.
+func LeftoverWork() string {
+	s, _ := General(GeneralLeftoverWork)
 	return s
 }
 

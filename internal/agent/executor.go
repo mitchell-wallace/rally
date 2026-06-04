@@ -33,6 +33,7 @@ type RunOptions struct {
 	PreviousSummary  string
 	RecentTryContext string
 	LapsEnabled      bool
+	LeftoverWork     bool   // working tree has uncommitted non-rally changes
 	Prompt           string // explicit override
 	LogPath          string // path to write try transcript log
 	ResumeSessionID  string // session-id to resume from a previous try

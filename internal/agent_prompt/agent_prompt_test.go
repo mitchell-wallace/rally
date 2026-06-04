@@ -106,7 +106,7 @@ func TestGeneralMissing(t *testing.T) {
 
 func TestGeneralsList(t *testing.T) {
 	got := Generals()
-	want := []string{"finalize", "headless"}
+	want := []string{"finalize", "headless", "leftover_work"}
 	if len(got) != len(want) {
 		t.Fatalf("Generals() = %v, want %v", got, want)
 	}

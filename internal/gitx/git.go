@@ -63,7 +63,10 @@ func IsGitDirty(dir string) (bool, error) {
 }
 
 // IsWorkspaceDirty checks if there are user-agent workspace changes, excluding
-// Rally's own workspace metadata and gitignored local state under .rally/.
+// Rally's own workspace metadata: gitignored local state under .rally/ and the
+// .laps/ queue/hook machinery that Rally rewrites on its own. This mirrors the
+// rally-state exclusion in filesChangedList so a run that only churns Rally's
+// bookkeeping is not mistaken for real user work.
 func IsWorkspaceDirty(dir string) (bool, error) {
 	out, err := GitOutput(dir, "status", "--porcelain")
 	if err != nil {
@@ -78,7 +81,7 @@ func IsWorkspaceDirty(dir string) (bool, error) {
 		parts := strings.SplitN(line, " ", 2)
 		if len(parts) == 2 {
 			path := parts[1]
-			if strings.HasPrefix(path, ".rally/") {
+			if strings.HasPrefix(path, ".rally/") || strings.HasPrefix(path, ".laps/") {
 				continue
 			}
 		}
