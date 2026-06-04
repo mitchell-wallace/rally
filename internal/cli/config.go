@@ -60,7 +60,7 @@ func runConfig(cmd *cobra.Command, _ []string) error {
 
 	dataDir := cfg.DataDir
 	lapsInstructions := cfg.Laps.InstructionsFile
-	fallbackInstructions := cfg.Fallback.InstructionsFile
+	freeRunPrompt := cfg.FreeRun.PromptFile
 	runHooksOnAutoCommit := cfg.RunHooksOnAutoCommit
 
 	stallStr := strconv.Itoa(cfg.Reliability.StallThresholdSecs)
@@ -109,7 +109,7 @@ func runConfig(cmd *cobra.Command, _ []string) error {
 		huh.NewNote().Title("Paths & toggles").Description("Optional paths and behaviour flags."),
 		huh.NewInput().Title("data_dir").Description("Where rally writes try logs and relay records. Blank = ~/.local/share/rally.").Value(&dataDir),
 		huh.NewInput().Title("laps.instructions_file").Description("Extra instructions injected when a lap is assigned.").Value(&lapsInstructions),
-		huh.NewInput().Title("fallback.instructions_file").Description("Instructions used when no laps queue exists.").Value(&fallbackInstructions),
+		huh.NewInput().Title("free_run.prompt_file").Description("Prompt used when no laps queue exists.").Value(&freeRunPrompt),
 		huh.NewConfirm().Title("run_hooks_on_autocommit").Description("Run git hooks (e.g. pre-commit) on rally's automatic commits.").Affirmative("Yes").Negative("No").Value(&runHooksOnAutoCommit),
 	)
 
@@ -168,7 +168,7 @@ func runConfig(cmd *cobra.Command, _ []string) error {
 
 	cfg.DataDir = strings.TrimSpace(dataDir)
 	cfg.Laps.InstructionsFile = strings.TrimSpace(lapsInstructions)
-	cfg.Fallback.InstructionsFile = strings.TrimSpace(fallbackInstructions)
+	cfg.FreeRun.PromptFile = strings.TrimSpace(freeRunPrompt)
 	cfg.RunHooksOnAutoCommit = runHooksOnAutoCommit
 
 	if n, ok := parseIntDefault(stallStr, cfg.Reliability.StallThresholdSecs); ok {

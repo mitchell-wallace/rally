@@ -350,13 +350,13 @@ command = ["tool"]
 	}
 }
 
-func TestLoadV2_LapsAndFallback(t *testing.T) {
+func TestLoadV2_LapsAndFreeRun(t *testing.T) {
 	dir := t.TempDir()
 	writeConfig(t, dir, `schema_version = 2
 [laps]
 instructions_file = ".rally/laps_instructions.md"
-[fallback]
-instructions_file = ".rally/fallback_instructions.md"
+[free_run]
+prompt_file = ".rally/free_run_prompt.md"
 `)
 
 	cfg, err := LoadV2(dir)
@@ -366,8 +366,8 @@ instructions_file = ".rally/fallback_instructions.md"
 	if cfg.Laps.InstructionsFile != ".rally/laps_instructions.md" {
 		t.Errorf("Laps.InstructionsFile = %q, wrong", cfg.Laps.InstructionsFile)
 	}
-	if cfg.Fallback.InstructionsFile != ".rally/fallback_instructions.md" {
-		t.Errorf("Fallback.InstructionsFile = %q, wrong", cfg.Fallback.InstructionsFile)
+	if cfg.FreeRun.PromptFile != ".rally/free_run_prompt.md" {
+		t.Errorf("FreeRun.PromptFile = %q, wrong", cfg.FreeRun.PromptFile)
 	}
 }
 
@@ -1330,5 +1330,62 @@ model_flag = "--model"
 		if strings.Contains(note, "TUI") {
 			t.Errorf("unexpected TUI mode warning for correct opencode config: %q", note)
 		}
+	}
+}
+
+func TestLoadV2_FreeRunLegacyFallbackAlias(t *testing.T) {
+	dir := t.TempDir()
+	writeConfig(t, dir, `schema_version = 2
+[fallback]
+instructions_file = ".rally/legacy_prompt.md"
+`)
+
+	cfg, err := LoadV2(dir)
+	if err != nil {
+		t.Fatalf("LoadV2 failed: %v", err)
+	}
+	if cfg.FreeRun.PromptFile != ".rally/legacy_prompt.md" {
+		t.Errorf("FreeRun.PromptFile = %q, want %q (from legacy [fallback])", cfg.FreeRun.PromptFile, ".rally/legacy_prompt.md")
+	}
+	found := false
+	for _, note := range cfg.DeprecationNotes {
+		if strings.Contains(note, "[fallback]") && strings.Contains(note, "deprecated") {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected deprecation note for [fallback], got: %v", cfg.DeprecationNotes)
+	}
+}
+
+func TestLoadV2_FreeRunNewKeyPreferredOverLegacy(t *testing.T) {
+	dir := t.TempDir()
+	writeConfig(t, dir, `schema_version = 2
+[free_run]
+prompt_file = ".rally/new_prompt.md"
+[fallback]
+instructions_file = ".rally/legacy_prompt.md"
+`)
+
+	cfg, err := LoadV2(dir)
+	if err != nil {
+		t.Fatalf("LoadV2 failed: %v", err)
+	}
+	if cfg.FreeRun.PromptFile != ".rally/new_prompt.md" {
+		t.Errorf("FreeRun.PromptFile = %q, want new key value (new key wins over legacy)", cfg.FreeRun.PromptFile)
+	}
+}
+
+func TestLoadV2_FreeRunAbsent(t *testing.T) {
+	dir := t.TempDir()
+	writeConfig(t, dir, `schema_version = 2
+`)
+
+	cfg, err := LoadV2(dir)
+	if err != nil {
+		t.Fatalf("LoadV2 failed: %v", err)
+	}
+	if cfg.FreeRun.PromptFile != "" {
+		t.Errorf("FreeRun.PromptFile = %q, want empty when absent", cfg.FreeRun.PromptFile)
 	}
 }

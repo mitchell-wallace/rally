@@ -233,7 +233,7 @@ func runRelay(cmd *cobra.Command, args []string) error {
 		RunHooksOnAutoCommit:     cfg.RunHooksOnAutoCommit,
 		LapsEnabled:              lapsEnabled,
 		LapsInstructionsFile:     cfg.Laps.InstructionsFile,
-		FallbackInstructionsFile: cfg.Fallback.InstructionsFile,
+		FreeRunPromptFile:        cfg.FreeRun.PromptFile,
 		RecentTryCount:           cfg.Reliability.RecentTryCount,
 		RecentTryCharLimit:       cfg.Reliability.RecentTryCharLimit,
 		RecentContextCharLimit:   cfg.Reliability.RecentContextCharLimit,

@@ -67,9 +67,11 @@ type LapsConfig struct {
 	InstructionsFile string `toml:"instructions_file,omitempty"`
 }
 
-type FallbackConfig struct {
-	InstructionsFile string `toml:"instructions_file,omitempty"`
+type FreeRunConfig struct {
+	PromptFile string `toml:"prompt_file,omitempty"`
 }
+
+type FallbackConfig = FreeRunConfig
 
 type ReliabilityConfig struct {
 	StallThresholdSecs     int  `toml:"stall_threshold_secs,omitempty"`
@@ -113,7 +115,7 @@ type V2Config struct {
 
 	Defaults    DefaultsConfig
 	Laps        LapsConfig
-	Fallback    FallbackConfig
+	FreeRun     FreeRunConfig
 	Reliability ReliabilityConfig
 	Harnesses   map[string]*HarnessConfig
 	Routes      map[string][]string
@@ -121,6 +123,10 @@ type V2Config struct {
 
 	DeprecationNotes []string
 	SchemaWarning    string
+}
+
+type rawFallbackAlias struct {
+	InstructionsFile string `toml:"instructions_file,omitempty"`
 }
 
 type rawConfig struct {
@@ -136,7 +142,8 @@ type rawConfig struct {
 
 	Defaults    DefaultsConfig            `toml:"defaults"`
 	Laps        LapsConfig                `toml:"laps"`
-	Fallback    FallbackConfig            `toml:"fallback"`
+	FreeRun     FreeRunConfig             `toml:"free_run"`
+	Fallback    rawFallbackAlias          `toml:"fallback"`
 	Reliability ReliabilityConfig         `toml:"reliability"`
 	Harnesses   map[string]*HarnessConfig `toml:"harness"`
 	Routes      map[string][]string       `toml:"routes"`
@@ -169,11 +176,19 @@ func LoadV2(workspaceDir string) (V2Config, error) {
 		LapsInstructions:     raw.LapsInstructions,
 		Defaults:             raw.Defaults,
 		Laps:                 raw.Laps,
-		Fallback:             raw.Fallback,
+		FreeRun:              raw.FreeRun,
 		Reliability:          raw.Reliability,
 		Harnesses:            raw.Harnesses,
 		Routes:               raw.Routes,
 		Telemetry:            raw.Telemetry,
+	}
+
+	if raw.Fallback.InstructionsFile != "" {
+		if cfg.FreeRun.PromptFile == "" {
+			cfg.FreeRun.PromptFile = raw.Fallback.InstructionsFile
+		}
+		cfg.DeprecationNotes = append(cfg.DeprecationNotes,
+			"config: [fallback] instructions_file is deprecated; use [free_run] prompt_file instead")
 	}
 
 	if cfg.Reliability.StallThresholdSecs == 0 {
@@ -537,7 +552,7 @@ func SaveV2(workspaceDir string, cfg V2Config) error {
 			AntigravityModel: effectiveModel(cfg.AntigravityModel, cfg.Defaults.AntigravityModel),
 		},
 		Laps:        cfg.Laps,
-		Fallback:    cfg.Fallback,
+		FreeRun:     cfg.FreeRun,
 		Reliability: cfg.Reliability,
 		Harnesses:   cfg.Harnesses,
 		Routes:      cfg.Routes,

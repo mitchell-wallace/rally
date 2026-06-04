@@ -3229,7 +3229,7 @@ func TestFallbackInstructionsUsedInNoBackendMode(t *testing.T) {
 		AgentMixSpecs:            []string{"cc:1"},
 		TargetIterations:         1,
 		LapsEnabled:              false,
-		FallbackInstructionsFile: fallbackFile,
+		FreeRunPromptFile: fallbackFile,
 	}, executors)
 
 	if err := r.Run(context.Background()); err != nil {
@@ -3270,7 +3270,7 @@ func TestFallbackInstructionsIgnoredWhenCLIPromptProvided(t *testing.T) {
 		TargetIterations:         1,
 		LapsEnabled:              false,
 		TaskPrompt:               "CLI prompt",
-		FallbackInstructionsFile: fallbackFile,
+		FreeRunPromptFile: fallbackFile,
 	}, executors)
 
 	if err := r.Run(context.Background()); err != nil {
@@ -3315,7 +3315,7 @@ func TestFallbackInstructionsIgnoredInLapsMode(t *testing.T) {
 		TargetIterations:         1,
 		LapsEnabled:              true,
 		TaskPrompt:               "configured prompt",
-		FallbackInstructionsFile: fallbackFile,
+		FreeRunPromptFile: fallbackFile,
 	}, executors)
 
 	if err := r.Run(context.Background()); err != nil {
@@ -3352,14 +3352,14 @@ func TestFallbackInstructionsMissingFileUsesBuiltInDefault(t *testing.T) {
 		AgentMixSpecs:            []string{"cc:1"},
 		TargetIterations:         1,
 		LapsEnabled:              false,
-		FallbackInstructionsFile: filepath.Join(workspaceDir, "nonexistent.md"),
+		FreeRunPromptFile: filepath.Join(workspaceDir, "nonexistent.md"),
 	}, executors)
 
 	if err := r.Run(context.Background()); err != nil {
 		t.Fatalf("run failed: %v", err)
 	}
 
-	if receivedTaskPrompt != builtInDefaultFallback {
+	if receivedTaskPrompt != builtInDefaultFreeRunPrompt {
 		t.Errorf("expected built-in default fallback, got %q", receivedTaskPrompt)
 	}
 }
@@ -3395,7 +3395,7 @@ func TestFallbackInstructionsUnconfiguredUsesBuiltInDefault(t *testing.T) {
 		t.Fatalf("run failed: %v", err)
 	}
 
-	if receivedTaskPrompt != builtInDefaultFallback {
+	if receivedTaskPrompt != builtInDefaultFreeRunPrompt {
 		t.Errorf("expected built-in default fallback, got %q", receivedTaskPrompt)
 	}
 }
@@ -3558,7 +3558,7 @@ func TestRunnerNoBackendUsesDefaultRouteAndFallbackPrompt(t *testing.T) {
 		RouteSpecs:               map[string][]string{"default": []string{"cx:1"}},
 		TargetIterations:         1,
 		LapsEnabled:              false,
-		FallbackInstructionsFile: fallbackFile,
+		FreeRunPromptFile: fallbackFile,
 		Resolver:                 testResolver,
 	}, executors)
 
@@ -3685,7 +3685,7 @@ instructions_file = %q
 		AgentMixSpecs:            mixSpecs,
 		TargetIterations:         cfg.Defaults.Iterations,
 		Resolver:                 resolver,
-		FallbackInstructionsFile: cfg.Fallback.InstructionsFile,
+		FreeRunPromptFile: cfg.FreeRun.PromptFile,
 	}, executors)
 
 	if err := r.Run(context.Background()); err != nil {

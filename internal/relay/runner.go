@@ -45,7 +45,7 @@ type Config struct {
 	OverwriteMixOnResume     bool
 	Resolver                 Resolver
 	LapsInstructionsFile     string
-	FallbackInstructionsFile string
+	FreeRunPromptFile string
 	RecentTryCount           int
 	RecentTryCharLimit       int
 	RecentContextCharLimit   int
@@ -63,8 +63,8 @@ type Runner struct {
 
 	lapsInstructionsCache     string
 	lapsWarned                bool
-	fallbackInstructionsCache string
-	fallbackWarned            bool
+	freeRunPromptCache string
+	freeRunWarned      bool
 
 	stallControllerFactory func(logPath string) reliability.StallController
 	sleepFunc              func(time.Duration)
@@ -141,7 +141,7 @@ func renderRunFooter(out io.Writer, opts style.FooterOptions) {
 	fmt.Fprintf(out, "\r\x1b[2K%s\n", rendered)
 }
 
-const builtInDefaultFallback = "Continue the relay run. Review the current state of the codebase and continue making progress on the project."
+const builtInDefaultFreeRunPrompt = "Continue the relay run. Review the current state of the codebase and continue making progress on the project."
 const incompleteRetryGuidance = "The last run was incomplete. Check any current git changes, finish anything not done, verify correctness, commit when good, then run `laps done`."
 
 const (
@@ -289,23 +289,23 @@ func (r *Runner) resolveInstructions() string {
 	return r.lapsInstructionsCache
 }
 
-func (r *Runner) loadFallbackInstructions() string {
-	if r.fallbackInstructionsCache != "" {
-		return r.fallbackInstructionsCache
+func (r *Runner) loadFreeRunPrompt() string {
+	if r.freeRunPromptCache != "" {
+		return r.freeRunPromptCache
 	}
-	if r.cfg.FallbackInstructionsFile != "" {
-		data, err := os.ReadFile(r.cfg.FallbackInstructionsFile)
+	if r.cfg.FreeRunPromptFile != "" {
+		data, err := os.ReadFile(r.cfg.FreeRunPromptFile)
 		if err != nil {
-			if !r.fallbackWarned {
-				fmt.Fprintf(os.Stderr, "warning: fallback instructions file %q not readable: %v; using built-in default\n", r.cfg.FallbackInstructionsFile, err)
-				r.fallbackWarned = true
+			if !r.freeRunWarned {
+				fmt.Fprintf(os.Stderr, "warning: free-run prompt file %q not readable: %v; using built-in default\n", r.cfg.FreeRunPromptFile, err)
+				r.freeRunWarned = true
 			}
-			return builtInDefaultFallback
+			return builtInDefaultFreeRunPrompt
 		}
-		r.fallbackInstructionsCache = string(data)
-		return r.fallbackInstructionsCache
+		r.freeRunPromptCache = string(data)
+		return r.freeRunPromptCache
 	}
-	return builtInDefaultFallback
+	return builtInDefaultFreeRunPrompt
 }
 
 func (r *Runner) RequestStop() {
@@ -1395,7 +1395,7 @@ func (r *Runner) resolveRunTask(ctx context.Context) (runTask, error) {
 
 	if !r.cfg.LapsEnabled {
 		if task.Prompt == "" {
-			task.Prompt = r.loadFallbackInstructions()
+			task.Prompt = r.loadFreeRunPrompt()
 		}
 		return task, nil
 	}

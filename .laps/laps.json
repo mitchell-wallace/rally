@@ -204,11 +204,11 @@
       "title": "rally init subcommands",
       "description": "Context: cli-polish task §3 + design Decision 3. `rally init` does workspace init today; role init exists as a separate path.\n\nOutcome: `rally init` = workspace init (unchanged), `rally init roles` = role init, `rally init all` = workspace + roles in sequence. Each subcommand is independently re-runnable (idempotent merge into existing config).\n\nFiles \u0026 scope: cmd/rally/main.go (init command wiring) plus the relevant main/cmd test.\n\nDesign: reuse the existing workspace-init and role-init code paths; `init all` runs them in order. Keep bare `init` behavior unchanged. Idempotent: re-running merges into existing config without clobbering.\n\nAcceptance: tests — `init all` runs both in sequence; `init roles` only touches role configuration. Run the relevant package tests (e.g. `go test ./cmd/rally/`). Do not tick tasks.md.",
       "assignee": "JUNIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 524288,
       "createdAt": "2026-06-04T11:13:52.686148651Z",
-      "updatedAt": "2026-06-04T11:13:52.686148651Z",
-      "completedAt": null
+      "updatedAt": "2026-06-04T13:43:49.843342578Z",
+      "completedAt": "2026-06-04T13:43:49.843342578Z"
     },
     {
       "id": "rall-9957",
