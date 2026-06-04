@@ -3,10 +3,12 @@ package style
 import (
 	"fmt"
 	"io"
+	"os"
 	"strings"
 	"time"
 
 	"github.com/charmbracelet/lipgloss"
+	"golang.org/x/term"
 )
 
 // PrintLine writes s to w followed by a newline, but only when s contains
@@ -24,12 +26,32 @@ func PrintLine(w io.Writer, s string) {
 // the hints stay readable while clearly being chrome, not content.
 var shortcutHintStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("245"))
 
-// ShortcutHint renders the single-line keyboard legend that sits below the
-// try header. The line is rendered without leading whitespace so it hugs the
-// left margin, and uses a medium grey so it reads as chrome rather than
-// content.
+var shortcutHintTiers = []string{
+	"[Ctrl+S skip] [Ctrl+P pause] [Ctrl+X stop] [Ctrl+C quit]",
+	"[^S skip] [^P pause] [^X stop] [^C quit]",
+	"^S skip · ^P pause · ^X stop · ^C quit",
+	"^S·^P·^X·^C",
+}
+
+func terminalWidth() int {
+	w, _, err := term.GetSize(int(os.Stdout.Fd()))
+	if err != nil || w <= 0 {
+		return 80
+	}
+	return w
+}
+
+func shortcutHintForWidth(width int) string {
+	for _, tier := range shortcutHintTiers {
+		if lipgloss.Width(tier) <= width {
+			return shortcutHintStyle.Render(tier)
+		}
+	}
+	return shortcutHintStyle.Render(shortcutHintTiers[len(shortcutHintTiers)-1])
+}
+
 func ShortcutHint() string {
-	return shortcutHintStyle.Render("Ctrl+S skip · Ctrl+P pause · Ctrl+X stop · Ctrl+C quit")
+	return shortcutHintForWidth(terminalWidth())
 }
 
 // Color scheme styles.

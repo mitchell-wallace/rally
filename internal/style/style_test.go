@@ -1,6 +1,7 @@
 package style
 
 import (
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -238,5 +239,69 @@ func TestPlural(t *testing.T) {
 	}
 	if plural(2) != "s" {
 		t.Errorf("plural(2) should be 's'")
+	}
+}
+
+var ansiStripRe = regexp.MustCompile("\x1b\\[[0-9;]*m")
+
+func stripAnsi(s string) string {
+	return ansiStripRe.ReplaceAllString(s, "")
+}
+
+func TestShortcutHintForWidthTiers(t *testing.T) {
+	full := shortcutHintTiers[0]
+	medium := shortcutHintTiers[1]
+	narrow := shortcutHintTiers[2]
+	minimal := shortcutHintTiers[3]
+
+	fullW := lipgloss.Width(full)
+	mediumW := lipgloss.Width(medium)
+	narrowW := lipgloss.Width(narrow)
+	minimalW := lipgloss.Width(minimal)
+
+	t.Logf("tier widths: full=%d medium=%d narrow=%d minimal=%d",
+		fullW, mediumW, narrowW, minimalW)
+
+	cases := []struct {
+		width    int
+		wantTier int
+		label    string
+	}{
+		{120, 0, "wide terminal gets full tier"},
+		{fullW, 0, "exact full width fits full tier"},
+		{fullW - 1, 1, "one less than full gets medium tier"},
+		{mediumW, 1, "exact medium width fits medium tier"},
+		{mediumW - 1, 2, "one less than medium gets narrow tier"},
+		{narrowW, 2, "exact narrow width fits narrow tier"},
+		{narrowW - 1, 3, "one less than narrow gets minimal tier"},
+		{minimalW, 3, "exact minimal width fits minimal tier"},
+		{1, 3, "very narrow terminal gets minimal tier"},
+	}
+
+	for _, c := range cases {
+		got := shortcutHintForWidth(c.width)
+		plain := stripAnsi(got)
+		want := shortcutHintTiers[c.wantTier]
+		if plain != want {
+			t.Errorf("width=%d (%s): got %q, want %q", c.width, c.label, plain, want)
+		}
+	}
+}
+
+func TestShortcutHintForWidthNoNewlines(t *testing.T) {
+	for w := 1; w <= 120; w++ {
+		got := shortcutHintForWidth(w)
+		if strings.Contains(got, "\n") {
+			t.Errorf("width=%d: output contains newline: %q", w, got)
+		}
+	}
+}
+
+func TestShortcutHintForWidthAlwaysSingleLine(t *testing.T) {
+	for w := 1; w <= 200; w++ {
+		got := stripAnsi(shortcutHintForWidth(w))
+		if strings.Contains(got, "\n") {
+			t.Fatalf("width=%d: visible text contains newline", w)
+		}
 	}
 }

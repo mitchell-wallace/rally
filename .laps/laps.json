@@ -121,6 +121,127 @@
       "createdAt": "2026-06-04T01:25:29.43345028Z",
       "updatedAt": "2026-06-04T02:59:48.549566954Z",
       "completedAt": "2026-06-04T02:59:48.549566954Z"
+    },
+    {
+      "id": "rall-797d",
+      "title": "Width-aware single-line shortcut hint",
+      "description": "Context: cli-polish change, task §1 + design Decision 1. `ShortcutHint()` (internal/style/style.go:31) renders a fixed string (\"Ctrl+S skip · Ctrl+P pause · Ctrl+X stop · Ctrl+C quit\"). On a narrow terminal it wraps to two lines, which breaks the monitor's 1s cursor-up countdown redraw (the cursor-up line count is fixed at print time), so each tick appends instead of overwriting and stale status lines accumulate.\n\nOutcome: `ShortcutHint` detects terminal width at render time and emits the widest of four tiers that fits on a single line, so the countdown redraw always overwrites cleanly.\n\nFiles \u0026 scope: internal/style/style.go (`ShortcutHint` + any local helpers) and internal/style/style_test.go. Do NOT touch the monitor redraw logic — guaranteeing one line is the whole fix.\n\nDesign: widest-that-fits among:\n- Full: `[Ctrl+S skip] [Ctrl+P pause] [Ctrl+X stop] [Ctrl+C quit]`\n- Medium: `[^S skip] [^P pause] [^X stop] [^C quit]`\n- Narrow: `^S skip · ^P pause · ^X stop · ^C quit`\n- Minimal: `^S·^P·^X·^C`\nUse `term.GetSize(fd)` for width; one-shot detection at render time is sufficient (the tier never changes mid-run), so SIGWINCH handling is optional — skip it if it complicates testing. When stdout is not a TTY or detection fails, fall back to width 80 and never wrap. Measure visible width without ANSI styling. COORDINATION: keep the current action labels (\"stop\"/\"quit\"); the \"graceful stop\"/\"quit now\" relabel is owned by the later agent-lifecycle change — do not introduce it here.\n\nAcceptance: style_test.go asserts each width band selects the expected tier and output is always ≤ one line. `go test ./internal/style/`. Report progress but do not check tasks.md boxes (VERIFY owns ticking).",
+      "assignee": "JUNIOR",
+      "isDone": false,
+      "order": 65536,
+      "createdAt": "2026-06-04T11:13:52.686126041Z",
+      "updatedAt": "2026-06-04T11:13:52.686126041Z",
+      "completedAt": null
+    },
+    {
+      "id": "rall-4d09",
+      "title": "Full-width headers and footers",
+      "description": "Context: cli-polish task §2 + design Decision 2. Headers/footers use fixed 40-char separators (style.go:44 `separatorWidth`, `separator()`/`subSeparator()`), so output is ragged and doesn't span the terminal.\n\nOutcome: header/footer/summary separator lines fill the terminal width (capped at 80) with box-drawing fill, degrading gracefully on narrow terminals.\n\nFiles \u0026 scope: internal/style/style.go (`separator`/`subSeparator` and the `RenderHeader`/`RenderFooter`/summary paths) and style_test.go. Confine to style.go.\n\nDesign: replace the fixed `separatorWidth` with terminal-width-aware fill capped at 80. On terminals narrower than the label, clamp to the available width and truncate the label while keeping the line structure intact. Non-TTY/detection failure → width 80.\n\nAcceptance: tests assert separators fill to the cap and clamp on narrow widths without breaking structure. `go test ./internal/style/`. Report progress; do not tick tasks.md.",
+      "assignee": "JUNIOR",
+      "isDone": false,
+      "order": 131072,
+      "createdAt": "2026-06-04T11:13:52.686140009Z",
+      "updatedAt": "2026-06-04T11:13:52.686140009Z",
+      "completedAt": null
+    },
+    {
+      "id": "rall-02de",
+      "title": "Bound activity age by try runtime",
+      "description": "Context: cli-polish task §5 + design Decision 4. `last activity` in `monitor.Tick()` is `time.Since(logMtime)` with no relation to when the current try started, so at a retry's start (elapsed≈0) it surfaces the stale previous-try mtime (e.g. \"20h 50m ago\") and the derived `⚠ slowing` indicator (≥0.6× the stall threshold) fires instantly and falsely.\n\nOutcome: the displayed last-activity age can never exceed the current try's elapsed time. A just-started try reads `\u003c 1m ago` regardless of the log file's pre-existing mtime, and `⚠ slowing` cannot appear until the try itself has been silent for ≥0.6× the threshold.\n\nFiles \u0026 scope: internal/monitor/monitor.go (the last-activity computation in `Tick()`) and monitor_test.go. Leave the stall detector in the reliability package untouched — only the *display* age is clamped, so liveness/kill behavior is unchanged.\n\nDesign: after computing `lastActivity`, clamp `if lastActivity \u003e elapsed { lastActivity = elapsed }` using the monitor's known `startTime`, before deriving indicators. Leave the `lastActivity \u003c 0` (\"—\") path unchanged.\n\nAcceptance: test that at elapsed==0 with a stale mtime the age reads `\u003c 1m ago` and `slowing` is absent until the try's own silence reaches 0.6× the threshold. `go test ./internal/monitor/`. Do not tick tasks.md.",
+      "assignee": "JUNIOR",
+      "isDone": false,
+      "order": 196608,
+      "createdAt": "2026-06-04T11:13:52.686141608Z",
+      "updatedAt": "2026-06-04T11:13:52.686141608Z",
+      "completedAt": null
+    },
+    {
+      "id": "rall-1bd4",
+      "title": "Collapse retries into one updating line; colour only terminal outcome",
+      "description": "Context: cli-polish task §6 + design Decision 5. Each retry attempt prints its own red `✗ failed` footer (`RenderFooter`, around runner.go:1123), so an in-flight run that retries 5× shows five near-identical red lines and miscolours non-terminal attempts as failures.\n\nOutcome: while a run is retrying within budget, a single neutral line updates in place (`↻ retrying N/M · last: \u003creason\u003e (\u003cdur\u003e, \u003cfiles\u003e)`); exactly one coloured outcome footer prints at the terminal result — green `✓ passed on try N/M …` on recovery, red `✗ failed after K tries · \u003creason\u003e` when the budget is exhausted. A single-attempt run (maxAttempts==1) is terminal on its first failure and coloured immediately.\n\nFiles \u0026 scope: internal/relay/runner.go (per-attempt footer orchestration around runner.go:1123), internal/style/style.go (`RenderFooter` gains a terminal-vs-interim notion), style_test.go, runner_test.go.\n\nDesign: suppress the per-attempt `RenderFooter` while retrying within budget; reuse the existing cursor-redraw mechanism for the in-place neutral line (safe — Rally does not currently print agent output inline). Add a terminal-vs-interim flag to `RenderFooter` so `FailureStyle` (red) is applied only to terminal failures; interim states use the neutral/dim style. Do not disturb the inline `retry N/M` live status indicator — this changes only footer cadence and colouring.\n\nAcceptance: tests — a 5× retry prints one updating line + one final coloured footer (not five red footers); a single-attempt failure is red; a recovering run prints a green footer. `go test ./internal/style/ ./internal/relay/`. Do not tick tasks.md.",
+      "assignee": "SENIOR",
+      "isDone": false,
+      "order": 262144,
+      "createdAt": "2026-06-04T11:13:52.686142861Z",
+      "updatedAt": "2026-06-04T11:13:52.686142861Z",
+      "completedAt": null
+    },
+    {
+      "id": "rall-74ba",
+      "title": "Verify display + retry UX slice",
+      "description": "Verify the user-visible display/monitor/retry slice (the four prior laps) for the cli-polish change — cli-display capability, tasks §1, §2, §5, §6.\n\nUse the openspec-verify-change skill against change `cli-polish`, then focus the report on: width-aware shortcut hint tiers, full-width headers, try-runtime-bounded activity age, and the collapsed single-line retry + terminal-only colouring.\n\nBefore diffing, identify the intended merge target from the user / PR metadata / branch config / recent history — do NOT assume `main` — and identify the first lap/try in this batch; treat earlier branch work as pre-existing. Use `git diff \u003ctarget\u003e...HEAD`.\n\nDepth: trace the actual rendered strings, not just green tests. Confirm `ShortcutHint` never exceeds one line across width bands, separators fill to the 80 cap and clamp on narrow widths, the activity-age clamp uses try elapsed (and the stall detector is untouched), and the footer path emits exactly one coloured line only at the terminal result. Confirm the current \"stop\"/\"quit\" labels were retained (the relabel is agent-lifecycle's job). Run `go test ./internal/style/ ./internal/monitor/ ./internal/relay/`.\n\nCheck off the tasks.md boxes under §1, §2, §5, §6 for work verified correct and thorough. For substantive gaps, add a focused head lap (`laps add head ...`) rather than fixing here; only tiny safe one-liners may be fixed in place. Do not rewrite git history.",
+      "assignee": "VERIFY",
+      "isDone": false,
+      "order": 327680,
+      "createdAt": "2026-06-04T11:13:52.686145286Z",
+      "updatedAt": "2026-06-04T11:13:52.686145286Z",
+      "completedAt": null
+    },
+    {
+      "id": "rall-d277",
+      "title": "Leftover-aware incomplete detection",
+      "description": "HIGH-RISK behavioral lap — relay-runner MODIFIED requirement (failure classification path).\n\nContext: cli-polish task §7 + design Decision 6 + specs/relay-runner/spec.md delta (\"Incomplete failure class\"). Today the incomplete class (runner.go:986) is computed from the whole dirty working tree (`dirtyBeforeAutoCommit` plus `filesChangedList`'s `git status --porcelain` fallback at runner.go:1490), so uncommitted leftovers from a *prior* failed try make a later no-op try look incomplete.\n\nOutcome: a try is \"incomplete\" only when *this* try produced its own uncommitted, unfinalized changes. Untouched leftovers inherited from a prior failed try no longer trigger the class; a try that touches (modifies/reverts/commits) an inherited leftover path has that path attributed to it.\n\nFiles \u0026 scope: internal/relay/runner.go — snapshot near the `headBefore` capture (runner.go:816); incomplete classification (runner.go:986); `filesChangedList` (runner.go:1490) — and runner_test.go.\n\nDesign: snapshot the already-dirty path set at try start (alongside `headBefore`) via `git status --porcelain`. Define \"changes produced by this try\" as the working-tree delta vs that snapshot (paths whose porcelain state differs before vs after). Base the incomplete classification on that delta, not the absolute dirty set. A try that both inherits leftovers and adds its own unfinalized changes is still incomplete. Preserve the incomplete-retry guidance flow and the resilience-cascade exemption (incomplete does NOT call `PauseAgent`/`RecordHourlyFailure`).\n\nAcceptance: regression tests for all four spec scenarios — (a) a no-op try inheriting leftovers is NOT incomplete; (b) a try adding its own unfinalized changes IS; (c) touching/reverting/committing an inherited leftover attributes it to this try; (d) no-change-and-no-finalize stays a normal agent-class failure. `go test ./internal/relay/`. Do not tick tasks.md.",
+      "assignee": "SENIOR",
+      "isDone": false,
+      "order": 393216,
+      "createdAt": "2026-06-04T11:13:52.686146421Z",
+      "updatedAt": "2026-06-04T11:13:52.686146421Z",
+      "completedAt": null
+    },
+    {
+      "id": "rall-9fa9",
+      "title": "Verify incomplete-classification correctness",
+      "description": "High-risk follow-up to the leftover-aware incomplete lap.\n\nUse the openspec-verify-change skill against change `cli-polish`, focused on the relay-runner MODIFIED \"Incomplete failure class\" requirement and its four scenarios.\n\nIdentify the intended merge target (do NOT assume `main`; use user / PR metadata / branch config / recent history) and the first lap/try in this batch before diffing; `git diff \u003ctarget\u003e...HEAD`.\n\nDepth: trace the snapshot capture at try start, the before/after porcelain delta, and the classification call site — confirm untouched inherited leftovers are excluded and touched leftovers are attributed to the try. Verify the resilience-cascade exemption (no `PauseAgent`/`RecordHourlyFailure` for incomplete) and the incomplete-retry guidance string are intact. Run `go test ./internal/relay/`. Do not trust green tests alone — read the delta computation.\n\nCheck off tasks.md §7 boxes for verified-correct work. Substantive gaps → focused head lap; only tiny safe one-liners fixed in place. No git history rewriting.",
+      "assignee": "VERIFY",
+      "isDone": false,
+      "order": 458752,
+      "createdAt": "2026-06-04T11:13:52.686147658Z",
+      "updatedAt": "2026-06-04T11:13:52.686147658Z",
+      "completedAt": null
+    },
+    {
+      "id": "rall-ee5d",
+      "title": "rally init subcommands",
+      "description": "Context: cli-polish task §3 + design Decision 3. `rally init` does workspace init today; role init exists as a separate path.\n\nOutcome: `rally init` = workspace init (unchanged), `rally init roles` = role init, `rally init all` = workspace + roles in sequence. Each subcommand is independently re-runnable (idempotent merge into existing config).\n\nFiles \u0026 scope: cmd/rally/main.go (init command wiring) plus the relevant main/cmd test.\n\nDesign: reuse the existing workspace-init and role-init code paths; `init all` runs them in order. Keep bare `init` behavior unchanged. Idempotent: re-running merges into existing config without clobbering.\n\nAcceptance: tests — `init all` runs both in sequence; `init roles` only touches role configuration. Run the relevant package tests (e.g. `go test ./cmd/rally/`). Do not tick tasks.md.",
+      "assignee": "JUNIOR",
+      "isDone": false,
+      "order": 524288,
+      "createdAt": "2026-06-04T11:13:52.686148651Z",
+      "updatedAt": "2026-06-04T11:13:52.686148651Z",
+      "completedAt": null
+    },
+    {
+      "id": "rall-9957",
+      "title": "Rename FallbackConfig to FreeRunPrompt with back-compat alias",
+      "description": "Context: cli-polish task §4 + design Decision 7. `FallbackConfig` only sets the task prompt for a laps-less, promptless (\"free\") run, but \"fallback\" reads like runner failover (a different mechanism). Pure naming/config clarity — no behavior change.\n\nOutcome: type/methods/defaults and the config key are renamed to free-run naming; the old `[fallback] instructions_file` still loads (deprecated, warns) for one release; behavior is unchanged.\n\nFiles \u0026 scope: internal/config/config_v2.go (`FallbackConfig.InstructionsFile`→`FreeRunPromptFile`; alias in `LoadV2`), internal/relay/runner.go (`loadFallbackInstructions()`→`loadFreeRunPrompt()`, `builtInDefaultFallback`→`builtInDefaultFreeRunPrompt`), config_v2_test.go. Do NOT add a `[fallback]` section to the generated config template — it never had one; only deserialization (`LoadV2`) needs the alias.\n\nDesign: config key becomes `[free_run] prompt_file`. In `LoadV2`, accept the old `[fallback] instructions_file` as a deprecated alias, emit a deprecation warning when it is read, both resolving to the same value. The `loadFreeRunPrompt()` body and the `resolveRunTask()` call site are untouched (name-only).\n\nAcceptance: tests — new key loads; old key still loads with a deprecation warning; both resolve to the same prompt. `go test ./internal/config/ ./internal/relay/`. Do not tick tasks.md.",
+      "assignee": "JUNIOR",
+      "isDone": false,
+      "order": 589824,
+      "createdAt": "2026-06-04T11:13:52.686149713Z",
+      "updatedAt": "2026-06-04T11:13:52.686149713Z",
+      "completedAt": null
+    },
+    {
+      "id": "rall-83fa",
+      "title": "Document init subcommands and free-run key; bump VERSION",
+      "description": "Context: cli-polish task §8.1 and §8.3.\n\nOutcome: README/config docs document the `init` subcommands (`init`, `init roles`, `init all`) and the `[free_run] prompt_file` key with the one-release `[fallback]` deprecation note; the build version is bumped per the release process.\n\nFiles \u0026 scope: README.md (and any config docs) and internal/buildinfo/VERSION.\n\nDesign: document the three init subcommands and the free-run key plus its deprecation window. Bump the patch version in internal/buildinfo/VERSION — do NOT create or push a git tag (auto-tag handles tagging on main).\n\nAcceptance: docs reflect the new commands and key; VERSION is incremented. Do not tick tasks.md.",
+      "assignee": "JUNIOR",
+      "isDone": false,
+      "order": 655360,
+      "createdAt": "2026-06-04T11:13:52.686150722Z",
+      "updatedAt": "2026-06-04T11:13:52.686150722Z",
+      "completedAt": null
+    },
+    {
+      "id": "rall-1beb",
+      "title": "Final full-change verification",
+      "description": "Whole-change verification for cli-polish.\n\nRun the complete openspec-verify-change skill against change `cli-polish` and inspect the entire diff. Identify the intended merge target (do NOT assume `main`; use user / PR metadata / branch config / recent history) and the first lap/try of this batch; treat earlier branch work as pre-existing unless the user asks to include it. `git diff \u003ctarget\u003e...HEAD`.\n\nCover every capability: cli-display (hint tiers, full-width headers, activity-age clamp, collapsed retry + terminal-only colour), cli-config (init subcommands, FreeRunPrompt rename + back-compat alias), and the relay-runner MODIFIED incomplete class. Confirm the coordination note held — `ShortcutHint` kept the current \"stop\"/\"quit\" labels and left the relabel to agent-lifecycle. Run the full suite `go test ./...` and `go build ./...`; confirm the VERSION bump.\n\nCheck off any remaining tasks.md boxes (including §8) verified correct and thorough. Substantive gaps → focused head lap; only tiny safe one-liners fixed in place. Do not rewrite git history.",
+      "assignee": "VERIFY",
+      "isDone": false,
+      "order": 720896,
+      "createdAt": "2026-06-04T11:13:52.686151716Z",
+      "updatedAt": "2026-06-04T11:13:52.686151716Z",
+      "completedAt": null
     }
   ]
 }
