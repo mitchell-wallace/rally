@@ -1032,7 +1032,7 @@ attemptLoop:
 				commitHistory = []string{headAfter}
 			}
 			commitHash = commitHistory[len(commitHistory)-1]
-		} else if dirtyBeforeAutoCommit && hasUserFileChanges && !incomplete {
+		} else if dirtyBeforeAutoCommit && hasUserFileChanges && !incomplete && finalized {
 			hash, commitErr := r.autoCommit(runIndex, picked.Harness, attempt)
 			if commitErr != nil {
 				fmt.Fprintf(log, "relay %d run %d attempt %d auto-commit warning: %v\n", relay.ID, runIndex+1, attempt, commitErr)

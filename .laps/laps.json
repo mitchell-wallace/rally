@@ -182,11 +182,11 @@
       "title": "Leftover-aware incomplete detection",
       "description": "HIGH-RISK behavioral lap — relay-runner MODIFIED requirement (failure classification path).\n\nContext: cli-polish task §7 + design Decision 6 + specs/relay-runner/spec.md delta (\"Incomplete failure class\"). Today the incomplete class (runner.go:986) is computed from the whole dirty working tree (`dirtyBeforeAutoCommit` plus `filesChangedList`'s `git status --porcelain` fallback at runner.go:1490), so uncommitted leftovers from a *prior* failed try make a later no-op try look incomplete.\n\nOutcome: a try is \"incomplete\" only when *this* try produced its own uncommitted, unfinalized changes. Untouched leftovers inherited from a prior failed try no longer trigger the class; a try that touches (modifies/reverts/commits) an inherited leftover path has that path attributed to it.\n\nFiles \u0026 scope: internal/relay/runner.go — snapshot near the `headBefore` capture (runner.go:816); incomplete classification (runner.go:986); `filesChangedList` (runner.go:1490) — and runner_test.go.\n\nDesign: snapshot the already-dirty path set at try start (alongside `headBefore`) via `git status --porcelain`. Define \"changes produced by this try\" as the working-tree delta vs that snapshot (paths whose porcelain state differs before vs after). Base the incomplete classification on that delta, not the absolute dirty set. A try that both inherits leftovers and adds its own unfinalized changes is still incomplete. Preserve the incomplete-retry guidance flow and the resilience-cascade exemption (incomplete does NOT call `PauseAgent`/`RecordHourlyFailure`).\n\nAcceptance: regression tests for all four spec scenarios — (a) a no-op try inheriting leftovers is NOT incomplete; (b) a try adding its own unfinalized changes IS; (c) touching/reverting/committing an inherited leftover attributes it to this try; (d) no-change-and-no-finalize stays a normal agent-class failure. `go test ./internal/relay/`. Do not tick tasks.md.",
       "assignee": "SENIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 393216,
       "createdAt": "2026-06-04T11:13:52.686146421Z",
-      "updatedAt": "2026-06-04T11:13:52.686146421Z",
-      "completedAt": null
+      "updatedAt": "2026-06-04T13:25:46.366421185Z",
+      "completedAt": "2026-06-04T13:25:46.366421185Z"
     },
     {
       "id": "rall-9fa9",

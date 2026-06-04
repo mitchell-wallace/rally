@@ -39,9 +39,9 @@
 
 ## 7. Leftover-aware "incomplete" detection
 
-- [ ] 7.1 Snapshot the already-dirty path set at try start (near the `headBefore` capture, `runner.go:816`) using `git status --porcelain`
-- [ ] 7.2 Compute "changes produced by this try" as the working-tree delta vs. the snapshot (comparing `git status --porcelain` before/after), and base the `incomplete` classification (`runner.go:986`) on that delta rather than `dirtyBeforeAutoCommit` / the porcelain fallback
-- [ ] 7.3 Tests: a no-op try that inherits leftover changes from a prior failed try is NOT classified incomplete; a try that adds its own unfinalized changes IS; a try that reverts/commits an inherited leftover is attributed to this try
+- [x] 7.1 Snapshot the already-dirty path set at try start (near the `headBefore` capture, `runner.go:816`) using `git status --porcelain`
+- [x] 7.2 Compute "changes produced by this try" as the working-tree delta vs. the snapshot (comparing `git status --porcelain` before/after), and base the `incomplete` classification (`runner.go:986`) on that delta rather than `dirtyBeforeAutoCommit` / the porcelain fallback
+- [x] 7.3 Tests: a no-op try that inherits leftover changes from a prior failed try is NOT classified incomplete; a try that adds its own unfinalized changes IS; a try that reverts/commits an inherited leftover is attributed to this try
 
 ## 8. Docs & coordination
 
