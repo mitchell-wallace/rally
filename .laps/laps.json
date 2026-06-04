@@ -160,11 +160,11 @@
       "title": "Collapse retries into one updating line; colour only terminal outcome",
       "description": "Context: cli-polish task §6 + design Decision 5. Each retry attempt prints its own red `✗ failed` footer (`RenderFooter`, around runner.go:1123), so an in-flight run that retries 5× shows five near-identical red lines and miscolours non-terminal attempts as failures.\n\nOutcome: while a run is retrying within budget, a single neutral line updates in place (`↻ retrying N/M · last: \u003creason\u003e (\u003cdur\u003e, \u003cfiles\u003e)`); exactly one coloured outcome footer prints at the terminal result — green `✓ passed on try N/M …` on recovery, red `✗ failed after K tries · \u003creason\u003e` when the budget is exhausted. A single-attempt run (maxAttempts==1) is terminal on its first failure and coloured immediately.\n\nFiles \u0026 scope: internal/relay/runner.go (per-attempt footer orchestration around runner.go:1123), internal/style/style.go (`RenderFooter` gains a terminal-vs-interim notion), style_test.go, runner_test.go.\n\nDesign: suppress the per-attempt `RenderFooter` while retrying within budget; reuse the existing cursor-redraw mechanism for the in-place neutral line (safe — Rally does not currently print agent output inline). Add a terminal-vs-interim flag to `RenderFooter` so `FailureStyle` (red) is applied only to terminal failures; interim states use the neutral/dim style. Do not disturb the inline `retry N/M` live status indicator — this changes only footer cadence and colouring.\n\nAcceptance: tests — a 5× retry prints one updating line + one final coloured footer (not five red footers); a single-attempt failure is red; a recovering run prints a green footer. `go test ./internal/style/ ./internal/relay/`. Do not tick tasks.md.",
       "assignee": "SENIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 262144,
       "createdAt": "2026-06-04T11:13:52.686142861Z",
-      "updatedAt": "2026-06-04T11:13:52.686142861Z",
-      "completedAt": null
+      "updatedAt": "2026-06-04T13:10:23.381130503Z",
+      "completedAt": "2026-06-04T13:10:23.381130503Z"
     },
     {
       "id": "rall-74ba",
