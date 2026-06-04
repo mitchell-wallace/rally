@@ -79,6 +79,28 @@ Prompt content lives in packages whose names reflect *who* is being prompted:
 When adding new prompt content, pick the package by audience, not by feature
 area, and keep the distinction intact.
 
+## Git and commit conventions
+
+Rally auto-commits at several points; agents should understand (but not
+reimplement) these conventions. See the "Git and commit conventions"
+section in README.md for the full table and state-folding rules.
+
+In short:
+
+- **Setup commits** (`rally: initialize workspace`, `rally: install laps
+  hooks`) are path-scoped and always use `--no-verify`.
+- **Per-attempt work commits** (`rally: run N attempt M (harness)`) are
+  `git add -A` with `--no-verify` unless `run_hooks_on_autocommit` is set.
+- **Lap-boundary commits** are agent-authored: use
+  `<lap-description>: done` or `<lap-description>: in progress (handoff)`
+  as the hook scripts instruct.
+- **State folding** folds `.rally/`/`.laps/` bookkeeping into the existing
+  commit (amends rally-prefixed HEAD with ` [+state]`; creates a single
+  `rally: update state` only when HEAD is not rally-authored).
+- **Leftover-work guidance** is injected when the working tree is dirty at
+  run start (excluding `.rally/`/`.laps/`), reminding the agent to review
+  and commit those changes first.
+
 ## Releasing
 
 Rally uses GoReleaser via GitHub Actions to publish releases. The workflow

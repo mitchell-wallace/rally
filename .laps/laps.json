@@ -94,11 +94,11 @@
       "title": "Edge-case hardening tests (special chars, git unavailable)",
       "description": "OpenSpec change git-hygiene, Phase 4 (tasks 4.5-4.6).\n\nOutcome: Tests for the robustness edges of the new commit paths:\n- Lap descriptions / commit messages containing special characters (quotes, newlines) are handled safely — no shell injection, no broken commit; the message is the literal content. Cover both the hook-script instruction form and any rally-side commit that embeds a description.\n- git unavailable or repo-corrupted scenarios (not a git repo, or a failing git command) cause the new commit logic to log a warning and skip gracefully rather than crashing the run/init.\n\nFiles \u0026 scope: test files only, matching existing patterns (internal/gitx, internal/relay, cmd/rally as appropriate). For the git-unavailable case, prefer a non-git temp dir or a forced-failure seam over un-PATHing git globally.\n\nAcceptance: `go test ./...` passes for the touched packages. If special-char handling reveals an actual production bug (e.g. a message built via unsafe string interpolation), add a head lap to fix it rather than weakening the test. Do not tick tasks.md (VERIFY owns checkoff).",
       "assignee": "JUNIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 589824,
       "createdAt": "2026-06-04T01:25:29.433447502Z",
-      "updatedAt": "2026-06-04T01:25:29.433447502Z",
-      "completedAt": null
+      "updatedAt": "2026-06-04T02:46:23.165066688Z",
+      "completedAt": "2026-06-04T02:46:23.165066688Z"
     },
     {
       "id": "rall-7527",

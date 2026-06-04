@@ -78,6 +78,37 @@ If the agent stalls, Rally graceful-kills it, classifies the failure, and
 either retries via session resume or advances to the next route entry. See
 the `[reliability]` section for tunables.
 
+### Git and commit conventions
+
+Rally manages its own commits so git history stays clean and
+machine-readable. All Rally-authored commits use `--no-verify` (unless
+`run_hooks_on_autocommit` is set) and fall back to `Rally <rally@localhost>`
+when the repo lacks `user.name` / `user.email`.
+
+| Message | When | Scope |
+|---|---|---|
+| `rally: initialize workspace` | `rally init` bootstraps `.rally/` | Setup files only, path-scoped |
+| `rally: install laps hooks` | Hooks installed or updated | Hook files only, path-scoped |
+| `rally: run N attempt M (harness)` | Agent leaves uncommitted file changes | `git add -A` |
+| `<lap-description>: done` | Agent guidance after `laps done` | Agent's own commit |
+| `<lap-description>: in progress (handoff)` | Agent guidance after `laps handoff` | Agent's own commit |
+
+**State folding.** Rally's bookkeeping (`.rally/`, `.laps/`) is folded into
+the existing commit history rather than creating extra commits:
+
+- In the common path (code run), `autoCommit` stages everything including
+  state — no separate commit is needed.
+- For no-code runs where only state changed, Rally amends a rally-authored
+  HEAD (`rally:` prefix) and appends ` [+state]` to the message (never
+  stacks the suffix).
+- If HEAD is not rally-authored, a single `rally: update state` commit is
+  created.
+- Nothing happens if nothing is staged or the directory is not a git repo.
+
+**Leftover-work guidance.** When a run starts with a dirty working tree
+(excluding `.rally/` and `.laps/`), Rally injects a prompt section reminding
+the agent to review and commit those changes before starting new work.
+
 ## Driving Rally
 
 ### Supported built-in harnesses and aliases
