@@ -15,11 +15,11 @@
 
 ## 3. Fold state into the work commit
 
-- [ ] 3.1 Confirm `runner.autoCommit`'s `git add -A` stages the `summary.jsonl` append, so no standalone state commit is needed in the common path
-- [ ] 3.2 Remove the `CommitRallyState` call from the common finalization path in `runner.go` (run-attempt loop)
-- [ ] 3.3 Add the amend-fallback for no-code runs: at finalization, if HEAD's commit message has the `rally:` prefix, amend HEAD appending ` [+state]` to its message; otherwise create a single `rally: update state` commit. Also handle the no-changes case: skip both amend and new commit if nothing is staged
-- [ ] 3.4 Remove `CommitRallyState` and `rallyTrackedStatePaths` from `internal/gitx/git.go` — the variable has no other callers and the amend-fallback handles the remaining case inline
-- [ ] 3.5 Tests: a code-producing run yields one work commit containing the `summary.jsonl` line and no separate state commit; a no-code run with rally-authored HEAD amends; a no-code run with non-rally HEAD creates a single `rally: update state` commit
+- [x] 3.1 Confirm `runner.autoCommit`'s `git add -A` stages the `summary.jsonl` append, so no standalone state commit is needed in the common path
+- [x] 3.2 Remove the `CommitRallyState` call from the common finalization path in `runner.go` (run-attempt loop)
+- [x] 3.3 Add the amend-fallback for no-code runs: at finalization, if HEAD's commit message has the `rally:` prefix, amend HEAD appending ` [+state]` to its message; otherwise create a single `rally: update state` commit. Also handle the no-changes case: skip both amend and new commit if nothing is staged
+- [x] 3.4 Remove `CommitRallyState` and `rallyTrackedStatePaths` from `internal/gitx/git.go` — the variable has no other callers and the amend-fallback handles the remaining case inline
+- [x] 3.5 Tests: a code-producing run yields one work commit containing the `summary.jsonl` line and no separate state commit; a no-code run with rally-authored HEAD amends; a no-code run with non-rally HEAD creates a single `rally: update state` commit
 
 ## 4. Docs, tests & coordination
 
