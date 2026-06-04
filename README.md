@@ -199,8 +199,8 @@ antigravity_model = "Gemini 3.5 Flash (High)"
 [laps]
 instructions_file = ".rally/laps_instructions.md"
 
-[fallback]
-instructions_file = ".rally/fallback_instructions.md"
+[free_run]
+prompt_file = ".rally/free_run_prompt.md"
 
 [harness.cc.models]
 opus = "claude-opus-4-7"
@@ -239,16 +239,22 @@ retry_budget          = 5
 A bare alias like `cc` in a mix resolves through `[defaults].claude_model`
 first, then falls back to the harness's hard-coded internal default.
 
-### `[laps]` and `[fallback]`
+### `[laps]` and `[free_run]`
 
 | Section      | Field               | Purpose                                                          |
 |--------------|---------------------|------------------------------------------------------------------|
 | `[laps]`     | `instructions_file` | Prompt body injected on every laps-backed iteration              |
-| `[fallback]` | `instructions_file` | Prompt body in no-backend mode when no ready lap exists          |
+| `[free_run]` | `prompt_file`       | Prompt body in no-backend mode when no ready lap exists          |
 
 Both fall back to a built-in default if the file is missing or unreadable.
 Injection in laps-backed mode is unconditional (per v0.4.0 — no toggle).
-The fallback file is ignored in laps-backed mode.
+The free-run file is ignored in laps-backed mode.
+
+**Deprecation:** The legacy `[fallback]` section (with `instructions_file`) is
+still accepted as an alias for `[free_run]` / `prompt_file`. If `[fallback]`
+is present without `[free_run]`, Rally loads the value and logs a one-time
+deprecation warning. `[free_run]` takes precedence when both are set.
+`[fallback]` will be removed in a future release.
 
 ### `[routes]` — role-aware routing
 
@@ -516,8 +522,9 @@ workspace path so multiple checkouts under one data dir never collide.
 
 ```sh
 rally start              # start or resume a relay
-rally init               # initialise .rally/ in the current repo
-rally init roles         # add default role routes and .rally/agents/*.md
+rally init               # initialise .rally/ in the current repo (workspace only)
+rally init roles         # add default role routes and .rally/agents/*.md (no workspace scaffold)
+rally init all           # full setup: workspace scaffold + roles
 rally tail [--try N]     # follow a try's log
 rally routes check       # validate [routes]
 rally instructions edit  # edit project instructions
@@ -525,6 +532,16 @@ rally instructions show
 rally update             # self-update from GitHub Releases
 rally version            # print version (vX.Y.Z, vX.Y.Z-dev for source builds)
 ```
+
+### `rally init` subcommands
+
+| Command | What it does |
+|---|---|
+| `rally init` | Creates `.rally/config.toml`, scaffolds `.rally/state/`, and writes `.rally/instructions.md` + `.gitignore` entries. Idempotent — safe to re-run. |
+| `rally init roles` | Adds `[routes]` entries for `junior`, `senior`, `ui`, `verify` to the existing config and writes `.rally/agents/*.md` role instruction files. Does **not** touch workspace scaffold files (README, .gitignore, etc.). Idempotent. |
+| `rally init all` | Runs `rally init` followed by `rally init roles` — full workspace + role setup in one step. The hidden alias `rally init-roles` also maps here for backward compatibility. Idempotent. |
+
+For a fresh repo, `rally init all` is the quickest path to a fully configured workspace.
 
 ## Telemetry
 
