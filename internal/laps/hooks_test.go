@@ -452,3 +452,117 @@ func loadHooksFile(path string) (*HooksFile, error) {
 	}
 	return &hf, nil
 }
+
+// --- Edge-case hardening: special characters in hook arguments ---
+
+// The done-hook audit trail records the lap ID via printf %s — special
+// characters in the ID must not break the JSON audit line or the script.
+func TestDoneHookScript_SpecialCharLapId(t *testing.T) {
+	tmp := t.TempDir()
+	origWD, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	scriptAbs, err := filepath.Abs("laps-done-hook.sh")
+	if err != nil {
+		t.Fatalf("abs: %v", err)
+	}
+	if err := os.Chdir(tmp); err != nil {
+		t.Fatalf("chdir: %v", err)
+	}
+	defer os.Chdir(origWD)
+
+	mockDir := filepath.Join(tmp, "mockbin")
+	if err := os.MkdirAll(mockDir, 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	mockRally := filepath.Join(mockDir, "rally")
+	mockScript := "#!/bin/sh\necho \"$@\" > \"$MOCK_LOG\"\n"
+	if err := os.WriteFile(mockRally, []byte(mockScript), 0o755); err != nil {
+		t.Fatalf("write mock rally: %v", err)
+	}
+
+	logFile := filepath.Join(tmp, "mock.log")
+	t.Setenv("PATH", mockDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	t.Setenv("MOCK_LOG", logFile)
+
+	specialID := `lap-"quotes'$dollars`
+	out, err := exec.Command("/bin/sh", scriptAbs, specialID).CombinedOutput()
+	if err != nil {
+		t.Fatalf("hook script with special char lap ID failed: %v\n%s", err, out)
+	}
+
+	logData, err := os.ReadFile(logFile)
+	if err != nil {
+		t.Fatalf("read mock log: %v", err)
+	}
+	if !strings.Contains(string(logData), "--record-lap") || !strings.Contains(string(logData), specialID) {
+		t.Errorf("expected rally progress --record-lap with special ID in log, got %q", string(logData))
+	}
+
+	auditPath := store.HookAuditPath(tmp)
+	auditData, err := os.ReadFile(auditPath)
+	if err != nil {
+		t.Fatalf("read audit log: %v", err)
+	}
+	audit := string(auditData)
+	if !strings.Contains(audit, "laps-done") {
+		t.Errorf("audit log missing hook name, got %q", audit)
+	}
+	if !strings.Contains(audit, specialID) {
+		t.Errorf("audit log missing special char lap ID, got %q", audit)
+	}
+}
+
+// The wrapup hook forwards arguments via $args — special characters in the
+// summary should pass through without breaking the script.
+func TestWrapupHookScript_SpecialCharSummary(t *testing.T) {
+	tmp := t.TempDir()
+	origWD, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	if err := os.Chdir(tmp); err != nil {
+		t.Fatalf("chdir: %v", err)
+	}
+	defer os.Chdir(origWD)
+
+	stateDir := store.StateDir(tmp)
+	if err := os.MkdirAll(stateDir, 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	state := `{"run_id":"run-1","handoff_state":0,"recorded_laps":[]}`
+	os.WriteFile(store.RunStatePath(tmp), []byte(state), 0o644)
+
+	mockDir := filepath.Join(tmp, "mockbin")
+	if err := os.MkdirAll(mockDir, 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	mockRally := filepath.Join(mockDir, "rally")
+	mockScript := "#!/bin/sh\necho \"$@\" > \"$MOCK_LOG\"\n"
+	if err := os.WriteFile(mockRally, []byte(mockScript), 0o755); err != nil {
+		t.Fatalf("write mock rally: %v", err)
+	}
+
+	logFile := filepath.Join(tmp, "mock.log")
+	t.Setenv("PATH", mockDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	t.Setenv("MOCK_LOG", logFile)
+
+	scriptPath := filepath.Join(origWD, "laps-wrapup-hook.sh")
+	summary := `Fixed "quotes" and $variables in 'parser'`
+	out, err := exec.Command("/bin/sh", scriptPath, "--summary", summary).CombinedOutput()
+	if err != nil {
+		t.Fatalf("wrapup hook with special char summary failed: %v\n%s", err, out)
+	}
+
+	logData, err := os.ReadFile(logFile)
+	if err != nil {
+		t.Fatalf("read mock log: %v", err)
+	}
+	if !strings.Contains(string(logData), "--complete") {
+		t.Errorf("expected rally progress --complete in log, got %q", string(logData))
+	}
+	if !strings.Contains(string(logData), summary) {
+		t.Errorf("summary with special chars not in log, got %q", string(logData))
+	}
+}

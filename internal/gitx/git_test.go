@@ -261,3 +261,173 @@ func TestFoldRallyStateNonGitDirIsNoOp(t *testing.T) {
 		t.Fatalf("FoldRallyState in non-git dir: %v", err)
 	}
 }
+
+// --- Edge-case hardening: special characters in commit messages ---
+
+// Commit messages containing double quotes, single quotes, dollar signs, and
+// backticks are passed through Go's exec.Command (not a shell), so they must
+// land in git history as the literal text — no shell expansion or injection.
+func TestCommitMessageSpecialChars_DoubleQuotesAndDollars(t *testing.T) {
+	dir := initRepo(t)
+	writeFile(t, dir, "file.txt", "content\n")
+	if _, err := GitOutput(dir, "add", "file.txt"); err != nil {
+		t.Fatalf("git add: %v", err)
+	}
+
+	msg := "fix: handle \"special\" chars like $HOME and `backtick`"
+	if _, err := GitOutput(dir, "commit", "--no-verify", "-m", msg); err != nil {
+		t.Fatalf("git commit with special chars: %v", err)
+	}
+
+	got := headSubject(t, dir)
+	if got != msg {
+		t.Errorf("commit message = %q, want %q", got, msg)
+	}
+}
+
+// Newlines in a -m message become the commit body (subject is the first line),
+// and the round-tripped subject must match exactly.
+func TestCommitMessageSpecialChars_Newlines(t *testing.T) {
+	dir := initRepo(t)
+	writeFile(t, dir, "file.txt", "content\n")
+	if _, err := GitOutput(dir, "add", "file.txt"); err != nil {
+		t.Fatalf("git add: %v", err)
+	}
+
+	msg := "feat: add widget\n\nThis is the body with\nmultiple lines."
+	if _, err := GitOutput(dir, "commit", "--no-verify", "-m", msg); err != nil {
+		t.Fatalf("git commit with newlines: %v", err)
+	}
+
+	got := headSubject(t, dir)
+	if got != "feat: add widget" {
+		t.Errorf("commit subject = %q, want %q", got, "feat: add widget")
+	}
+
+	bodyOut, err := GitOutput(dir, "log", "-1", "--format=%b")
+	if err != nil {
+		t.Fatalf("git log body: %v", err)
+	}
+	wantBody := "This is the body with\nmultiple lines."
+	if strings.TrimSpace(string(bodyOut)) != wantBody {
+		t.Errorf("commit body = %q, want %q", strings.TrimSpace(string(bodyOut)), wantBody)
+	}
+}
+
+// FoldRallyState amends a rally-authored HEAD whose subject already contains
+// special characters — the amended message must preserve the original text and
+// append [ +state].
+func TestFoldRallyStateSpecialCharHeadMessage(t *testing.T) {
+	dir := initRepo(t)
+	seedInitialCommit(t, dir)
+
+	writeFile(t, dir, "feature.go", "package main\n")
+	commitAll(t, dir, `rally: run 1 "fix quotes $VAR" (claude)`)
+
+	writeFile(t, dir, ".rally/summary.jsonl", `{"run":2}`+"\n")
+	if err := FoldRallyState(dir); err != nil {
+		t.Fatalf("FoldRallyState: %v", err)
+	}
+
+	want := `rally: run 1 "fix quotes $VAR" (claude) [+state]`
+	if got := headSubject(t, dir); got != want {
+		t.Errorf("HEAD subject = %q, want %q", got, want)
+	}
+}
+
+// FoldRallyState creates a "rally: update state" commit when HEAD is not
+// rally-authored. Verify the non-rally HEAD with special chars is untouched.
+func TestFoldRallyStateNonRallyHeadSpecialCharsUnchanged(t *testing.T) {
+	dir := initRepo(t)
+	seedInitialCommit(t, dir)
+
+	writeFile(t, dir, "user.go", "package main\n")
+	commitAll(t, dir, `feat: "user's feature" with $pecial chars`)
+
+	writeFile(t, dir, ".rally/summary.jsonl", `{"run":1}`+"\n")
+	if err := FoldRallyState(dir); err != nil {
+		t.Fatalf("FoldRallyState: %v", err)
+	}
+
+	// The old HEAD should be behind the new "rally: update state" commit.
+	got := headSubject(t, dir)
+	if got != "rally: update state" {
+		t.Errorf("HEAD subject = %q, want %q", got, "rally: update state")
+	}
+
+	// The prior commit with special chars must be preserved as-is.
+	prevOut, err := GitOutput(dir, "log", "-1", "--skip=1", "--format=%s")
+	if err != nil {
+		t.Fatalf("git log --skip=1: %v", err)
+	}
+	want := `feat: "user's feature" with $pecial chars`
+	if strings.TrimSpace(string(prevOut)) != want {
+		t.Errorf("prior commit subject = %q, want %q", strings.TrimSpace(string(prevOut)), want)
+	}
+}
+
+// --- Edge-case hardening: git unavailable / repo-corrupted ---
+
+// IsGitDirty on a non-git directory returns an error (not a panic).
+func TestIsGitDirtyNonGitDir(t *testing.T) {
+	dir := t.TempDir()
+	_, err := IsGitDirty(dir)
+	if err == nil {
+		t.Error("expected error for IsGitDirty in non-git dir")
+	}
+}
+
+// IsWorkspaceDirty on a non-git directory returns an error (not a panic).
+func TestIsWorkspaceDirtyNonGitDir(t *testing.T) {
+	dir := t.TempDir()
+	_, err := IsWorkspaceDirty(dir)
+	if err == nil {
+		t.Error("expected error for IsWorkspaceDirty in non-git dir")
+	}
+}
+
+// GitRepoRoot on a plain temp dir returns ok=false with no error.
+func TestGitRepoRootNonGitDir(t *testing.T) {
+	dir := t.TempDir()
+	root, ok, err := GitRepoRoot(dir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if ok {
+		t.Error("expected ok=false for non-git dir")
+	}
+	if root != "" {
+		t.Errorf("expected empty root, got %q", root)
+	}
+}
+
+// GitRepoRoot in a corrupted git repo (empty .git directory) returns ok=false.
+func TestGitRepoRootCorruptedGitDir(t *testing.T) {
+	dir := t.TempDir()
+	gitDir := filepath.Join(dir, ".git")
+	if err := os.MkdirAll(gitDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	root, ok, err := GitRepoRoot(dir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if ok {
+		t.Error("expected ok=false for corrupted git dir")
+	}
+	if root != "" {
+		t.Errorf("expected empty root, got %q", root)
+	}
+}
+
+// FoldRallyState on a corrupted repo (empty .git) is a graceful no-op.
+func TestFoldRallyStateCorruptedGitDirIsNoOp(t *testing.T) {
+	dir := t.TempDir()
+	gitDir := filepath.Join(dir, ".git")
+	if err := os.MkdirAll(gitDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := FoldRallyState(dir); err != nil {
+		t.Fatalf("FoldRallyState on corrupted repo: %v", err)
+	}
+}

@@ -651,3 +651,103 @@ func TestCommitSetupFiles_HookReinstallIsNoOp(t *testing.T) {
 		t.Fatalf("expected exactly 1 'rally: install laps hooks' commit, got %d", initCount)
 	}
 }
+
+// --- Edge-case hardening: special characters in commit messages ---
+
+// commitSetupFiles must pass messages with double quotes and dollar signs
+// through to git literally — no shell expansion because exec.Command is used.
+func TestCommitSetupFiles_SpecialCharMessage_DoubleQuotesAndDollars(t *testing.T) {
+	dir := initGitTestRepo(t)
+	makeInitialCommit(t, dir)
+
+	writeFileMain(t, dir, ".rally/.gitignore", "state/\n")
+	writeFileMain(t, dir, ".rally/config.toml", "schema_version = 2\n")
+
+	msg := "rally: init \"special\" with $HOME and `backtick`"
+	committed, err := commitSetupFiles(dir, []string{
+		".rally/.gitignore",
+		".rally/config.toml",
+	}, msg)
+	if err != nil {
+		t.Fatalf("commitSetupFiles: %v", err)
+	}
+	if !committed {
+		t.Fatal("expected committed=true")
+	}
+
+	got := lastCommitMessage(t, dir)
+	if got != msg {
+		t.Errorf("commit message = %q, want %q", got, msg)
+	}
+}
+
+// commitSetupFiles must handle single quotes and newlines in the message.
+// The subject line (first line) is verified via git log.
+func TestCommitSetupFiles_SpecialCharMessage_SingleQuotesAndNewlines(t *testing.T) {
+	dir := initGitTestRepo(t)
+	makeInitialCommit(t, dir)
+
+	writeFileMain(t, dir, ".rally/.gitignore", "state/\n")
+	writeFileMain(t, dir, ".rally/config.toml", "schema_version = 2\n")
+
+	msg := "rally: init user's workspace\n\nBody with special 'chars'."
+	committed, err := commitSetupFiles(dir, []string{
+		".rally/.gitignore",
+		".rally/config.toml",
+	}, msg)
+	if err != nil {
+		t.Fatalf("commitSetupFiles: %v", err)
+	}
+	if !committed {
+		t.Fatal("expected committed=true")
+	}
+
+	got := lastCommitMessage(t, dir)
+	if got != `rally: init user's workspace` {
+		t.Errorf("commit subject = %q, want %q", got, `rally: init user's workspace`)
+	}
+}
+
+// --- Edge-case hardening: git unavailable ---
+
+// commitSetupFiles on a non-git directory returns (false, nil) — no crash.
+func TestCommitSetupFiles_NonGitDirIsNoOp(t *testing.T) {
+	dir := t.TempDir()
+
+	writeFileMain(t, dir, ".rally/.gitignore", "state/\n")
+	writeFileMain(t, dir, ".rally/config.toml", "schema_version = 2\n")
+
+	committed, err := commitSetupFiles(dir, []string{
+		".rally/.gitignore",
+		".rally/config.toml",
+	}, "rally: initialize workspace")
+	if err != nil {
+		t.Fatalf("commitSetupFiles non-git dir: %v", err)
+	}
+	if committed {
+		t.Error("expected committed=false for non-git dir")
+	}
+}
+
+// commitSetupFiles in a directory with a corrupted/empty .git returns
+// (false, nil) — graceful skip, no panic.
+func TestCommitSetupFiles_CorruptedGitDirIsNoOp(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	writeFileMain(t, dir, ".rally/.gitignore", "state/\n")
+	writeFileMain(t, dir, ".rally/config.toml", "schema_version = 2\n")
+
+	committed, err := commitSetupFiles(dir, []string{
+		".rally/.gitignore",
+		".rally/config.toml",
+	}, "rally: initialize workspace")
+	if err != nil {
+		t.Fatalf("commitSetupFiles corrupted git dir: %v", err)
+	}
+	if committed {
+		t.Error("expected committed=false for corrupted git dir")
+	}
+}
