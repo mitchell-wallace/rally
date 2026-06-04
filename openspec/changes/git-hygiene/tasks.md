@@ -24,7 +24,7 @@
 ## 4. Docs, tests & coordination
 
 - [ ] 4.1 Document the commit conventions (setup, lap-boundary, folded state, leftover-work guidance) in `AGENTS.md`/`README.md`
-- [ ] 4.2 Confirm sequencing: this change lands after `tidy-rally-runtime-data-storage` so the gitignore/state layout it commits against exists. Verify the tracked-file set correctly reflects all files #2 declares tracked (`.rally/.gitignore`, `.rally/README.md`, `.rally/config.toml`, `.rally/instructions.md`, `.rally/agents`, `.rally/summary.jsonl`) with no missing, extra, or legacy state files
+- [ ] 4.2 Confirm sequencing: this change lands after `tidy-rally-runtime-data-storage` so the gitignore/state layout it commits against exists. Verify the tracked-file set in the working tree matches the intended set — `.rally/.gitignore`, `.rally/README.md`, `.rally/config.toml`, `.rally/agents/` (`*.md`), and `.rally/summary.jsonl` (the only churning tracked data file) — with no missing, extra, or legacy state files. (`.rally/agent_status.jsonl`, a tracked-churn artifact from an older rally version, was untracked during batch prep; confirm it stays gitignored.)
 - [ ] 4.3 Tests: init in a dirty working tree (user has unstaged changes) does not accidentally commit them
 - [ ] 4.4 Tests: hook install re-run is idempotent (no duplicate commit)
 - [ ] 4.5 Tests: commit messages with special characters (quotes, newlines) in lap descriptions are handled safely
