@@ -1,17 +1,17 @@
 ## 1. Auto-commit on init and hook install
 
-- [ ] 1.1 After `rally init` (`cmd/rally/main.go` `runInit`), stage the tracked setup files and commit `rally: initialize workspace` with `--no-verify`, only if something is staged
-- [ ] 1.2 After laps-hook install (`cmd/rally/main.go`, near the `laps.InstallHooks` call in `rally start`), stage `.laps/hooks.json` / `.laps/laps.json` (and any modified tracked files) and commit `rally: install laps hooks` with `--no-verify`, only if something is staged
-- [ ] 1.3 Stage against the file set / gitignore that `tidy-rally-runtime-data-storage` declares tracked — do not redefine the gitignore or file list here
-- [ ] 1.4 Tests: init in a clean repo produces exactly one setup commit; re-running init is a no-op (nothing staged → no commit); concurrent `rally start` instances do not produce duplicate commits
+- [x] 1.1 After `rally init` (`cmd/rally/main.go` `runInit`), stage the tracked setup files and commit `rally: initialize workspace` with `--no-verify`, only if something is staged
+- [x] 1.2 After laps-hook install (`cmd/rally/main.go`, near the `laps.InstallHooks` call in `rally start`), stage `.laps/hooks.json` / `.laps/laps.json` (and any modified tracked files) and commit `rally: install laps hooks` with `--no-verify`, only if something is staged
+- [x] 1.3 Stage against the file set / gitignore that `tidy-rally-runtime-data-storage` declares tracked — do not redefine the gitignore or file list here
+- [x] 1.4 Tests: init in a clean repo produces exactly one setup commit; re-running init is a no-op (nothing staged → no commit); concurrent `rally start` instances do not produce duplicate commits
 
 ## 2. Agent commit at lap boundary
 
-- [ ] 2.1 Add a commit instruction to the `laps done` hook script (`internal/laps/laps-done-hook.sh`) with message `<lap-description>: done`
-- [ ] 2.2 Add a commit instruction to the `laps handoff` hook script (`internal/laps/laps-handoff-hook.sh`) with message `<lap-description>: in progress (handoff)`
-- [ ] 2.3 Tests/fixtures: assert each hook script's wrapup output contains the commit instruction with the correct message form
-- [ ] 2.4 Leftover-work detection: at run start in `internal/relay/runner.go`, check for uncommitted non-rally changes via `IsWorkspaceDirty` (excludes `.rally/`); when dirty, inject an advisory commit-first instruction into the initial prompt (code changes must be committed; docs/config-only may be left); when clean, omit it
-- [ ] 2.5 Tests: dirty tree outside `.rally/` → prompt contains leftover-work commit guidance; clean tree → prompt does not contain it; only `.rally/` files dirty → no guidance
+- [x] 2.1 Add a commit instruction to the `laps done` hook script (`internal/laps/laps-done-hook.sh`) with message `<lap-description>: done`
+- [x] 2.2 Add a commit instruction to the `laps handoff` hook script (`internal/laps/laps-handoff-hook.sh`) with message `<lap-description>: in progress (handoff)`
+- [x] 2.3 Tests/fixtures: assert each hook script's wrapup output contains the commit instruction with the correct message form
+- [x] 2.4 Leftover-work detection: at run start in `internal/relay/runner.go`, check for uncommitted non-rally changes via `IsWorkspaceDirty` (excludes `.rally/`); when dirty, inject an advisory commit-first instruction into the initial prompt (code changes must be committed; docs/config-only may be left); when clean, omit it
+- [x] 2.5 Tests: dirty tree outside `.rally/` → prompt contains leftover-work commit guidance; clean tree → prompt does not contain it; only `.rally/` files dirty → no guidance
 
 ## 3. Fold state into the work commit
 
@@ -25,8 +25,8 @@
 
 - [ ] 4.1 Document the commit conventions (setup, lap-boundary, folded state, leftover-work guidance) in `AGENTS.md`/`README.md`
 - [ ] 4.2 Confirm sequencing: this change lands after `tidy-rally-runtime-data-storage` so the gitignore/state layout it commits against exists. Verify the tracked-file set in the working tree matches the intended set — `.rally/.gitignore`, `.rally/README.md`, `.rally/config.toml`, `.rally/agents/` (`*.md`), and `.rally/summary.jsonl` (the only churning tracked data file) — with no missing, extra, or legacy state files. (`.rally/agent_status.jsonl`, a tracked-churn artifact from an older rally version, was untracked during batch prep; confirm it stays gitignored.)
-- [ ] 4.3 Tests: init in a dirty working tree (user has unstaged changes) does not accidentally commit them
-- [ ] 4.4 Tests: hook install re-run is idempotent (no duplicate commit)
+- [x] 4.3 Tests: init in a dirty working tree (user has unstaged changes) does not accidentally commit them
+- [x] 4.4 Tests: hook install re-run is idempotent (no duplicate commit)
 - [ ] 4.5 Tests: commit messages with special characters (quotes, newlines) in lap descriptions are handled safely
 - [ ] 4.6 Tests: `git` unavailable or repo-corrupted scenarios log a warning and skip commits gracefully
 - [ ] 4.7 Bump `internal/buildinfo/VERSION` (patch bump per release process) as part of the change
