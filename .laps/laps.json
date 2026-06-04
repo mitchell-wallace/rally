@@ -171,11 +171,11 @@
       "title": "Verify display + retry UX slice",
       "description": "Verify the user-visible display/monitor/retry slice (the four prior laps) for the cli-polish change — cli-display capability, tasks §1, §2, §5, §6.\n\nUse the openspec-verify-change skill against change `cli-polish`, then focus the report on: width-aware shortcut hint tiers, full-width headers, try-runtime-bounded activity age, and the collapsed single-line retry + terminal-only colouring.\n\nBefore diffing, identify the intended merge target from the user / PR metadata / branch config / recent history — do NOT assume `main` — and identify the first lap/try in this batch; treat earlier branch work as pre-existing. Use `git diff \u003ctarget\u003e...HEAD`.\n\nDepth: trace the actual rendered strings, not just green tests. Confirm `ShortcutHint` never exceeds one line across width bands, separators fill to the 80 cap and clamp on narrow widths, the activity-age clamp uses try elapsed (and the stall detector is untouched), and the footer path emits exactly one coloured line only at the terminal result. Confirm the current \"stop\"/\"quit\" labels were retained (the relabel is agent-lifecycle's job). Run `go test ./internal/style/ ./internal/monitor/ ./internal/relay/`.\n\nCheck off the tasks.md boxes under §1, §2, §5, §6 for work verified correct and thorough. For substantive gaps, add a focused head lap (`laps add head ...`) rather than fixing here; only tiny safe one-liners may be fixed in place. Do not rewrite git history.",
       "assignee": "VERIFY",
-      "isDone": false,
+      "isDone": true,
       "order": 327680,
       "createdAt": "2026-06-04T11:13:52.686145286Z",
-      "updatedAt": "2026-06-04T11:13:52.686145286Z",
-      "completedAt": null
+      "updatedAt": "2026-06-04T13:14:20.667954911Z",
+      "completedAt": "2026-06-04T13:14:20.667954911Z"
     },
     {
       "id": "rall-d277",

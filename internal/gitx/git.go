@@ -88,6 +88,35 @@ func IsWorkspaceDirty(dir string) (bool, error) {
 	return false, nil
 }
 
+// WorkspaceDirtyPaths returns a map of path -> porcelain XY status code for
+// every workspace entry that is dirty (excluding Rally's own .rally/ and
+// .laps/ paths). The returned map is suitable for snapshotting before a try
+// and diffing against the post-try state to attribute changes to a specific
+// try.
+func WorkspaceDirtyPaths(dir string) (map[string]string, error) {
+	out, err := GitOutput(dir, "status", "--porcelain")
+	if err != nil {
+		return nil, err
+	}
+	result := make(map[string]string)
+	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		if len(line) < 4 {
+			continue
+		}
+		xy := line[:2]
+		path := strings.TrimSpace(line[2:])
+		if strings.HasPrefix(path, ".rally/") || strings.HasPrefix(path, ".laps/") {
+			continue
+		}
+		result[path] = xy
+	}
+	return result, nil
+}
+
 // FoldRallyState folds Rally's own bookkeeping (state under .rally/ and the
 // .laps/ queue) into the run's history without ever emitting a standalone state
 // commit in the common path. The run's work commit already stages the working

@@ -1529,6 +1529,203 @@ func TestIncompleteDoesNotCountTowardFailureCascade(t *testing.T) {
 	}
 }
 
+// TestIncompleteLeftoverAware_NoOpInheritingLeftovers verifies that a no-op try
+// inheriting uncommitted leftovers from a prior failed try is NOT classified as
+// incomplete. The try produced no changes of its own, so the incomplete class
+// should not apply.
+func TestIncompleteLeftoverAware_NoOpInheritingLeftovers(t *testing.T) {
+	oldHeadPull := headPullLap
+	headPullLap = func(context.Context, string) (laps.Lap, error) {
+		return laps.Lap{ID: "lap-1", Title: "test", Assignee: "senior"}, nil
+	}
+	defer func() { headPullLap = oldHeadPull }()
+
+	workspaceDir := t.TempDir()
+	rallyDir := store.RallyDir(workspaceDir)
+	os.MkdirAll(rallyDir, 0o755)
+	initRepo(t, workspaceDir)
+
+	runGit(t, workspaceDir, "commit", "--allow-empty", "-m", "initial")
+
+	if err := os.WriteFile(filepath.Join(workspaceDir, "leftover.txt"), []byte("leftover"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	s := newTestStore(t, rallyDir)
+	exec := &funcExecutor{
+		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+			return &agent.TryResult{Completed: false, Summary: "no-op"}, nil
+		},
+	}
+
+	r := NewRunner(s, Config{
+		WorkspaceDir:     workspaceDir,
+		DataDir:          t.TempDir(),
+		AgentMixSpecs:    []string{"op:dsf"},
+		TargetIterations: 1,
+		RetryBudget:      1,
+		LapsEnabled:      true,
+		Resolver:         cheapTestResolver,
+	}, map[string]agent.Executor{"opencode": exec})
+
+	_ = r.Run(context.Background())
+
+	tries := s.AllTries()
+	if len(tries) == 0 {
+		t.Fatal("expected at least one try")
+	}
+	if tries[0].FailReason == "incomplete: file changes without finalization" {
+		t.Fatalf("no-op try inheriting leftovers should NOT be incomplete, got FailReason=%q", tries[0].FailReason)
+	}
+}
+
+// TestIncompleteLeftoverAware_OwnUnfinalizedChanges verifies that a try that
+// adds its own unfinalized changes IS classified as incomplete.
+func TestIncompleteLeftoverAware_OwnUnfinalizedChanges(t *testing.T) {
+	oldHeadPull := headPullLap
+	headPullLap = func(context.Context, string) (laps.Lap, error) {
+		return laps.Lap{ID: "lap-1", Title: "test", Assignee: "senior"}, nil
+	}
+	defer func() { headPullLap = oldHeadPull }()
+
+	workspaceDir := t.TempDir()
+	rallyDir := store.RallyDir(workspaceDir)
+	os.MkdirAll(rallyDir, 0o755)
+	initRepo(t, workspaceDir)
+
+	runGit(t, workspaceDir, "commit", "--allow-empty", "-m", "initial")
+
+	s := newTestStore(t, rallyDir)
+	exec := &funcExecutor{
+		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+			if err := os.WriteFile(filepath.Join(workspaceDir, "new.txt"), []byte("new"), 0o644); err != nil {
+				return nil, err
+			}
+			return &agent.TryResult{Completed: true, Summary: "changed but did not finalize"}, nil
+		},
+	}
+
+	r := NewRunner(s, Config{
+		WorkspaceDir:     workspaceDir,
+		DataDir:          t.TempDir(),
+		AgentMixSpecs:    []string{"op:dsf"},
+		TargetIterations: 1,
+		RetryBudget:      1,
+		LapsEnabled:      true,
+		Resolver:         cheapTestResolver,
+	}, map[string]agent.Executor{"opencode": exec})
+
+	_ = r.Run(context.Background())
+
+	tries := s.AllTries()
+	if len(tries) == 0 {
+		t.Fatal("expected at least one try")
+	}
+	if tries[0].FailReason != "incomplete: file changes without finalization" {
+		t.Fatalf("FailReason = %q, want incomplete classification", tries[0].FailReason)
+	}
+}
+
+// TestIncompleteLeftoverAware_TouchingInheritedLeftover verifies that a try
+// that stages an inherited leftover path has that change attributed to it,
+// making the try incomplete if not finalized.
+func TestIncompleteLeftoverAware_TouchingInheritedLeftover(t *testing.T) {
+	oldHeadPull := headPullLap
+	headPullLap = func(context.Context, string) (laps.Lap, error) {
+		return laps.Lap{ID: "lap-1", Title: "test", Assignee: "senior"}, nil
+	}
+	defer func() { headPullLap = oldHeadPull }()
+
+	workspaceDir := t.TempDir()
+	rallyDir := store.RallyDir(workspaceDir)
+	os.MkdirAll(rallyDir, 0o755)
+	initRepo(t, workspaceDir)
+
+	runGit(t, workspaceDir, "commit", "--allow-empty", "-m", "initial")
+
+	if err := os.WriteFile(filepath.Join(workspaceDir, "leftover.txt"), []byte("leftover"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	s := newTestStore(t, rallyDir)
+	exec := &funcExecutor{
+		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+			cmd := exec.Command("git", "-C", workspaceDir, "add", "leftover.txt")
+			if err := cmd.Run(); err != nil {
+				return nil, err
+			}
+			return &agent.TryResult{Completed: true, Summary: "staged leftover but did not finalize"}, nil
+		},
+	}
+
+	r := NewRunner(s, Config{
+		WorkspaceDir:     workspaceDir,
+		DataDir:          t.TempDir(),
+		AgentMixSpecs:    []string{"op:dsf"},
+		TargetIterations: 1,
+		RetryBudget:      1,
+		LapsEnabled:      true,
+		Resolver:         cheapTestResolver,
+	}, map[string]agent.Executor{"opencode": exec})
+
+	_ = r.Run(context.Background())
+
+	tries := s.AllTries()
+	if len(tries) == 0 {
+		t.Fatal("expected at least one try")
+	}
+	if tries[0].FailReason != "incomplete: file changes without finalization" {
+		t.Fatalf("FailReason = %q, want incomplete (staging inherited leftover attributes it)", tries[0].FailReason)
+	}
+}
+
+// TestIncompleteLeftoverAware_NoChangeNoFinalize verifies that a try with no
+// changes and no finalization is a normal agent-class failure, not incomplete.
+func TestIncompleteLeftoverAware_NoChangeNoFinalize(t *testing.T) {
+	oldHeadPull := headPullLap
+	headPullLap = func(context.Context, string) (laps.Lap, error) {
+		return laps.Lap{ID: "lap-1", Title: "test", Assignee: "senior"}, nil
+	}
+	defer func() { headPullLap = oldHeadPull }()
+
+	workspaceDir := t.TempDir()
+	rallyDir := store.RallyDir(workspaceDir)
+	os.MkdirAll(rallyDir, 0o755)
+	initRepo(t, workspaceDir)
+
+	runGit(t, workspaceDir, "commit", "--allow-empty", "-m", "initial")
+
+	s := newTestStore(t, rallyDir)
+	exec := &funcExecutor{
+		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+			return &agent.TryResult{Completed: false, Summary: "did nothing"}, nil
+		},
+	}
+
+	r := NewRunner(s, Config{
+		WorkspaceDir:     workspaceDir,
+		DataDir:          t.TempDir(),
+		AgentMixSpecs:    []string{"op:dsf"},
+		TargetIterations: 1,
+		RetryBudget:      1,
+		LapsEnabled:      true,
+		Resolver:         cheapTestResolver,
+	}, map[string]agent.Executor{"opencode": exec})
+
+	_ = r.Run(context.Background())
+
+	tries := s.AllTries()
+	if len(tries) == 0 {
+		t.Fatal("expected at least one try")
+	}
+	if tries[0].FailReason == "incomplete: file changes without finalization" {
+		t.Fatalf("no-change try should NOT be incomplete, got FailReason=%q", tries[0].FailReason)
+	}
+	if tries[0].Completed {
+		t.Fatal("no-change try should be failed")
+	}
+}
+
 func TestFailureCascadeSingleInfraDoesNotIncrement(t *testing.T) {
 	workspaceDir := t.TempDir()
 	rallyDir := store.RallyDir(workspaceDir)
@@ -4493,12 +4690,14 @@ func TestProbationIncompletePromotesToActive(t *testing.T) {
 
 	s := newTestStore(t, rallyDir)
 
-	// The executor writes a file (dirty tree) but never calls laps done →
-	// incomplete. All attempts behave identically so the run exhausts its
-	// retry budget as an incomplete failure.
+	// The executor writes a unique file per attempt (dirty tree) but never
+	// calls laps done → incomplete. Each attempt produces its own new dirty
+	// path ensures the leftover-aware delta still classifies it incomplete.
+	attempt := 0
 	exec := &funcExecutor{
 		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
-			_ = os.WriteFile(filepath.Join(workspaceDir, "partial.txt"), []byte("partial"), 0o644)
+			attempt++
+			_ = os.WriteFile(filepath.Join(workspaceDir, fmt.Sprintf("partial-%d.txt", attempt)), []byte("partial"), 0o644)
 			return &agent.TryResult{Completed: true, Summary: "made progress but did not finalize"}, nil
 		},
 	}

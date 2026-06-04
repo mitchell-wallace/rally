@@ -844,6 +844,7 @@ attemptLoop:
 		opts.LogPath = tryLogPath
 
 		headBefore, _ := r.headHash()
+		dirtySnapshot, _ := gitx.WorkspaceDirtyPaths(r.cfg.WorkspaceDir)
 		startedAt := time.Now().UTC()
 
 		var lapsStarted, lapsTotal int
@@ -1013,9 +1014,18 @@ attemptLoop:
 		commitHistory := []string{}
 		preCommitFilesChanged := r.filesChangedList(result, headBefore, headAfter, "")
 		dirtyBeforeAutoCommit, _ := gitx.IsWorkspaceDirty(r.cfg.WorkspaceDir)
+		dirtyAfter, _ := gitx.WorkspaceDirtyPaths(r.cfg.WorkspaceDir)
+		hasOwnUncommittedChanges := false
+		for path, afterXY := range dirtyAfter {
+			beforeXY, existed := dirtySnapshot[path]
+			if !existed || beforeXY != afterXY {
+				hasOwnUncommittedChanges = true
+				break
+			}
+		}
 		finalized := !task.IsLapsBacked || len(recordedLaps) > 0 || handoffState != 0 || (task.LapID == "" && result != nil && result.Completed)
 		hasUserFileChanges := len(preCommitFilesChanged) > 0
-		incomplete := task.IsLapsBacked && dirtyBeforeAutoCommit && hasUserFileChanges && !finalized
+		incomplete := task.IsLapsBacked && hasOwnUncommittedChanges && !finalized
 		if headBefore != "" && headAfter != "" && headBefore != headAfter {
 			commitHistory = r.commitRange(headBefore, headAfter)
 			if len(commitHistory) == 0 {
