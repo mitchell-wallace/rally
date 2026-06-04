@@ -29,8 +29,9 @@ sonnet = 'claude-sonnet-4-6'
 haiku  = 'claude-haiku-4-5'
 
 [harness.cx.models]
-g55 = 'gpt-5.5'
-g54  = 'gpt-5.4'
+# review codex while doing big work elsewhere
+g55 = 'gpt-5.5-disabled'
+g54  = 'gpt-5.4-disabled'
 mini = 'gpt-5.4-mini'
 
 [harness.ge.models]
