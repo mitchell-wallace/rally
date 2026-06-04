@@ -105,22 +105,22 @@
       "title": "Docs and version bump for git-hygiene",
       "description": "OpenSpec change git-hygiene, Phase 4 (tasks 4.1, 4.7).\n\nOutcome:\n1. Document the new commit conventions in AGENTS.md and/or README.md (4.1): setup auto-commit (`rally: initialize workspace` / `rally: install laps hooks`), lap-boundary agent commits (`\u003clap-description\u003e: done` / `: in progress (handoff)`), folded state (state rides the work commit; amend-fallback appends ` [+state]`; a single `rally: update state` only on a non-rally HEAD), and leftover-work run-start guidance. Keep it concise and consistent with the existing docs voice; place it where git/commit behavior is already discussed. Cross-check the wording against the implemented code, not just the proposal.\n2. Bump internal/buildinfo/VERSION by one patch level (0.8.3 -\u003e 0.8.4) per the release process in AGENTS.md (4.7). VERSION file only — do NOT create or push a git tag; auto-tag CI handles tagging on main.\n\nFiles \u0026 scope: AGENTS.md / README.md / internal/buildinfo/VERSION. No production logic changes.\n\nAcceptance: docs accurately describe shipped behavior; `cat internal/buildinfo/VERSION` shows 0.8.4. Do not tick tasks.md (VERIFY owns checkoff).",
       "assignee": "JUNIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 655360,
       "createdAt": "2026-06-04T01:25:29.433449299Z",
-      "updatedAt": "2026-06-04T01:25:29.433449299Z",
-      "completedAt": null
+      "updatedAt": "2026-06-04T02:53:46.861796165Z",
+      "completedAt": "2026-06-04T02:53:46.861796165Z"
     },
     {
       "id": "rall-4b4d",
       "title": "Final full-change verification of git-hygiene",
       "description": "OpenSpec change git-hygiene — final whole-change verification before archive.\n\nUse the `openspec-verify-change` skill against change `git-hygiene` and run the COMPLETE verification; inspect the whole diff.\n\nBranch awareness: current branch is `dev`. Determine the intended merge target (user / PR metadata / repo docs / recent history) — do not assume `main` — then review with `git diff \u003ctarget\u003e...HEAD`. Identify the first lap/try of this batch; earlier branch work is pre-existing baseline (flag, do not remove). Do not rewrite git history; for any scope cleanup use additive/revert commits or ask the user.\n\nVerify all tasks are complete and coherent across phases. Run `go test ./...` and `go build ./...`.\n\nReview with depth: confirm clean `git status` during/after a run, one commit per lap boundary where the agent complied, no standalone `rally: update state` in the common path, and accurate docs. For task 4.2 (tracked-file-set), verify against the ACTUAL tracked set in the tree rather than any stale list — note for the planner/user: tasks.md 4.2 names `.rally/instructions.md`, which does not exist in this repo, and the `agent_status.jsonl` churn was a pre-batch old-rally-version artifact cleaned up before this batch; flag any remaining mismatch rather than editing the OpenSpec docs yourself.\n\nReport findings first; create head laps for substantive gaps; fix only tiny safe one-liners. Check off the tasks.md boxes for every task you verified as correctly and thoroughly done.",
       "assignee": "VERIFY",
-      "isDone": false,
+      "isDone": true,
       "order": 720896,
       "createdAt": "2026-06-04T01:25:29.43345028Z",
-      "updatedAt": "2026-06-04T01:25:29.43345028Z",
-      "completedAt": null
+      "updatedAt": "2026-06-04T02:59:48.549566954Z",
+      "completedAt": "2026-06-04T02:59:48.549566954Z"
     }
   ]
 }
