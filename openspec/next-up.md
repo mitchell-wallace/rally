@@ -46,6 +46,7 @@ are not yet renamed on disk.
    integration is a possible later add, deferred). Also the home for **prompt-
    size logging**: emit assembled-prompt size + per-source breakdown so runaway
    prompts are caught empirically.
+       State: **DONE**
 
 3. **git-hygiene** _(full artifacts — proposal/design/tasks/specs written, `openspec validate --strict` passes; reworked for the post-#2 world)_
    Depends on #2. Slimmed to two surviving items + one rewrite: auto-commit on
@@ -56,6 +57,7 @@ are not yet renamed on disk.
    auto-squash (window git-commits are removed by #2, so there are no streaks).
    Coordination flag: #2's relocation makes `CommitRallyState`'s `.rally/*.jsonl`
    glob a near-no-op — retire/repurpose it when folding.
+       State: **DONE**
 
 4. **cli-polish** _(full artifacts — proposal/design/tasks/specs written, `openspec validate --strict` passes)_
    Display fixes (shortcut-hint width-aware truncation + left-align, full-width
