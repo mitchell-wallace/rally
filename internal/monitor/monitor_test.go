@@ -192,6 +192,7 @@ func TestMonitorSlowingIndicator(t *testing.T) {
 
 	m := NewMonitor(dir, logPath, 0)
 	m.SetStallThreshold(900 * time.Second)
+	m.startTime = time.Now().Add(-600 * time.Second)
 
 	line, err := m.Tick()
 	if err != nil {
@@ -211,6 +212,7 @@ func TestMonitorSlowingWindowDerivedAt06x(t *testing.T) {
 
 	m := NewMonitor(dir, logPath, 0)
 	m.SetStallThreshold(900 * time.Second)
+	m.startTime = time.Now().Add(-600 * time.Second)
 
 	// 0.6 × 900s = 540s. Activity at 530s should NOT trigger slowing.
 	past := time.Now().Add(-530 * time.Second)
@@ -246,6 +248,7 @@ func TestMonitorSlowingNotShownDuringNormalReasoning(t *testing.T) {
 
 	m := NewMonitor(dir, logPath, 0)
 	m.SetStallThreshold(900 * time.Second)
+	m.startTime = time.Now().Add(-300 * time.Second)
 
 	// 4m silence (240s) is well within a normal reasoning burst (≪ 540s window).
 	past := time.Now().Add(-240 * time.Second)
@@ -395,6 +398,85 @@ func TestNetworkMonitorCheckNonLinux(t *testing.T) {
 	nm := NewNetworkMonitor([]int{1})
 	if warnings := nm.Check(); len(warnings) != 0 {
 		t.Fatalf("expected no warnings on non-linux, got %v", warnings)
+	}
+}
+
+func TestTickClampsStaleActivityToElapsed(t *testing.T) {
+	dir := t.TempDir()
+	initGitRepo(t, dir)
+	logPath := filepath.Join(dir, "try.log")
+	os.WriteFile(logPath, []byte("data"), 0o644)
+
+	// Set mtime 20h in the past — stale from a previous try.
+	stale := time.Now().Add(-20 * time.Hour)
+	os.Chtimes(logPath, stale, stale)
+
+	// Monitor just started (elapsed ≈ 0).
+	m := NewMonitor(dir, logPath, 0)
+	m.SetStallThreshold(900 * time.Second)
+
+	line, err := m.Tick()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !containsString(line, "< 1m ago") {
+		t.Errorf("expected clamped '< 1m ago' at try start, got %q", line)
+	}
+	if containsString(line, "⚠ slowing") {
+		t.Errorf("slowing should not fire at try start with stale mtime, got %q", line)
+	}
+	if containsString(line, "h ago") {
+		t.Errorf("stale hour-based age should not appear at try start, got %q", line)
+	}
+}
+
+func TestTickSlowingOnlyAfterTryOwnSilenceReachesThreshold(t *testing.T) {
+	dir := t.TempDir()
+	initGitRepo(t, dir)
+	logPath := filepath.Join(dir, "try.log")
+	os.WriteFile(logPath, []byte("data"), 0o644)
+
+	// Set mtime far in the past — stale from a previous try.
+	stale := time.Now().Add(-20 * time.Hour)
+	os.Chtimes(logPath, stale, stale)
+
+	m := NewMonitor(dir, logPath, 0)
+	m.SetStallThreshold(900 * time.Second)
+
+	// elapsed ≈ 300s (5min): clamped activity = 300s < 540s → no slowing.
+	m.startTime = time.Now().Add(-5 * time.Minute)
+	line, err := m.Tick()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if containsString(line, "⚠ slowing") {
+		t.Errorf("slowing should not appear at 5min elapsed (300s < 540s), got %q", line)
+	}
+
+	// elapsed ≈ 600s (10min): clamped activity = 600s ≥ 540s → slowing.
+	m.startTime = time.Now().Add(-10 * time.Minute)
+	line, err = m.Tick()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !containsString(line, "⚠ slowing") {
+		t.Errorf("expected slowing at 10min elapsed (600s ≥ 540s), got %q", line)
+	}
+}
+
+func TestTickClampPreservesDashForMissingLog(t *testing.T) {
+	dir := t.TempDir()
+	initGitRepo(t, dir)
+
+	m := NewMonitor(dir, "", 0)
+	m.SetStallThreshold(900 * time.Second)
+
+	line, err := m.Tick()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !containsString(line, "last activity: —") {
+		t.Errorf("expected '—' for missing log path, got %q", line)
 	}
 }
 

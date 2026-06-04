@@ -427,6 +427,10 @@ func (m *Monitor) Tick() (string, error) {
 		}
 	}
 
+	if lastActivity > elapsed {
+		lastActivity = elapsed
+	}
+
 	var warnings []string
 	if m.netMon != nil {
 		m.UpdatePIDs()

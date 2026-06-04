@@ -127,22 +127,22 @@
       "title": "Width-aware single-line shortcut hint",
       "description": "Context: cli-polish change, task §1 + design Decision 1. `ShortcutHint()` (internal/style/style.go:31) renders a fixed string (\"Ctrl+S skip · Ctrl+P pause · Ctrl+X stop · Ctrl+C quit\"). On a narrow terminal it wraps to two lines, which breaks the monitor's 1s cursor-up countdown redraw (the cursor-up line count is fixed at print time), so each tick appends instead of overwriting and stale status lines accumulate.\n\nOutcome: `ShortcutHint` detects terminal width at render time and emits the widest of four tiers that fits on a single line, so the countdown redraw always overwrites cleanly.\n\nFiles \u0026 scope: internal/style/style.go (`ShortcutHint` + any local helpers) and internal/style/style_test.go. Do NOT touch the monitor redraw logic — guaranteeing one line is the whole fix.\n\nDesign: widest-that-fits among:\n- Full: `[Ctrl+S skip] [Ctrl+P pause] [Ctrl+X stop] [Ctrl+C quit]`\n- Medium: `[^S skip] [^P pause] [^X stop] [^C quit]`\n- Narrow: `^S skip · ^P pause · ^X stop · ^C quit`\n- Minimal: `^S·^P·^X·^C`\nUse `term.GetSize(fd)` for width; one-shot detection at render time is sufficient (the tier never changes mid-run), so SIGWINCH handling is optional — skip it if it complicates testing. When stdout is not a TTY or detection fails, fall back to width 80 and never wrap. Measure visible width without ANSI styling. COORDINATION: keep the current action labels (\"stop\"/\"quit\"); the \"graceful stop\"/\"quit now\" relabel is owned by the later agent-lifecycle change — do not introduce it here.\n\nAcceptance: style_test.go asserts each width band selects the expected tier and output is always ≤ one line. `go test ./internal/style/`. Report progress but do not check tasks.md boxes (VERIFY owns ticking).",
       "assignee": "JUNIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 65536,
       "createdAt": "2026-06-04T11:13:52.686126041Z",
-      "updatedAt": "2026-06-04T11:13:52.686126041Z",
-      "completedAt": null
+      "updatedAt": "2026-06-04T12:20:39.482820803Z",
+      "completedAt": "2026-06-04T12:20:39.482820803Z"
     },
     {
       "id": "rall-4d09",
       "title": "Full-width headers and footers",
       "description": "Context: cli-polish task §2 + design Decision 2. Headers/footers use fixed 40-char separators (style.go:44 `separatorWidth`, `separator()`/`subSeparator()`), so output is ragged and doesn't span the terminal.\n\nOutcome: header/footer/summary separator lines fill the terminal width (capped at 80) with box-drawing fill, degrading gracefully on narrow terminals.\n\nFiles \u0026 scope: internal/style/style.go (`separator`/`subSeparator` and the `RenderHeader`/`RenderFooter`/summary paths) and style_test.go. Confine to style.go.\n\nDesign: replace the fixed `separatorWidth` with terminal-width-aware fill capped at 80. On terminals narrower than the label, clamp to the available width and truncate the label while keeping the line structure intact. Non-TTY/detection failure → width 80.\n\nAcceptance: tests assert separators fill to the cap and clamp on narrow widths without breaking structure. `go test ./internal/style/`. Report progress; do not tick tasks.md.",
       "assignee": "JUNIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 131072,
       "createdAt": "2026-06-04T11:13:52.686140009Z",
-      "updatedAt": "2026-06-04T11:13:52.686140009Z",
-      "completedAt": null
+      "updatedAt": "2026-06-04T12:48:28.884758981Z",
+      "completedAt": "2026-06-04T12:48:28.884758981Z"
     },
     {
       "id": "rall-02de",
