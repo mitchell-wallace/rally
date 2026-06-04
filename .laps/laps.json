@@ -149,11 +149,11 @@
       "title": "Finish rally 0.8.3 release wiring and full verification",
       "description": "Context: Complete OpenSpec change rally-083-polish tasks 8.1-8.3 after all implementation laps. Use the openspec-verify-change skill against rally-083-polish and read the release instructions in AGENTS.md.\\n\\nOutcome: Formatting and the full test suite pass, internal/buildinfo/VERSION is 0.8.3, and a short real relay validates the specified runtime behavior.\\n\\nVerification: Identify the intended branch target/base before diffing and the first lap/try in this batch; treat earlier branch work as pre-existing. Run just fmt, the full test suite, and a realistic short relay using test-driving-rally guidance. Confirm no false slowing during ordinary reasoning, inline retry N/M, run-level tally, bounded tries.jsonl/summary.jsonl, and wrapup-summary consistency. Mark tasks 8.1-8.3 complete and ensure the full OpenSpec verification passes.\\n\\nConstraints: Do not create or push a version tag by hand and do not rewrite git history. Add focused head laps for substantive gaps.",
       "assignee": "VERIFY",
-      "isDone": false,
+      "isDone": true,
       "order": 786432,
       "createdAt": "2026-06-03T03:56:54.770935963Z",
-      "updatedAt": "2026-06-03T03:56:54.770935963Z",
-      "completedAt": null
+      "updatedAt": "2026-06-03T09:13:07.382093587Z",
+      "completedAt": "2026-06-03T09:13:07.382093587Z"
     }
   ]
 }
