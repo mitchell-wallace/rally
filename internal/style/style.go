@@ -180,11 +180,30 @@ type FooterOptions struct {
 	CommitHash   string
 	CommitTitle  string
 	FailReason   string
+
+	// Interim marks a within-budget retry: instead of the coloured terminal
+	// block, RenderFooter emits a single neutral (dim) line suitable for
+	// in-place redraw, so a run that retries several times shows one updating
+	// line rather than one red footer per attempt. The coloured ✓/✗ block is
+	// reserved for the terminal outcome (Interim == false).
+	Interim bool
+	// Attempt and MaxAttempts annotate the terminal outcome ("passed on try
+	// N/M", "failed after K tries") and the interim line ("retrying N/M").
+	// Both zero keeps the bare "passed"/"failed" outcome text.
+	Attempt     int
+	MaxAttempts int
 }
 
-// RenderFooter renders a try footer with outcome, runtime, files changed count,
-// and commit hash.
+// RenderFooter renders a try footer. For a terminal outcome (Interim == false)
+// it emits the three-line block with a coloured ✓/✗ outcome, runtime, files
+// changed count, and commit hash. For an interim within-budget retry
+// (Interim == true) it emits a single neutral line — `↻ retrying N/M · last:
+// <reason> (<dur>, <files>)` — that the caller redraws in place.
 func RenderFooter(opts FooterOptions) string {
+	if opts.Interim {
+		return renderRetryLine(opts)
+	}
+
 	w := sepWidth()
 
 	var outcomeIcon, outcomeText string
@@ -193,10 +212,16 @@ func RenderFooter(opts FooterOptions) string {
 	if opts.Passed {
 		outcomeIcon = "✓"
 		outcomeText = "passed"
+		if opts.Attempt > 1 {
+			outcomeText = fmt.Sprintf("passed on try %d/%d", opts.Attempt, opts.MaxAttempts)
+		}
 		outcomeStyle = SuccessStyle
 	} else {
 		outcomeIcon = "✗"
 		outcomeText = "failed"
+		if opts.Attempt > 1 {
+			outcomeText = fmt.Sprintf("failed after %d %s", opts.Attempt, tries(opts.Attempt))
+		}
 		outcomeStyle = FailureStyle
 	}
 
@@ -228,6 +253,28 @@ func RenderFooter(opts FooterOptions) string {
 	sb.WriteString("\n")
 	sb.WriteString(separatorForWidth(w))
 	return sb.String()
+}
+
+// renderRetryLine renders the single neutral line shown while a run is retrying
+// within budget. It is entirely dim — no green/red — because the attempt is not
+// a terminal outcome; only the final footer is coloured.
+func renderRetryLine(opts FooterOptions) string {
+	reason := opts.FailReason
+	if reason == "" {
+		reason = "—"
+	}
+	line := fmt.Sprintf("↻ retrying %d/%d · last: %s (%s, %d file%s)",
+		opts.Attempt, opts.MaxAttempts, reason,
+		formatDuration(opts.Duration), opts.FilesChanged, plural(opts.FilesChanged))
+	return DimStyle.Render(line)
+}
+
+// tries returns the noun for a try count: "try" for 1, "tries" otherwise.
+func tries(n int) string {
+	if n == 1 {
+		return "try"
+	}
+	return "tries"
 }
 
 // RenderSummary renders a relay summary with total runs, pass/fail counts, and

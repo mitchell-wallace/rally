@@ -149,11 +149,11 @@
       "title": "Bound activity age by try runtime",
       "description": "Context: cli-polish task §5 + design Decision 4. `last activity` in `monitor.Tick()` is `time.Since(logMtime)` with no relation to when the current try started, so at a retry's start (elapsed≈0) it surfaces the stale previous-try mtime (e.g. \"20h 50m ago\") and the derived `⚠ slowing` indicator (≥0.6× the stall threshold) fires instantly and falsely.\n\nOutcome: the displayed last-activity age can never exceed the current try's elapsed time. A just-started try reads `\u003c 1m ago` regardless of the log file's pre-existing mtime, and `⚠ slowing` cannot appear until the try itself has been silent for ≥0.6× the threshold.\n\nFiles \u0026 scope: internal/monitor/monitor.go (the last-activity computation in `Tick()`) and monitor_test.go. Leave the stall detector in the reliability package untouched — only the *display* age is clamped, so liveness/kill behavior is unchanged.\n\nDesign: after computing `lastActivity`, clamp `if lastActivity \u003e elapsed { lastActivity = elapsed }` using the monitor's known `startTime`, before deriving indicators. Leave the `lastActivity \u003c 0` (\"—\") path unchanged.\n\nAcceptance: test that at elapsed==0 with a stale mtime the age reads `\u003c 1m ago` and `slowing` is absent until the try's own silence reaches 0.6× the threshold. `go test ./internal/monitor/`. Do not tick tasks.md.",
       "assignee": "JUNIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 196608,
       "createdAt": "2026-06-04T11:13:52.686141608Z",
-      "updatedAt": "2026-06-04T11:13:52.686141608Z",
-      "completedAt": null
+      "updatedAt": "2026-06-04T12:52:35.42118113Z",
+      "completedAt": "2026-06-04T12:52:35.42118113Z"
     },
     {
       "id": "rall-1bd4",

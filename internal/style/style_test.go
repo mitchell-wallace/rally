@@ -171,6 +171,107 @@ func TestRenderFooterZeroDuration(t *testing.T) {
 	}
 }
 
+func TestRenderFooterTerminalRecovery(t *testing.T) {
+	got := RenderFooter(FooterOptions{
+		Passed:       true,
+		Duration:     30 * time.Second,
+		FilesChanged: 2,
+		CommitHash:   "abc1234",
+		Attempt:      3,
+		MaxAttempts:  5,
+	})
+
+	plain := stripAnsi(got)
+	if !strings.Contains(plain, "passed on try 3/5") {
+		t.Errorf("expected 'passed on try 3/5' in recovery footer, got: %s", plain)
+	}
+	// A terminal success is coloured (green), not dim-only.
+	if !strings.Contains(got, "\x1b[") {
+		t.Errorf("expected ANSI colour in terminal footer, got: %q", got)
+	}
+	// Terminal footers keep the three-line block.
+	if !strings.Contains(plain, strings.Repeat("═", maxSepWidth)) {
+		t.Errorf("expected full-width separator in terminal footer, got: %s", plain)
+	}
+}
+
+func TestRenderFooterTerminalExhausted(t *testing.T) {
+	got := RenderFooter(FooterOptions{
+		Passed:      false,
+		Duration:    12 * time.Second,
+		FailReason:  "agent error",
+		Attempt:     5,
+		MaxAttempts: 5,
+	})
+
+	plain := stripAnsi(got)
+	if !strings.Contains(plain, "failed after 5 tries") {
+		t.Errorf("expected 'failed after 5 tries', got: %s", plain)
+	}
+	if !strings.Contains(plain, "agent error") {
+		t.Errorf("expected fail reason in footer, got: %s", plain)
+	}
+}
+
+func TestRenderFooterSingleAttemptStaysBare(t *testing.T) {
+	// A single-attempt (maxAttempts==1) failure is terminal on its first
+	// attempt: it should read "failed" with no "after N tries" suffix.
+	got := stripAnsi(RenderFooter(FooterOptions{
+		Passed:      false,
+		Duration:    5 * time.Second,
+		FailReason:  "no changes made",
+		Attempt:     1,
+		MaxAttempts: 1,
+	}))
+	if !strings.Contains(got, "failed") {
+		t.Errorf("expected 'failed' in single-attempt footer, got: %s", got)
+	}
+	if strings.Contains(got, "after") {
+		t.Errorf("single-attempt footer should not say 'after N tries', got: %s", got)
+	}
+}
+
+func TestRenderFooterInterimRetryLine(t *testing.T) {
+	got := RenderFooter(FooterOptions{
+		Passed:       false,
+		Interim:      true,
+		Duration:     12 * time.Second,
+		FilesChanged: 0,
+		FailReason:   "agent error",
+		Attempt:      2,
+		MaxAttempts:  5,
+	})
+
+	plain := stripAnsi(got)
+	if !strings.Contains(plain, "↻ retrying 2/5") {
+		t.Errorf("expected '↻ retrying 2/5' in interim line, got: %s", plain)
+	}
+	if !strings.Contains(plain, "last: agent error") {
+		t.Errorf("expected last reason in interim line, got: %s", plain)
+	}
+	if !strings.Contains(plain, "12s") {
+		t.Errorf("expected duration in interim line, got: %s", plain)
+	}
+	if !strings.Contains(plain, "0 files") {
+		t.Errorf("expected files count in interim line, got: %s", plain)
+	}
+	// The interim line is a single line — no separator block.
+	if strings.Contains(plain, "\n") {
+		t.Errorf("interim line should be a single line, got: %q", plain)
+	}
+	if strings.Contains(plain, strings.Repeat("═", maxSepWidth)) {
+		t.Errorf("interim line should not carry the separator block, got: %s", plain)
+	}
+	// Interim states are neutral/dim, never red. The whole line must be the
+	// dim style — exactly what DimStyle.Render produces — not FailureStyle.
+	if got != DimStyle.Render(plain) {
+		t.Errorf("interim line should be dim-styled, got: %q want: %q", got, DimStyle.Render(plain))
+	}
+	if got == FailureStyle.Render(plain) {
+		t.Errorf("interim line must not use FailureStyle (red), got: %q", got)
+	}
+}
+
 func TestRenderSummary(t *testing.T) {
 	got := RenderSummary(10, 8, 2, 25*time.Minute+10*time.Second)
 

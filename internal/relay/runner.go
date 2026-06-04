@@ -69,7 +69,21 @@ type Runner struct {
 	stallControllerFactory func(logPath string) reliability.StallController
 	sleepFunc              func(time.Duration)
 
+	// out is the console writer for run headers and outcome footers. Defaults
+	// to os.Stdout via outWriter; tests inject a buffer to assert on footer
+	// cadence and colouring.
+	out io.Writer
+
 	telemetry telemetry.Sink
+}
+
+// outWriter returns the console writer for headers/footers, defaulting to
+// os.Stdout so call sites never need a nil check.
+func (r *Runner) outWriter() io.Writer {
+	if r.out == nil {
+		return os.Stdout
+	}
+	return r.out
 }
 
 // SetTelemetry wires a telemetry sink into the runner. When unset, telemetry
@@ -110,6 +124,22 @@ func NewRunner(s *store.Store, cfg Config, executors map[string]agent.Executor) 
 }
 
 var stallCheckInterval = monitor.TickInterval
+
+// renderRunFooter writes a per-attempt outcome to out, collapsing a burst of
+// retries into one updating line. While the run still has retry budget
+// (opts.Interim), it draws the neutral retry line, clearing the current line
+// and parking the cursor at its start with no committed newline — so the next
+// attempt's status line, or the next retry line, overwrites it in place. At a
+// terminal outcome it clears any pending interim line and commits the coloured
+// ✓/✗ footer block. This is the only place the per-attempt footer is emitted.
+func renderRunFooter(out io.Writer, opts style.FooterOptions) {
+	rendered := style.RenderFooter(opts)
+	if opts.Interim {
+		fmt.Fprintf(out, "\r\x1b[2K%s\r", rendered)
+		return
+	}
+	fmt.Fprintf(out, "\r\x1b[2K%s\n", rendered)
+}
 
 const builtInDefaultFallback = "Continue the relay run. Review the current state of the codebase and continue making progress on the project."
 const incompleteRetryGuidance = "The last run was incomplete. Check any current git changes, finish anything not done, verify correctness, commit when good, then run `laps done`."
@@ -860,13 +890,15 @@ attemptLoop:
 
 		initialStatus, _ := mon.Tick()
 		// Skip empty/whitespace status to avoid an extra blank line below the
-		// header. The control hint line is always shown.
+		// header. The control hint line is always shown. Each line is cleared
+		// (\r\x1b[2K) before printing so it cleanly overwrites the neutral retry
+		// line a prior failing attempt parked here (see renderRunFooter).
 		cursorUp := 1
 		if strings.TrimSpace(initialStatus) != "" {
-			fmt.Println(initialStatus)
+			fmt.Printf("\r\x1b[2K%s\n", initialStatus)
 			cursorUp = 2
 		}
-		fmt.Println(style.ShortcutHint())
+		fmt.Printf("\r\x1b[2K%s\n", style.ShortcutHint())
 		mon.SetCursorUpLines(cursorUp)
 		mon.Start(os.Stdout)
 
@@ -1120,15 +1152,25 @@ attemptLoop:
 		}
 		lastAttemptIncomplete = failed && attemptFailureClass == reliability.FailureIncomplete
 
-		footer := style.RenderFooter(style.FooterOptions{
+		// A failing attempt that will be retried within budget is not a terminal
+		// outcome: it gets the neutral, in-place retry line rather than a red
+		// footer. Exactly one coloured footer prints when the run resolves —
+		// green on success, red when the budget is exhausted (or the run breaks
+		// out via skip/stop/lap-pin mismatch). A single-attempt run is terminal
+		// on its first failure, so it colours immediately.
+		willRetry := failed && attempt < maxAttempts &&
+			!actionTaken && !r.skipFlag.Load() && !lapPinMismatch && !r.stopFlag.Load()
+		renderRunFooter(r.outWriter(), style.FooterOptions{
 			Passed:       !failed,
 			Duration:     runtime,
 			FilesChanged: filesChangedCount,
 			CommitHash:   shortHash,
 			CommitTitle:  commitTitle,
 			FailReason:   failReason,
+			Interim:      willRetry,
+			Attempt:      attempt,
+			MaxAttempts:  maxAttempts,
 		})
-		fmt.Println(footer)
 
 		// Fold any remaining Rally state churn into history. The work commit
 		// above already staged summary.jsonl via `git add -A`; this only fires

@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"regexp"
 	"strconv"
 	"strings"
 	"testing"
@@ -21,6 +22,7 @@ import (
 	"github.com/mitchell-wallace/rally/internal/progress"
 	"github.com/mitchell-wallace/rally/internal/reliability"
 	"github.com/mitchell-wallace/rally/internal/store"
+	"github.com/mitchell-wallace/rally/internal/style"
 )
 
 type funcExecutor struct {
@@ -658,6 +660,203 @@ func TestDetectLapsMarkerInText(t *testing.T) {
 				t.Errorf("detectLapsMarkerInText(%q) = %q, want %q", tc.summary, got, tc.want)
 			}
 		})
+	}
+}
+
+var footerAnsiRe = regexp.MustCompile("\x1b\\[[0-9;]*m")
+
+func stripFooterAnsi(s string) string { return footerAnsiRe.ReplaceAllString(s, "") }
+
+func TestRenderRunFooterInterimRedrawsInPlace(t *testing.T) {
+	var buf bytes.Buffer
+	renderRunFooter(&buf, style.FooterOptions{
+		Passed:      false,
+		Interim:     true,
+		Duration:    12 * time.Second,
+		FailReason:  "agent error",
+		Attempt:     2,
+		MaxAttempts: 5,
+	})
+	got := buf.String()
+	// Interim lines clear the current line and park the cursor at column 0 with
+	// no committed newline, so the next attempt's status line overwrites them.
+	if !strings.HasPrefix(got, "\r\x1b[2K") {
+		t.Errorf("interim footer should begin with a clear-line sequence, got: %q", got)
+	}
+	if !strings.HasSuffix(got, "\r") {
+		t.Errorf("interim footer should park the cursor at the line start, got: %q", got)
+	}
+	if strings.Contains(got, "\n") {
+		t.Errorf("interim footer must not commit a newline, got: %q", got)
+	}
+	if !strings.Contains(stripFooterAnsi(got), "↻ retrying 2/5") {
+		t.Errorf("interim footer missing retry text, got: %q", got)
+	}
+}
+
+func TestRenderRunFooterTerminalCommits(t *testing.T) {
+	var buf bytes.Buffer
+	renderRunFooter(&buf, style.FooterOptions{
+		Passed:      false,
+		Duration:    12 * time.Second,
+		FailReason:  "agent error",
+		Attempt:     5,
+		MaxAttempts: 5,
+	})
+	got := buf.String()
+	if !strings.HasSuffix(got, "\n") {
+		t.Errorf("terminal footer should commit with a trailing newline, got: %q", got)
+	}
+	if !strings.Contains(stripFooterAnsi(got), "failed after 5 tries") {
+		t.Errorf("terminal footer missing outcome text, got: %q", got)
+	}
+}
+
+// TestRunFooterCadenceExhausted drives a run whose agent always fails and
+// asserts the console shows one updating retry line per within-budget attempt
+// and exactly one coloured terminal footer — not one red footer per attempt.
+func TestRunFooterCadenceExhausted(t *testing.T) {
+	workspaceDir := t.TempDir()
+	rallyDir := store.RallyDir(workspaceDir)
+	os.MkdirAll(rallyDir, 0o755)
+	initRepo(t, workspaceDir)
+
+	s := newTestStore(t, rallyDir)
+	exec := &funcExecutor{
+		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+			return &agent.TryResult{Completed: false, Summary: "nope"}, nil
+		},
+	}
+	executors := map[string]agent.Executor{"claude": exec}
+
+	var buf bytes.Buffer
+	r := NewRunner(s, Config{
+		WorkspaceDir:     workspaceDir,
+		DataDir:          t.TempDir(),
+		AgentMixSpecs:    []string{"cc:1"},
+		TargetIterations: 1,
+		RetryBudget:      5,
+	}, executors)
+	r.out = &buf
+
+	if err := r.Run(context.Background()); err != nil {
+		if !strings.Contains(err.Error(), "all agents frozen") {
+			t.Fatalf("run failed with unexpected error: %v", err)
+		}
+	}
+
+	out := buf.String()
+	plain := stripFooterAnsi(out)
+	if n := strings.Count(plain, "↻ retrying"); n != 4 {
+		t.Errorf("expected 4 interim retry lines (attempts 1-4), got %d\noutput: %q", n, plain)
+	}
+	if n := strings.Count(plain, "✗"); n != 1 {
+		t.Errorf("expected exactly one coloured ✗ footer, got %d\noutput: %q", n, plain)
+	}
+	if !strings.Contains(plain, "failed after 5 tries") {
+		t.Errorf("expected terminal 'failed after 5 tries' footer, got: %q", plain)
+	}
+	// The terminal footer must be coloured (FailureStyle red), not plain text.
+	if !strings.Contains(out, "\x1b[") {
+		t.Errorf("expected ANSI colour on terminal footer, got: %q", out)
+	}
+}
+
+// TestRunFooterCadenceRecovery asserts a run that fails then recovers prints
+// interim retry lines followed by exactly one green terminal footer.
+func TestRunFooterCadenceRecovery(t *testing.T) {
+	workspaceDir := t.TempDir()
+	rallyDir := store.RallyDir(workspaceDir)
+	os.MkdirAll(rallyDir, 0o755)
+	initRepo(t, workspaceDir)
+
+	s := newTestStore(t, rallyDir)
+	attempt := 0
+	exec := &funcExecutor{
+		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+			attempt++
+			if attempt < 3 {
+				return &agent.TryResult{Completed: false, Summary: "fail"}, nil
+			}
+			f, _ := os.Create(filepath.Join(workspaceDir, fmt.Sprintf("ok-%d.txt", attempt)))
+			f.WriteString("changed")
+			f.Close()
+			return &agent.TryResult{Completed: true, Summary: "success"}, nil
+		},
+	}
+	executors := map[string]agent.Executor{"claude": exec}
+
+	var buf bytes.Buffer
+	r := NewRunner(s, Config{
+		WorkspaceDir:     workspaceDir,
+		DataDir:          t.TempDir(),
+		AgentMixSpecs:    []string{"cc:1"},
+		TargetIterations: 1,
+		RetryBudget:      5,
+	}, executors)
+	r.out = &buf
+
+	if err := r.Run(context.Background()); err != nil {
+		t.Fatalf("run failed: %v", err)
+	}
+
+	plain := stripFooterAnsi(buf.String())
+	if n := strings.Count(plain, "↻ retrying"); n != 2 {
+		t.Errorf("expected 2 interim retry lines, got %d\noutput: %q", n, plain)
+	}
+	if !strings.Contains(plain, "passed on try 3/5") {
+		t.Errorf("expected green 'passed on try 3/5' footer, got: %q", plain)
+	}
+	if strings.Contains(plain, "✗") {
+		t.Errorf("a recovering run should print no ✗ footer, got: %q", plain)
+	}
+}
+
+// TestRunFooterSingleAttemptColoursImmediately asserts a single-attempt run
+// (RetryBudget 1) colours its first failure red with no interim retry line.
+func TestRunFooterSingleAttemptColoursImmediately(t *testing.T) {
+	workspaceDir := t.TempDir()
+	rallyDir := store.RallyDir(workspaceDir)
+	os.MkdirAll(rallyDir, 0o755)
+	initRepo(t, workspaceDir)
+
+	s := newTestStore(t, rallyDir)
+	exec := &funcExecutor{
+		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+			return &agent.TryResult{Completed: false, Summary: "nope"}, nil
+		},
+	}
+	executors := map[string]agent.Executor{"claude": exec}
+
+	var buf bytes.Buffer
+	r := NewRunner(s, Config{
+		WorkspaceDir:     workspaceDir,
+		DataDir:          t.TempDir(),
+		AgentMixSpecs:    []string{"cc:1"},
+		TargetIterations: 1,
+		RetryBudget:      1,
+	}, executors)
+	r.out = &buf
+
+	if err := r.Run(context.Background()); err != nil {
+		if !strings.Contains(err.Error(), "all agents frozen") {
+			t.Fatalf("run failed with unexpected error: %v", err)
+		}
+	}
+
+	out := buf.String()
+	plain := stripFooterAnsi(out)
+	if strings.Contains(plain, "↻ retrying") {
+		t.Errorf("single-attempt run should print no interim retry line, got: %q", plain)
+	}
+	if n := strings.Count(plain, "✗"); n != 1 {
+		t.Errorf("expected exactly one ✗ footer, got %d\noutput: %q", n, plain)
+	}
+	if strings.Contains(plain, "after") {
+		t.Errorf("single-attempt footer should not say 'after N tries', got: %q", plain)
+	}
+	if !strings.Contains(out, "\x1b[") {
+		t.Errorf("expected ANSI colour on the terminal footer, got: %q", out)
 	}
 }
 
