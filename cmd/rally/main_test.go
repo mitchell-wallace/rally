@@ -278,8 +278,8 @@ func TestRunInitRoles_InstallsRoutesAndRoleInstructions(t *testing.T) {
 	}
 
 	cmd := &cobra.Command{}
-	if err := runInitRoles(cmd, []string{}); err != nil {
-		t.Fatalf("runInitRoles failed: %v", err)
+	if err := runInitAll(cmd, []string{}); err != nil {
+		t.Fatalf("runInitAll failed: %v", err)
 	}
 
 	cfg, err := config.LoadV2(tmp)
@@ -287,20 +287,20 @@ func TestRunInitRoles_InstallsRoutesAndRoleInstructions(t *testing.T) {
 		t.Fatalf("LoadV2 failed: %v", err)
 	}
 
-	if cfg.OpenCodeModel != "opencode-go/kimi-k2.6" {
-		t.Errorf("OpenCodeModel = %q, want opencode-go/kimi-k2.6", cfg.OpenCodeModel)
+	if cfg.Defaults.OpenCodeModel != "opencode-go/kimi-k2.6" {
+		t.Errorf("OpenCodeModel = %q, want opencode-go/kimi-k2.6", cfg.Defaults.OpenCodeModel)
 	}
-	if cfg.ClaudeModel != "claude-opus-4-7" {
-		t.Errorf("ClaudeModel = %q, want claude-opus-4-7", cfg.ClaudeModel)
+	if cfg.Defaults.ClaudeModel != "claude-opus-4-7" {
+		t.Errorf("ClaudeModel = %q, want claude-opus-4-7", cfg.Defaults.ClaudeModel)
 	}
-	if cfg.GeminiModel != "gemini-3.1-pro-preview" {
-		t.Errorf("GeminiModel = %q, want gemini-3.1-pro-preview", cfg.GeminiModel)
+	if cfg.Defaults.GeminiModel != "gemini-3.1-pro-preview" {
+		t.Errorf("GeminiModel = %q, want gemini-3.1-pro-preview", cfg.Defaults.GeminiModel)
 	}
-	if cfg.CodexModel != "gpt-5.5" {
-		t.Errorf("CodexModel = %q, want gpt-5.5", cfg.CodexModel)
+	if cfg.Defaults.CodexModel != "gpt-5.5" {
+		t.Errorf("CodexModel = %q, want gpt-5.5", cfg.Defaults.CodexModel)
 	}
-	if cfg.AntigravityModel != "Gemini 3.5 Flash (High)" {
-		t.Errorf("AntigravityModel = %q, want Gemini 3.5 Flash (High)", cfg.AntigravityModel)
+	if cfg.Defaults.AntigravityModel != "Gemini 3.5 Flash (High)" {
+		t.Errorf("AntigravityModel = %q, want Gemini 3.5 Flash (High)", cfg.Defaults.AntigravityModel)
 	}
 
 	wantRoutes := map[string]string{
@@ -326,6 +326,183 @@ func TestRunInitRoles_InstallsRoutesAndRoleInstructions(t *testing.T) {
 		if !strings.Contains(string(data), "# ") {
 			t.Errorf("%s instructions missing heading", role)
 		}
+	}
+}
+
+func TestRunInitAll_RunsBothInSequence(t *testing.T) {
+	tmp := t.TempDir()
+	t.Chdir(tmp)
+
+	if err := os.MkdirAll(filepath.Join(tmp, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	cmd := &cobra.Command{}
+	if err := runInitAll(cmd, []string{}); err != nil {
+		t.Fatalf("runInitAll failed: %v", err)
+	}
+
+	configPath := store.ConfigPath(tmp)
+	if _, err := os.Stat(configPath); err != nil {
+		t.Fatalf("workspace config not created: %v", err)
+	}
+	gitignorePath := filepath.Join(store.RallyDir(tmp), ".gitignore")
+	if _, err := os.Stat(gitignorePath); err != nil {
+		t.Fatalf("workspace .gitignore not created: %v", err)
+	}
+	readmePath := filepath.Join(store.RallyDir(tmp), "README.md")
+	if _, err := os.Stat(readmePath); err != nil {
+		t.Fatalf("workspace README.md not created: %v", err)
+	}
+
+	cfg, err := config.LoadV2(tmp)
+	if err != nil {
+		t.Fatalf("LoadV2 failed: %v", err)
+	}
+	if cfg.SchemaVersion != 2 {
+		t.Errorf("SchemaVersion = %d, want 2", cfg.SchemaVersion)
+	}
+	if _, ok := cfg.Routes["junior"]; !ok {
+		t.Error("missing junior route (role setup not run)")
+	}
+	if cfg.Defaults.OpenCodeModel != "opencode-go/kimi-k2.6" {
+		t.Errorf("OpenCodeModel = %q, want opencode-go/kimi-k2.6", cfg.Defaults.OpenCodeModel)
+	}
+
+	for _, role := range []string{"junior", "senior", "ui", "verify"} {
+		path := filepath.Join(store.AgentsDir(tmp), role+".md")
+		if _, err := os.Stat(path); err != nil {
+			t.Errorf("role instructions for %s not created: %v", role, err)
+		}
+	}
+}
+
+func TestRunInitRoles_OnlyTouchesRoleConfig(t *testing.T) {
+	tmp := t.TempDir()
+	t.Chdir(tmp)
+
+	if err := os.MkdirAll(filepath.Join(tmp, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	cmd := &cobra.Command{}
+	if err := runInit(cmd, []string{}); err != nil {
+		t.Fatalf("runInit failed: %v", err)
+	}
+
+	readmePath := filepath.Join(store.RallyDir(tmp), "README.md")
+	readmeBefore, err := os.ReadFile(readmePath)
+	if err != nil {
+		t.Fatalf("read README.md: %v", err)
+	}
+
+	gitignorePath := filepath.Join(store.RallyDir(tmp), ".gitignore")
+	gitignoreBefore, err := os.ReadFile(gitignorePath)
+	if err != nil {
+		t.Fatalf("read .gitignore: %v", err)
+	}
+
+	if err := runInitRoles(cmd, []string{}); err != nil {
+		t.Fatalf("runInitRoles failed: %v", err)
+	}
+
+	readmeAfter, err := os.ReadFile(readmePath)
+	if err != nil {
+		t.Fatalf("read README.md after roles: %v", err)
+	}
+	if string(readmeAfter) != string(readmeBefore) {
+		t.Error("init roles should not modify README.md")
+	}
+
+	gitignoreAfter, err := os.ReadFile(gitignorePath)
+	if err != nil {
+		t.Fatalf("read .gitignore after roles: %v", err)
+	}
+	if string(gitignoreAfter) != string(gitignoreBefore) {
+		t.Error("init roles should not modify .gitignore")
+	}
+
+	cfg, err := config.LoadV2(tmp)
+	if err != nil {
+		t.Fatalf("LoadV2 failed: %v", err)
+	}
+	if _, ok := cfg.Routes["junior"]; !ok {
+		t.Error("missing junior route")
+	}
+	if cfg.Defaults.ClaudeModel != "claude-opus-4-7" {
+		t.Errorf("ClaudeModel = %q, want claude-opus-4-7", cfg.Defaults.ClaudeModel)
+	}
+
+	for _, role := range []string{"junior", "senior", "ui", "verify"} {
+		path := filepath.Join(store.AgentsDir(tmp), role+".md")
+		if _, err := os.Stat(path); err != nil {
+			t.Errorf("role instructions for %s not created: %v", role, err)
+		}
+	}
+}
+
+func TestRunInitAll_IdempotentRerun(t *testing.T) {
+	tmp := t.TempDir()
+	t.Chdir(tmp)
+
+	if err := os.MkdirAll(filepath.Join(tmp, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	cmd := &cobra.Command{}
+	if err := runInitAll(cmd, []string{}); err != nil {
+		t.Fatalf("first runInitAll failed: %v", err)
+	}
+
+	cfg, err := config.LoadV2(tmp)
+	if err != nil {
+		t.Fatalf("LoadV2 after first run: %v", err)
+	}
+	cfg.Defaults.ClaudeModel = "my-custom-claude"
+	if err := config.SaveV2(tmp, cfg); err != nil {
+		t.Fatalf("SaveV2 custom config: %v", err)
+	}
+
+	if err := runInitAll(cmd, []string{}); err != nil {
+		t.Fatalf("second runInitAll failed: %v", err)
+	}
+
+	cfg2, err := config.LoadV2(tmp)
+	if err != nil {
+		t.Fatalf("LoadV2 after second run: %v", err)
+	}
+	if cfg2.Defaults.ClaudeModel != "my-custom-claude" {
+		t.Errorf("ClaudeModel = %q, want my-custom-claude (idempotent rerun should not overwrite)", cfg2.Defaults.ClaudeModel)
+	}
+}
+
+func TestRunInitRoles_IdempotentRerun(t *testing.T) {
+	tmp := t.TempDir()
+	t.Chdir(tmp)
+
+	if err := os.MkdirAll(filepath.Join(tmp, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	cmd := &cobra.Command{}
+	if err := runInitAll(cmd, []string{}); err != nil {
+		t.Fatalf("runInitAll setup failed: %v", err)
+	}
+
+	cfg, _ := config.LoadV2(tmp)
+	cfg.Defaults.GeminiModel = "my-gemini"
+	config.SaveV2(tmp, cfg)
+
+	if err := runInitRoles(cmd, []string{}); err != nil {
+		t.Fatalf("runInitRoles rerun failed: %v", err)
+	}
+
+	cfg2, err := config.LoadV2(tmp)
+	if err != nil {
+		t.Fatalf("LoadV2: %v", err)
+	}
+	if cfg2.Defaults.GeminiModel != "my-gemini" {
+		t.Errorf("GeminiModel = %q, want my-gemini (idempotent rerun should not overwrite)", cfg2.Defaults.GeminiModel)
 	}
 }
 

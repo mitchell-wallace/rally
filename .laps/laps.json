@@ -193,11 +193,11 @@
       "title": "Verify incomplete-classification correctness",
       "description": "High-risk follow-up to the leftover-aware incomplete lap.\n\nUse the openspec-verify-change skill against change `cli-polish`, focused on the relay-runner MODIFIED \"Incomplete failure class\" requirement and its four scenarios.\n\nIdentify the intended merge target (do NOT assume `main`; use user / PR metadata / branch config / recent history) and the first lap/try in this batch before diffing; `git diff \u003ctarget\u003e...HEAD`.\n\nDepth: trace the snapshot capture at try start, the before/after porcelain delta, and the classification call site — confirm untouched inherited leftovers are excluded and touched leftovers are attributed to the try. Verify the resilience-cascade exemption (no `PauseAgent`/`RecordHourlyFailure` for incomplete) and the incomplete-retry guidance string are intact. Run `go test ./internal/relay/`. Do not trust green tests alone — read the delta computation.\n\nCheck off tasks.md §7 boxes for verified-correct work. Substantive gaps → focused head lap; only tiny safe one-liners fixed in place. No git history rewriting.",
       "assignee": "VERIFY",
-      "isDone": false,
+      "isDone": true,
       "order": 458752,
       "createdAt": "2026-06-04T11:13:52.686147658Z",
-      "updatedAt": "2026-06-04T11:13:52.686147658Z",
-      "completedAt": null
+      "updatedAt": "2026-06-04T13:32:58.653086688Z",
+      "completedAt": "2026-06-04T13:32:58.653086688Z"
     },
     {
       "id": "rall-ee5d",
