@@ -29,7 +29,7 @@ Requires the `laps` CLI v0.7.0 or newer for batch JSON task creation. Rally inje
 - For lightweight greenfield examples or Rally role-routing smoke tests, a single final `VERIFY` is enough. Spend saved laps on implementation depth.
 - Verification laps may fix only tiny, safe one-liners. Anything larger becomes a new focused lap added to the head of the queue.
 - If any lap uncovers a blocker, the assigned agent should `laps add head ...` for it before marking the lap done.
-- Every lap should instruct its agent to surface meaningful uncertainties and apparent plan problems — circular or contradictory task dependencies, work that does not map cleanly onto a lap, missing prerequisites, a plan claim that contradicts the tree — rather than silently working around them. Route these to a head lap (`laps add head`) or the wrapup summary so they reach a human or the VERIFY role.
+- Keep laps tight and well-defined. Do not pad lap descriptions with "report any uncertainty" boilerplate — surfacing plan problems is the planning agent's job (see Workflow), and execution-time blockers are already covered by the head-lap rule above.
 - For OpenSpec work, only `VERIFY` laps check off `tasks.md` boxes, and only after verifying the work is done correctly and with sufficient thoroughness and quality. Implementation laps (`JUNIOR`/`SENIOR`/`UI`) do the work and report it but must not tick `tasks.md`; a checked box means "verified done," not "attempted."
 - Diff and cleanup instructions must be branch-target aware. Do not assume `main`; tell VERIFY laps to identify the intended merge target from the user, PR metadata, repo docs, branch config, or recent history before using `git diff <target>...HEAD`.
 - Work that predates the first lap in the current batch is valid baseline context, even when it is not part of the current request. VERIFY may flag it as pre-existing, but must not add cleanup laps that remove it unless the user explicitly asks.
@@ -89,6 +89,7 @@ Requires the `laps` CLI v0.7.0 or newer for batch JSON task creation. Rally inje
      ```
 
    - Run `laps list` at the end and sanity-check role order, VERIFY placement, and the final full-outcome verification lap.
+   - Report to the operator any meaningful uncertainties or plan problems you hit while planning — circular or contradictory task dependencies, work that does not map cleanly onto laps, missing prerequisites, or a plan claim that contradicts the working tree. Raise these in your summary to the operator; do not bury them inside lap descriptions or silently plan around them. This planning-time reporting is the planning agent's responsibility, distinct from the `VERIFY` role's mid-change verification.
 
 ## Testing Laps
 
@@ -111,7 +112,6 @@ Verification lap descriptions should include:
 - Identify the first lap/try in the current batch and treat earlier branch work as pre-existing unless the user asks to include it in scope.
 - Do not rewrite git history. If scope cleanup is needed, add a focused lap that uses additive/revert commits or asks the user for an explicit recovery strategy.
 - Review with appropriate depth: trace the core lines of dependency — key call sites, the symbols actually added or removed, the prompt/string actually emitted, the commit actually produced — not just whether tests pass. "Tests are green" is not sufficient verification for a high-risk lap.
-- Report meaningful uncertainties and any apparent plan problems found while verifying (contradictory tasks, scope that does not map onto the change, premises that no longer hold), and create head laps for substantive gaps.
 - For OpenSpec work, check off the `tasks.md` boxes for the tasks this lap verified as correctly and thoroughly done. Do not check boxes for work the implementation laps merely attempted — verification is the gate for ticking a box.
 
 ## Skill Maintenance
