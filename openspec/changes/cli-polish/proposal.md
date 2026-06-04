@@ -1,35 +1,56 @@
 ## Why
 
-Two unrelated rough edges in rally's CLI surface, bundled because both are small,
-low-risk polish:
+A cluster of 5 main and 5 smaller rough edges in rally's CLI surface, bundled
+because each is polish:
 
 1. **Display glitches.** The keyboard-shortcut hint line wraps to two lines on a
-   narrow terminal, and the 1-second countdown redraw (`waiting 50m 39s`) doesn't
-   account for the extra line, so each tick appends instead of overwriting and the
-   screen fills with stale countdown lines. The hint is also centre-aligned
-   (indented from the left edge) and headers/footers don't span the terminal width,
-   so output reads ragged.
-2. **Config UX friction.** `rally init` produces a config that works but is awkward
-   to navigate and doesn't demonstrate key features — notably model shorthands
-   (important for opencode, whose model names are long). And the config type
-   `FallbackConfig` is misnamed: it only sets the task prompt for a laps-less,
-   promptless ("free") run, but "fallback" reads like runner failover (which is
-   actually the routing Scheduler's lane rotation, unrelated).
+   narrow terminal, and the 1-second status redraw doesn't account for the extra
+   line, so each tick appends instead of overwriting and the screen fills with stale
+   status lines. Headers/footers don't span the terminal width (fixed-width 40-char
+   separators), so output reads ragged.
+2. **Status-line inaccuracy.** `last activity` is computed as
+   `time.Since(logMtime)` with no relation to when the current try started, so at the
+   start of a retry (`⏱ 0s`) it reports the stale log mtime — e.g. `20h 50m ago` —
+   and the derived `⚠ slowing` indicator (≥0.6× the stall threshold) fires
+   immediately and falsely.
+3. **Noisy, mis-coloured retries.** Each retry attempt prints its own red
+   `✗ failed` footer, so a run that retries five times shows five near-identical red
+   lines even though it is still in flight. Retry attempts that are not the terminal
+   outcome should not be coloured as failures, and the repetition is unnecessary.
+4. **Leftover changes misclassified as "incomplete".** The "incomplete: file
+   changes without finalization" class is computed from the whole dirty working tree
+   (`dirtyBeforeAutoCommit` + a `git status --porcelain` fallback), so uncommitted
+   leftovers from a *previous* failed try make a later no-op try look incomplete.
+5. **Config UX friction.** The config type `FallbackConfig` is misnamed: it only sets
+   the task prompt for a laps-less, promptless ("free") run, but "fallback" reads like
+   runner failover (which is actually the routing Scheduler's lane rotation, unrelated).
 
 ## What Changes
 
 - **Width-aware shortcut hint.** Detect terminal width at render time and truncate
   the shortcut hint to a single line, picking a tier (full / medium / narrow /
   minimal) that fits, so countdown redraws always overwrite cleanly.
-- **Left-align shortcut hints.** Remove centering/padding from
-  `style.ShortcutHint()`; render flush-left.
+- **Left-align shortcut hints.** The hint is already flush-left in the current
+  code; verify the width-aware tier changes preserve that.
 - **Full-width headers.** Make header/footer/summary lines span the terminal width
   (capped at 80) using box-drawing fill.
-- **Model shorthands in config.** Populate a `[models]` shorthand section in the
-  generated config (e.g. `s4 = "claude-sonnet-4-20250514"`).
+- **Activity age bounded by try runtime.** Clamp `last activity` so it can never
+  exceed the current try's elapsed time. A try that just started reads `< 1m ago`
+  regardless of the log file's pre-existing mtime, and `⚠ slowing` cannot fire until
+  the try itself has been silent long enough.
+- **Collapse retries into one updating line.** While a run is retrying, render a
+  single in-place neutral line (`↻ retrying N/M · last: <reason> (<dur>, <files>)`)
+  instead of one footer per attempt. Print exactly one coloured outcome footer when
+  the run reaches its terminal result.
+- **Colour only the terminal outcome.** Render the `✗ failed` footer in the failure
+  colour only when the failure is terminal (retry budget exhausted, or a
+  single-attempt run). Non-terminal retry states render neutral/dim.
+- **Leftover-aware "incomplete" detection.** Snapshot the set of already-dirty
+  paths at try start and classify a try as "incomplete" only when *this* try
+  produced uncommitted changes — leftovers inherited from a prior failed try no
+  longer trigger the class.
 - **`rally init` subcommands.** `rally init` (workspace, existing), `rally init
-  models` (add/update shorthands), `rally init roles` (existing role init), `rally
-  init all` (all three in sequence).
+  roles` (existing role init), `rally init all` (workspace + roles in sequence).
 - **Rename `FallbackConfig` → `FreeRunPrompt`.** Rename
   `FallbackConfig.InstructionsFile` / `loadFallbackInstructions()` /
   `builtInDefaultFallback` to `FreeRunPromptFile` / `loadFreeRunPrompt()` /
@@ -40,21 +61,34 @@ low-risk polish:
 ## Capabilities
 
 ### Added Capabilities
-- `cli-display`: terminal-width-aware shortcut hint, left-aligned hints, and
-  full-width headers/footers.
-- `cli-config`: model-shorthand config section, `rally init` subcommands, and the
-  `FreeRunPrompt` config rename with a back-compat alias.
+- `cli-display`: terminal-width-aware shortcut hint, left-aligned hints, full-width
+  headers/footers, try-runtime-bounded activity age, the collapsed single-line retry
+  pattern, and terminal-outcome-only failure colouring.
+- `cli-config`: `rally init` subcommands and the `FreeRunPrompt` config rename
+  with a back-compat alias.
+
+### Modified Capabilities
+- `relay-runner`: the "Incomplete failure class" requirement is tightened so the
+  class is computed from changes produced *during the current try*, not the whole
+  dirty working tree, so leftovers from a prior failed try no longer trigger it.
 
 ## Impact
 
-- **Code**: `internal/style/style.go` (`ShortcutHint`, header rendering), the
-  countdown/redraw path, `cmd/rally/main.go` (`init` subcommands), the config struct
-  and template (`internal/config/` and the `config.toml` template in
-  `cmd/rally/main.go`), and the free-run prompt loader (`runner.go:1054`,
-  `loadFallbackInstructions`).
-- **Behavior**: clean single-line shortcut hint and countdown on any width;
-  flush-left hints; full-width headers; richer generated config; clearer config
-  naming with a one-release back-compat alias.
+- **Code**: `internal/style/style.go` (`ShortcutHint`, `RenderHeader`/`RenderFooter`,
+  terminal-outcome colouring), `internal/monitor/monitor.go` (status redraw path +
+  `Tick`'s last-activity computation / `formatLastActivity`), `internal/relay/runner.go`
+  (per-attempt footer orchestration around `runner.go:1123`; the `incomplete`
+  computation at `runner.go:986` + `filesChangedList` porcelain fallback at
+  `runner.go:1490`), `cmd/rally/main.go` (`init` subcommands), the config struct and
+  template (`internal/config/config_v2.go` and the `config.toml` template in
+  `cmd/rally/main.go`), and the free-run prompt loader (`loadFallbackInstructions` /
+  `builtInDefaultFallback` in `runner.go`).
+- **Behavior**: clean single-line shortcut hint and status redraw on any width;
+  flush-left hints; full-width headers; accurate `last activity` (bounded by try
+  runtime) with no false instant `slowing`; one updating retry line plus a single
+  coloured outcome footer instead of repeated red failures; "incomplete" no longer
+  fires on inherited leftover changes; clearer config naming
+  with a one-release back-compat alias.
 - **Out of scope / rejected**:
   - `rally reconcile` (QA R8) — rejected; fixing internal state via a CLI command is
     a code smell. Correctness is made intrinsic instead (lap pinning in
