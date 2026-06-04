@@ -65,6 +65,14 @@ The intended flow is:
   instructions into a lap *only when that lap has a related change* (e.g. "mark
   off the relevant `tasks.md` boxes"). Smoothing the integration with
   OpenSpec-specific references is expected there — and only there.
+- **"Draft" an OpenSpec change = a single `draft.md` only.** When the user asks
+  to *draft* a change (as opposed to propose/write/flesh out), create just one
+  `draft.md` artifact in the change folder as a substitute for the full
+  proposal/design/tasks/specs flow — do not generate the full artifact set. The
+  point is to capture intent without premature over-scoping: the change can be
+  explored and expanded later when it's ready, avoiding stale file/symbol
+  references that go out of date as the codebase moves. See
+  `improve-harness-consistency/draft.md` for the shape.
 
 ### Prompt package naming
 
