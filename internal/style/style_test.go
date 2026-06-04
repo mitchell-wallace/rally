@@ -34,13 +34,12 @@ func TestRenderHeader(t *testing.T) {
 	if !strings.Contains(got, "started 15:04") {
 		t.Errorf("expected 'started 15:04' in header, got: %s", got)
 	}
-	if !strings.Contains(got, strings.Repeat("═", separatorWidth)) {
-		t.Errorf("expected separator line in header, got: %s", got)
+	if !strings.Contains(got, strings.Repeat("═", maxSepWidth)) {
+		t.Errorf("expected full-width separator line in header, got: %s", got)
 	}
 	if !strings.Contains(got, "model: sonnet-4") {
 		t.Errorf("expected 'model: sonnet-4' in header, got: %s", got)
 	}
-	// Verify ANSI color codes are present (separator uses dim color)
 	if !strings.Contains(got, "\x1b[") {
 		t.Logf("no ANSI codes found in header (possible TTY detection); output: %q", got)
 	}
@@ -99,21 +98,27 @@ func TestRenderFooterPassed(t *testing.T) {
 		CommitHash:   "abc1234",
 	})
 
-	if !strings.Contains(got, "passed") {
+	plain := stripAnsi(got)
+	if !strings.Contains(plain, "passed") {
 		t.Errorf("expected 'passed' in footer, got: %s", got)
 	}
-	if !strings.Contains(got, "2m 34s") {
+	if !strings.Contains(plain, "2m 34s") {
 		t.Errorf("expected '2m 34s' in footer, got: %s", got)
 	}
-	if !strings.Contains(got, "3 files") {
+	if !strings.Contains(plain, "3 files") {
 		t.Errorf("expected '3 files' in footer, got: %s", got)
 	}
-	if !strings.Contains(got, "abc1234") {
+	if !strings.Contains(plain, "abc1234") {
 		t.Errorf("expected commit hash 'abc1234' in footer, got: %s", got)
 	}
-	// Verify ANSI codes are present
 	if !strings.Contains(got, "\x1b[") {
-		t.Logf("no ANSI codes found in passed footer (possible TTY detection); output: %q", got)
+		t.Logf("no ANSI codes found in passed footer; output: %q", got)
+	}
+	if !strings.Contains(plain, strings.Repeat("─", maxSepWidth)) {
+		t.Errorf("expected full-width sub-separator in footer")
+	}
+	if !strings.Contains(plain, strings.Repeat("═", maxSepWidth)) {
+		t.Errorf("expected full-width separator in footer")
 	}
 }
 
@@ -124,16 +129,17 @@ func TestRenderFooterFailed(t *testing.T) {
 		FilesChanged: 0,
 	})
 
-	if !strings.Contains(got, "failed") {
+	plain := stripAnsi(got)
+	if !strings.Contains(plain, "failed") {
 		t.Errorf("expected 'failed' in footer, got: %s", got)
 	}
-	if !strings.Contains(got, "1m 12s") {
+	if !strings.Contains(plain, "1m 12s") {
 		t.Errorf("expected '1m 12s' in footer, got: %s", got)
 	}
-	if !strings.Contains(got, "0 files") {
+	if !strings.Contains(plain, "0 files") {
 		t.Errorf("expected '0 files' in footer, got: %s", got)
 	}
-	if !strings.Contains(got, "—") {
+	if !strings.Contains(plain, "—") {
 		t.Errorf("expected '—' for empty commit hash in footer, got: %s", got)
 	}
 }
@@ -146,7 +152,8 @@ func TestRenderFooterSingularFile(t *testing.T) {
 		CommitHash:   "deadbeef",
 	})
 
-	if !strings.Contains(got, "1 file") {
+	plain := stripAnsi(got)
+	if !strings.Contains(plain, "1 file") {
 		t.Errorf("expected '1 file' (singular) in footer, got: %s", got)
 	}
 }
@@ -158,7 +165,8 @@ func TestRenderFooterZeroDuration(t *testing.T) {
 		FilesChanged: 0,
 	})
 
-	if !strings.Contains(got, "0s") {
+	plain := stripAnsi(got)
+	if !strings.Contains(plain, "0s") {
 		t.Errorf("expected '0s' in footer for zero duration, got: %s", got)
 	}
 }
@@ -166,39 +174,43 @@ func TestRenderFooterZeroDuration(t *testing.T) {
 func TestRenderSummary(t *testing.T) {
 	got := RenderSummary(10, 8, 2, 25*time.Minute+10*time.Second)
 
-	if !strings.Contains(got, "Relay complete:") {
+	plain := stripAnsi(got)
+	if !strings.Contains(plain, "Relay complete:") {
 		t.Errorf("expected 'Relay complete:' in summary, got: %s", got)
 	}
-	if !strings.Contains(got, "10 runs") {
+	if !strings.Contains(plain, "10 runs") {
 		t.Errorf("expected '10 runs' in summary, got: %s", got)
 	}
-	if !strings.Contains(got, "8 passed") {
+	if !strings.Contains(plain, "8 passed") {
 		t.Errorf("expected '8 passed' in summary, got: %s", got)
 	}
-	if !strings.Contains(got, "2 failed") {
+	if !strings.Contains(plain, "2 failed") {
 		t.Errorf("expected '2 failed' in summary, got: %s", got)
 	}
-	if !strings.Contains(got, "total 25m 10s") {
+	if !strings.Contains(plain, "total 25m 10s") {
 		t.Errorf("expected 'total 25m 10s' in summary, got: %s", got)
 	}
 	if !strings.Contains(got, "\x1b[") {
-		t.Logf("no ANSI codes found in summary (possible TTY detection); output: %q", got)
+		t.Logf("no ANSI codes found in summary; output: %q", got)
+	}
+	if !strings.Contains(plain, strings.Repeat("═", maxSepWidth)) {
+		t.Errorf("expected full-width separator in summary")
 	}
 }
 
 func TestRenderSummaryEdgeCases(t *testing.T) {
-	// Single run, all pass
 	got := RenderSummary(1, 1, 0, 5*time.Second)
-	if !strings.Contains(got, "1 run") {
+	plain := stripAnsi(got)
+	if !strings.Contains(plain, "1 run") {
 		t.Errorf("expected '1 run' (singular) in summary, got: %s", got)
 	}
 
-	// All fail
 	got = RenderSummary(5, 0, 5, 1*time.Hour+30*time.Minute)
-	if !strings.Contains(got, "0 passed") {
+	plain = stripAnsi(got)
+	if !strings.Contains(plain, "0 passed") {
 		t.Errorf("expected '0 passed' in summary, got: %s", got)
 	}
-	if !strings.Contains(got, "5 failed") {
+	if !strings.Contains(plain, "5 failed") {
 		t.Errorf("expected '5 failed' in summary, got: %s", got)
 	}
 }
@@ -303,5 +315,136 @@ func TestShortcutHintForWidthAlwaysSingleLine(t *testing.T) {
 		if strings.Contains(got, "\n") {
 			t.Fatalf("width=%d: visible text contains newline", w)
 		}
+	}
+}
+
+func TestSeparatorForWidth(t *testing.T) {
+	got := stripAnsi(separatorForWidth(80))
+	if got != strings.Repeat("═", 80) {
+		t.Errorf("separatorForWidth(80) visible width = %d, want 80", len([]rune(got)))
+	}
+
+	got = stripAnsi(separatorForWidth(40))
+	if got != strings.Repeat("═", 40) {
+		t.Errorf("separatorForWidth(40) visible width = %d, want 40", len([]rune(got)))
+	}
+
+	got = stripAnsi(separatorForWidth(1))
+	if got != "═" {
+		t.Errorf("separatorForWidth(1) = %q, want single ═", got)
+	}
+
+	got = stripAnsi(separatorForWidth(0))
+	if got != "═" {
+		t.Errorf("separatorForWidth(0) should clamp to 1, got %q", got)
+	}
+}
+
+func TestSubSeparatorForWidth(t *testing.T) {
+	got := stripAnsi(subSeparatorForWidth(80))
+	if got != strings.Repeat("─", 80) {
+		t.Errorf("subSeparatorForWidth(80) visible width = %d, want 80", len([]rune(got)))
+	}
+
+	got = stripAnsi(subSeparatorForWidth(1))
+	if got != "─" {
+		t.Errorf("subSeparatorForWidth(1) = %q, want single ─", got)
+	}
+}
+
+func TestTruncateToVisible(t *testing.T) {
+	if got := truncateToVisible("hello", 10); got != "hello" {
+		t.Errorf("short string should pass through, got %q", got)
+	}
+	if got := truncateToVisible("hello", 5); got != "hello" {
+		t.Errorf("exact fit should pass through, got %q", got)
+	}
+	if got := truncateToVisible("hello world", 6); got != "hello…" {
+		t.Errorf("overlong should truncate with ellipsis, got %q", got)
+	}
+	if got := truncateToVisible("hello", 1); got != "h" {
+		t.Errorf("single-rune budget should take one rune, got %q", got)
+	}
+	if got := truncateToVisible("hello", 0); got != "" {
+		t.Errorf("zero budget should return empty, got %q", got)
+	}
+	if got := truncateToVisible("héllo wörld", 7); got != "héllo …" {
+		t.Errorf("unicode truncation, got %q", got)
+	}
+}
+
+func TestSepWidthDefaultIs80(t *testing.T) {
+	w := sepWidth()
+	if w != maxSepWidth {
+		t.Errorf("sepWidth() in non-TTY test env = %d, want %d", w, maxSepWidth)
+	}
+}
+
+func TestRenderHeaderLabelTruncationNarrow(t *testing.T) {
+	for _, width := range []int{20, 10, 5, 3} {
+		label := "this is a very long label that should be truncated"
+		truncated := truncateToVisible(label, width-labelIndent)
+		header := separatorForWidth(width) + "\n  " + truncated + "\n" + subSeparatorForWidth(width)
+		plain := stripAnsi(header)
+		lines := strings.Split(plain, "\n")
+		if len(lines) < 1 {
+			t.Errorf("width=%d: no lines in output", width)
+			continue
+		}
+		sepRunes := []rune(lines[0])
+		if len(sepRunes) != width {
+			t.Errorf("width=%d: separator has %d runes, want %d", width, len(sepRunes), width)
+		}
+		if len(lines) < 2 {
+			t.Errorf("width=%d: missing label line", width)
+			continue
+		}
+		labelLine := lines[1]
+		labelRunes := []rune(labelLine)
+		if len(labelRunes) > width {
+			t.Errorf("width=%d: label line has %d runes, exceeds width", width, len(labelRunes))
+		}
+	}
+}
+
+func TestRenderFooterHasSeparators(t *testing.T) {
+	got := RenderFooter(FooterOptions{
+		Passed:       true,
+		Duration:     1 * time.Second,
+		FilesChanged: 0,
+	})
+
+	plain := stripAnsi(got)
+	lines := strings.Split(plain, "\n")
+	if len(lines) != 3 {
+		t.Fatalf("footer should have 3 lines (sub-sep, content, sep), got %d: %q", len(lines), lines)
+	}
+	if !strings.HasPrefix(lines[0], strings.Repeat("─", maxSepWidth)) {
+		t.Errorf("footer first line should be full-width sub-separator, got: %q", lines[0])
+	}
+	if !strings.HasPrefix(lines[2], strings.Repeat("═", maxSepWidth)) {
+		t.Errorf("footer last line should be full-width separator, got: %q", lines[2])
+	}
+	if !strings.Contains(lines[1], "passed") {
+		t.Errorf("footer middle line should contain outcome, got: %q", lines[1])
+	}
+}
+
+func TestRenderSummaryHasSeparators(t *testing.T) {
+	got := RenderSummary(5, 3, 2, 10*time.Minute)
+
+	plain := stripAnsi(got)
+	lines := strings.Split(plain, "\n")
+	if len(lines) != 3 {
+		t.Fatalf("summary should have 3 lines (sep, content, sep), got %d: %q", len(lines), lines)
+	}
+	if !strings.HasPrefix(lines[0], strings.Repeat("═", maxSepWidth)) {
+		t.Errorf("summary first line should be full-width separator, got: %q", lines[0])
+	}
+	if !strings.HasPrefix(lines[2], strings.Repeat("═", maxSepWidth)) {
+		t.Errorf("summary last line should be full-width separator, got: %q", lines[2])
+	}
+	if !strings.Contains(lines[1], "Relay complete:") {
+		t.Errorf("summary middle line should contain content, got: %q", lines[1])
 	}
 }

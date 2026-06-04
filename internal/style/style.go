@@ -63,14 +63,44 @@ var (
 	BoldStyle    = lipgloss.NewStyle().Bold(true)
 )
 
-const separatorWidth = 40
+const maxSepWidth = 80
 
-func separator() string {
-	return lipgloss.NewStyle().Foreground(lipgloss.Color("240")).Render(strings.Repeat("═", separatorWidth))
+const labelIndent = 2
+
+func sepWidth() int {
+	w := terminalWidth()
+	if w > maxSepWidth {
+		return maxSepWidth
+	}
+	return w
 }
 
-func subSeparator() string {
-	return lipgloss.NewStyle().Foreground(lipgloss.Color("240")).Render(strings.Repeat("─", separatorWidth))
+func separatorForWidth(w int) string {
+	if w < 1 {
+		w = 1
+	}
+	return lipgloss.NewStyle().Foreground(lipgloss.Color("240")).Render(strings.Repeat("═", w))
+}
+
+func subSeparatorForWidth(w int) string {
+	if w < 1 {
+		w = 1
+	}
+	return lipgloss.NewStyle().Foreground(lipgloss.Color("240")).Render(strings.Repeat("─", w))
+}
+
+func truncateToVisible(s string, maxRunes int) string {
+	if maxRunes <= 0 {
+		return ""
+	}
+	runes := []rune(s)
+	if len(runes) <= maxRunes {
+		return s
+	}
+	if maxRunes <= 1 {
+		return string(runes[:1])
+	}
+	return string(runes[:maxRunes-1]) + "…"
 }
 
 // HeaderOptions carries parameters for rendering a run header.
@@ -91,6 +121,8 @@ type HeaderOptions struct {
 // attempt number, and start time. When LapsTotal > 0 a `laps: X/Y` line is
 // appended; when Model is set a `model: <model>` line is appended.
 func RenderHeader(opts HeaderOptions) string {
+	w := sepWidth()
+
 	timeStr := opts.StartTime.Local().Format("15:04")
 	var label string
 
@@ -112,15 +144,22 @@ func RenderHeader(opts HeaderOptions) string {
 		}
 	}
 
+	maxLabelW := w - labelIndent
+	if maxLabelW < 1 {
+		maxLabelW = 1
+	}
+	if len([]rune(label)) > maxLabelW {
+		label = truncateToVisible(label, maxLabelW)
+	}
+
 	var sb strings.Builder
-	// Leading newline separates this header from prior output for readability.
 	sb.WriteString("\n")
-	sb.WriteString(separator())
+	sb.WriteString(separatorForWidth(w))
 	sb.WriteString("\n")
 	sb.WriteString("  ")
 	sb.WriteString(label)
 	sb.WriteString("\n")
-	sb.WriteString(subSeparator())
+	sb.WriteString(subSeparatorForWidth(w))
 
 	if opts.LapsTotal > 0 {
 		sb.WriteString("\n  ")
@@ -146,6 +185,8 @@ type FooterOptions struct {
 // RenderFooter renders a try footer with outcome, runtime, files changed count,
 // and commit hash.
 func RenderFooter(opts FooterOptions) string {
+	w := sepWidth()
+
 	var outcomeIcon, outcomeText string
 	var outcomeStyle lipgloss.Style
 
@@ -180,18 +221,32 @@ func RenderFooter(opts FooterOptions) string {
 		extraStr = DimStyle.Render(reason)
 	}
 
-	return fmt.Sprintf("%s  │  %s  │  %s  │  %s", outcome, durStr, filesStr, extraStr)
+	var sb strings.Builder
+	sb.WriteString(subSeparatorForWidth(w))
+	sb.WriteString("\n")
+	sb.WriteString(fmt.Sprintf("%s  │  %s  │  %s  │  %s", outcome, durStr, filesStr, extraStr))
+	sb.WriteString("\n")
+	sb.WriteString(separatorForWidth(w))
+	return sb.String()
 }
 
 // RenderSummary renders a relay summary with total runs, pass/fail counts, and
 // total runtime.
 func RenderSummary(totalRuns, passedCount, failedCount int, totalDuration time.Duration) string {
+	w := sepWidth()
+
 	runsStr := fmt.Sprintf("%d run%s", totalRuns, plural(totalRuns))
 	passedStr := SuccessStyle.Render(fmt.Sprintf("%d passed", passedCount))
 	failedStr := FailureStyle.Render(fmt.Sprintf("%d failed", failedCount))
 	durStr := DimStyle.Render(fmt.Sprintf("total %s", formatDuration(totalDuration)))
 
-	return fmt.Sprintf("Relay complete: %s  │  %s  │  %s  │  %s", runsStr, passedStr, failedStr, durStr)
+	var sb strings.Builder
+	sb.WriteString(separatorForWidth(w))
+	sb.WriteString("\n")
+	sb.WriteString(fmt.Sprintf("Relay complete: %s  │  %s  │  %s  │  %s", runsStr, passedStr, failedStr, durStr))
+	sb.WriteString("\n")
+	sb.WriteString(separatorForWidth(w))
+	return sb.String()
 }
 
 func formatDuration(d time.Duration) string {
