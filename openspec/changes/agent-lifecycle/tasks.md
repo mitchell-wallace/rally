@@ -25,23 +25,23 @@
 
 ## 4. Shortcut label renames
 
-- [ ] 4.1 In `style.shortcutHintTiers` (`internal/style/style.go:29-34`, four tiers indexed 0=full, 1=medium, 2=narrow, 3=minimal — see `style_test.go:365-368`), update labels per tier and re-confirm each still fits its width: tier 0 (full) carries "graceful stop"/"quit now"; tiers 1-2 keep terse "stop"/"quit" (already abbreviated-key, width-constrained); tier 3 has no word labels (`^S·^P·^X·^C`) — unchanged. Coordinate any width regression with `cli-polish` tier widths
-- [ ] 4.2 Update `internal/style/style_test.go` tier-width fixtures/assertions to the new labels and confirm every tier still fits its width
-- [ ] 4.3 Note: the width-aware tier layout already shipped in `cli-polish` — change label text only, do not re-do layout
+- [x] 4.1 In `style.shortcutHintTiers` (`internal/style/style.go:29-34`, four tiers indexed 0=full, 1=medium, 2=narrow, 3=minimal — see `style_test.go:365-368`), update labels per tier and re-confirm each still fits its width: tier 0 (full) carries "graceful stop"/"quit now"; tiers 1-2 keep terse "stop"/"quit" (already abbreviated-key, width-constrained); tier 3 has no word labels (`^S·^P·^X·^C`) — unchanged. Coordinate any width regression with `cli-polish` tier widths
+- [x] 4.2 Update `internal/style/style_test.go` tier-width fixtures/assertions to the new labels and confirm every tier still fits its width
+- [x] 4.3 Note: the width-aware tier layout already shipped in `cli-polish` — change label text only, do not re-do layout
 
 ## 5. Single-runner lane warning (R9)
 
-- [ ] 5.1 Detect single-runner lanes where the per-lane schedulers are built in `internal/relay/route_runtime.go:130-145` (`routing.NewScheduler(resolvedEntries)` per route; a lane with `len(resolvedEntries)==1` has no fallback). Emit a warning to the operator-facing sink (stderr/monitor — pick one and assert it in 5.4) that one dead harness can stall that lane
-- [ ] 5.2 Encourage multi-runner lanes in docs/defaults
-- [ ] 5.3 Confirm the dependency is already satisfied: `harden-relay-run-lifecycle` already classifies infra failures and marks entries `Benched`/`Exhausted`, and the scheduler already rotates off them
-- [ ] 5.4 Tests: single-entry lane warns; multi-entry lane does not
+- [x] 5.1 Detect single-runner lanes where the per-lane schedulers are built in `internal/relay/route_runtime.go:130-145` (`routing.NewScheduler(resolvedEntries)` per route; a lane with `len(resolvedEntries)==1` has no fallback). Emit a warning to the operator-facing sink (stderr/monitor — pick one and assert it in 5.4) that one dead harness can stall that lane
+- [x] 5.2 Encourage multi-runner lanes in docs/defaults
+- [x] 5.3 Confirm the dependency is already satisfied: `harden-relay-run-lifecycle` already classifies infra failures and marks entries `Benched`/`Exhausted`, and the scheduler already rotates off them
+- [x] 5.4 Tests: single-entry lane warns; multi-entry lane does not
 
 ## 6. VERIFY role default boundary (R12/R13)
 
-- [ ] 6.1 Confirm/align the embedded default role doc `internal/agent_prompt/roles/verify.md` (the authoritative source; `.rally/agents/verify.md` is the installed copy): reporting-focused, trivial clearly-correct fixes allowed, substantial gaps become a new head lap. It already states this — reconcile the spec language to it, do not remove the small-fix allowance
-- [ ] 6.2 Keep `internal/agent_prompt/roles/verify.md` OpenSpec-agnostic — no "mark off tasks.md" in rally core or the default doc
-- [ ] 6.3 Confirm the OpenSpec-specific `tasks.md` behavior is injected per-lap by `prepare-laps` only for laps with a related change (no separate sync mechanism)
-- [ ] 6.4 Cross-check against the boundary rules in `AGENTS.md`
+- [x] 6.1 Confirm/align the embedded default role doc `internal/agent_prompt/roles/verify.md` (the authoritative source; `.rally/agents/verify.md` is the installed copy): reporting-focused, trivial clearly-correct fixes allowed, substantial gaps become a new head lap. It already states this — reconcile the spec language to it, do not remove the small-fix allowance
+- [x] 6.2 Keep `internal/agent_prompt/roles/verify.md` OpenSpec-agnostic — no "mark off tasks.md" in rally core or the default doc
+- [x] 6.3 Confirm the OpenSpec-specific `tasks.md` behavior is injected per-lap by `prepare-laps` only for laps with a related change (no separate sync mechanism)
+- [x] 6.4 Cross-check against the boundary rules in `AGENTS.md`
 
 ## 7. Docs & coordination
 
