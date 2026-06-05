@@ -1,9 +1,9 @@
 ## 1. Graceful subprocess shutdown (unified on SIGINT)
 
-- [ ] 1.1 In `SetProcessGroup` (`internal/agent/exec.go`), set `Cmd.Cancel` to send SIGINT to the process group (`syscall.Kill(-pid, SIGINT)`) and `Cmd.WaitDelay = 5s`
-- [ ] 1.2 Confirm all executors route through `SetProcessGroup` so the change applies uniformly (claude, antigravity, gemini, opencode, codex, generic)
-- [ ] 1.3 Switch the stall killer's `signalTerminate` mapping from SIGTERM to SIGINT in `internal/reliability/freeze_unix.go:14` (grep all build-tag variants of `sendProcessGroupSignal` first — today only `freeze_unix.go` maps it; `freeze_windows.go` is an unsupported stub — so a future non-unix variant isn't missed)
-- [ ] 1.4 Re-validate `internal/reliability/stall_test.go` signal-sequence assertions still hold (they assert the abstract `signalTerminate`→`signalKill` enums at `:171,:204`, not the OS signal; only the mapping changes)
+- [x] 1.1 In `SetProcessGroup` (`internal/agent/exec.go`), set `Cmd.Cancel` to send SIGINT to the process group (`syscall.Kill(-pid, SIGINT)`) and `Cmd.WaitDelay = 5s`
+- [x] 1.2 Confirm all executors route through `SetProcessGroup` so the change applies uniformly (claude, antigravity, gemini, opencode, codex, generic)
+- [x] 1.3 Switch the stall killer's `signalTerminate` mapping from SIGTERM to SIGINT in `internal/reliability/freeze_unix.go:14` (grep all build-tag variants of `sendProcessGroupSignal` first — today only `freeze_unix.go` maps it; `freeze_windows.go` is an unsupported stub — so a future non-unix variant isn't missed)
+- [x] 1.4 Re-validate `internal/reliability/stall_test.go` signal-sequence assertions still hold (they assert the abstract `signalTerminate`→`signalKill` enums at `:171,:204`, not the OS signal; only the mapping changes)
 - [ ] 1.5 Tests: cancel sends SIGINT to the **process group** (negative PID, `-pid`) — not just the leader — then escalates to SIGKILL after `WaitDelay`. Pin the group-reach win: today's default `CommandContext` cancel SIGKILLs only `cmd.Process`, so the test must assert group targeting, not merely SIGINT-vs-SIGKILL
 
 ## 2. Responsive stop / quit

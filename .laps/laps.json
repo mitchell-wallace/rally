@@ -248,10 +248,32 @@
       "title": "Graceful subprocess shutdown unified on SIGINT",
       "description": "Context: openspec/changes/agent-lifecycle (proposal §1, design Decision 1, tasks 1.1-1.5). Cancellation today flows through exec.CommandContext, which SIGKILLs only the leader PID with no grace window; the stall killer already drains but on SIGTERM. Unify both kill paths on SIGINT-to-the-process-group.\n\nOutcome: cancelling an attempt sends SIGINT to the whole process group and escalates to SIGKILL only after a bounded WaitDelay; the stall detector uses the same signal.\n\nFiles \u0026 scope: internal/agent/exec.go (SetProcessGroup: add Cmd.Cancel = syscall.Kill(-cmd.Process.Pid, SIGINT) and Cmd.WaitDelay = 5s); internal/reliability/freeze_unix.go:14 (map signalTerminate to SIGINT, not SIGTERM). Do not touch runner.go action handling here (that is the next lap). Grep all build-tag variants of sendProcessGroupSignal first — today only freeze_unix.go maps it; freeze_windows.go is an unsupported stub.\n\nDesign: keep the 5s drain consistent between the cancel path (WaitDelay) and the stall killer (processGroupKiller.drain). All executors already call SetProcessGroup, so this applies uniformly — confirm claude/antigravity/gemini/opencode/codex/generic.\n\nAcceptance: a test asserts cancel signals the process GROUP (negative PID, -pid) with SIGINT, then SIGKILL after WaitDelay when the child ignores SIGINT — pin the group-reach win, not merely SIGINT-vs-SIGKILL. Existing internal/reliability/stall_test.go signal-sequence assertions (abstract signalTerminate then signalKill enums at :171,:204) still pass unchanged. go build ./... and go test ./internal/agent/... ./internal/reliability/... green. Do not tick tasks.md.",
       "assignee": "SENIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 65536,
       "createdAt": "2026-06-05T00:27:20.307807313Z",
-      "updatedAt": "2026-06-05T00:27:20.307807313Z",
+      "updatedAt": "2026-06-05T03:34:17.842635844Z",
+      "completedAt": "2026-06-05T03:34:17.842635844Z"
+    },
+    {
+      "id": "work-636e",
+      "title": "Cancel path must SIGKILL the process group after grace window",
+      "description": "OpenSpec change agent-lifecycle, graceful-shutdown slice follow-up from VERIFY. Current SetProcessGroup uses Cmd.Cancel=SIGINT to -pid plus Cmd.WaitDelay=5s, but Go's os/exec WaitDelay escalation only calls os.Process.Kill() on the leader and then closes parent pipes; it does NOT send SIGKILL to the process group. That leaves a spec gap versus graceful subprocess shutdown if a non-leader child ignores SIGINT, and the current exec_unix_test only proves group SIGINT reach + leader SIGKILL.\n\nOutcome: make the cancel path escalate to SIGKILL for the whole process group after the 5s grace window, not just cmd.Process, while preserving the existing SIGINT-first behavior and bounded shutdown. Reuse a shared helper if it keeps the path coherent with internal/reliability/processGroupKiller. Handle already-exited groups cleanly (ESRCH should not surface as a spurious cancel error).\n\nTests: add a regression where both leader and inherited non-leader child ignore SIGINT; after the grace window both must be gone (no orphan child/process-group survivor). Keep the existing group-reach assertion too. Run go test ./internal/agent/... ./internal/reliability/.... Do not tick tasks.md; VERIFY will re-check.",
+      "assignee": "SENIOR",
+      "isDone": false,
+      "order": 65536,
+      "createdAt": "2026-06-05T03:39:23.437248683Z",
+      "updatedAt": "2026-06-05T03:39:23.437248683Z",
+      "completedAt": null
+    },
+    {
+      "id": "work-8253",
+      "title": "Verify cancel escalation kills the whole process group",
+      "description": "Follow-up VERIFY lap for agent-lifecycle graceful-shutdown tasks 1.1-1.5 after the cancel-path escalation fix lands.\n\nReview depth: diff from the pre-fix baseline, read the actual kill path, and confirm the post-grace escalation is sent to the process group (not just cmd.Process). Re-run go test ./internal/agent/... ./internal/reliability/.... Verify the stubborn-child regression proves no orphaned non-leader child survives after WaitDelay, and only then check off task 1.5 (and any other still-unchecked graceful-shutdown tasks that are now fully verified).",
+      "assignee": "VERIFY",
+      "isDone": false,
+      "order": 98304,
+      "createdAt": "2026-06-05T03:39:28.797046202Z",
+      "updatedAt": "2026-06-05T03:39:28.797046202Z",
       "completedAt": null
     },
     {
@@ -259,11 +281,11 @@
       "title": "Verify graceful shutdown + SIGINT unification",
       "description": "Use the openspec-verify-change skill against agent-lifecycle, focused on the graceful-shutdown phase (tasks 1.1-1.5, spec 'Graceful subprocess shutdown').\n\nIdentify the intended merge target before diffing (ask the user / PR metadata / branch config / recent history — do not assume main), then diff \u003ctarget\u003e...HEAD. Treat commits before the first lap of this batch as pre-existing baseline.\n\nReview depth: confirm Cmd.Cancel actually targets the negative PID (group), that WaitDelay is set, that freeze_unix.go now maps to SIGINT, and that no other build-tag variant of the signal mapping was missed. Trace that every executor still routes through SetProcessGroup. Run go test ./internal/agent/... ./internal/reliability/.... Do not just trust green tests — read the kill path.\n\nCheck off the tasks.md boxes for 1.1-1.5 only for work you verified correct and thorough. Create a head lap (laps add head) for any substantive gap rather than fixing it here; only tiny safe one-liners may be fixed inline. Do not rewrite git history.",
       "assignee": "VERIFY",
-      "isDone": false,
+      "isDone": true,
       "order": 131072,
       "createdAt": "2026-06-05T00:27:20.307825443Z",
-      "updatedAt": "2026-06-05T00:27:20.307825443Z",
-      "completedAt": null
+      "updatedAt": "2026-06-05T03:41:46Z",
+      "completedAt": "2026-06-05T03:41:46Z"
     },
     {
       "id": "rall-772e",
