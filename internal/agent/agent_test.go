@@ -1588,3 +1588,78 @@ printf '%%s\n' '{"type":"text","part":{"type":"text","text":"%s"}}'
 		t.Errorf("opencode args should not contain --session when ResumeSessionID is empty, got:\n%s", string(argsData))
 	}
 }
+
+func TestCodexExecutor_ResumeFlagInArgs(t *testing.T) {
+	binDir, argsPath := testMockBinDir(t, "codex")
+	scriptPath := filepath.Join(binDir, "codex")
+	script := fmt.Sprintf(`#!/bin/sh
+printf '%%s\n' "$@" > %q
+printf '%%s\n' '{"type":"thread.started","thread_id":"codex-mock-sess"}'
+printf '%%s\n' '{"type":"item.completed","item":{"id":"item_0","type":"agent_message","text":"ok"}}'
+next=0
+for i in "$@"; do
+  if [ "$next" = "1" ]; then printf '{"completed":true,"summary":"codex ok"}' > "$i"; break; fi
+  if [ "$i" = "-o" ]; then next=1; fi
+done
+`, argsPath)
+	if err := os.WriteFile(scriptPath, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	exec := &CodexExecutor{}
+	res, err := exec.Execute(context.Background(), RunOptions{
+		Prompt:          "do work",
+		ResumeSessionID: "sess-resume-77",
+	})
+	if err != nil {
+		t.Fatalf("Execute failed: %v", err)
+	}
+	if !res.Completed {
+		t.Error("expected completed")
+	}
+
+	argsData, err := os.ReadFile(argsPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	args := string(argsData)
+	if !strings.Contains(args, "resume") || !strings.Contains(args, "sess-resume-77") {
+		t.Errorf("codex args missing resume sess-resume-77, got:\n%s", args)
+	}
+}
+
+func TestCodexExecutor_NoResumeFlagWhenSessionIDEmpty(t *testing.T) {
+	binDir, argsPath := testMockBinDir(t, "codex")
+	scriptPath := filepath.Join(binDir, "codex")
+	script := fmt.Sprintf(`#!/bin/sh
+printf '%%s\n' "$@" > %q
+printf '%%s\n' '{"type":"thread.started","thread_id":"codex-mock-sess"}'
+printf '%%s\n' '{"type":"item.completed","item":{"id":"item_0","type":"agent_message","text":"ok"}}'
+next=0
+for i in "$@"; do
+  if [ "$next" = "1" ]; then printf '{"completed":true,"summary":"codex ok"}' > "$i"; break; fi
+  if [ "$i" = "-o" ]; then next=1; fi
+done
+`, argsPath)
+	if err := os.WriteFile(scriptPath, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	exec := &CodexExecutor{}
+	_, err := exec.Execute(context.Background(), RunOptions{
+		Prompt: "do work",
+	})
+	if err != nil {
+		t.Fatalf("Execute failed: %v", err)
+	}
+
+	argsData, err := os.ReadFile(argsPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(argsData), "resume") {
+		t.Errorf("codex args should not contain resume when ResumeSessionID is empty, got:\n%s", string(argsData))
+	}
+}

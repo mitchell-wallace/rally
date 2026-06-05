@@ -174,6 +174,9 @@ func (c *CodexExecutor) Execute(ctx context.Context, opts RunOptions) (*TryResul
 	if model != "" {
 		args = append(args, "--model", model)
 	}
+	if opts.ResumeSessionID != "" {
+		args = append(args, "resume", opts.ResumeSessionID)
+	}
 	args = append(args, "--output-schema", schemaPath, "-o", reportPath, prompt)
 
 	cmd := exec.CommandContext(ctx, "codex", args...)
