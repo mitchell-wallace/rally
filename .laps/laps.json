@@ -343,6 +343,17 @@
       "completedAt": "2026-06-05T04:41:46.393744425Z"
     },
     {
+      "id": "work-1395",
+      "title": "Verify responsive stop/quit behavior (recovery)",
+      "description": "Queue-state recovery lap inserted because .rally/state/current_task.md still points at the already-completed stop/quit verify prompt while the real queue head has advanced to rall-37e0. Use this lap only to record the re-verification without consuming the unrelated resume-tests head task.",
+      "assignee": "VERIFY",
+      "isDone": true,
+      "order": 393216,
+      "createdAt": "2026-06-05T05:01:35.728268355Z",
+      "updatedAt": "2026-06-05T05:01:38.495083313Z",
+      "completedAt": "2026-06-05T05:01:38.495083313Z"
+    },
+    {
       "id": "rall-37e0",
       "title": "Resume contract + regression tests",
       "description": "Context: tasks 3.5-3.6, spec scenarios under 'Pause-now and honest session resume'.\n\nOutcome: tests that lock in honest resume across harnesses and guard the already-working pause/resume policy.\n\nFiles \u0026 scope: internal/agent/*_test.go for the contract test; internal/relay for the regression tests (follow existing test patterns; use the fixture executor where helpful).\n\nAcceptance: (1) Contract test — for every executor, ResumeSupported()==true implies the built command args contain that harness's resume flag when ResumeSessionID is set (claude --resume, antigravity --conversation=, gemini/opencode/codex per their wired flag); executors reporting false are exempt. (2) Regression tests — pause captures the session ID into run-state; the next attempt reuses it; an explicit skip starts fresh; a FreshRestart strategy starts fresh. go test ./internal/agent/... ./internal/relay/... green. Do not tick tasks.md.",
