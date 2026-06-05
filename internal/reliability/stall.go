@@ -17,6 +17,11 @@ const (
 	DefaultStallTick      = 5 * time.Second
 	defaultKillDrain      = 5 * time.Second
 	defaultKillPoll       = 100 * time.Millisecond
+	// GracefulShutdownGrace is the drain window shared by the stall killer and
+	// the agent cancel path: how long a process group has to exit after SIGINT
+	// before SIGKILL escalation. Exported so the agent's Cmd.WaitDelay backstop
+	// stays aligned with the killer's drain.
+	GracefulShutdownGrace = defaultKillDrain
 	// NetworkSilentThreshold is how long an agent may hold open TCP connections
 	// without any syscall I/O (rchar+wchar) before it is declared stalled.
 	// This catches rate-limited agents that keep a connection alive but send no data.
@@ -156,17 +161,10 @@ func NewStallControllerFull(logPath string, threshold time.Duration, probe *Live
 		logPath:      logPath,
 		netStatsPath: netStatsPath,
 		detector:     NewDetector(threshold),
-		killer: processGroupKiller{
-			drain:     defaultKillDrain,
-			poll:      defaultKillPoll,
-			now:       time.Now,
-			sleep:     time.Sleep,
-			send:      sendProcessGroupSignal,
-			isRunning: processGroupRunning,
-		},
-		now:      time.Now,
-		platform: runtime.GOOS,
-		probe:    probe,
+		killer:       defaultProcessGroupKiller(),
+		now:          time.Now,
+		platform:     runtime.GOOS,
+		probe:        probe,
 	}
 }
 
@@ -293,6 +291,32 @@ type processGroupKiller struct {
 	sleep     func(time.Duration)
 	send      func(int, processSignal) error
 	isRunning func(int) (bool, error)
+}
+
+// defaultProcessGroupKiller builds the production killer wired to the real
+// signal/liveness syscalls and the standard drain window. Both the stall
+// controller and the agent cancel path use it so process-group shutdown
+// escalates identically (SIGINT, then SIGKILL after the drain) everywhere.
+func defaultProcessGroupKiller() processGroupKiller {
+	return processGroupKiller{
+		drain:     defaultKillDrain,
+		poll:      defaultKillPoll,
+		now:       time.Now,
+		sleep:     time.Sleep,
+		send:      sendProcessGroupSignal,
+		isRunning: processGroupRunning,
+	}
+}
+
+// KillProcessGroup performs a bounded, graceful shutdown of the process group
+// led by pgid: it sends SIGINT to the whole group, waits up to the drain window
+// for every member to exit, then escalates to SIGKILL for any survivors. A
+// group that has already exited (ESRCH) is treated as success rather than an
+// error. The grace window itself bounds the call, so callers on the cancel path
+// — where the parent context is already cancelled — should pass a fresh context
+// (e.g. context.Background()) to avoid short-circuiting the escalation.
+func KillProcessGroup(ctx context.Context, pgid int) error {
+	return defaultProcessGroupKiller().Kill(ctx, pgid)
 }
 
 func (k processGroupKiller) Kill(ctx context.Context, pgid int) error {

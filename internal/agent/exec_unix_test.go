@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"strconv"
 	"syscall"
 	"testing"
 	"time"
@@ -33,6 +34,8 @@ func TestHelperGroupLeader(t *testing.T) {
 		"RALLY_GROUP_HELPER=child",
 		"RALLY_CHILD_INT_FILE="+os.Getenv("RALLY_CHILD_INT_FILE"),
 		"RALLY_CHILD_READY_FILE="+os.Getenv("RALLY_CHILD_READY_FILE"),
+		"RALLY_CHILD_PID_FILE="+os.Getenv("RALLY_CHILD_PID_FILE"),
+		"RALLY_CHILD_IGNORE_INT="+os.Getenv("RALLY_CHILD_IGNORE_INT"),
 	)
 	// No Setpgid: the child inherits the leader's process group, so a
 	// negative-PID signal must reach it for the group-reach assertion to hold.
@@ -54,6 +57,19 @@ func TestHelperGroupLeader(t *testing.T) {
 func TestHelperGroupChild(t *testing.T) {
 	if os.Getenv("RALLY_GROUP_HELPER") != "child" {
 		return
+	}
+	if pidFile := os.Getenv("RALLY_CHILD_PID_FILE"); pidFile != "" {
+		_ = os.WriteFile(pidFile, []byte(strconv.Itoa(os.Getpid())), 0o644)
+	}
+	if os.Getenv("RALLY_CHILD_IGNORE_INT") == "1" {
+		// Ignore SIGINT so only the group-wide SIGKILL escalation can reap this
+		// non-leader child. Go's WaitDelay would SIGKILL only the leader, so a
+		// surviving child here proves the cancel path failed to kill the group.
+		signal.Ignore(syscall.SIGINT)
+		_ = os.WriteFile(os.Getenv("RALLY_CHILD_READY_FILE"), []byte("1"), 0o644)
+		for {
+			time.Sleep(time.Hour)
+		}
 	}
 	ch := make(chan os.Signal, 1)
 	signal.Notify(ch, syscall.SIGINT)
