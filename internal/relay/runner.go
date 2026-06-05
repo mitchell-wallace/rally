@@ -926,6 +926,7 @@ attemptLoop:
 		var execErr error
 		actionTaken := false
 		stallTriggered := false
+		attemptPGID := 0
 		stallTicker := time.NewTicker(stallCheckInterval)
 	actionLoop:
 		for {
@@ -935,6 +936,7 @@ attemptLoop:
 				execErr = res.err
 				break actionLoop
 			case pid := <-pidCh:
+				attemptPGID = pid
 				mon.SetProcessGroupID(pid)
 				if stallController != nil {
 					stallController.SetProcessGroupID(pid)
@@ -975,8 +977,48 @@ attemptLoop:
 					result = res.result
 					execErr = res.err
 					break actionLoop
-				case keyboard.ActionStop, keyboard.ActionQuit:
+				case keyboard.ActionStop:
+					// Graceful stop (Ctrl+X): let the current try finish, then
+					// stop the relay. The outer loop sees stopFlag and launches
+					// no further runs. For a frozen agent this is bounded by the
+					// stall detector.
 					r.stopFlag.Store(true)
+				case keyboard.ActionQuit:
+					// Quit now (Ctrl+C): cancel the running try immediately and
+					// abort the relay. cancelAttempt fires Cmd.Cancel, which sends
+					// SIGINT to the process group then escalates to a group-wide
+					// SIGKILL after the grace window. Mirror the pause/skip drain
+					// of tryCh, but keep selecting on actionCh so a second Ctrl+C
+					// within the grace window forces an immediate SIGKILL rather
+					// than waiting it out. The "stopping…" monitor indicator keeps
+					// the UI from looking frozen during the drain.
+					r.stopFlag.Store(true)
+					cancelAttempt()
+					mon.SetStopping(true)
+					actionTaken = true
+				drainLoop:
+					for {
+						select {
+						case res := <-tryCh:
+							result = res.result
+							execErr = res.err
+							break drainLoop
+						case pid := <-pidCh:
+							// A late OnStart can land here if the try hadn't
+							// reported its pid yet; capture it so a second quit
+							// can target the right group.
+							attemptPGID = pid
+						case a := <-actionCh:
+							// Second quit-now: escalate past the grace window.
+							// SIGKILL is idempotent (a re-signalled or already
+							// exited group resolves to nil), so this cannot race
+							// the WaitDelay/Cmd.Cancel escalation into an error.
+							if a == keyboard.ActionQuit && attemptPGID > 0 {
+								_ = reliability.ForceKillProcessGroup(attemptPGID)
+							}
+						}
+					}
+					break actionLoop
 				}
 			}
 		}

@@ -319,6 +319,19 @@ func KillProcessGroup(ctx context.Context, pgid int) error {
 	return defaultProcessGroupKiller().Kill(ctx, pgid)
 }
 
+// ForceKillProcessGroup immediately sends SIGKILL to the whole process group
+// led by pgid, skipping the SIGINT + grace-window escalation that
+// KillProcessGroup performs. It is the escalation path for a second "quit now"
+// shortcut: the operator has already asked once and does not want to wait out
+// the remaining grace window. A group that has already exited (ESRCH) is
+// treated as success, so a double escalation does not surface a spurious error.
+func ForceKillProcessGroup(pgid int) error {
+	if pgid <= 0 {
+		return fmt.Errorf("invalid process group id %d", pgid)
+	}
+	return sendProcessGroupSignal(pgid, signalKill)
+}
+
 func (k processGroupKiller) Kill(ctx context.Context, pgid int) error {
 	if pgid <= 0 {
 		return fmt.Errorf("invalid process group id %d", pgid)

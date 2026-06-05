@@ -361,6 +361,7 @@ type Monitor struct {
 	// Reliability state
 	stallThreshold time.Duration // 0 = slowing detection disabled
 	stalled        bool
+	stopping       bool
 	recovered      bool
 	recoveredTicks int // counts steady ticks after recovery; clears indicator
 
@@ -451,8 +452,12 @@ func (m *Monitor) computeIndicators(lastActivity time.Duration) Indicators {
 
 	ind.Retry = m.retry
 
-	// Reliability indicator priority: stalled > recovered > slowing
-	if m.stalled {
+	// Reliability indicator priority: stopping > stalled > recovered > slowing.
+	// "stopping…" wins so a quit-now cancel drain never looks frozen, even if
+	// the try was already flagged stalled when the operator pressed Ctrl+C.
+	if m.stopping {
+		ind.Reliability = "■ stopping…"
+	} else if m.stalled {
 		ind.Reliability = "❄ stalled"
 	} else if m.recovered {
 		m.recoveredTicks++
@@ -540,6 +545,15 @@ func (m *Monitor) SetRetry(attempt, maxAttempts int) {
 func (m *Monitor) SetStalled(v bool) {
 	m.mu.Lock()
 	m.stalled = v
+	m.mu.Unlock()
+}
+
+// SetStopping marks the active try as being cancelled by a quit-now shortcut,
+// surfacing a "stopping…" indicator so the cancel drain never looks frozen. It
+// takes priority over the stalled indicator.
+func (m *Monitor) SetStopping(v bool) {
+	m.mu.Lock()
+	m.stopping = v
 	m.mu.Unlock()
 }
 
