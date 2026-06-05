@@ -11,7 +11,10 @@ func sendProcessGroupSignal(pgid int, sig processSignal) error {
 	var signal syscall.Signal
 	switch sig {
 	case signalTerminate:
-		signal = syscall.SIGTERM
+		// SIGINT (not SIGTERM) so the stall killer uses the same signal as the
+		// cancel path (internal/agent/exec.go SetProcessGroup), giving harnesses
+		// a consistent graceful-shutdown signal across both kill paths.
+		signal = syscall.SIGINT
 	case signalKill:
 		signal = syscall.SIGKILL
 	default:
