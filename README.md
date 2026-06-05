@@ -52,9 +52,19 @@ rally tail              # latest try
 rally tail --try 3      # specific try by id
 ```
 
-If you Ctrl-C, Rally finishes the current try cleanly and exits. The next
-`rally start` from the same workspace asks whether to resume the unfinished
-relay or start fresh; `--resume` and `--new` skip the prompt.
+All shortcuts require a **double-press** within a 4-second confirm window;
+a single press intentionally does nothing. The shortcut legend adapts to
+terminal width.
+
+| Shortcut | Action | Behaviour |
+|----------|--------|-----------|
+| Ctrl+X | Graceful stop | Sets a stop flag. The current try runs to completion, then the relay halts without launching further runs. |
+| Ctrl+C | Quit now | Cancels the active try immediately (SIGINT to the process group, 5-second drain, then SIGKILL). A second Ctrl+C during the drain window escalates to an immediate SIGKILL. |
+| Ctrl+P | Pause | Cancels the active try and prints "Paused — press Enter to resume". Pressing Enter resumes with session reuse. |
+| Ctrl+S | Skip | Skips the current agent and advances to the next route entry. |
+
+The next `rally start` from the same workspace asks whether to resume the
+unfinished relay or start fresh; `--resume` and `--new` skip the prompt.
 
 ## How a Rally loop works
 
@@ -77,6 +87,38 @@ Each iteration of `rally start` does this:
 If the agent stalls, Rally graceful-kills it, classifies the failure, and
 either retries via session resume or advances to the next route entry. See
 the `[reliability]` section for tunables.
+
+### Graceful stop vs quit now
+
+The two stop shortcuts differ in how aggressively they terminate the relay:
+
+- **Ctrl+X (graceful stop):** arms on first double-press, sets a stop flag
+  but does **not** cancel the running attempt. The current try finishes
+  naturally (bounded by the stall detector), then the relay exits without
+  starting further runs. Use this when you want the agent to wrap up its
+  work cleanly.
+
+- **Ctrl+C (quit now):** arms on first double-press, immediately cancels
+  the running attempt's context. The harness sends SIGINT to the agent's
+  process group, waits up to 5 seconds for a clean exit, then SIGKILL any
+  survivors. A second Ctrl+C during the drain window skips the grace period
+  entirely and force-kills the group. Use this when the agent is stuck or
+  you need to stop immediately.
+
+### Pause and resume
+
+Ctrl+P cancels the current try and pauses the relay. Rally prints
+"Paused — press Enter to resume" and blocks until you press Enter. On
+resume, Rally reuses the agent's session when the harness supports it,
+so the agent continues in context rather than starting from scratch.
+
+### Double-press confirm window
+
+Each shortcut key requires two presses of the **same** key within a
+4-second window. The first press arms the action silently; the second
+press fires it. Pressing a different shortcut key starts a new arm cycle
+for that key instead. This prevents accidental triggers from a single
+keypress.
 
 ### Git and commit conventions
 
