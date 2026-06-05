@@ -27,7 +27,7 @@ func PrintLine(w io.Writer, s string) {
 var shortcutHintStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("245"))
 
 var shortcutHintTiers = []string{
-	"[Ctrl+S skip] [Ctrl+P pause] [Ctrl+X stop] [Ctrl+C quit]",
+	"[Ctrl+S skip] [Ctrl+P pause] [Ctrl+X graceful stop] [Ctrl+C quit now]",
 	"[^S skip] [^P pause] [^X stop] [^C quit]",
 	"^S skip · ^P pause · ^X stop · ^C quit",
 	"^S·^P·^X·^C",
