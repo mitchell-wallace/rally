@@ -391,11 +391,11 @@
       "title": "Add contract + regression tests for resume wiring (tasks 3.5, 3.6)",
       "description": "Task 3.5: For every executor where ResumeSupported()==true, assert the built command args contain the resume flag when ResumeSessionID is set. Already verified: claude, antigravity, opencode. Codex will be covered after work-ae43. Task 3.6: Add explicit pause-captures-session-ID, resume-reuses-on-next-attempt, explicit-skip-starts-fresh tests. Existing TestResumeRetryPassesSessionID and TestFreshStartRetryClearsRunState cover retry flows already.",
       "assignee": "junior",
-      "isDone": false,
+      "isDone": true,
       "order": 491520,
       "createdAt": "2026-06-05T05:54:21.153721489Z",
-      "updatedAt": "2026-06-05T05:54:21.153721489Z",
-      "completedAt": null
+      "updatedAt": "2026-06-05T06:37:19.755515197Z",
+      "completedAt": "2026-06-05T06:37:19.755515197Z"
     },
     {
       "id": "work-0898",
