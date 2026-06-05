@@ -358,11 +358,11 @@
       "title": "Resume contract + regression tests",
       "description": "Context: tasks 3.5-3.6, spec scenarios under 'Pause-now and honest session resume'.\n\nOutcome: tests that lock in honest resume across harnesses and guard the already-working pause/resume policy.\n\nFiles \u0026 scope: internal/agent/*_test.go for the contract test; internal/relay for the regression tests (follow existing test patterns; use the fixture executor where helpful).\n\nAcceptance: (1) Contract test — for every executor, ResumeSupported()==true implies the built command args contain that harness's resume flag when ResumeSessionID is set (claude --resume, antigravity --conversation=, gemini/opencode/codex per their wired flag); executors reporting false are exempt. (2) Regression tests — pause captures the session ID into run-state; the next attempt reuses it; an explicit skip starts fresh; a FreshRestart strategy starts fresh. go test ./internal/agent/... ./internal/relay/... green. Do not tick tasks.md.",
       "assignee": "JUNIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 458752,
       "createdAt": "2026-06-05T00:27:20.307835322Z",
-      "updatedAt": "2026-06-05T00:27:20.307835322Z",
-      "completedAt": null
+      "updatedAt": "2026-06-05T05:18:03.992280706Z",
+      "completedAt": "2026-06-05T05:18:03.992280706Z"
     },
     {
       "id": "rall-0f7b",
