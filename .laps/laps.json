@@ -336,11 +336,11 @@
       "title": "Wire honest session resume for gemini, opencode, codex",
       "description": "Context: design Decision 3 + the resume matrix table, tasks 3.1-3.4, spec 'Pause-now and honest session resume'. claude (--resume, claude.go:49) and antigravity (--conversation=, antigravity.go:80) wire the session correctly. gemini (gemini.go:54), opencode (opencode.go:60), and codex's main Execute (codex.go:173) return ResumeSupported()=true but never pass opts.ResumeSessionID — resume silently no-ops.\n\nOutcome: a ResumeSupported()==true harness always passes its resume flag when ResumeSessionID is set, or honestly reports false.\n\nFiles \u0026 scope: internal/agent/gemini.go, opencode.go, codex.go. For each, confirm the CLI's real resume invocation against its --help, then append the resume flag when opts.ResumeSessionID != \"\"; codex should use 'exec resume \u003csessionID\u003e' (the form already used by its liveness probe at codex.go:125-134) instead of a fresh 'exec'. If a CLI's resume cannot be verified, set that executor's ResumeSupported() to false instead of guessing a flag. Do NOT change the runner-side policy.\n\nDesign: preserve existing behavior — resume fires on any retry with a tracked session (runner.go:791-822) and FreshRestart clears it (runner.go:1157-1160); do not add a 'meaningful progress' heuristic. On resume failure, keep the existing degrade-to-fresh-try (do not error the run).\n\nAcceptance: go build ./... green; tests in the next lap pin the contract. Do not tick tasks.md.",
       "assignee": "SENIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 393216,
       "createdAt": "2026-06-05T00:27:20.307833526Z",
-      "updatedAt": "2026-06-05T00:27:20.307833526Z",
-      "completedAt": null
+      "updatedAt": "2026-06-05T04:41:46.393744425Z",
+      "completedAt": "2026-06-05T04:41:46.393744425Z"
     },
     {
       "id": "rall-37e0",
