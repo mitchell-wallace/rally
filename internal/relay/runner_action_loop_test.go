@@ -279,3 +279,114 @@ func TestActionLoopSecondQuitForceKills(t *testing.T) {
 		t.Errorf("expected force-kill of pgid %d, got %d", pgid, atomic.LoadInt32(&killed))
 	}
 }
+
+// TestActionLoopPauseCapturesSessionID verifies that ActionPause cancels the
+// running attempt and returns the result with its SessionID intact, so the
+// outer runOneRun code can propagate it to the next attempt.
+func TestActionLoopPauseCapturesSessionID(t *testing.T) {
+	r := &Runner{}
+	tryCh := make(chan tryResult, 1)
+	actionCh := make(chan keyboard.Action, 1)
+	attemptCtx, cancelAttempt := context.WithCancel(context.Background())
+	defer cancelAttempt()
+
+	go func() {
+		<-attemptCtx.Done()
+		tryCh <- tryResult{
+			result: &agent.TryResult{
+				Completed: false,
+				Summary:   "paused mid-work",
+				SessionID: "sess-pause-capture",
+			},
+			err: attemptCtx.Err(),
+		}
+	}()
+
+	actionCh <- keyboard.ActionPause
+	done := runLoopAsync(r, actionLoopDeps{
+		tryCh:         tryCh,
+		pidCh:         make(chan int, 1),
+		actionCh:      actionCh,
+		stallTick:     neverTick(),
+		attemptCtx:    attemptCtx,
+		cancelAttempt: cancelAttempt,
+		mon:           &fakeMonitor{},
+		log:           io.Discard,
+	})
+
+	var out actionLoopResult
+	select {
+	case out = <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("action loop did not return promptly on ActionPause")
+	}
+
+	if !out.actionTaken {
+		t.Error("expected actionTaken=true for pause")
+	}
+	if out.result == nil {
+		t.Fatal("expected result returned from pause")
+	}
+	if out.result.SessionID != "sess-pause-capture" {
+		t.Errorf("SessionID = %q, want %q", out.result.SessionID, "sess-pause-capture")
+	}
+	if attemptCtx.Err() == nil {
+		t.Error("expected the attempt context to be cancelled")
+	}
+}
+
+// TestActionLoopSkipReturnsResultAndSetsFlag verifies that ActionSkip sets the
+// skip flag and returns the attempt result. The outer runOneRun code checks
+// skipFlag after actionTaken and returns without propagating session ID, so
+// the next run starts fresh.
+func TestActionLoopSkipReturnsResultAndSetsFlag(t *testing.T) {
+	r := &Runner{}
+	tryCh := make(chan tryResult, 1)
+	actionCh := make(chan keyboard.Action, 1)
+	attemptCtx, cancelAttempt := context.WithCancel(context.Background())
+	defer cancelAttempt()
+
+	go func() {
+		<-attemptCtx.Done()
+		tryCh <- tryResult{
+			result: &agent.TryResult{
+				Completed: false,
+				Summary:   "skipped mid-work",
+				SessionID: "sess-skip-discard",
+			},
+			err: attemptCtx.Err(),
+		}
+	}()
+
+	actionCh <- keyboard.ActionSkip
+	done := runLoopAsync(r, actionLoopDeps{
+		tryCh:         tryCh,
+		pidCh:         make(chan int, 1),
+		actionCh:      actionCh,
+		stallTick:     neverTick(),
+		attemptCtx:    attemptCtx,
+		cancelAttempt: cancelAttempt,
+		mon:           &fakeMonitor{},
+		log:           io.Discard,
+	})
+
+	var out actionLoopResult
+	select {
+	case out = <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("action loop did not return promptly on ActionSkip")
+	}
+
+	if !out.actionTaken {
+		t.Error("expected actionTaken=true for skip")
+	}
+	if !r.skipFlag.Load() {
+		t.Error("expected skipFlag set after ActionSkip")
+	}
+	if out.result == nil {
+		t.Fatal("expected result returned from skip")
+	}
+	if out.result.SessionID != "sess-skip-discard" {
+		t.Errorf("SessionID = %q, want %q (preserved in result for caller inspection)", out.result.SessionID, "sess-skip-discard")
+	}
+}

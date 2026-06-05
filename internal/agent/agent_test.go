@@ -1369,3 +1369,222 @@ func TestTryResultSessionIDField(t *testing.T) {
 		t.Errorf("SessionID = %q, want empty string", trZero.SessionID)
 	}
 }
+
+func testMockBinDir(t *testing.T, binName string) (binDir string, argsPath string) {
+	t.Helper()
+	tmp := t.TempDir()
+	binDir = filepath.Join(tmp, "bin")
+	if err := os.MkdirAll(binDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	argsPath = filepath.Join(tmp, "args.txt")
+	return binDir, argsPath
+}
+
+func TestClaudeExecutor_ResumeFlagInArgs(t *testing.T) {
+	binDir, argsPath := testMockBinDir(t, "claude")
+	scriptPath := filepath.Join(binDir, "claude")
+	script := fmt.Sprintf(`#!/bin/sh
+printf '%%s\n' "$@" > %q
+printf '%%s\n' '{"type":"system","session_id":"mock-sess"}'
+printf '%%s\n' '{"type":"result","result":{"completed":true,"summary":"ok"}}'
+`, argsPath)
+	if err := os.WriteFile(scriptPath, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	tmp := t.TempDir()
+	logPath := filepath.Join(tmp, "try.log")
+	exec := &ClaudeExecutor{}
+	res, err := exec.Execute(context.Background(), RunOptions{
+		Prompt:          "do work",
+		ResumeSessionID: "sess-resume-42",
+		LogPath:         logPath,
+	})
+	if err != nil {
+		t.Fatalf("Execute failed: %v", err)
+	}
+	if !res.Completed {
+		t.Error("expected completed")
+	}
+
+	argsData, err := os.ReadFile(argsPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	args := string(argsData)
+	if !strings.Contains(args, "--resume") || !strings.Contains(args, "sess-resume-42") {
+		t.Errorf("claude args missing --resume sess-resume-42, got:\n%s", args)
+	}
+}
+
+func TestClaudeExecutor_NoResumeFlagWhenSessionIDEmpty(t *testing.T) {
+	binDir, argsPath := testMockBinDir(t, "claude")
+	scriptPath := filepath.Join(binDir, "claude")
+	script := fmt.Sprintf(`#!/bin/sh
+printf '%%s\n' "$@" > %q
+printf '%%s\n' '{"type":"system","session_id":"mock-sess"}'
+printf '%%s\n' '{"type":"result","result":{"completed":true,"summary":"ok"}}'
+`, argsPath)
+	if err := os.WriteFile(scriptPath, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	tmp := t.TempDir()
+	logPath := filepath.Join(tmp, "try.log")
+	exec := &ClaudeExecutor{}
+	_, err := exec.Execute(context.Background(), RunOptions{
+		Prompt:  "do work",
+		LogPath: logPath,
+	})
+	if err != nil {
+		t.Fatalf("Execute failed: %v", err)
+	}
+
+	argsData, err := os.ReadFile(argsPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(argsData), "--resume") {
+		t.Errorf("claude args should not contain --resume when ResumeSessionID is empty, got:\n%s", string(argsData))
+	}
+}
+
+func TestAntigravityExecutor_ResumeFlagInArgs(t *testing.T) {
+	tmp := t.TempDir()
+	home := filepath.Join(tmp, "home")
+	t.Setenv("HOME", home)
+
+	binDir, argsPath := testMockBinDir(t, "antigravity")
+	scriptPath := filepath.Join(binDir, "agy")
+	script := fmt.Sprintf(`#!/bin/sh
+printf '%%s\n' "$@" > %q
+printf '%%s\n' '{"completed":true,"summary":"agy ok"}'
+`, argsPath)
+	if err := os.WriteFile(scriptPath, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	logPath := filepath.Join(tmp, "try.log")
+	exec := &AntigravityExecutor{PrintTimeout: time.Second}
+	_, err := exec.Execute(context.Background(), RunOptions{
+		Prompt:          "do work",
+		ResumeSessionID: "conv-abc-123",
+		LogPath:         logPath,
+	})
+	if err != nil {
+		t.Fatalf("Execute failed: %v", err)
+	}
+
+	argsData, err := os.ReadFile(argsPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	args := string(argsData)
+	if !strings.Contains(args, "--conversation=conv-abc-123") {
+		t.Errorf("antigravity args missing conversation flag, got:\n%s", args)
+	}
+}
+
+func TestAntigravityExecutor_NoResumeFlagWhenSessionIDEmpty(t *testing.T) {
+	tmp := t.TempDir()
+	home := filepath.Join(tmp, "home")
+	t.Setenv("HOME", home)
+
+	binDir, argsPath := testMockBinDir(t, "antigravity")
+	scriptPath := filepath.Join(binDir, "agy")
+	script := fmt.Sprintf(`#!/bin/sh
+printf '%%s\n' "$@" > %q
+printf '%%s\n' '{"completed":true,"summary":"agy ok"}'
+`, argsPath)
+	if err := os.WriteFile(scriptPath, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	logPath := filepath.Join(tmp, "try.log")
+	exec := &AntigravityExecutor{PrintTimeout: time.Second}
+	_, err := exec.Execute(context.Background(), RunOptions{
+		Prompt:  "do work",
+		LogPath: logPath,
+	})
+	if err != nil {
+		t.Fatalf("Execute failed: %v", err)
+	}
+
+	argsData, err := os.ReadFile(argsPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(argsData), "--conversation=") {
+		t.Errorf("antigravity args should not contain --conversation when ResumeSessionID is empty, got:\n%s", string(argsData))
+	}
+}
+
+func TestOpenCodeExecutor_ResumeFlagInArgs(t *testing.T) {
+	binDir, argsPath := testMockBinDir(t, "opencode")
+	scriptPath := filepath.Join(binDir, "opencode")
+	innerJSON := `{"completed":true,"summary":"ok"}`
+	script := fmt.Sprintf(`#!/bin/sh
+printf '%%s\n' "$@" > %q
+printf '%%s\n' '{"type":"text","part":{"type":"text","text":"%s"}}'
+`, argsPath, strings.ReplaceAll(innerJSON, `"`, `\"`))
+	if err := os.WriteFile(scriptPath, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	exec := &OpenCodeExecutor{}
+	res, err := exec.Execute(context.Background(), RunOptions{
+		Prompt:          "do work",
+		ResumeSessionID: "ses-resume-99",
+	})
+	if err != nil {
+		t.Fatalf("Execute failed: %v", err)
+	}
+	if !res.Completed {
+		t.Error("expected completed")
+	}
+
+	argsData, err := os.ReadFile(argsPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	args := string(argsData)
+	if !strings.Contains(args, "--session") || !strings.Contains(args, "ses-resume-99") {
+		t.Errorf("opencode args missing --session ses-resume-99, got:\n%s", args)
+	}
+}
+
+func TestOpenCodeExecutor_NoResumeFlagWhenSessionIDEmpty(t *testing.T) {
+	binDir, argsPath := testMockBinDir(t, "opencode")
+	scriptPath := filepath.Join(binDir, "opencode")
+	innerJSON := `{"completed":true,"summary":"ok"}`
+	script := fmt.Sprintf(`#!/bin/sh
+printf '%%s\n' "$@" > %q
+printf '%%s\n' '{"type":"text","part":{"type":"text","text":"%s"}}'
+`, argsPath, strings.ReplaceAll(innerJSON, `"`, `\"`))
+	if err := os.WriteFile(scriptPath, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	exec := &OpenCodeExecutor{}
+	_, err := exec.Execute(context.Background(), RunOptions{
+		Prompt: "do work",
+	})
+	if err != nil {
+		t.Fatalf("Execute failed: %v", err)
+	}
+
+	argsData, err := os.ReadFile(argsPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(argsData), "--session") {
+		t.Errorf("opencode args should not contain --session when ResumeSessionID is empty, got:\n%s", string(argsData))
+	}
+}

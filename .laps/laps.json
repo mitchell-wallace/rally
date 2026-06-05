@@ -380,11 +380,11 @@
       "title": "Wire codex exec resume \u003csessionID\u003e for honest resume (task 3.2)",
       "description": "codex.go ResumeSupported()=true but main Execute builds fresh 'exec' without resume, only the liveness probe uses 'exec resume'. Wire 'exec resume \u003csessionID\u003e' into the main Execute args when ResumeSessionID is set, following the liveness probe pattern at codex.go:125-134. Ensure the report-file/output-schema flags still work alongside resume mode.",
       "assignee": "junior",
-      "isDone": false,
+      "isDone": true,
       "order": 458752,
       "createdAt": "2026-06-05T05:54:15.083351206Z",
-      "updatedAt": "2026-06-05T05:54:15.083351206Z",
-      "completedAt": null
+      "updatedAt": "2026-06-05T05:55:51.829093828Z",
+      "completedAt": "2026-06-05T05:55:51.829093828Z"
     },
     {
       "id": "work-98a8",
