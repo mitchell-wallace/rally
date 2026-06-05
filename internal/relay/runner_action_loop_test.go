@@ -1,0 +1,281 @@
+package relay
+
+import (
+	"context"
+	"io"
+	"sync/atomic"
+	"testing"
+	"time"
+
+	"github.com/mitchell-wallace/rally/internal/agent"
+	"github.com/mitchell-wallace/rally/internal/keyboard"
+)
+
+// fakeMonitor records the action loop's monitor calls via optional callbacks so
+// tests can synchronise on UI-state transitions (stalled, stopping, pid known).
+type fakeMonitor struct {
+	onPGID     func(int)
+	onStalled  func(bool)
+	onStopping func(bool)
+}
+
+func (m *fakeMonitor) SetProcessGroupID(pgid int) {
+	if m.onPGID != nil {
+		m.onPGID(pgid)
+	}
+}
+func (m *fakeMonitor) SetStalled(v bool) {
+	if m.onStalled != nil {
+		m.onStalled(v)
+	}
+}
+func (m *fakeMonitor) SetStopping(v bool) {
+	if m.onStopping != nil {
+		m.onStopping(v)
+	}
+}
+
+// runLoopAsync starts runActionLoop in a goroutine and returns a channel that
+// delivers its result. Tests assert promptness by selecting on this channel
+// against a deadline — no real sleeps anywhere near WaitDelay.
+func runLoopAsync(r *Runner, d actionLoopDeps) <-chan actionLoopResult {
+	done := make(chan actionLoopResult, 1)
+	go func() { done <- r.runActionLoop(d) }()
+	return done
+}
+
+// neverTick is a stall ticker channel that never fires.
+func neverTick() <-chan time.Time { return make(chan time.Time) }
+
+// TestActionLoopQuitCancelsAndAbortsWithoutWaiting pins acceptance (1): Ctrl+C
+// cancels the running attempt and aborts the relay without waiting for the try
+// to finish on its own. The fake try blocks until its context is cancelled, so
+// the loop can only return if it cancelled the attempt first.
+func TestActionLoopQuitCancelsAndAbortsWithoutWaiting(t *testing.T) {
+	r := &Runner{}
+	tryCh := make(chan tryResult, 1)
+	actionCh := make(chan keyboard.Action, 1)
+	attemptCtx, cancelAttempt := context.WithCancel(context.Background())
+	defer cancelAttempt()
+
+	// The try only completes once the attempt context is cancelled; if the loop
+	// waited for natural completion instead of cancelling, this never fires.
+	go func() {
+		<-attemptCtx.Done()
+		tryCh <- tryResult{result: &agent.TryResult{Completed: false}, err: attemptCtx.Err()}
+	}()
+
+	actionCh <- keyboard.ActionQuit
+	done := runLoopAsync(r, actionLoopDeps{
+		tryCh:         tryCh,
+		pidCh:         make(chan int, 1),
+		actionCh:      actionCh,
+		stallTick:     neverTick(),
+		attemptCtx:    attemptCtx,
+		cancelAttempt: cancelAttempt,
+		mon:           &fakeMonitor{},
+		log:           io.Discard,
+	})
+
+	var out actionLoopResult
+	select {
+	case out = <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("action loop did not return promptly on Ctrl+C")
+	}
+
+	if !out.actionTaken {
+		t.Error("expected actionTaken=true for quit-now")
+	}
+	if !r.stopFlag.Load() {
+		t.Error("expected stopFlag set so the relay aborts")
+	}
+	if attemptCtx.Err() == nil {
+		t.Error("expected the attempt context to be cancelled")
+	}
+}
+
+// TestActionLoopStopLetsTryFinish pins acceptance (2): Ctrl+X lets the current
+// try finish, then stops. The loop must keep waiting (not cancel) after the
+// stop action, returning only once the try delivers its own result.
+func TestActionLoopStopLetsTryFinish(t *testing.T) {
+	r := &Runner{}
+	tryCh := make(chan tryResult, 1)
+	actionCh := make(chan keyboard.Action, 1)
+	attemptCtx, cancelAttempt := context.WithCancel(context.Background())
+	defer cancelAttempt()
+
+	actionCh <- keyboard.ActionStop
+	done := runLoopAsync(r, actionLoopDeps{
+		tryCh:         tryCh,
+		pidCh:         make(chan int, 1),
+		actionCh:      actionCh,
+		stallTick:     neverTick(),
+		attemptCtx:    attemptCtx,
+		cancelAttempt: cancelAttempt,
+		mon:           &fakeMonitor{},
+		log:           io.Discard,
+	})
+
+	// The loop must not return until the try finishes. Give it time to process
+	// the stop action, then confirm it is still waiting and has not cancelled.
+	select {
+	case <-done:
+		t.Fatal("loop returned before the try finished; Ctrl+X must let it complete")
+	case <-time.After(100 * time.Millisecond):
+	}
+	if !r.stopFlag.Load() {
+		t.Error("expected stopFlag set after Ctrl+X")
+	}
+	if attemptCtx.Err() != nil {
+		t.Error("Ctrl+X must not cancel the running attempt")
+	}
+
+	// Now let the try finish naturally.
+	tryCh <- tryResult{result: &agent.TryResult{Completed: true, Summary: "ok"}}
+	var out actionLoopResult
+	select {
+	case out = <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("loop did not return after the try finished")
+	}
+	if out.actionTaken {
+		t.Error("Ctrl+X is not an in-loop actionTaken break; expected actionTaken=false")
+	}
+	if out.result == nil || !out.result.Completed {
+		t.Errorf("expected the try's own completed result, got %+v", out.result)
+	}
+}
+
+// TestActionLoopStalledAttemptQuitsPromptly pins acceptance (3): a stalled /
+// long-running attempt ends promptly on Ctrl+C rather than waiting for the
+// stall threshold to escalate. The try blocks until cancelled; the stall
+// controller reports stalled, but quit-now is what ends the attempt.
+func TestActionLoopStalledAttemptQuitsPromptly(t *testing.T) {
+	r := &Runner{}
+	tryCh := make(chan tryResult, 1)
+	actionCh := make(chan keyboard.Action, 1)
+	stallTick := make(chan time.Time, 1)
+	stalledCh := make(chan struct{}, 1)
+	attemptCtx, cancelAttempt := context.WithCancel(context.Background())
+	defer cancelAttempt()
+
+	go func() {
+		<-attemptCtx.Done()
+		tryCh <- tryResult{result: &agent.TryResult{Completed: false}, err: attemptCtx.Err()}
+	}()
+
+	mon := &fakeMonitor{onStalled: func(v bool) {
+		if v {
+			stalledCh <- struct{}{}
+		}
+	}}
+	sc := &fakeStallController{check: func(context.Context) (bool, error) { return true, nil }}
+
+	done := runLoopAsync(r, actionLoopDeps{
+		tryCh:           tryCh,
+		pidCh:           make(chan int, 1),
+		actionCh:        actionCh,
+		stallTick:       stallTick,
+		attemptCtx:      attemptCtx,
+		cancelAttempt:   cancelAttempt,
+		stallController: sc,
+		mon:             mon,
+		log:             io.Discard,
+	})
+
+	// Drive a stall detection first so the attempt is "stalled" when quit lands.
+	stallTick <- time.Now()
+	select {
+	case <-stalledCh:
+	case <-time.After(2 * time.Second):
+		t.Fatal("stall was never detected")
+	}
+
+	// Ctrl+C should end the stalled attempt without waiting on any threshold.
+	start := time.Now()
+	actionCh <- keyboard.ActionQuit
+	var out actionLoopResult
+	select {
+	case out = <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("stalled attempt did not end promptly on Ctrl+C")
+	}
+	if elapsed := time.Since(start); elapsed > time.Second {
+		t.Errorf("quit on a stalled attempt took %v, expected near-instant", elapsed)
+	}
+	if !out.stallTriggered {
+		t.Error("expected stallTriggered=true so the run records the stall")
+	}
+	if !out.actionTaken || !r.stopFlag.Load() {
+		t.Error("expected quit-now to set actionTaken and stopFlag")
+	}
+	if attemptCtx.Err() == nil {
+		t.Error("expected the stalled attempt to be cancelled by quit-now")
+	}
+}
+
+// TestActionLoopSecondQuitForceKills pins acceptance (4): a second Ctrl+C during
+// the drain escalates straight to the force-kill path with the captured process
+// group id, instead of waiting out the grace window.
+func TestActionLoopSecondQuitForceKills(t *testing.T) {
+	const pgid = 4242
+	var killed int32
+	killedCh := make(chan int, 1)
+	r := &Runner{forceKillFunc: func(p int) error {
+		atomic.StoreInt32(&killed, int32(p))
+		killedCh <- p
+		return nil
+	}}
+
+	tryCh := make(chan tryResult) // unbuffered: try stays alive through the drain
+	actionCh := make(chan keyboard.Action)
+	pidCh := make(chan int, 1)
+	pgidKnown := make(chan struct{}, 1)
+	attemptCtx, cancelAttempt := context.WithCancel(context.Background())
+	defer cancelAttempt()
+
+	mon := &fakeMonitor{onPGID: func(int) { pgidKnown <- struct{}{} }}
+
+	done := runLoopAsync(r, actionLoopDeps{
+		tryCh:         tryCh,
+		pidCh:         pidCh,
+		actionCh:      actionCh,
+		stallTick:     neverTick(),
+		attemptCtx:    attemptCtx,
+		cancelAttempt: cancelAttempt,
+		mon:           mon,
+		log:           io.Discard,
+	})
+
+	// Report the pid so the loop captures the process group before the drain.
+	pidCh <- pgid
+	select {
+	case <-pgidKnown:
+	case <-time.After(2 * time.Second):
+		t.Fatal("pid was never observed by the loop")
+	}
+
+	// First quit-now enters the drain; the second escalates to force-kill.
+	actionCh <- keyboard.ActionQuit
+	actionCh <- keyboard.ActionQuit
+	select {
+	case p := <-killedCh:
+		if p != pgid {
+			t.Errorf("force-kill targeted pgid %d, want %d", p, pgid)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("second Ctrl+C did not escalate to the force-kill path")
+	}
+
+	// Releasing the try lets the drain (and the loop) finish.
+	tryCh <- tryResult{result: &agent.TryResult{Completed: false}}
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("loop did not return after the try drained")
+	}
+	if atomic.LoadInt32(&killed) != pgid {
+		t.Errorf("expected force-kill of pgid %d, got %d", pgid, atomic.LoadInt32(&killed))
+	}
+}

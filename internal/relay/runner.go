@@ -69,6 +69,12 @@ type Runner struct {
 	stallControllerFactory func(logPath string) reliability.StallController
 	sleepFunc              func(time.Duration)
 
+	// forceKillFunc is the escalation hook for a second quit-now during the
+	// cancel drain. Defaults to reliability.ForceKillProcessGroup; tests inject
+	// a fake to assert the force-kill path is taken without signalling a real
+	// process group.
+	forceKillFunc func(pgid int) error
+
 	// out is the console writer for run headers and outcome footers. Defaults
 	// to os.Stdout via outWriter; tests inject a buffer to assert on footer
 	// cadence and colouring.
@@ -713,6 +719,173 @@ func buildRecentContext(tries []store.TryRecord, perSummaryLimit, overallLimit i
 	return buf.String()
 }
 
+// forceKillGroup escalates the cancel drain to an immediate group-wide SIGKILL,
+// routing through the injectable hook so tests can observe the escalation.
+func (r *Runner) forceKillGroup(pgid int) error {
+	if r.forceKillFunc != nil {
+		return r.forceKillFunc(pgid)
+	}
+	return reliability.ForceKillProcessGroup(pgid)
+}
+
+// tryResult carries one attempt's executor outcome from the execute goroutine
+// back to the action loop.
+type tryResult struct {
+	result *agent.TryResult
+	err    error
+}
+
+// actionMonitor is the slice of *monitor.Monitor the action loop drives. It is
+// an interface so the loop can be tested with a fake that records calls.
+type actionMonitor interface {
+	SetProcessGroupID(pgid int)
+	SetStalled(v bool)
+	SetStopping(v bool)
+}
+
+// actionLoopDeps bundles the channels and collaborators the in-try action loop
+// selects over. Splitting them out lets [Runner.runActionLoop] be driven by a
+// fake executor/try channel and simulated keyboard.Action values in tests.
+type actionLoopDeps struct {
+	tryCh           <-chan tryResult
+	pidCh           <-chan int
+	actionCh        <-chan keyboard.Action
+	stallTick       <-chan time.Time
+	attemptCtx      context.Context
+	cancelAttempt   context.CancelFunc
+	stallController reliability.StallController
+	mon             actionMonitor
+	onStall         func()
+	log             io.Writer
+
+	// Identifiers used only for log lines.
+	relayID  int
+	runIndex int
+	attempt  int
+	harness  string
+}
+
+// actionLoopResult is the outcome of one pass through the action loop.
+type actionLoopResult struct {
+	result         *agent.TryResult
+	execErr        error
+	actionTaken    bool
+	stallTriggered bool
+	attemptPGID    int
+}
+
+// runActionLoop is the in-try select-based state machine. It blocks until the
+// attempt resolves on tryCh, or an operator action redirects it:
+//
+//   - Ctrl+S (skip) / Ctrl+P (pause): cancel the attempt, then drain tryCh.
+//   - Ctrl+X (stop): set stopFlag and keep waiting so the current try finishes
+//     naturally; the relay halts afterwards.
+//   - Ctrl+C (quit now): set stopFlag, cancel the attempt immediately, and drain
+//     tryCh while staying responsive — a second Ctrl+C within the grace window
+//     escalates to a group-wide SIGKILL via forceKillGroup rather than waiting
+//     the window out.
+//
+// While quit-now drains, the monitor shows a "stopping…" indicator so the UI
+// does not look frozen. Stall detection (stallTick) and late pid reports
+// (pidCh) are handled alongside the action cases.
+func (r *Runner) runActionLoop(d actionLoopDeps) actionLoopResult {
+	var out actionLoopResult
+actionLoop:
+	for {
+		select {
+		case res := <-d.tryCh:
+			out.result = res.result
+			out.execErr = res.err
+			break actionLoop
+		case pid := <-d.pidCh:
+			out.attemptPGID = pid
+			d.mon.SetProcessGroupID(pid)
+			if d.stallController != nil {
+				d.stallController.SetProcessGroupID(pid)
+			}
+		case <-d.stallTick:
+			if d.stallController == nil || out.stallTriggered {
+				continue
+			}
+			stalled, err := d.stallController.Check(d.attemptCtx)
+			if err != nil {
+				fmt.Fprintf(d.log, "relay %d run %d attempt %d stall check warning: %v\n", d.relayID, d.runIndex+1, d.attempt, err)
+				continue
+			}
+			if !stalled {
+				continue
+			}
+			out.stallTriggered = true
+			d.mon.SetStalled(true)
+			if d.onStall != nil {
+				d.onStall()
+			}
+			fmt.Fprintf(d.log, "relay %d run %d attempt %d stall detected for %s\n", d.relayID, d.runIndex+1, d.attempt, d.harness)
+		case action := <-d.actionCh:
+			switch action {
+			case keyboard.ActionSkip:
+				d.cancelAttempt()
+				r.skipFlag.Store(true)
+				out.actionTaken = true
+				res := <-d.tryCh
+				out.result = res.result
+				out.execErr = res.err
+				break actionLoop
+			case keyboard.ActionPause:
+				d.cancelAttempt()
+				out.actionTaken = true
+				res := <-d.tryCh
+				out.result = res.result
+				out.execErr = res.err
+				break actionLoop
+			case keyboard.ActionStop:
+				// Graceful stop (Ctrl+X): let the current try finish, then
+				// stop the relay. The outer loop sees stopFlag and launches
+				// no further runs. For a frozen agent this is bounded by the
+				// stall detector.
+				r.stopFlag.Store(true)
+			case keyboard.ActionQuit:
+				// Quit now (Ctrl+C): cancel the running try immediately and
+				// abort the relay. cancelAttempt fires Cmd.Cancel, which sends
+				// SIGINT to the process group then escalates to a group-wide
+				// SIGKILL after the grace window. Mirror the pause/skip drain
+				// of tryCh, but keep selecting on actionCh so a second Ctrl+C
+				// within the grace window forces an immediate SIGKILL rather
+				// than waiting it out. The "stopping…" monitor indicator keeps
+				// the UI from looking frozen during the drain.
+				r.stopFlag.Store(true)
+				d.cancelAttempt()
+				d.mon.SetStopping(true)
+				out.actionTaken = true
+			drainLoop:
+				for {
+					select {
+					case res := <-d.tryCh:
+						out.result = res.result
+						out.execErr = res.err
+						break drainLoop
+					case pid := <-d.pidCh:
+						// A late OnStart can land here if the try hadn't
+						// reported its pid yet; capture it so a second quit
+						// can target the right group.
+						out.attemptPGID = pid
+					case a := <-d.actionCh:
+						// Second quit-now: escalate past the grace window.
+						// SIGKILL is idempotent (a re-signalled or already
+						// exited group resolves to nil), so this cannot race
+						// the WaitDelay/Cmd.Cancel escalation into an error.
+						if a == keyboard.ActionQuit && out.attemptPGID > 0 {
+							_ = r.forceKillGroup(out.attemptPGID)
+						}
+					}
+				}
+				break actionLoop
+			}
+		}
+	}
+	return out
+}
+
 func (r *Runner) runOne(
 	ctx context.Context,
 	relay *store.RelayRecord,
@@ -903,10 +1076,6 @@ attemptLoop:
 		mon.SetCursorUpLines(cursorUp)
 		mon.Start(os.Stdout)
 
-		type tryResult struct {
-			result *agent.TryResult
-			err    error
-		}
 		tryCh := make(chan tryResult, 1)
 		attemptCtx, cancelAttempt := context.WithCancel(ctx)
 		defer cancelAttempt()
@@ -922,107 +1091,31 @@ attemptLoop:
 			tryCh <- tryResult{res, err}
 		}()
 
-		var result *agent.TryResult
-		var execErr error
-		actionTaken := false
-		stallTriggered := false
-		attemptPGID := 0
 		stallTicker := time.NewTicker(stallCheckInterval)
-	actionLoop:
-		for {
-			select {
-			case res := <-tryCh:
-				result = res.result
-				execErr = res.err
-				break actionLoop
-			case pid := <-pidCh:
-				attemptPGID = pid
-				mon.SetProcessGroupID(pid)
-				if stallController != nil {
-					stallController.SetProcessGroupID(pid)
-				}
-			case <-stallTicker.C:
-				if stallController == nil || stallTriggered {
-					continue
-				}
-				stalled, err := stallController.Check(attemptCtx)
-				if err != nil {
-					fmt.Fprintf(log, "relay %d run %d attempt %d stall check warning: %v\n", relay.ID, runIndex+1, attempt, err)
-					continue
-				}
-				if !stalled {
-					continue
-				}
-				stallTriggered = true
-				stallMarked = true
-				mon.SetStalled(true)
-				if onStall != nil {
-					onStall()
-				}
-				fmt.Fprintf(log, "relay %d run %d attempt %d stall detected for %s\n", relay.ID, runIndex+1, attempt, picked.Harness)
-			case action := <-actionCh:
-				switch action {
-				case keyboard.ActionSkip:
-					cancelAttempt()
-					r.skipFlag.Store(true)
-					actionTaken = true
-					res := <-tryCh
-					result = res.result
-					execErr = res.err
-					break actionLoop
-				case keyboard.ActionPause:
-					cancelAttempt()
-					actionTaken = true
-					res := <-tryCh
-					result = res.result
-					execErr = res.err
-					break actionLoop
-				case keyboard.ActionStop:
-					// Graceful stop (Ctrl+X): let the current try finish, then
-					// stop the relay. The outer loop sees stopFlag and launches
-					// no further runs. For a frozen agent this is bounded by the
-					// stall detector.
-					r.stopFlag.Store(true)
-				case keyboard.ActionQuit:
-					// Quit now (Ctrl+C): cancel the running try immediately and
-					// abort the relay. cancelAttempt fires Cmd.Cancel, which sends
-					// SIGINT to the process group then escalates to a group-wide
-					// SIGKILL after the grace window. Mirror the pause/skip drain
-					// of tryCh, but keep selecting on actionCh so a second Ctrl+C
-					// within the grace window forces an immediate SIGKILL rather
-					// than waiting it out. The "stopping…" monitor indicator keeps
-					// the UI from looking frozen during the drain.
-					r.stopFlag.Store(true)
-					cancelAttempt()
-					mon.SetStopping(true)
-					actionTaken = true
-				drainLoop:
-					for {
-						select {
-						case res := <-tryCh:
-							result = res.result
-							execErr = res.err
-							break drainLoop
-						case pid := <-pidCh:
-							// A late OnStart can land here if the try hadn't
-							// reported its pid yet; capture it so a second quit
-							// can target the right group.
-							attemptPGID = pid
-						case a := <-actionCh:
-							// Second quit-now: escalate past the grace window.
-							// SIGKILL is idempotent (a re-signalled or already
-							// exited group resolves to nil), so this cannot race
-							// the WaitDelay/Cmd.Cancel escalation into an error.
-							if a == keyboard.ActionQuit && attemptPGID > 0 {
-								_ = reliability.ForceKillProcessGroup(attemptPGID)
-							}
-						}
-					}
-					break actionLoop
-				}
-			}
-		}
+		loopOut := r.runActionLoop(actionLoopDeps{
+			tryCh:           tryCh,
+			pidCh:           pidCh,
+			actionCh:        actionCh,
+			stallTick:       stallTicker.C,
+			attemptCtx:      attemptCtx,
+			cancelAttempt:   cancelAttempt,
+			stallController: stallController,
+			mon:             mon,
+			onStall:         onStall,
+			log:             log,
+			relayID:         relay.ID,
+			runIndex:        runIndex,
+			attempt:         attempt,
+			harness:         picked.Harness,
+		})
 		stallTicker.Stop()
+
+		result := loopOut.result
+		execErr := loopOut.execErr
+		actionTaken := loopOut.actionTaken
+		if loopOut.stallTriggered {
+			stallMarked = true
+		}
 
 		mon.Stop()
 		kbCancel()
