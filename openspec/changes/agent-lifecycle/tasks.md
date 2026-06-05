@@ -45,7 +45,7 @@
 
 ## 7. Docs & coordination
 
-- [ ] 7.1 Document graceful stop / quit now timing, pause-now/resume behavior, and the single-runner-lane warning in `README.md`/`AGENTS.md`
-- [ ] 7.2 Note in docs that the interactive shortcuts require a double-press within the confirm window (`internal/keyboard`), so a single press intentionally does nothing
-- [ ] 7.3 Coordinate label text with `cli-polish` (it owns the tier layout; this change owns the words)
-- [ ] 7.4 Bump `internal/buildinfo/VERSION` (per release process) as part of the change
+- [x] 7.1 Document graceful stop / quit now timing, pause-now/resume behavior, and the single-runner-lane warning in `README.md`/`AGENTS.md`
+- [x] 7.2 Note in docs that the interactive shortcuts require a double-press within the confirm window (`internal/keyboard`), so a single press intentionally does nothing
+- [x] 7.3 Coordinate label text with `cli-polish` (it owns the tier layout; this change owns the words)
+- [x] 7.4 Bump `internal/buildinfo/VERSION` (per release process) as part of the change
