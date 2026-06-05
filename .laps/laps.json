@@ -376,6 +376,39 @@
       "completedAt": "2026-06-05T05:38:05.345095599Z"
     },
     {
+      "id": "work-ae43",
+      "title": "Wire codex exec resume \u003csessionID\u003e for honest resume (task 3.2)",
+      "description": "codex.go ResumeSupported()=true but main Execute builds fresh 'exec' without resume, only the liveness probe uses 'exec resume'. Wire 'exec resume \u003csessionID\u003e' into the main Execute args when ResumeSessionID is set, following the liveness probe pattern at codex.go:125-134. Ensure the report-file/output-schema flags still work alongside resume mode.",
+      "assignee": "junior",
+      "isDone": false,
+      "order": 458752,
+      "createdAt": "2026-06-05T05:54:15.083351206Z",
+      "updatedAt": "2026-06-05T05:54:15.083351206Z",
+      "completedAt": null
+    },
+    {
+      "id": "work-98a8",
+      "title": "Add contract + regression tests for resume wiring (tasks 3.5, 3.6)",
+      "description": "Task 3.5: For every executor where ResumeSupported()==true, assert the built command args contain the resume flag when ResumeSessionID is set. Already verified: claude, antigravity, opencode. Codex will be covered after work-ae43. Task 3.6: Add explicit pause-captures-session-ID, resume-reuses-on-next-attempt, explicit-skip-starts-fresh tests. Existing TestResumeRetryPassesSessionID and TestFreshStartRetryClearsRunState cover retry flows already.",
+      "assignee": "junior",
+      "isDone": false,
+      "order": 491520,
+      "createdAt": "2026-06-05T05:54:21.153721489Z",
+      "updatedAt": "2026-06-05T05:54:21.153721489Z",
+      "completedAt": null
+    },
+    {
+      "id": "work-0898",
+      "title": "Verify codex resume wiring + contract/regression tests (tasks 3.2, 3.5, 3.6)",
+      "description": "Re-verify after codex resume is wired and contract/regression tests are added. Confirm: (1) all ResumeSupported()==true harnesses actually pass the resume flag when ResumeSessionID is set; (2) contract test covers all four resume-supporting harnesses; (3) regression tests cover pause-capture, resume-reuse, skip-fresh, FreshRestart-fresh. Run task 3.7 smoke pass (test-driving-rally pause/resume) if possible.",
+      "assignee": "verify",
+      "isDone": false,
+      "order": 507904,
+      "createdAt": "2026-06-05T05:54:43.705946257Z",
+      "updatedAt": "2026-06-05T05:54:43.705946257Z",
+      "completedAt": null
+    },
+    {
       "id": "rall-0f7b",
       "title": "Verify honest resume + run pause/resume smoke",
       "description": "Use the openspec-verify-change skill against agent-lifecycle, focused on the resume phase (tasks 3.1-3.6, spec 'Pause-now and honest session resume'), and perform task 3.7's smoke pass.\n\nIdentify the merge target before diffing (not assumed main). Read each executor's Execute and confirm the resume flag is actually appended (or ResumeSupported() flipped to false) — claude/antigravity were already correct; the fix targets gemini/opencode/codex. Confirm the runner policy was NOT changed (resume-on-retry preserved, no meaningful-progress heuristic, FreshRestart still clears).\n\nSmoke (task 3.7): run a test-driving-rally pause/resume pass (or, if a full relay isn't practical, a minimal real invocation) to confirm a paused run actually resumes the session on a resume-supporting harness rather than starting over. Report what you observed.\n\nCheck off tasks.md 3.1-3.7 only for verified work. Head-lap gaps; one-liners only inline. No history rewriting.",

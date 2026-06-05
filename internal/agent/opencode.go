@@ -61,6 +61,9 @@ func (o *OpenCodeExecutor) Execute(ctx context.Context, opts RunOptions) (*TryRe
 	if model != "" {
 		args = append(args, "--model", model)
 	}
+	if opts.ResumeSessionID != "" {
+		args = append(args, "--session", opts.ResumeSessionID)
+	}
 
 	cmd := exec.CommandContext(ctx, "opencode", args...)
 	if opts.WorkspaceDir != "" {

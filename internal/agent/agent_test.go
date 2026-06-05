@@ -1258,8 +1258,8 @@ func TestOpenCodeAdapter_RotateModel(t *testing.T) {
 
 func TestGeminiAdapterCapabilities(t *testing.T) {
 	g := &GeminiExecutor{}
-	if !g.ResumeSupported() {
-		t.Error("ResumeSupported() = false, want true")
+	if g.ResumeSupported() {
+		t.Error("ResumeSupported() = true, want false (gemini --resume takes index/latest, not session UUID)")
 	}
 	if g.RotateSupported() {
 		t.Error("RotateSupported() = true, want false")
