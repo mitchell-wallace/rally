@@ -365,6 +365,17 @@
       "completedAt": "2026-06-05T05:18:03.992280706Z"
     },
     {
+      "id": "work-289d",
+      "title": "Verify responsive stop/quit behavior (recovery)",
+      "description": "Queue-state recovery lap inserted because .rally/state/current_task.md still points at the already-completed stop/quit verify prompt while the real queue head is rall-0f7b (resume verify). Use this lap only to record the re-verification without consuming the unrelated resume head task.",
+      "assignee": "VERIFY",
+      "isDone": true,
+      "order": 458752,
+      "createdAt": "2026-06-05T05:38:02.488907906Z",
+      "updatedAt": "2026-06-05T05:38:05.345095599Z",
+      "completedAt": "2026-06-05T05:38:05.345095599Z"
+    },
+    {
       "id": "rall-0f7b",
       "title": "Verify honest resume + run pause/resume smoke",
       "description": "Use the openspec-verify-change skill against agent-lifecycle, focused on the resume phase (tasks 3.1-3.6, spec 'Pause-now and honest session resume'), and perform task 3.7's smoke pass.\n\nIdentify the merge target before diffing (not assumed main). Read each executor's Execute and confirm the resume flag is actually appended (or ResumeSupported() flipped to false) — claude/antigravity were already correct; the fix targets gemini/opencode/codex. Confirm the runner policy was NOT changed (resume-on-retry preserved, no meaningful-progress heuristic, FreshRestart still clears).\n\nSmoke (task 3.7): run a test-driving-rally pause/resume pass (or, if a full relay isn't practical, a minimal real invocation) to confirm a paused run actually resumes the session on a resume-supporting harness rather than starting over. Report what you observed.\n\nCheck off tasks.md 3.1-3.7 only for verified work. Head-lap gaps; one-liners only inline. No history rewriting.",
