@@ -356,6 +356,10 @@ func (r *Runner) Run(ctx context.Context) error {
 		}
 	}
 
+	for _, w := range routeRuntime.Warnings() {
+		fmt.Fprintln(os.Stderr, w)
+	}
+
 	log, err := openRelayLog(r.cfg.DataDir, r.cfg.WorkspaceDir, relay.ID)
 	if err != nil {
 		return err

@@ -721,3 +721,57 @@ func TestRouteRuntime_ProbationOneShotEnforcement(t *testing.T) {
 		t.Fatalf("expected exactly 1 probation event, got %d", probationCount)
 	}
 }
+
+func TestRouteRuntime_SingleRunnerLaneWarns(t *testing.T) {
+	rt, _ := newResolvedRouteRuntimeOrDie(t, map[string][]string{
+		"solo": {"claude:opus-4.7"},
+	}, false)
+
+	warnings := rt.Warnings()
+	if len(warnings) != 1 {
+		t.Fatalf("expected 1 warning, got %d: %v", len(warnings), warnings)
+	}
+	if !strings.Contains(warnings[0], "solo") || !strings.Contains(warnings[0], "single runner") {
+		t.Fatalf("warning = %q, want single-runner warning for lane %q", warnings[0], "solo")
+	}
+}
+
+func TestRouteRuntime_MultiRunnerLaneDoesNotWarn(t *testing.T) {
+	rt, _ := newResolvedRouteRuntimeOrDie(t, map[string][]string{
+		"default": {"claude:opus-4.7", "codex:gpt-5.5"},
+	}, false)
+
+	warnings := rt.Warnings()
+	if len(warnings) != 0 {
+		t.Fatalf("expected 0 warnings for multi-runner lane, got %d: %v", len(warnings), warnings)
+	}
+}
+
+func TestRouteRuntime_SingleRunnerOverrideWarns(t *testing.T) {
+	rt, _ := newOverrideRouteRuntimeOrDie(t, []string{"op:opencode-go/fancy-model"}, map[string][]string{
+		"default": {"claude:opus-4.7", "codex:gpt-5.5"},
+	}, false)
+
+	warnings := rt.Warnings()
+	if len(warnings) != 1 {
+		t.Fatalf("expected 1 warning for single-runner override, got %d: %v", len(warnings), warnings)
+	}
+	if !strings.Contains(warnings[0], "override") || !strings.Contains(warnings[0], "single runner") {
+		t.Fatalf("warning = %q, want single-runner warning for override lane", warnings[0])
+	}
+}
+
+func TestRouteRuntime_MixedLanesWarnsOnlySingleRunner(t *testing.T) {
+	rt, _ := newResolvedRouteRuntimeOrDie(t, map[string][]string{
+		"default": {"claude:opus-4.7", "codex:gpt-5.5"},
+		"fragile": {"gemini:gemini-2.5-pro"},
+	}, false)
+
+	warnings := rt.Warnings()
+	if len(warnings) != 1 {
+		t.Fatalf("expected 1 warning (fragile lane only), got %d: %v", len(warnings), warnings)
+	}
+	if !strings.Contains(warnings[0], "fragile") {
+		t.Fatalf("warning = %q, want warning for %q lane", warnings[0], "fragile")
+	}
+}

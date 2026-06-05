@@ -41,6 +41,16 @@ type routeRuntime struct {
 	schedulers map[string]*routing.Scheduler
 	resolver   Resolver
 	lastAgent  map[string]agent.ResolvedAgent
+	warnings   []string
+}
+
+func (r *routeRuntime) Warnings() []string {
+	if r.warnings == nil {
+		return nil
+	}
+	out := make([]string, len(r.warnings))
+	copy(out, r.warnings)
+	return out
 }
 
 type routeSelection struct {
@@ -127,6 +137,7 @@ func newResolvedRouteRuntime(routeSpecs map[string][]string, resolver Resolver, 
 		return nil, err
 	}
 
+	var warnings []string
 	schedulers := make(map[string]*routing.Scheduler, len(routeSpecs)+1)
 	for name, rawEntries := range routeSpecs {
 		route, err := routing.ParseRoute(name, rawEntries)
@@ -139,10 +150,17 @@ func newResolvedRouteRuntime(routeSpecs map[string][]string, resolver Resolver, 
 			return nil, fmt.Errorf("routing: route %q: %w", name, err)
 		}
 		schedulers[strings.ToLower(name)] = routing.NewScheduler(resolvedEntries)
+		if len(resolvedEntries) == 1 {
+			warnings = append(warnings, fmt.Sprintf("warning: lane %q has a single runner (%s) — if it fails, the lane stalls with no fallback", name, resolvedEntries[0].Spec))
+		}
 	}
 
 	if override != nil {
-		schedulers[strings.ToLower(override.Name)] = routing.NewScheduler(cloneParsedEntries(override.Entries))
+		overrideEntries := cloneParsedEntries(override.Entries)
+		schedulers[strings.ToLower(override.Name)] = routing.NewScheduler(overrideEntries)
+		if len(overrideEntries) == 1 {
+			warnings = append(warnings, fmt.Sprintf("warning: lane %q has a single runner (%s) — if it fails, the lane stalls with no fallback", override.Name, overrideEntries[0].Spec))
+		}
 	}
 
 	return &routeRuntime{
@@ -151,6 +169,7 @@ func newResolvedRouteRuntime(routeSpecs map[string][]string, resolver Resolver, 
 		schedulers: schedulers,
 		resolver:   resolver,
 		lastAgent:  make(map[string]agent.ResolvedAgent, len(schedulers)),
+		warnings:   warnings,
 	}, nil
 }
 

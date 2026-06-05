@@ -65,6 +65,9 @@ sonnet = 'Claude Sonnet 4.6 (Thinking)'
 # A route is a list. Rally walks it left-to-right, skipping entries that
 # fail or freeze. So `["cc:opus", "cx:g55", "op:zai"]` reads as:
 # "use opus; if it dies, switch to gpt-5.5; if that dies, switch to glm".
+#
+# Prefer at least two entries per lane. A single-runner lane has no fallback
+# when its harness fails — Rally will warn at relay start.
 [routes]
 
 

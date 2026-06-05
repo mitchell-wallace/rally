@@ -308,6 +308,13 @@ In no-backend mode there is no lap and no `assignee`, so Rally always uses
 `default`. Non-default routes still load and validate, but are never
 selected.
 
+#### Single-runner lanes
+
+Rally warns at relay start when a lane has exactly one runner entry — a
+single dead harness stalls that lane with no fallback to rotate to. A
+single-runner lane is valid, just fragile. Prefer at least two entries per
+lane so the scheduler can rotate past a failing harness.
+
 #### Role instruction files
 
 When a lap has an `assignee`, Rally looks for
