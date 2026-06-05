@@ -446,11 +446,11 @@
       "title": "Reconcile VERIFY role default-boundary spec to the doc",
       "description": "Context: tasks 6.1-6.4, spec 'VERIFY role default boundary'. The embedded default role doc internal/agent_prompt/roles/verify.md ALREADY states the reporting-focused stance (trivial clearly-correct fixes allowed; substantial gaps → new head lap). This lap is reconciliation, not a behavior change.\n\nOutcome: the spec language and the embedded doc agree; the generic doc stays OpenSpec-agnostic.\n\nFiles \u0026 scope: internal/agent_prompt/roles/verify.md (authoritative; .rally/agents/verify.md is the installed copy). Confirm it matches the spec scenarios; adjust wording only if they diverge — do NOT remove the small-fix allowance. Ensure no 'mark off tasks.md' instruction lives in rally core or the default doc. Confirm (read-only) that the OpenSpec-specific tasks.md-checkoff behavior is injected per-lap by prepare-laps only for laps with a related change, and cross-check the boundary rules in AGENTS.md.\n\nAcceptance: doc and spec are consistent; no OpenSpec coupling leaked into the generic doc; go build ./... green. Do not tick tasks.md.",
       "assignee": "JUNIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 720896,
       "createdAt": "2026-06-05T00:27:20.307855172Z",
-      "updatedAt": "2026-06-05T00:27:20.307855172Z",
-      "completedAt": null
+      "updatedAt": "2026-06-05T07:14:08.678887542Z",
+      "completedAt": "2026-06-05T07:14:08.678887542Z"
     },
     {
       "id": "rall-b1fe",
