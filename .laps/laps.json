@@ -281,22 +281,22 @@
       "title": "Cancel path must SIGKILL the process group after grace window",
       "description": "OpenSpec change agent-lifecycle, graceful-shutdown slice follow-up from VERIFY. Current SetProcessGroup uses Cmd.Cancel=SIGINT to -pid plus Cmd.WaitDelay=5s, but Go's os/exec WaitDelay escalation only calls os.Process.Kill() on the leader and then closes parent pipes; it does NOT send SIGKILL to the process group. That leaves a spec gap versus graceful subprocess shutdown if a non-leader child ignores SIGINT, and the current exec_unix_test only proves group SIGINT reach + leader SIGKILL.\n\nOutcome: make the cancel path escalate to SIGKILL for the whole process group after the 5s grace window, not just cmd.Process, while preserving the existing SIGINT-first behavior and bounded shutdown. Reuse a shared helper if it keeps the path coherent with internal/reliability/processGroupKiller. Handle already-exited groups cleanly (ESRCH should not surface as a spurious cancel error).\n\nTests: add a regression where both leader and inherited non-leader child ignore SIGINT; after the grace window both must be gone (no orphan child/process-group survivor). Keep the existing group-reach assertion too. Run go test ./internal/agent/... ./internal/reliability/.... Do not tick tasks.md; VERIFY will re-check.",
       "assignee": "SENIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 32768,
       "createdAt": "2026-06-05T03:55:13.190216601Z",
-      "updatedAt": "2026-06-05T03:55:13.190216601Z",
-      "completedAt": null
+      "updatedAt": "2026-06-05T04:04:45.541034072Z",
+      "completedAt": "2026-06-05T04:04:45.541034072Z"
     },
     {
       "id": "work-8253",
       "title": "Verify cancel escalation kills the whole process group",
       "description": "Follow-up VERIFY lap for agent-lifecycle graceful-shutdown tasks 1.1-1.5 after the cancel-path escalation fix lands.\n\nReview depth: diff from the pre-fix baseline, read the actual kill path, and confirm the post-grace escalation is sent to the process group (not just cmd.Process). Re-run go test ./internal/agent/... ./internal/reliability/.... Verify the stubborn-child regression proves no orphaned non-leader child survives after WaitDelay, and only then check off task 1.5 (and any other still-unchecked graceful-shutdown tasks that are now fully verified).",
       "assignee": "VERIFY",
-      "isDone": false,
+      "isDone": true,
       "order": 98304,
       "createdAt": "2026-06-05T03:39:28.797046202Z",
-      "updatedAt": "2026-06-05T03:39:28.797046202Z",
-      "completedAt": null
+      "updatedAt": "2026-06-05T04:07:36.056041638Z",
+      "completedAt": "2026-06-05T04:07:36.056041638Z"
     },
     {
       "id": "rall-772e",
