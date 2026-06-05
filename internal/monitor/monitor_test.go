@@ -285,6 +285,28 @@ func TestMonitorStalledIndicator(t *testing.T) {
 	}
 }
 
+func TestMonitorStoppingIndicator(t *testing.T) {
+	dir := t.TempDir()
+	initGitRepo(t, dir)
+	logPath := filepath.Join(dir, "try.log")
+	os.WriteFile(logPath, []byte("data"), 0o644)
+
+	m := NewMonitor(dir, logPath, 0)
+	m.SetStalled(true)
+	m.SetStopping(true)
+
+	line, err := m.Tick()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !containsString(line, "■ stopping…") {
+		t.Errorf("expected stopping indicator, got %q", line)
+	}
+	if containsString(line, "❄ stalled") {
+		t.Errorf("stopping should take priority over stalled, got %q", line)
+	}
+}
+
 func TestMonitorRecoveredIndicator(t *testing.T) {
 	dir := t.TempDir()
 	initGitRepo(t, dir)

@@ -8,10 +8,10 @@
 
 ## 2. Responsive stop / quit
 
-- [ ] 2.1 Split the shared `ActionStop`/`ActionQuit` branch (`internal/relay/runner.go:978-980`): `ActionQuit` SHALL `cancelAttempt()`, set `stopFlag`, drain `tryCh`, and `break actionLoop` (immediate); `ActionStop` keeps "set `stopFlag`, finish current try, stop after"
-- [ ] 2.2 Keep the action loop responsive during the cancel drain: after `cancelAttempt()` keep selecting on `actionCh` so a second Ctrl+C within the ≤5s `WaitDelay` window escalates to an immediate SIGKILL of the process group
-- [ ] 2.3 Surface a "stopping…" indicator (monitor/footer) while a cancel drains so the UI never looks frozen
-- [ ] 2.4 Tests: Ctrl+C cancels the running attempt and aborts the relay without waiting for the try to finish; Ctrl+X lets the current try finish then stops; a frozen/stalled agent ends promptly on Ctrl+C rather than waiting for the stall threshold
+- [x] 2.1 Split the shared `ActionStop`/`ActionQuit` branch (`internal/relay/runner.go:978-980`): `ActionQuit` SHALL `cancelAttempt()`, set `stopFlag`, drain `tryCh`, and `break actionLoop` (immediate); `ActionStop` keeps "set `stopFlag`, finish current try, stop after"
+- [x] 2.2 Keep the action loop responsive during the cancel drain: after `cancelAttempt()` keep selecting on `actionCh` so a second Ctrl+C within the ≤5s `WaitDelay` window escalates to an immediate SIGKILL of the process group
+- [x] 2.3 Surface a "stopping…" indicator (monitor/footer) while a cancel drains so the UI never looks frozen
+- [x] 2.4 Tests: Ctrl+C cancels the running attempt and aborts the relay without waiting for the try to finish; Ctrl+X lets the current try finish then stops; a frozen/stalled agent ends promptly on Ctrl+C rather than waiting for the stall threshold
 
 ## 3. Honest session resume across harnesses
 

@@ -303,33 +303,33 @@
       "title": "Make Ctrl+C quit-now immediate; keep Ctrl+X stop-after-try",
       "description": "Context: design Decision 2, tasks 2.1-2.3, spec 'Responsive stop and quit shortcuts'. Today ActionStop and ActionQuit share one branch (internal/relay/runner.go:978-980) that only sets r.stopFlag and lets the current try run to completion — so stop/quit appear dead while an agent is stalled (the try ends only when the stall detector fires, up to ~180s).\n\nOutcome: Ctrl+C cancels the running attempt immediately via graceful shutdown and aborts the relay; Ctrl+X keeps 'finish current try, then stop'; the action loop stays responsive during the cancel drain.\n\nFiles \u0026 scope: internal/relay/runner.go — split the shared branch in the in-try action loop (~:961-982). ActionQuit: set stopFlag, cancelAttempt(), drain tryCh, break actionLoop (mirror the pause/skip pattern). ActionStop: unchanged (set stopFlag, let try finish). While blocked on \u003c-tryCh after cancelAttempt(), keep selecting on actionCh so a second Ctrl+C within the ≤5s WaitDelay escalates to an immediate SIGKILL of the process group. Surface a 'stopping…' indicator via the monitor/footer so the UI never looks frozen.\n\nDesign: this is concurrency-sensitive — avoid deadlocking the select loop or double-closing channels; the second-quit escalation must not race the WaitDelay SIGKILL. Reuse the existing cancelAttempt/tryCh machinery; do not invent a new cancellation channel. Leave the inter-run waitLoop branch (~:224) as-is (no active try there).\n\nAcceptance: behavior is exercised by the next (test) lap; for this lap, manual reasoning + go build ./... green and existing runner tests pass. Do not tick tasks.md.",
       "assignee": "SENIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 196608,
       "createdAt": "2026-06-05T00:27:20.307828426Z",
-      "updatedAt": "2026-06-05T00:27:20.307828426Z",
-      "completedAt": null
+      "updatedAt": "2026-06-05T04:11:56.536924378Z",
+      "completedAt": "2026-06-05T04:11:56.536924378Z"
     },
     {
       "id": "rall-a182",
       "title": "Tests for responsive stop/quit and drain escalation",
       "description": "Context: task 2.4, spec scenarios under 'Responsive stop and quit shortcuts'. The in-try action loop is a select-based state machine, so its tests double as the design review for the previous lap.\n\nOutcome: deterministic tests that pin the three behaviors.\n\nFiles \u0026 scope: internal/relay/runner_test.go (or a focused new test file). Drive the action loop with a fake executor/try channel and simulated keyboard.Action values.\n\nAcceptance: (1) Ctrl+C cancels the running attempt and aborts the relay WITHOUT waiting for the try to finish; (2) Ctrl+X lets the current try finish then stops; (3) a stalled/long-running attempt ends promptly on Ctrl+C rather than waiting for the stall threshold; (4) a second Ctrl+C during the drain escalates (assert the force-kill path is taken). Use injected timeouts/fakes so tests are fast and deterministic — no real sleeps near WaitDelay. go test ./internal/relay/... green. Do not tick tasks.md.",
       "assignee": "SENIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 262144,
       "createdAt": "2026-06-05T00:27:20.307830265Z",
-      "updatedAt": "2026-06-05T00:27:20.307830265Z",
-      "completedAt": null
+      "updatedAt": "2026-06-05T04:17:49.420842687Z",
+      "completedAt": "2026-06-05T04:17:49.420842687Z"
     },
     {
       "id": "rall-4c9f",
       "title": "Verify responsive stop/quit behavior",
       "description": "Use the openspec-verify-change skill against agent-lifecycle, focused on the stop/quit phase (tasks 2.1-2.4, spec 'Responsive stop and quit shortcuts').\n\nIdentify the merge target before diffing (do not assume main). Review the actual select-loop edit in runner.go: confirm ActionQuit now cancels+drains+breaks and aborts the relay, ActionStop is unchanged, and the drain stays responsive to a second quit without deadlock or channel races. Confirm the 'stopping…' indicator is wired. Trace at least one test per scenario rather than trusting the suite count.\n\nThis is the highest-concurrency-risk slice: look specifically for goroutine leaks, double-cancel, or a hang when the child ignores SIGINT. Run go test ./internal/relay/... -race if feasible.\n\nCheck off tasks.md 2.1-2.4 only for verified-correct work. Head-lap any substantive gap; tiny one-liners only inline. No history rewriting.",
       "assignee": "VERIFY",
-      "isDone": false,
+      "isDone": true,
       "order": 327680,
       "createdAt": "2026-06-05T00:27:20.307831869Z",
-      "updatedAt": "2026-06-05T00:27:20.307831869Z",
-      "completedAt": null
+      "updatedAt": "2026-06-05T04:24:01.565191422Z",
+      "completedAt": "2026-06-05T04:24:01.565191422Z"
     },
     {
       "id": "rall-e793",
