@@ -19,9 +19,9 @@
 - [x] 3.2 Wire the real resume flag for gemini (`internal/agent/gemini.go`), opencode (`internal/agent/opencode.go`), and codex's main `Execute` (`internal/agent/codex.go:173` — use `exec resume <sessionID>` like the liveness probe), after confirming each CLI's actual resume invocation against its `--help`; OR set `ResumeSupported()=false` for any harness whose resume cannot be verified
 - [x] 3.3 Preserve the existing runner-side resume policy: resume on any retry with a tracked session; `FreshRestart` clears the session (`runner.go:1157-1160`). Do NOT add a "meaningful progress" heuristic
 - [x] 3.4 On resume failure, preserve the existing degrade-to-fresh-try behavior rather than erroring the run
-- [ ] 3.5 Contract test: for every executor, `ResumeSupported()==true` implies the built command args contain the resume flag when `ResumeSessionID` is set
-- [ ] 3.6 Regression tests (assert already-working behavior is preserved): pause captures the session ID; resume reuses it on the next attempt; explicit skip starts fresh; `FreshRestart` starts fresh
-- [ ] 3.7 Run a `test-driving-rally` pause/resume validation pass after implementation
+- [x] 3.5 Contract test: for every executor, `ResumeSupported()==true` implies the built command args contain the resume flag when `ResumeSessionID` is set
+- [x] 3.6 Regression tests (assert already-working behavior is preserved): pause captures the session ID; resume reuses it on the next attempt; explicit skip starts fresh; `FreshRestart` starts fresh
+- [x] 3.7 Run a `test-driving-rally` pause/resume validation pass after implementation
 
 ## 4. Shortcut label renames
 
