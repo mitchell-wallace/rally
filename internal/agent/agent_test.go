@@ -541,6 +541,75 @@ func TestParseOpenCodeOutput_CapturesSessionID(t *testing.T) {
 	}
 }
 
+// TestResumeSupportImpliesSessionCapture is a contract test across all executors:
+// every harness reporting ResumeSupported()==true MUST also capture a session ID
+// from realistic harness output. Capture is half the resume contract — without it,
+// result.SessionID is always empty, the runner never has a session to feed back as
+// the next attempt's ResumeSessionID, and resume silently no-ops even though the
+// resume flag is wired (the opencode bug fixed in 0.8.7). Each resume-supporting
+// harness needs an entry in `captures` proving its parse path extracts a non-empty
+// session ID; a harness that does not claim resume support must NOT have one.
+//
+// Adding a new resume-supporting executor without a capture fixture fails this test,
+// forcing the author to prove the session is actually captured end-to-end.
+func TestResumeSupportImpliesSessionCapture(t *testing.T) {
+	// Each extractor feeds a realistic, harness-specific output sample through the
+	// executor's real capture path and returns the captured session ID.
+	captures := map[string]func() string{
+		"claude": func() string {
+			out := []byte(`{"type":"system","session_id":"sess-claude-1"}
+{"type":"result","session_id":"sess-claude-1","result":"{\"completed\":true,\"summary\":\"ok\"}"}`)
+			_, sid, _ := scanClaudeOutput(out)
+			return sid
+		},
+		"codex": func() string {
+			out := []byte(`{"type":"thread.started","thread_id":"codex-sess-1"}
+{"type":"item.completed","item":{"id":"item_0","type":"agent_message","text":"ok"}}`)
+			sid, _ := scanCodexEvents(out)
+			return sid
+		},
+		"opencode": func() string {
+			out := []byte(`{"type":"step_start","sessionID":"ses_oc1","part":{"type":"step-start"}}
+{"type":"text","sessionID":"ses_oc1","part":{"type":"text","text":"{\"completed\":true,\"summary\":\"ok\"}"}}`)
+			tr, err := parseOpenCodeOutput(out, true)
+			if err != nil {
+				return ""
+			}
+			return tr.SessionID
+		},
+		"antigravity": func() string {
+			return scanAntigravityConversationID([]byte("Print mode: conversation=11111111-2222-3333-4444-555555555555\n"))
+		},
+	}
+
+	executors := map[string]Executor{
+		"claude":      &ClaudeExecutor{},
+		"codex":       &CodexExecutor{},
+		"opencode":    &OpenCodeExecutor{},
+		"antigravity": &AntigravityExecutor{},
+		"gemini":      &GeminiExecutor{},
+		"generic":     &GenericExecutor{},
+		"fixture":     &FixtureExecutor{},
+	}
+
+	for name, exec := range executors {
+		if !exec.ResumeSupported() {
+			if _, ok := captures[name]; ok {
+				t.Errorf("%s reports ResumeSupported()==false but has a session-capture fixture; either wire resume or drop the fixture", name)
+			}
+			continue
+		}
+		capture, ok := captures[name]
+		if !ok {
+			t.Errorf("%s reports ResumeSupported()==true but has no session-capture fixture — resume will silently no-op unless its parse path captures a session ID. Add a fixture proving capture.", name)
+			continue
+		}
+		if sid := capture(); sid == "" {
+			t.Errorf("%s reports ResumeSupported()==true but captured an empty session ID from realistic output — resume cannot fire", name)
+		}
+	}
+}
+
 func TestParseOpenCodeOutput_MissingText(t *testing.T) {
 	for _, tc := range []struct {
 		name        string
