@@ -221,22 +221,22 @@ func runRelay(cmd *cobra.Command, args []string) error {
 	}
 
 	runnerCfg := relay.Config{
-		WorkspaceDir:             workspaceDir,
-		DataDir:                  dataDir,
-		AgentMixSpecs:            selectedSpecs,
-		RouteSpecs:               cfg.Routes,
-		UseOverrideRoute:         usedOverride,
-		TargetIterations:         iterations,
-		StallThreshold:           cfg.Reliability.StallThreshold(),
-		LivenessProbe:            cfg.Reliability.LivenessProbe,
-		RetryBudget:              cfg.Reliability.RetryBudget,
-		RunHooksOnAutoCommit:     cfg.RunHooksOnAutoCommit,
-		LapsEnabled:              lapsEnabled,
-		LapsInstructionsFile:     cfg.Laps.InstructionsFile,
-		FreeRunPromptFile:        cfg.FreeRun.PromptFile,
-		RecentTryCount:           cfg.Reliability.RecentTryCount,
-		RecentTryCharLimit:       cfg.Reliability.RecentTryCharLimit,
-		RecentContextCharLimit:   cfg.Reliability.RecentContextCharLimit,
+		WorkspaceDir:           workspaceDir,
+		DataDir:                dataDir,
+		AgentMixSpecs:          selectedSpecs,
+		RouteSpecs:             cfg.Routes,
+		UseOverrideRoute:       usedOverride,
+		TargetIterations:       iterations,
+		StallThreshold:         cfg.Reliability.StallThreshold(),
+		LivenessProbe:          cfg.Reliability.LivenessProbe,
+		RetryBudget:            cfg.Reliability.RetryBudget,
+		RunHooksOnAutoCommit:   cfg.RunHooksOnAutoCommit,
+		LapsEnabled:            lapsEnabled,
+		LapsInstructionsFile:   cfg.Laps.InstructionsFile,
+		FreeRunPromptFile:      cfg.FreeRun.PromptFile,
+		RecentTryCount:         cfg.Reliability.RecentTryCount,
+		RecentTryCharLimit:     cfg.Reliability.RecentTryCharLimit,
+		RecentContextCharLimit: cfg.Reliability.RecentContextCharLimit,
 	}
 
 	runnerCfg.Resolver = func(spec string) (agent.ResolvedAgent, error) {

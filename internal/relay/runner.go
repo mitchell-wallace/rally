@@ -29,26 +29,26 @@ import (
 )
 
 type Config struct {
-	WorkspaceDir             string
-	DataDir                  string
-	AgentMixSpecs            []string
-	RouteSpecs               map[string][]string
-	UseOverrideRoute         bool
-	TargetIterations         int
-	StallThreshold           time.Duration
-	LivenessProbe            bool
-	RetryBudget              int
-	RunHooksOnAutoCommit     bool
-	LapsEnabled              bool
-	Instructions             string
-	TaskPrompt               string
-	OverwriteMixOnResume     bool
-	Resolver                 Resolver
-	LapsInstructionsFile     string
-	FreeRunPromptFile string
-	RecentTryCount           int
-	RecentTryCharLimit       int
-	RecentContextCharLimit   int
+	WorkspaceDir           string
+	DataDir                string
+	AgentMixSpecs          []string
+	RouteSpecs             map[string][]string
+	UseOverrideRoute       bool
+	TargetIterations       int
+	StallThreshold         time.Duration
+	LivenessProbe          bool
+	RetryBudget            int
+	RunHooksOnAutoCommit   bool
+	LapsEnabled            bool
+	Instructions           string
+	TaskPrompt             string
+	OverwriteMixOnResume   bool
+	Resolver               Resolver
+	LapsInstructionsFile   string
+	FreeRunPromptFile      string
+	RecentTryCount         int
+	RecentTryCharLimit     int
+	RecentContextCharLimit int
 }
 
 type Runner struct {
@@ -61,10 +61,10 @@ type Runner struct {
 	resilience *Resilience
 	relayStart time.Time
 
-	lapsInstructionsCache     string
-	lapsWarned                bool
-	freeRunPromptCache string
-	freeRunWarned      bool
+	lapsInstructionsCache string
+	lapsWarned            bool
+	freeRunPromptCache    string
+	freeRunWarned         bool
 
 	stallControllerFactory func(logPath string) reliability.StallController
 	sleepFunc              func(time.Duration)

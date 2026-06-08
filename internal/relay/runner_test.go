@@ -3351,11 +3351,11 @@ func TestFallbackInstructionsUsedInNoBackendMode(t *testing.T) {
 	executors := map[string]agent.Executor{"claude": exec}
 
 	r := NewRunner(s, Config{
-		WorkspaceDir:             workspaceDir,
-		DataDir:                  t.TempDir(),
-		AgentMixSpecs:            []string{"cc:1"},
-		TargetIterations:         1,
-		LapsEnabled:              false,
+		WorkspaceDir:      workspaceDir,
+		DataDir:           t.TempDir(),
+		AgentMixSpecs:     []string{"cc:1"},
+		TargetIterations:  1,
+		LapsEnabled:       false,
 		FreeRunPromptFile: fallbackFile,
 	}, executors)
 
@@ -3391,12 +3391,12 @@ func TestFallbackInstructionsIgnoredWhenCLIPromptProvided(t *testing.T) {
 	executors := map[string]agent.Executor{"claude": exec}
 
 	r := NewRunner(s, Config{
-		WorkspaceDir:             workspaceDir,
-		DataDir:                  t.TempDir(),
-		AgentMixSpecs:            []string{"cc:1"},
-		TargetIterations:         1,
-		LapsEnabled:              false,
-		TaskPrompt:               "CLI prompt",
+		WorkspaceDir:      workspaceDir,
+		DataDir:           t.TempDir(),
+		AgentMixSpecs:     []string{"cc:1"},
+		TargetIterations:  1,
+		LapsEnabled:       false,
+		TaskPrompt:        "CLI prompt",
 		FreeRunPromptFile: fallbackFile,
 	}, executors)
 
@@ -3436,12 +3436,12 @@ func TestFallbackInstructionsIgnoredInLapsMode(t *testing.T) {
 	executors := map[string]agent.Executor{"claude": exec}
 
 	r := NewRunner(s, Config{
-		WorkspaceDir:             workspaceDir,
-		DataDir:                  t.TempDir(),
-		AgentMixSpecs:            []string{"cc:1"},
-		TargetIterations:         1,
-		LapsEnabled:              true,
-		TaskPrompt:               "configured prompt",
+		WorkspaceDir:      workspaceDir,
+		DataDir:           t.TempDir(),
+		AgentMixSpecs:     []string{"cc:1"},
+		TargetIterations:  1,
+		LapsEnabled:       true,
+		TaskPrompt:        "configured prompt",
 		FreeRunPromptFile: fallbackFile,
 	}, executors)
 
@@ -3474,11 +3474,11 @@ func TestFallbackInstructionsMissingFileUsesBuiltInDefault(t *testing.T) {
 	executors := map[string]agent.Executor{"claude": exec}
 
 	r := NewRunner(s, Config{
-		WorkspaceDir:             workspaceDir,
-		DataDir:                  t.TempDir(),
-		AgentMixSpecs:            []string{"cc:1"},
-		TargetIterations:         1,
-		LapsEnabled:              false,
+		WorkspaceDir:      workspaceDir,
+		DataDir:           t.TempDir(),
+		AgentMixSpecs:     []string{"cc:1"},
+		TargetIterations:  1,
+		LapsEnabled:       false,
 		FreeRunPromptFile: filepath.Join(workspaceDir, "nonexistent.md"),
 	}, executors)
 
@@ -3680,13 +3680,13 @@ func TestRunnerNoBackendUsesDefaultRouteAndFallbackPrompt(t *testing.T) {
 	executors := map[string]agent.Executor{"codex": exec}
 
 	r := NewRunner(s, Config{
-		WorkspaceDir:             workspaceDir,
-		DataDir:                  t.TempDir(),
-		RouteSpecs:               map[string][]string{"default": []string{"cx:1"}},
-		TargetIterations:         1,
-		LapsEnabled:              false,
+		WorkspaceDir:      workspaceDir,
+		DataDir:           t.TempDir(),
+		RouteSpecs:        map[string][]string{"default": []string{"cx:1"}},
+		TargetIterations:  1,
+		LapsEnabled:       false,
 		FreeRunPromptFile: fallbackFile,
-		Resolver:                 testResolver,
+		Resolver:          testResolver,
 	}, executors)
 
 	if err := r.Run(context.Background()); err != nil {
@@ -3807,11 +3807,11 @@ instructions_file = %q
 
 	mixSpecs := strings.Fields(cfg.Defaults.Mix)
 	r := NewRunner(s, Config{
-		WorkspaceDir:             workspaceDir,
-		DataDir:                  t.TempDir(),
-		AgentMixSpecs:            mixSpecs,
-		TargetIterations:         cfg.Defaults.Iterations,
-		Resolver:                 resolver,
+		WorkspaceDir:      workspaceDir,
+		DataDir:           t.TempDir(),
+		AgentMixSpecs:     mixSpecs,
+		TargetIterations:  cfg.Defaults.Iterations,
+		Resolver:          resolver,
 		FreeRunPromptFile: cfg.FreeRun.PromptFile,
 	}, executors)
 
