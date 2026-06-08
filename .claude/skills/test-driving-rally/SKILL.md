@@ -439,3 +439,89 @@ What goes here vs. elsewhere:
 - *./tmp/session-handoff.md*: a single rolling doc with what *this session* did and what's outstanding. Overwrite each session.
 
 Do **not** duplicate rally's own documentation here — the authoritative source is the source code, `AGENTS.md`, and `README.md`. This skill captures *how to test-drive*, not *what rally can do*.
+
+---
+
+## 6. Adversarial verification of an OpenSpec change (reference)
+
+Use this when asked to verify that a specific OpenSpec change (e.g. a branch like
+`agent-lifecycle`) is *actually functional* — especially when its `tasks.md` is already
+all checked off. **"All tasks checked" and "all tests green" are not evidence the
+behavior works.** Your job is to disprove that, then patch what breaks. Treat the change
+as guilty until proven innocent.
+
+### 6.1 Build the checklist from the spec, not the tasks
+
+1. Read `openspec/changes/<change>/{proposal,design,spec,tasks}.md`. The **`spec.md`
+   Requirements + Scenarios are your test oracle** — each `#### Scenario:` is a behavior
+   you must observe directly. The `tasks.md` boxes tell you what the author *intended to
+   do*, not what works.
+2. For every scenario, write down the **observable behavior** that proves it, and the
+   cheapest way to *observe* it for real (drive the CLI, inspect state files, watch the
+   monitor). A scenario you can only "confirm" by reading code is not yet verified.
+3. Map each spec requirement to the code that implements it (grep the files named in the
+   proposal's Impact section), then to the test that guards it. Note any requirement with
+   **no behavioral test** — that's where bugs hide.
+
+### 6.2 Behavioural testing over unit-trust
+
+- **Drive the real thing.** Prefer running the actual agent CLI / a real `rally relay`
+  over trusting a unit test. The pre-built real-backend suite (section 0) is the baseline;
+  add targeted manual drives for the change's specific behaviors.
+- **Two-step behavioral probes beat assertions.** To verify *resume*, have the agent
+  memorize a codeword in try 1, then resume and ask for it back — if it answers, resume
+  genuinely works (this is how codex/opencode resume were proven). To verify *graceful
+  cancel*, send the signal and confirm the child actually dies within the window. Design
+  a probe whose success is only possible if the behavior is real.
+- **Verify the WHOLE data-flow chain, both ends.** Half-wired features are the #1
+  "looks-done" defect: a flag is *passed* but the value it depends on is never *captured*
+  (the opencode resume bug — `--session` was wired, but `parseOpenCodeOutput` never
+  captured `sessionID`, so the session was always empty and resume silently no-op'd).
+  For any "pass X downstream" feature, also confirm X is produced upstream.
+- **Distrust contract tests that inject their own precondition.** A test that sets
+  `ResumeSessionID` and asserts the flag appears proves nothing about whether a session
+  is ever captured in the wild. When a capability flag (`ResumeSupported()`,
+  `RotateSupported()`, …) claims `true`, prove the capability is *honest* end-to-end, and
+  prefer a contract test that fails if a new harness claims the capability without wiring
+  the full chain (see `TestResumeSupportImpliesSessionCapture`).
+- **Confirm CLI invocations against reality.** Don't assume an arg string is correct —
+  check it against the CLI's `--help` AND a real run. Subcommand/flag placement
+  (`codex exec [flags] resume <id> …`), flag-takes-index-vs-id (gemini `--resume`), and
+  client/server cwd resolution (opencode `--dir`) all bit this change.
+- **Shake out races.** Run suspect packages with `-count=3` and `-race`; flaky
+  "file already closed" / pipe errors are usually a real ordering bug (the codex
+  `cmd.Wait()`-before-drain race), not noise.
+
+### 6.3 Common "looks-done" defect classes (check each)
+
+- **Half-wired data flow** — downstream consumer wired, upstream producer missing.
+- **Dishonest capability flag** — `XxxSupported()==true` but the path no-ops.
+- **Stale tests/docs from a *prior* change** — a behavior changed (e.g. pause now needs
+  repeated infra failures) but old tests/skill text still assert the old contract. `git
+  blame` the relevant condition to see whether a failure is a *new* regression or a
+  pre-existing stale assertion, and fix the test/doc to the current behavior (don't
+  re-assert the old one).
+- **CLI arg assumptions** — wrong subcommand/flag placement or semantics.
+- **Environment/isolation leaks** — agent writes into the test/process cwd instead of its
+  workspace; check `git status` after a real-backend run for strays.
+
+### 6.4 Catch → patch → prove loop
+
+When a probe fails, fix it in-session (the user expects fixes, not just a report):
+
+1. **Root-cause it** by tracing the data flow in code, not by patching the symptom.
+2. **Make the minimal surgical fix** matching surrounding style.
+3. **Add a regression test that fails before and passes after** — and *prove it catches
+   the bug*: temporarily revert the fix, watch the test go red, restore it, watch it go
+   green. (A regression test you never saw fail might be asserting nothing.)
+4. **Re-run** the unit suite, the relevant real-backend test, and your behavioral probe.
+5. **Bump VERSION** (patch for bugfixes on an in-flight change; see section 1) and commit
+   code fixes separately from skill/doc updates.
+
+### 6.5 Cover every harness; divide and conquer
+
+The change usually touches all executors. Drive a **simple task on each harness**
+(`cc`, `cx`, `ge`, `op`, `ag`/`agy`) plus the change-specific behavior. Use the current
+slugs (section 1). For large permutation sets, fan out to short-lived subagents (one
+harness or one scenario each) and keep each subagent task small and concrete — but do the
+spec reading, checklist, and root-causing yourself so the judgment stays in one place.

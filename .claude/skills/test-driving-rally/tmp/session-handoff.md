@@ -53,12 +53,30 @@ tests still asserted the old "any failure pauses" behavior:
 - Real-backend suite: all green after fixes. (Pre-fix: OpenCodeRelay + ResilienceRetryBudget
   failed on stale assertions.)
 
+## Followups completed (commit set 2, v0.8.8)
+- **opencode workspace isolation FIXED.** Root cause: opencode's client/server model
+  resolves file paths against the SERVER cwd, not the `opencode run` client's `cmd.Dir`,
+  so it wrote task files into the `go test` process cwd (`internal/relay/`). Fix: pass
+  `--dir opts.WorkspaceDir` to `opencode run` (verified: file lands in target, nothing
+  leaks to cwd; real OpenCodeRelay run no longer recreates `opencode-e2e.txt`).
+- **`git rm internal/relay/opencode-e2e.txt`** — the tracked artifact (originally
+  auto-committed by a rally self-relay, commit 39fef5a).
+- **Session-capture contract test** `TestResumeSupportImpliesSessionCapture`: enumerates
+  all executors; every `ResumeSupported()==true` harness must have a fixture proving its
+  parse path captures a non-empty session ID from realistic output. Proven to catch the
+  opencode bug (temporarily reverted capture → test goes red with the exact message).
+  Guards future resume-harness additions.
+- **Skill: added §6 "Adversarial verification of an OpenSpec change (reference)"** —
+  spec-scenarios-as-oracle, behavioural 2-step probes, verify-both-ends-of-the-data-flow,
+  distrust contract tests that inject their own precondition, common looks-done defect
+  classes, and the catch→patch→prove-the-regression-test loop.
+
 ## Outstanding / for next session
-- **Test-artifact leak**: real-backend tests leave `internal/relay/opencode-e2e.txt`
-  (already tracked!) and `step-3.txt` (untracked). Consider fixing test workspace
-  isolation and `git rm` the tracked artifact. Not done this session (scoped out).
 - The unrelated openspec "Update Notes" edits + `.laps/laps.json` + `.rally/summary.jsonl`
   in the working tree are pre-existing/from other work — left untouched.
 - Did not drive an interactive Ctrl+P→resume through the real TUI (hard to automate);
   resume proven by composition (unit capture test + CLI resume proof + runner plumbing
   trace + action-loop tests).
+- Other harnesses use `cmd.Dir` only; they didn't leak in testing, but if a future
+  harness adopts a daemon model, re-check workspace isolation with a `git status` after a
+  real run.
