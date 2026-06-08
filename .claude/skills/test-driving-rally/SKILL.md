@@ -234,10 +234,28 @@ Run `rally relay --new --agent mycode:kimi "Create file custom-test.txt"`. Check
 
 ### 2g. Resilient execution
 
-After a run exhausts its retry budget (e.g., codex CLI broken), check:
+**Pause semantics (changed 2026-05-28 in `harden-relay-run-lifecycle`):** an agent
+is only **paused** (`"paused"` event in `agent_status.jsonl`) when its failures are
+classified `FailureInfra` AND there is more than one infra failure
+(`failureClass == FailureInfra && infraFailures > 1`). A *plain* agent task-failure
+(`FailureAgent` — e.g. the agent runs but makes no changes, or returns a non-infra
+error) **no longer pauses** the agent; the scheduler still rotates off it within the
+relay via `OnAgentFailed`, but cross-relay resilience-pause is reserved for repeated
+infra problems (rate limits, connection refused, usage limits, harness/launch errors —
+see `internal/reliability/patterns.go`). Classification reads the **last 50 lines of the
+try log file**, so to force an infra classification in a fake-executor test, write an
+infra-pattern line (e.g. `rate limit`) to `opts.LogPath`.
+
+To verify pause-on-infra (e.g. codex CLI broken, or a rate-limited free-tier provider),
+check:
 - `.rally/state/agent_status.jsonl` contains a `"paused"` event for that agent
 - Subsequent relay attempts for that agent show "all agents paused, waiting Xm" in the relay log
 - `~/.local/share/rally/relays/relay-N.log` for confirmation
+
+`TestRealBackend_ResilienceRetryBudget` (deterministic, fake executor) guards the
+infra-pause path; `TestRealBackend_OpenCodeRelay` only requires a pause event when the
+opencode failure was infra-classified (a plain "no changes" failure is a valid
+non-paused outcome). Do NOT re-assert the old "any failure pauses" behavior.
 
 ### 2h. Resume and --new/--resume flags
 
@@ -337,9 +355,40 @@ These are agent-CLI behaviours that affect how tests appear. None are rally bugs
 - **Codex**: `--full-auto` / `--dangerously-bypass-approvals-and-sandbox` conflict resolved (commit history) — only the bypass flag is passed now. `TestRealBackend_CodexRelay` guards this.
 - **OpenCode**: Model availability varies by provider. Use the built-in `op` alias — NOT a custom harness with `command = ["opencode"]` (which starts TUI mode). Rally warns on this at startup. When rate-limited (`opencode-go` free tier in particular), opencode maintains TCP connections silently for ~2 minutes then disconnects; `classicFrozen` fires ~130s after start regardless of freeze threshold (provided threshold < 130s). After freeze, rally marks the agent paused and retries later. Free tier resets roughly every 12h.
 
+### Session resume per harness (verified 2026-06-08)
+
+Resume reuses a harness's prior session on pause/resume and on any retry that has a
+tracked session ID. The runner is harness-agnostic: it carries `result.SessionID` into
+the next attempt's `RunOptions.ResumeSessionID` (runner.go ~`:999`/`:1439`) and persists
+it to run-state. A harness contributes to resume only if it BOTH (a) captures its
+session ID into `TryResult.SessionID`, and (b) passes its resume flag when
+`ResumeSessionID != ""`. Current truth:
+
+| Harness | `ResumeSupported()` | Captures session? | Resume flag | Verified |
+|---|---|---|---|---|
+| claude | true | ✅ | `--resume <id>` | works |
+| antigravity | true | ✅ | `--conversation=<id>` | works |
+| codex | true | ✅ (`thread.started`) | `exec [flags] resume <id>` | **end-to-end CLI proven** — same thread reused, prior context retained |
+| opencode | true | ✅ (`sessionID` field, **fixed 0.8.7**) | `--session <id>` | CLI resume proven; capture was missing pre-0.8.7 |
+| gemini | **false** | n/a | n/a (CLI `--resume` is **index/`latest` only, not a session UUID**) | correctly honest-false |
+
+Gotcha: gemini *does* have `-r, --resume` but it takes an index number or `latest`, not
+a captured session UUID, so `ResumeSupported()=false` is the correct honest answer — do
+not "fix" it to true. If you find a harness reporting `ResumeSupported()=true` whose
+`parseXxxOutput` never sets `TryResult.SessionID`, resume is silently dead (that was the
+opencode bug). Drive a real 2-step resume check: have the agent memorize a codeword in
+try 1, then resume and ask for it.
+
 **Linux freeze behavior**: Two paths — `classicFrozen` (log silent + no connections) fires once connections drop (either after task completion or after rate-limit timeout). `connectedFrozen` (log silent + connections open + no syscall I/O for 5 min) catches agents holding a connection open indefinitely (e.g., different rate-limit behavior). The `TestRealBackend_OpenCodeRelay` test takes ~3 minutes when opencode-go is rate-limited (2m10s for freeze + 50s for ctx expiry); this is expected and the test passes.
 
 When an agent CLI is broken/unauthed, verify that rally's retry and resilience handling works correctly (pause recorded, relay continues or ends gracefully) rather than treating it as a rally failure.
+
+**Test-artifact leak**: some real-backend tests (e.g. OpenCodeRelay) can leave task
+output files (`opencode-e2e.txt`, `step-3.txt`, …) in `internal/relay/` because the
+agent occasionally writes into the package dir rather than its temp workspace. After a
+`RALLY_TEST_REAL_AGENTS=1` run, check `git status` and `git checkout`/`rm` these strays
+before committing — they are not real changes and `opencode-e2e.txt` is already an
+accidentally-tracked artifact.
 
 ---
 
