@@ -51,14 +51,21 @@ continue to emit the local `relay_id` tag for within-machine correlation.
 
 ### Requirement: Agent state on captured failures
 When a failure is captured, the system SHALL attach the failing try's agent state as
-filterable scalar tags: the current attempt and retry budget, the failure class
-(infra, agent, or incomplete), and the agent-type resilience state (active, probation,
-or frozen) where known. The harness and model SHALL remain available via the existing
-`runner` tag.
+filterable scalar tags: the current attempt and retry budget, the stable failure
+category (as defined by the error-categorisation taxonomy), and the agent-type
+resilience state (active, probation, frozen, or benched) where known. When the failure
+category is a usage/quota exhaustion, the system SHALL additionally attach the quota
+scope and reset timing where the failure evidence provides them. The system SHALL read
+these values from the failure evidence produced upstream and SHALL NOT re-classify the
+failure. The harness and model SHALL remain available via the existing `runner` tag.
 
 #### Scenario: Captured failure carries agent state
 - **WHEN** an operator-worthy failure is captured
-- **THEN** the event SHALL include the attempt, retry budget, failure class, and resilience state tags
+- **THEN** the event SHALL include the attempt, retry budget, failure category, and resilience state tags
+
+#### Scenario: Usage-limit failure carries reset evidence
+- **WHEN** a captured failure has a usage/quota-exhaustion category with reset evidence
+- **THEN** the event SHALL additionally include the quota scope and reset timing as scalar tags
 
 #### Scenario: Agent-class failures unaffected
 - **WHEN** an agent-class try failure is recorded as a span/log rather than an Issue

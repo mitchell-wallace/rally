@@ -7,13 +7,19 @@ and returns a `Sink`; `SentrySink` implements spans (`StartSpan`), per-try logs
 values. Correlation tags are built in `tags.go` from `EventInfo`.
 
 Failures are captured at three sites in `internal/relay/runner.go`: relay stall
-(all agents frozen, `runner.go:393`), per-try failure (`runner.go:1227`), and
-"agent exited without finalizing" (`runner.go:1298`). The relay-level span is tagged
-at `runner.go:337`.
+(all agents frozen, `runner.go:433`), per-try failure (`runner.go:1418`), and
+"agent exited without finalizing" (`runner.go:1489`). The relay-level span is tagged
+at `runner.go:377`.
 
 What is missing is **context that survives leaving the machine**: there is no record
 of rally version, OS, terminal, or working directory, and every identifier
 (`relay_id`, `try_id`) is a local store counter that collides across machines.
+
+This change sequences **after** `improve-error-categorisation`, which introduces the
+typed `FailureEvidence` on `TryResult`, the stable `FailureCategory` set, the
+harness-aware `quota_scope`, and the reset-driven **benched** state. Telemetry consumes
+those values for the failure-state snapshot rather than computing its own failure class,
+so the assumed baseline below is the post-error-categorisation runner.
 
 ## Goals / Non-Goals
 
@@ -49,7 +55,7 @@ unreadable/unwritable, fall back to an ephemeral per-process value (still anonym
 `relay_guid = <machine-id-prefix>-<YYYYMMDD>-<relay_id>`, where the date comes from
 the relay's `StartedAt` and `relay_id` is the existing local counter. Attach
 `relay_guid`, `machine_id`, and `relay_started_at` (RFC3339) as tags/context at the
-relay span (`runner.go:337`) and on every failure capture. Keep emitting the local
+relay span (`runner.go:377`) and on every failure capture. Keep emitting the local
 `relay_id` tag for back-compat and within-machine correlation with `summary.jsonl`.
 Rationale for a composite over a random UUID: it stays human-greppable and ties back
 to the local store, while the machine prefix + date guarantee cross-machine
@@ -65,11 +71,17 @@ is retained.
 
 **5. Agent state on failure.**
 Extend the failure-capture call sites to pass a small state struct alongside the
-existing tags: `attempt`, `max_attempts`, `failure_class` (infra / agent /
-incomplete), and `agent_state` (active / probation / frozen) for the runner whose try
-failed, where the runner can supply it. Harness+model already arrive via the `runner`
-tag. These are scalar tags, so they remain filterable in Sentry. Use the resilience
-vocabulary from `harden-relay-run-lifecycle` verbatim.
+existing tags: `attempt`, `max_attempts`, the stable `failure_category` from
+`improve-error-categorisation` (e.g. `usage_limit`, `short_rate_limit`,
+`invalid_model`, `incomplete_finalization`, `agent_error`, …), and `agent_state`
+(active / probation / frozen / benched) for the runner whose try failed. When the
+category is a usage/quota failure, also attach the `FailureEvidence` reset fields as
+scalar tags where present (`quota_scope`, `reset_at`/`reset_after`), so a captured quota
+exhaustion is triageable without re-reading logs. Harness+model already arrive via the
+`runner` tag. These are scalar tags, so they remain filterable in Sentry. Read the
+category and evidence straight off the `TryResult.Evidence` / `StrategyDecision` that
+`improve-error-categorisation` populates — do not re-classify here. Use the resilience
+vocabulary (active / probation / frozen / benched) verbatim.
 
 ## Risks / Trade-offs
 

@@ -2,363 +2,441 @@
 
 ## Why
 
-Recent real Rally relays exposed that the current failure labels are too coarse
-and sometimes actively misleading. The visible CLI output is improving, but the
-underlying categorisation still conflates different operational causes:
+Recent real Rally relays showed the failure taxonomy is too coarse and sometimes
+actively misleading. The CLI surface has improved, but the underlying
+classification still conflates distinct operational causes, so the labels that
+drive operator decisions, retry timing, benching, and Sentry issues are often
+wrong. The objective of this change is **cleaner, more consistent, and more
+understandable error handling and reporting**: one taxonomy, one priority order,
+and one typed evidence shape used everywhere a failure is decided, displayed, or
+recorded.
 
-- Long subscription usage limits are shown as generic `agent error`, generic
-  `rate limit`, or `incomplete: file changes without finalization`.
-- A Codex run can be labelled `claude rate-limit interrupt` because the shared
-  classifier matches unscoped text in a log tail.
-- Dirty harness-local settings can make startup/provider errors look like agent
-  file edits without finalization.
-- Invalid model names are currently a workaround for per-relay runner disabling,
-  but the resulting failures are not categorized as configuration errors.
+Concretely, today (`internal/reliability/patterns.go`,
+`internal/relay/runner.go:1270`):
 
-These labels drive operator decisions, retry timing, runner freezing, Sentry
-issues, and the on-screen retry story. When they are wrong, Rally wastes tries,
-waits for the wrong duration, routes poorly, and makes post-relay debugging
-harder.
+- `rate limit` is one bucket for five different conditions (short throttle,
+  provider overload, multi-day subscription exhaustion, proxy block,
+  invalid-model fallback). They need different actions.
+- **`incomplete` wins first.** `ClassifyError` checks the dirty-tree context
+  before the pattern table (`patterns.go:239`), so a dirty harness-local file
+  (e.g. `.claude/settings.local.json`) masks a stronger `RESOURCE_EXHAUSTED` or
+  `model_not_found` as `incomplete: file changes without finalization`.
+- **Patterns are global substring matches** (`containsSubstring` over the last
+  50 log lines), not harness-scoped, so a Codex VERIFY run gets labelled
+  `claude rate-limit interrupt` because the log tail incidentally contains the
+  prose "rate-limit".
+- Classification reads arbitrary text only; harnesses that emit structured error
+  events get no benefit.
+- Display label and retry strategy are coupled to the same `Reason` string;
+  machine consumers (telemetry, scheduler) have to string-match.
 
 ## Evidence From Recent Runs
 
-### Antigravity Claude usage exhaustion
+Condensed from the relay forensics that motivated this change:
 
-Container `30cb9624d27c`, Rally 0.8.3, tries 57-61:
-
-- CLI displayed five short failures as `agent error`.
-- Raw Antigravity logs repeatedly contained:
-  `RESOURCE_EXHAUSTED (code 429): Individual quota reached ... Resets in
-  123h50m...`.
-- There were zero changed files, so incomplete detection did not mask the error.
-- This is a subscription usage/quota limit with a reset measured in days, not an
-  ordinary per-minute API rate limit.
-
-Container `ca5990ebcc41`, Rally 0.8.4, tries 242-246:
-
-- CLI displayed `incomplete: file changes without finalization`.
-- Raw Antigravity logs again showed `RESOURCE_EXHAUSTED ... Resets in
-  118h44m...`.
-- The only changed path was `.claude/settings.local.json`; there were no
-  agent-conducted task edits.
-- Dirty-path based incomplete classification masked the stronger provider
-  failure.
-
-### Claude intentionally disabled by invalid model
-
-Container `ca5990ebcc41`, tries 247-251:
-
-- The configured model was intentionally renamed to
-  `claude-opus-4-8-disabled` to preserve Claude usage for a parallel session.
-- Early tries produced `model_not_found` / HTTP 404 with text saying the selected
-  model may not exist or may not be accessible.
-- Later tries produced `403 CONNECT blocked: rate limit exceeded for
-  api.anthropic.com`.
-- Rally displayed `incomplete: file changes without finalization` because the
-  same harness-local `.claude/settings.local.json` path was dirty.
-- The clean category should be invalid model/configuration, not incomplete. A
-  cleaner per-relay disablement mechanism should avoid this pattern entirely.
-
-### Codex verifier runs mislabelled as Claude rate limits
-
-Container `30cb9624d27c`, Rally 0.8.3, tries 70-74:
-
-- Harness was Codex (`gpt-5.4`) on a VERIFY lap.
-- The attempts ran for around 16-18 minutes and produced useful verification
-  summaries, recorded laps, and Rally state changes.
-- Rally labelled several failures `claude rate-limit interrupt` or
-  `rate limit generic`.
-- The last 50 log lines contained incidental strings such as `rate-limit`,
-  `rate limit`, and `Claude`; the classifier currently uses broad global
-  substring patterns. This is classifier bleed-through, not a Codex quota event.
-- Waiting one minute repeatedly is mismatched to the underlying evidence and did
-  not resolve the run.
-
-### Incomplete retry-to-success
-
-Container `30cb9624d27c`, Rally 0.8.3, try 62 then retry success:
-
-- A Claude try changed files and failed without finalization.
-- The retry completed and committed successfully.
-- This validates retry-to-success and resume-on-retry as useful, but the resumed
-  prompt should include finalization guidance, not only previous summary/session
-  context.
-
-## Problem Shape
-
-The current taxonomy is not wrong in spirit, but it is missing important
-distinctions and priority rules:
-
-- `rate limit` is overloaded. Short API throttling, provider overload,
-  subscription usage limits, proxy blocks, and invalid-model fallback failures
-  need different actions.
-- `incomplete` currently wins too early when any new dirty path exists outside
-  `.rally/` and `.laps/`. Some dirty paths are harness-local or operator-local
-  state, not task progress.
-- Classifier patterns are not harness-scoped. A label can name the wrong
-  harness.
-- Classification mostly reads arbitrary text tails. Some harnesses emit
-  structured error events that should be parsed first.
-- Retry strategy and display category are coupled too tightly. The CLI label
-  should tell the operator what happened; the retry strategy should use parsed
-  retry/reset metadata where available.
+- **Antigravity Claude quota, zero changed files** (container `30cb9624d27c`,
+  tries 57-61): five `RESOURCE_EXHAUSTED (429) … Resets in 123h50m` failures
+  shown as generic `agent error`. A days-long subscription limit, not a per-minute
+  rate limit.
+- **Antigravity Claude quota, only harness-local dirty** (`ca5990ebcc41`,
+  tries 242-246): same `RESOURCE_EXHAUSTED … Resets in 118h44m`, but the only
+  dirty path was `.claude/settings.local.json`, so it displayed
+  `incomplete: file changes without finalization` — the dirty-path rule masked
+  the provider failure.
+- **Invalid model masked as incomplete** (`ca5990ebcc41`, tries 247-251): model
+  intentionally renamed to `claude-opus-4-8-disabled`; produced `model_not_found`
+  / 404 then `403 CONNECT blocked`, again shown as `incomplete` because the same
+  harness-local path was dirty.
+- **Codex mislabelled as Claude rate limit** (`30cb9624d27c`, tries 70-74): a
+  Codex (`gpt-5.4`) VERIFY lap produced useful summaries but was labelled
+  `claude rate-limit interrupt` / `rate limit generic` from incidental prose, and
+  then pointlessly waited one minute per try.
+- **Incomplete retry-to-success** (`30cb9624d27c`, try 62 → retry): a genuine
+  incomplete-finalization retry succeeded — the flow is good, but the resumed
+  prompt should carry explicit finalization guidance.
 
 ## Goals
 
-- Produce truthful, operator-actionable failure labels in the CLI footer,
-  retry line, try records, telemetry, and Sentry issue data.
-- Separate short rate limits from long usage/quota limits.
-- Parse reset/retry timing when providers expose it, and avoid arbitrary
-  one-minute waits for multi-hour or multi-day usage exhaustion.
-- Prevent dirty harness-local files from masking provider/configuration errors
-  as `incomplete`.
-- Make classification harness-aware so Codex cannot be labelled as a Claude
-  rate-limit interrupt.
-- Preserve the useful incomplete finalization flow for real task-file changes
-  without finalization.
-- Feed better categories into route fallback, runner freeze/disable decisions,
-  and retry/resume policy.
-- Add focused regression coverage using the observed signatures from this
-  thread.
+- One taxonomy of stable categories, surfaced consistently in the footer, retry
+  line, try records, telemetry, and Sentry.
+- Separate short rate limits from long usage/quota exhaustion, and parse reset /
+  retry timing when providers expose it (no one-minute waits for multi-hour
+  limits).
+- Provider / config / quota evidence beats `incomplete`; harness-local dirty
+  files never mask a stronger failure.
+- Harness-scoped classification: a Codex failure can never be labelled a Claude
+  rate limit.
+- A typed `FailureEvidence` carried on `TryResult`, so display, retry, scheduler,
+  and telemetry all read structured fields instead of re-parsing a string.
+- Usage limits **bench** the affected quota scope until reset; better categories
+  feed benching, fallback, and retry/resume policy.
+- Regression coverage built from the concrete signatures above.
 
 ## Non-Goals
 
-- Do not redesign the full harness adapter contract. That remains available for
-  the later `improve-harness-consistency` work once error handling has moved.
-- Do not build the new TUI here. This change may add data/actions that a future
-  start-of-run config or inflight steering UI can use.
-- Do not require OpenSpec for Rally core behavior.
-- Do not change the basic retry-to-success behavior for genuine incomplete
-  runs, except to ensure resumed attempts receive the right guidance.
+- Not the full harness-adapter normalization — that is `improve-harness-consistency`
+  (next-up #3). This change introduces `FailureEvidence` and begins populating it;
+  #3 completes moving population into every adapter under a conformance suite.
+- Not a per-relay runner-disable UI. `invalid_model` is classified correctly so
+  the invalid-model-name workaround is no longer *needed*, but the ergonomic
+  "disable a runner for this relay" flow is deferred to `build-new-tui` / steering.
+- Not a change to which failures become Sentry Issues vs spans (owned by the
+  telemetry spec).
+- Rally core stays OpenSpec-agnostic.
+
+## Decisions
+
+These four forks were settled on 2026-06-09:
+
+1. **Typed evidence lives on `TryResult` now, executor-populated.** Add a
+   `FailureEvidence` value to `TryResult`; executors begin populating it this
+   change (starting with the harnesses we have signatures for), and
+   `improve-harness-consistency` finishes the job for all adapters with a
+   conformance suite. Runner-side log parsing remains the fallback path for
+   harnesses not yet emitting structured evidence.
+2. **Usage limits bench the quota scope until reset.** A `usage_limit` does not
+   `frozen` the runner (that is the consecutive-infra circuit breaker, per
+   `ResilienceKey{Harness, Model}`) and does not loop one-minute waits — it
+   **benches** the affected route entries. The existing bench machinery
+   (`routing/scheduler.go` `OnAgentFailed(entry, reason, bench=true)` /
+   `OnAgentRecovered`) is necessary but **not sufficient** as-is: today
+   `EntryState` carries no time field and recovery is driven only by
+   `syncRecoverySignals` (`route_runtime.go:247`) reading resilience
+   `AgentState`. This change adds reset-deadline-driven recovery and scope-keyed
+   benching — see "Retry, Benching, And Routing" for the concrete mechanism. If
+   no reset is parseable, bench with a long conservative default and route away.
+3. **Quota scope is a harness-aware key, not flat `harness+model`.** Benching one
+   model must bench everything sharing the same account/quota bucket. The scope
+   key is computed by a single pure resolver `QuotaScope(harness, model) string`
+   (a standalone routing/config-layer function, **not** a new `Executor` method —
+   keep the `Executor` interface unchanged this round), testable in isolation:
+   - **antigravity** — per model *family*. Antigravity model names are free-form
+     display labels (`DefaultAntigravityModel = "Gemini 3.5 Flash (High)"`,
+     `antigravity.go:16`), **not** slugs, so the resolver uses case-insensitive
+     substring matching over the label: `claude` / `flash` / `pro` (gemini-pro)
+     are separate quotas (Claude exhaustion does not bench Gemini).
+   - **opencode** — per *provider*, the segment before the `/` in the model id
+     (`ResolvedAgent.Model` is `provider/model`, e.g. `zai-coding-plan/glm-5.1`,
+     `openai/…`). There is no global "opencode sub"; a Codex sub used via opencode
+     appears as `openai/…`.
+   - **direct harnesses** (`claude`, `codex`, `gemini`) — per harness, which is
+     effectively the account front.
+   Benching applies to every route entry whose resolved scope key matches. (Label
+   variance for antigravity — versions, `(High)` suffixes — may later need a
+   maintained mapping table; see Residual Open Questions.)
+4. **`invalid_model` is classified, not actioned with new UI.** It marks the
+   route entry exhausted and routes away (it must not spend the retry budget on
+   identical 404s), and surfaces the reason. No new disable flag here.
 
 ## Proposed Taxonomy
 
-Use stable internal categories and short display labels. Suggested starting set:
+Stable internal `FailureCategory` constants with short display labels. This
+replaces the current `claude rate-limit interrupt` / `rate limit generic` /
+`usage limit hit` pattern names with a typed set:
 
-- `usage_limit`: Subscription or account quota exhausted; reset is measured in
-  hours/days or explicitly described as a usage limit.
-  - Examples: Antigravity/Gemini `RESOURCE_EXHAUSTED ... Individual quota
-    reached ... Resets in 118h44m37s`; Codex "You've hit your usage limit";
-    Claude `rate_limit_event.rateLimitType` of `five_hour` or `seven_day` when
-    overage is rejected.
-  - Strategy: pause/freeze that runner until reset if parsed; route away. Do
-    not retry every minute.
-  - Display: `usage limit`, optionally `usage limit, resets in 118h44m`.
+| Category | Display | Strategy |
+|---|---|---|
+| `usage_limit` | `usage limit` (+ `resets in 118h44m`) | bench quota scope until reset; route away; never 1-min loop |
+| `short_rate_limit` | `rate limit` (+ `waiting 2m`) | wait parsed `Retry-After`, else short default; resume |
+| `provider_overloaded` | `provider overloaded` | resume within retry budget; do not bench for days |
+| `invalid_model` | `invalid model` | exhaust entry, route away; do not retry identically |
+| `auth_or_proxy` | `auth/proxy error` | route away, surface operator action |
+| `harness_launch` | `harness launch error` | fresh restart or rotate by subtype |
+| `incomplete_finalization` | `incomplete: file changes without finalization` | resume + retry **with finalization guidance** |
+| `agent_error` | `agent error` | existing retry/fresh behaviour (default) |
 
-- `short_rate_limit`: Short throttling or too-many-requests condition where a
-  short wait or `Retry-After` makes sense.
-  - Examples: `429 Too Many Requests` with a small `retry-after`; provider text
-    that clearly describes request throttling.
-  - Strategy: wait parsed retry-after or a conservative short default, then
-    resume.
-  - Display: `rate limit`, optionally with wait duration.
+Signatures that map into each (parser targets):
 
-- `provider_overloaded`: Provider 5xx/overload with no account quota signal.
-  - Examples: Claude `529 Overloaded`, `503 Service Unavailable`.
-  - Strategy: resume retry with exponential or existing retry budget behavior;
-    do not treat as usage exhaustion.
-  - Display: `provider overloaded`.
-
-- `invalid_model`: Configured model does not exist or is inaccessible.
-  - Examples: Claude `model_not_found`, "selected model may not exist or you may
-    not have access".
-  - Strategy: fail/rotate/disable that runner entry until config changes; do not
-    spend all retry budget on identical attempts.
-  - Display: `invalid model`.
-
-- `auth_or_proxy`: Authentication, OAuth, or proxy/connect block.
-  - Examples: `Failed to authenticate`, `CONNECT blocked`, OAuth token failures.
-  - Strategy: route away or mark runner unavailable until operator action.
-  - Display: `auth/proxy error`.
-
-- `harness_launch`: Local executable/config launch failure.
-  - Examples: `fork/exec`, `argument list too long`, executable missing.
-  - Strategy: fresh restart or rotate depending on subtype.
-  - Display: `harness launch error`.
-
-- `incomplete_finalization`: Meaningful task-file changes were produced by this
-  try, but the lap did not finalize with `laps done` or `laps handoff`.
-  - Strategy: resume retry with explicit finalization guidance.
-  - Display: `incomplete: file changes without finalization`.
-
-- `agent_error`: Agent exited or returned incomplete without stronger infra,
-  configuration, quota, or incomplete-finalization evidence.
-  - Strategy: existing retry/fresh behavior.
-  - Display: `agent error`.
+- `usage_limit` — Antigravity/Gemini `RESOURCE_EXHAUSTED … Individual quota
+  reached … Resets in <dur>`; Codex "you've hit your usage limit"; Claude
+  `rate_limit_event` of `five_hour` / `seven_day` when overage is rejected.
+- `short_rate_limit` — `429 Too Many Requests` with a small `Retry-After`.
+- `provider_overloaded` — Claude `529 Overloaded`, `503 Service Unavailable`.
+- `invalid_model` — Claude `model_not_found`, "selected model may not exist or you
+  may not have access".
+- `auth_or_proxy` — `Failed to authenticate`, `CONNECT blocked`, OAuth failures.
+- `harness_launch` — `fork/exec`, `argument list too long`, `exec format error`,
+  executable missing (the existing harness/launch patterns).
 
 ## Classification Priority
 
-1. Parse structured harness events and executor-returned error metadata first.
-2. Detect provider/configuration/quota errors from structured data or bounded
-   error snippets.
-3. Compute meaningful task-file change evidence for incomplete finalization.
-4. Apply harness-scoped text patterns as a fallback.
-5. Default to `agent_error`.
+The key behaviour change. `ClassifyError` is reordered to:
 
-This priority is the key behavior change. A dirty path should not mask
-`RESOURCE_EXHAUSTED`, `model_not_found`, or `Failed to authenticate`, especially
-when the changed file is known harness-local state.
+1. **Typed `FailureEvidence` from the executor** (if present) — authoritative.
+2. **Provider / config / quota evidence** from structured data or bounded error
+   snippets (`usage_limit`, `invalid_model`, `auth_or_proxy`,
+   `provider_overloaded`, `short_rate_limit`).
+3. **Meaningful task-file change** → `incomplete_finalization`.
+4. **Harness-scoped text patterns** as fallback.
+5. Default `agent_error`.
+
+So a dirty path can no longer mask `RESOURCE_EXHAUSTED`, `model_not_found`, or
+`Failed to authenticate` — the dirty-tree check moves *below* provider/config/quota
+detection, the inverse of today's ordering (`ClassifyError` at `patterns.go:237`
+runs the incomplete pre-check at `patterns.go:241`, before the pattern loop at
+`patterns.go:250`).
+
+### Category → FailureClass mapping
+
+The new `Category` is **orthogonal** to the existing three-value `FailureClass`
+(`infra`/`agent`/`incomplete`) that drives the freeze cascade and `infraFailures++`
+(`runner.go:1275-1276`). The mapping is load-bearing and must be stated explicitly,
+because a category that maps to `FailureInfra` *also* feeds the freeze counter — so a
+`usage_limit` mapped to infra would be **both** frozen (per harness+model) and benched
+(per quota scope), contradicting Decision §2. Required mapping:
+
+| Category | FailureClass | Notes |
+|---|---|---|
+| `usage_limit` | **not** `infra` | bench only; must not increment freeze counter; retries bounded by terminating the attempt loop on first detection (Mechanism §1), not the freeze counter |
+| `invalid_model` | **not** `infra` | exhaust entry only; not a transient infra fault |
+| `auth_or_proxy` | **not** `infra` | route away; bounded by the same attempt-loop break (Mechanism §1), not freeze |
+| `short_rate_limit` | `infra` | transient; existing wait-resume + freeze accounting fine |
+| `provider_overloaded` | `infra` | transient |
+| `harness_launch` | `infra` | transient launch fault |
+| `incomplete_finalization` | `incomplete` | unchanged |
+| `agent_error` | `agent` | unchanged default |
+
+## Harness-Scoped Patterns
+
+`ClassifyError` (and the pattern table) gain the harness identity, which is
+already in scope at the call site as `picked.Harness`
+(`runner.go:1272`). Each `Pattern` carries an optional harness constraint; a
+pattern only matches when the failing try's harness matches (or the pattern is
+harness-agnostic, e.g. generic network errors). Harness names are removed from
+the *display label* of generic reasons — `usage limit` not
+`claude rate-limit interrupt`, unless the harness genuinely is Claude and the
+label is intentionally Claude-specific.
 
 ## Harness-Local Dirty Path Handling
 
-Add a small exclusion or classification helper for paths that are not task work:
+Meaningful-task-change detection excludes paths that are not task work, so they
+cannot trigger `incomplete_finalization` or mask a provider error. The exclusion
+that actually governs the `incomplete` decision lives in **`internal/gitx/git.go`**,
+not the runner: the `incomplete` flag derives from `WorkspaceDirtyPaths`
+(`git.go:96`), and the same `.rally/`/`.laps/` prefix skip is duplicated in
+`IsWorkspaceDirty` (`git.go:82`) and `WorkspaceDirtyPaths` (`git.go:112`) (and a
+third copy in the `filesChanged` path used for records). Adding a path in only one
+place will not stop the masking.
 
-- Rally state remains excluded: `.rally/`, `.laps/`.
-- Add known harness-local transient paths observed in relays, starting with
+- Already excluded: `.rally/`, `.laps/` (two+ duplicated copies today).
+- **Extract a single shared exclusion helper** (e.g.
+  `gitx.IsRallyOwnedOrTransientPath`) consumed by all call sites, so the rule is
+  consistent and `incomplete` actually stops triggering on harness-local-only dirt.
+- Add known harness-local transient state to that helper, starting with
   `.claude/settings.local.json`.
-- Consider whether repo-local tool settings created by harness startup should be
-  excluded entirely or recorded under a separate `harness_state_changed` flag.
+- A try whose *only* dirty paths are excluded is treated as having no meaningful
+  task changes.
 
-The goal is not to hide real project configuration changes. The helper should be
-conservative and covered by tests:
+Conservative and test-covered:
 
-- A try that only dirties `.claude/settings.local.json` and logs
-  `RESOURCE_EXHAUSTED` is `usage_limit`.
-- A try that changes `src/foo.go` without finalization remains
-  `incomplete_finalization`.
-- A try that changes both a meaningful task file and a provider error should
-  prefer the provider error if the subprocess never reached useful work; this may
-  need structured evidence or tool-call/session evidence.
+- only `.claude/settings.local.json` dirty + `RESOURCE_EXHAUSTED` → `usage_limit`.
+- `src/foo.go` dirty, no finalization → `incomplete_finalization`.
+- meaningful task file dirty *and* a provider error where the subprocess never
+  reached useful work → prefer the provider error (relies on the structured
+  evidence / tool-call count, not just the dirty tree).
 
 ## Structured Error Evidence
 
-Prefer extracting a compact `FailureEvidence` from each executor or log parser:
+Add a typed evidence value carried on `TryResult` and produced by executors,
+with runner-side log parsing as the fallback populator:
 
 ```go
 type FailureEvidence struct {
-    Category     FailureCategory
-    Harness      string
-    Provider     string
-    Message      string
-    StatusCode   int
-    ResetAfter   time.Duration
-    ResetAt      *time.Time
-    RetryAfter   time.Duration
-    RawSignal    string
+    Category   FailureCategory
+    Harness    string
+    Provider   string        // provider/account segment where known
+    QuotaScope string        // harness-aware bench key (see Decisions §3)
+    Message    string        // human-readable, bounded
+    StatusCode int
+    ResetAfter time.Duration // parsed "resets in …"
+    ResetAt    *time.Time
+    RetryAfter time.Duration // parsed Retry-After
+    RawSignal  string        // bounded raw match for debugging
 }
 ```
 
-This does not need to be the final shape, but the runner needs a typed signal so
-it is not inferring everything from arbitrary text. The first pass can still live
-in reliability classification helpers if changing `TryResult` is too broad, but
-the design should move toward typed evidence.
+`StrategyDecision` carries the stable `Category` and a separate display label so
+nothing downstream has to string-match `Reason`. Executors populate
+`TryResult.Evidence` (`executor.go:44`) where they can; `ClassifyError` falls back
+to building evidence from the log tail for harnesses that don't yet.
 
-Observed parser targets:
+Note the population gap: process-level failures (`harness_launch` — `fork/exec`,
+non-zero exit) surface as the executor's returned `error` with a nil or partial
+`TryResult`, so executor-populated evidence is **absent exactly for those**.
+`ClassifyError` must therefore treat `Evidence` as optional (handle nil/empty
+gracefully) and the fallback log parser owns `harness_launch` and any other
+failure where `TryResult` is nil.
 
-- Antigravity/Gemini: `RESOURCE_EXHAUSTED`, `Individual quota reached`, `Resets
-  in <duration>`.
-- Claude: stream JSON `rate_limit_event`, `api_error_status`, `error` values
-  such as `model_not_found` and `authentication_failed`, result text for 529
-  overload.
-- Codex: `turn.failed` usage-limit messages and any structured error objects
-  emitted by the CLI.
-- Opencode: JSON error events and provider API errors, with harness-specific
-  parsing kept out of generic substring labels.
+Observed parser targets: Antigravity/Gemini `RESOURCE_EXHAUSTED` /
+`Individual quota reached` / `Resets in <dur>`; Claude stream-JSON
+`rate_limit_event`, `api_error_status`, `model_not_found`,
+`authentication_failed`, 529 overload; Codex `turn.failed` usage-limit messages;
+opencode JSON error events and provider API errors (kept out of generic substring
+labels).
 
-## Retry And Routing Behavior
+## Retry, Benching, And Routing
 
-- `usage_limit`: mark the runner unavailable until parsed reset where possible.
-  If no reset is available, apply a long conservative pause and route away. The
-  one-minute wait is inappropriate for five-hour or seven-day limits.
-- `short_rate_limit`: wait parsed retry-after; if absent, use a short default.
-- `invalid_model`: do not retry the same runner/model repeatedly. Mark the entry
-  exhausted for the relay or require operator/config change.
-- `auth_or_proxy`: route away and surface operator action; repeated retry is
-  unlikely to help.
-- `provider_overloaded`: retry/resume within budget; do not freeze for days.
-- `incomplete_finalization`: resume retry and include finalization instructions.
+- `usage_limit` — bench the quota scope (Decisions §2/§3) until parsed reset;
+  long conservative default + route away when no reset is available. Scheduler
+  recovery becomes reset-time-driven, not only the frozen→probation decay.
+- `short_rate_limit` — wait parsed `Retry-After`, else a short default, then
+  resume.
+- `provider_overloaded` — resume within the existing retry budget; never bench
+  for days.
+- `invalid_model` — exhaust the entry, route away; do not retry the same model.
+- `auth_or_proxy` — route away and surface operator action.
+- `harness_launch` — fresh restart or rotate by subtype (unchanged intent).
+- `incomplete_finalization` — resume + retry with finalization guidance.
+
+### Mechanism (current code does not yet support benching from a category)
+
+Five plumbing changes are required, because today the category/evidence never
+reaches the layer that benches, the per-run attempt loop would burn the whole
+budget against a dead quota first, and the existing recovery/wait paths would
+undo or mis-handle the bench:
+
+1. **Break the attempt loop on first detection.** `ClassifyError` and strategy
+   dispatch run *inside* `runOne`'s attempt loop (`runner.go:1269-1301`), which
+   only short-circuits when a strategy sets `r.skipFlag` (rotate) or NoOp-succeeds.
+   `usage_limit` and `auth_or_proxy` must terminate the loop on first detection
+   (reuse the skip short-circuit or add a terminal strategy) so they make
+   **exactly one attempt** and never re-run the exhausted quota across
+   `maxAttempts`. (Their non-`infra` mapping means the freeze counter does not
+   bound them — the loop break is what bounds them.)
+2. **Surface the category up to the routing loop.** `runOne` currently returns
+   `(…, reliability.FailureClass, int, error)` (`runner.go:906`) — only the
+   coarse class. Extend its return contract (or add a side channel) to carry the
+   resolved `FailureCategory` + reset evidence to the routing dispatch loop
+   (`runner.go:520-593`), where `OnAgentFailed` is reachable. Without this, a
+   `usage_limit` cannot trigger a bench.
+3. **Add reset-deadline state + scope-keyed benching.** `EntryState`
+   (`scheduler.go:8`) has no time field, and `OnAgentFailed` benches a *single*
+   entry. Add a `BenchUntil *time.Time` (or equivalent) and a scope-keyed bench
+   helper that benches every entry whose `QuotaScope(harness, model)` matches.
+4. **Make `BenchUntil` survive recovery sync.** `syncRecoverySignals`
+   (`route_runtime.go:247`) unconditionally unbenches any benched-but-*active*
+   entry (`route_runtime.go:257-260`). Because `usage_limit` benches **without**
+   touching resilience `AgentState` (it is not a freeze), the entry stays
+   `StateActive` and this branch would unbench it on the very next `Next()` cycle,
+   evaporating the quota bench. The `StateActive` recovery branch must **not**
+   unbench an entry whose `BenchUntil` is still in the future; `BenchUntil` takes
+   precedence over the resilience-driven unbench. Drive actual recovery off the
+   deadline (`now >= BenchUntil`, then re-probe once). Persist the deadline via a
+   new `agent_status.jsonl` event carrying `reset_at` + `quota_scope` (the store
+   is the only persistence layer; scheduler `EntryState` is in-memory only).
+5. **Wait out an all-benched lane instead of failing it.** When the scope-keyed
+   bench takes down every entry in a lane, `Next()` returns "all exhausted" and
+   `selectionWaitError` (`route_runtime.go:313`) currently derives a wait only
+   from `StatePaused` entries (`:330`), so an all-benched-but-active lane falls
+   through to `AllFrozen: true` and the relay-stall capture
+   (`runner.go:433`) **fails the relay immediately**. `selectionWaitError` must
+   derive a wait from the minimum pending `BenchUntil` across benched entries and
+   treat "all benched with a future reset" as a wait, not a frozen lockout.
+   (All-benched with *no* reset deadline ties into the Residual Open Question on
+   fail-fast vs conservative-default wait.)
 
 ## Resume Prompt Follow-Up
 
-When retrying or resuming after an incomplete finalization, include the normal
-finalization instructions in the resumed prompt. Add a small resume-specific
-snippet along these lines:
+When retrying/resuming after `incomplete_finalization` (and on operator
+pause/resume of a laps-backed run), include the normal finalization instructions
+plus a short resume snippet:
 
 ```text
 Continue the current lap. If you need to double-check the scope, run `laps get`.
 Finish with `laps done` when complete, or `laps handoff` if blocked.
 ```
 
-This should apply to retry resumes as well as operator pause/resume when the run
-is laps-backed.
-
 ## CLI Display And Records
 
-- Show the accurate category in the footer and collapsed retry line.
-- Include reset/wait information when known:
-  - `usage limit, resets in 123h50m`
-  - `rate limit, waiting 2m`
-  - `invalid model`
-- Store the stable category separately from the display label in try records and
-  telemetry. `fail_reason` can remain human-readable, but machine-readable data
-  should not require string parsing.
-- Avoid harness-specific labels that can be wrong for another harness. Prefer
-  `usage limit` over `claude rate-limit interrupt`, unless the harness is Claude
-  and the label is intentionally Claude-specific.
+- Footer and collapsed retry line show the accurate category, with reset/wait
+  detail when known (`usage limit, resets in 123h50m`, `rate limit, waiting 2m`,
+  `invalid model`).
+- Try records and telemetry store the stable `Category` separately from the
+  human display reason; `fail_reason` stays human-readable but machine consumers
+  read `Category` / `FailureEvidence` fields, not the string.
 
-## Configuration And Steering Tie-In
+## Coordination
 
-The invalid-model workaround points to an adjacent need: per-relay or start-time
-runner disablement. This draft does not need to implement the UI, but the error
-handling pass should leave room for:
-
-- disabling a harness or model for the current relay without editing config;
-- marking a runner unavailable because the classifier found usage exhaustion or
-  invalid model config;
-- showing why a runner is unavailable and when it may recover.
-
-This overlaps with the directional rethink in `build-new-tui`: a lighter
-start-of-run config flow and inflight steering may be more useful than a full
-alternate runtime TUI.
+- **enrich-failure-telemetry (next-up #2)** consumes this change's
+  `FailureCategory`, `QuotaScope`, reset evidence, and the **benched** state
+  rather than re-deriving its own `infra/agent/incomplete` trio. Its
+  "agent state on failure" requirement is realigned onto this baseline.
+- **improve-harness-consistency (next-up #3)** moves `FailureEvidence`
+  *population* out of runner-side log parsing into the adapters, under a
+  per-adapter conformance suite. This change deliberately leaves the fallback
+  parser in place so #3 has a clear before/after.
+- **build-new-tui** owns the ergonomic per-relay runner disablement that would
+  retire the invalid-model-name workaround entirely.
 
 ## Candidate Work
 
-- Add `FailureCategory` names and update `StrategyDecision` to carry stable
-  category plus display label.
-- Add parser helpers/tests for:
-  - Antigravity/Gemini `RESOURCE_EXHAUSTED ... Resets in ...`;
-  - Claude `rate_limit_event` five-hour/seven-day usage limit;
-  - Claude `model_not_found`;
-  - Claude auth/proxy failures;
-  - Codex usage-limit messages;
-  - provider overload such as 529.
-- Make rate-limit patterns harness-scoped or remove harness names from generic
-  reasons.
-- Reorder classification so strong provider/configuration/quota evidence beats
-  incomplete detection.
-- Exclude conservative harness-local dirty paths from meaningful task-change
-  detection.
-- Add retry strategy tests proving usage limits do not sleep for one minute and
-  loop through the retry budget.
-- Add run-level regression tests using the concrete observed signatures:
-  - Antigravity quota with zero changed files -> `usage_limit`;
-  - Antigravity quota plus only `.claude/settings.local.json` dirty ->
-    `usage_limit`;
-  - Codex log tail mentioning `rate-limit` as prose -> not Claude rate limit;
-  - Claude invalid model plus settings dirty -> `invalid_model`;
-  - real task-file dirty with no finalization -> `incomplete_finalization`.
-- Add resumed-attempt finalization prompt coverage for incomplete retries.
+- Add `FailureCategory` constants + display labels; extend `StrategyDecision`
+  with `Category` and display label; add `FailureEvidence` to `TryResult`
+  (`executor.go:44`), treated as optional (may be nil for `harness_launch`).
+- Define the Category → `FailureClass` mapping (above) so `usage_limit` /
+  `invalid_model` / `auth_or_proxy` do **not** map to `FailureInfra` and thus do
+  not increment the freeze counter (`runner.go:1275-1276`).
+- Reorder `ClassifyError` so executor evidence + provider/config/quota beats the
+  dirty-tree `incomplete` pre-check (`ClassifyError` `patterns.go:237`, pre-check
+  `:241`, pattern loop `:250`).
+- Make patterns harness-scoped; thread `picked.Harness` into `ClassifyError`
+  (`runner.go:1272`); strip harness names from generic display labels.
+- Add parser helpers + tests for the signatures listed under Taxonomy.
+- Extract a single shared dirty-path exclusion helper in `internal/gitx/git.go`
+  (replacing the duplicated `.rally/`/`.laps/` skips at `git.go:82` and `:112`),
+  consumed by all call sites; add `.claude/settings.local.json` to it.
+- Add a standalone `QuotaScope(harness, model) string` resolver (antigravity
+  label-substring family / opencode provider-prefix / direct-harness); keep the
+  `Executor` interface unchanged.
+- Break the attempt loop (`runner.go:1269-1301`) on first `usage_limit` /
+  `auth_or_proxy` detection so they make exactly one attempt before benching.
+- Extend `runOne`'s return contract (`runner.go:906`) to surface the resolved
+  `FailureCategory` + reset evidence to the routing dispatch loop
+  (`runner.go:520-593`).
+- Add `BenchUntil` (or equivalent reset-deadline) + a scope-keyed bench helper to
+  the scheduler (`scheduler.go:8`); guard the `StateActive` unbench in
+  `syncRecoverySignals` (`route_runtime.go:257-260`) so a future `BenchUntil`
+  is not undone, and unbench when the reset passes; persist the deadline via a
+  new `agent_status.jsonl` event carrying `reset_at` + `quota_scope`.
+- Teach `selectionWaitError` (`route_runtime.go:313`) to derive a wait from the
+  minimum pending `BenchUntil` so an all-benched lane waits out the reset instead
+  of failing as `AllFrozen` (`runner.go:433`).
+- Begin executor population of `FailureEvidence` for harnesses we have
+  signatures for.
+- Tests for the three plumbing changes: (a) `usage_limit` makes exactly one
+  attempt then benches the whole quota scope (not one-minute loops); (b) a
+  benched-but-active entry is **not** unbenched before `BenchUntil`; (c) an
+  all-benched lane with a future reset produces a wait, not an `AllFrozen` relay
+  failure.
+- Run-level regression tests from the concrete signatures (zero-change quota →
+  `usage_limit`; quota + only `.claude/settings.local.json` → `usage_limit`;
+  Codex prose "rate-limit" → not a Claude rate limit; invalid model + settings
+  dirty → `invalid_model`; real task file dirty, no finalize →
+  `incomplete_finalization`).
+- Resume-prompt finalization coverage for incomplete retries.
 
-## Open Questions
+## Residual Open Questions
 
-- Should the first implementation add typed evidence to `TryResult`, or keep it
-  in reliability/log parsing until the later harness-consistency pass?
-- How should Rally represent long reset windows in scheduler state: paused until
-  reset, frozen until reset, or a new unavailable/quota state?
-- Should `usage_limit` be per harness, per harness+model, or per provider
-  account? Antigravity Claude exhaustion may not imply Gemini models are also
-  exhausted.
-- What is the exact set of harness-local paths safe to exclude from meaningful
-  task changes?
-- Should invalid model/config errors fail the relay immediately when every route
-  entry for that lane is invalid, or produce an operator prompt where possible?
+- Exact full set of harness-local paths safe to exclude beyond
+  `.claude/settings.local.json` (start conservative, grow with evidence).
+- When *every* entry in a lane is `invalid_model`/benched, fail the relay
+  immediately vs. surface an operator prompt where a TTY is available.
+- Whether `usage_limit` bench state should persist across relays on the same
+  machine (a still-unreset quota is unreset for the next relay too) or reset per
+  relay. Leaning persist-with-reset-time via a new `agent_status.jsonl` resilience
+  event carrying `reset_at` + `quota_scope` (reuses the existing store; scheduler
+  `EntryState` is in-memory only and cannot persist on its own). **This is the
+  decision most worth settling before implementation**, since it determines
+  whether `QuotaScope` needs a persisted home.
+- Antigravity label variance (model versions, `(High)`/`(Low)` suffixes) may
+  outgrow substring matching and need a maintained label→family table.
 
 ## Acceptance Direction
 
-- The observed examples from this thread classify accurately.
-- Retry waits align with parsed reset/retry evidence.
+- The observed examples classify accurately.
+- Retry waits align with parsed reset/retry evidence; usage limits bench instead
+  of looping.
 - No Codex run can display `claude rate-limit interrupt`.
-- Harness-local dirty files do not mask provider/config errors as incomplete.
-- Genuine incomplete finalization still retries/resumes and includes finalization
-  guidance.
-- Try records and telemetry expose both stable category and human display reason.
+- Harness-local dirty files never mask provider/config errors as incomplete.
+- Genuine incomplete finalization still resumes and carries finalization guidance.
+- Try records and telemetry expose both stable `Category` and human display reason.

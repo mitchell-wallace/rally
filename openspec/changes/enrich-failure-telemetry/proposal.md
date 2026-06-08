@@ -31,17 +31,21 @@ hand, and so relays are globally identifiable across machines.
   prefix collapsed (`/home/<user>/…` → `~/…`), so the path shape is visible for
   triage without leaking the username. The existing `repo` tag (path-hash) is kept.
 - **Agent state on failure.** When a failure is captured, attach the runner's state
-  snapshot: harness+model (already in `runner`), current attempt / retry budget,
-  failure class (infra vs agent vs incomplete), and the agent-type resilience state
-  (active / probation / frozen) where known.
+  snapshot: harness+model (already in `runner`), current attempt / retry budget, the
+  stable **failure category** and reset/quota evidence produced by
+  `improve-error-categorisation` (e.g. `usage_limit` with its `quota_scope` and
+  `reset_at`), and the agent-type resilience state (active / probation / frozen /
+  benched) where known. The category replaces the older infra/agent/incomplete trio so
+  triage reads one consistent vocabulary across CLI, records, and Sentry.
 
 ## Capabilities
 
 ### Modified Capabilities
 - `telemetry`: adds run-environment context, an anonymous machine-local hash, a
   globally-unique relay identity, username-stripped cwd, and a failure-time agent
-  state snapshot. The existing PII-scrubbing requirement is extended to cover the new
-  cwd and environment fields.
+  state snapshot carrying the stable failure category + reset/quota evidence from
+  `improve-error-categorisation`. The existing PII-scrubbing requirement is extended to
+  cover the new cwd and environment fields.
 
 ## Impact
 
@@ -50,17 +54,21 @@ hand, and so relays are globally identifiable across machines.
   `sentry.go`/`sink.go` if the context attachment needs a new entry point), a small
   machine-id helper (new file under `internal/telemetry/` or `internal/buildinfo/`),
   and the three `CaptureFailure` call sites in `internal/relay/runner.go`
-  (`runner.go:393`, `:1227`, `:1298`) plus the relay-start span tagging
-  (`runner.go:337`).
+  (`runner.go:433`, `:1418`, `:1489`) plus the relay span tagging
+  (`runner.go:377`).
 - **Behavior**: when telemetry is disabled (no DSN, or `RALLY_TELEMETRY=0`) nothing
   changes — the machine-id file is only written when the sink is active. When enabled,
   captured failures gain environment + identity + state context.
 - **Privacy**: no new PII is transmitted. The machine hash is random and anonymous;
   cwd is home-stripped; hostname/username/IP are never sent. The change extends, not
   relaxes, the existing `before_send` scrubber.
-- **Out of scope**: changing the failure taxonomy (which failures become Issues vs
-  spans is owned by the existing telemetry spec / `harden-relay-run-lifecycle`); any
+- **Out of scope**: defining the failure taxonomy itself, and which failures become
+  Issues vs spans (owned by `improve-error-categorisation` and the existing telemetry
+  spec respectively — this change *consumes* the taxonomy, it does not author it); any
   non-Sentry backend; sampling-rate changes.
-- **Coordination**: the agent-resilience state names (active / probation / frozen)
-  are governed by `harden-relay-run-lifecycle`'s vocabulary; reuse those terms rather
-  than inventing new ones.
+- **Coordination**: this change lands **after** `improve-error-categorisation` and
+  consumes its typed `FailureCategory`, `quota_scope`, and reset evidence rather than
+  re-deriving a failure class. The resilience-state names (active / probation / frozen /
+  benched) come from `harden-relay-run-lifecycle`'s vocabulary, with `benched` added by
+  `improve-error-categorisation`'s reset-driven usage-limit handling; reuse those terms
+  rather than inventing new ones.

@@ -13,7 +13,7 @@
 ## 3. Globally-unique relay identity
 
 - [ ] 3.1 In `tags.go` (or a new builder), compute `relay_guid = <machine-id-prefix>-<YYYYMMDD>-<relay_id>` from the machine id, the relay `StartedAt`, and the local `relay_id`
-- [ ] 3.2 Attach `relay_guid`, `machine_id`, and `relay_started_at` (RFC3339) at the relay span (`runner.go:337`) and on each failure capture; keep emitting local `relay_id`
+- [ ] 3.2 Attach `relay_guid`, `machine_id`, and `relay_started_at` (RFC3339) at the relay span (`runner.go:377`) and on each failure capture; keep emitting local `relay_id`
 - [ ] 3.3 Tests: guid is stable for a relay, unique across machine ids and dates; local `relay_id` still present
 
 ## 4. Username-stripped working directory
@@ -25,9 +25,10 @@
 
 ## 5. Agent state on failure
 
-- [ ] 5.1 Extend the failure-capture path to carry `attempt`, `max_attempts`, `failure_class` (infra/agent/incomplete), and `agent_state` (active/probation/frozen) as scalar tags, reusing `harden-relay-run-lifecycle` vocabulary
-- [ ] 5.2 Wire the state at the three `CaptureFailure` sites (`runner.go:393`, `:1227`, `:1298`) from data already in scope at each site
-- [ ] 5.3 Tests: a captured infra failure carries attempt/budget/class/state tags; agent-class failures recorded as spans/logs are unaffected
+- [ ] 5.1 Extend the failure-capture path to carry `attempt`, `max_attempts`, the stable `failure_category` (from `improve-error-categorisation`), and `agent_state` (active/probation/frozen/benched) as scalar tags, reusing the resilience vocabulary
+- [ ] 5.2 When the category is a usage/quota failure, also attach the `FailureEvidence` reset fields (`quota_scope`, `reset_at`/`reset_after`) as scalar tags where present
+- [ ] 5.3 Wire the state at the three `CaptureFailure` sites (`runner.go:433`, `:1418`, `:1489`) by reading `TryResult.Evidence`/`StrategyDecision` already in scope — do not re-classify in telemetry
+- [ ] 5.4 Tests: a captured usage-limit failure carries attempt/budget/category/quota_scope/reset/state tags; agent-class failures recorded as spans/logs are unaffected
 
 ## 6. Docs
 
