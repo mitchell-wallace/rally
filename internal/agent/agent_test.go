@@ -529,6 +529,18 @@ func TestParseOpenCodeOutput_Valid(t *testing.T) {
 	}
 }
 
+func TestParseOpenCodeOutput_CapturesSessionID(t *testing.T) {
+	out := []byte(`{"type":"step_start","sessionID":"ses_test123","part":{"type":"step-start"}}
+{"type":"text","sessionID":"ses_test123","part":{"type":"text","text":"{\"completed\":true,\"summary\":\"ok\"}"}}`)
+	tr, err := parseOpenCodeOutput(out, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tr.SessionID != "ses_test123" {
+		t.Errorf("SessionID = %q, want %q", tr.SessionID, "ses_test123")
+	}
+}
+
 func TestParseOpenCodeOutput_MissingText(t *testing.T) {
 	for _, tc := range []struct {
 		name        string

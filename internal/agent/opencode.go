@@ -22,8 +22,9 @@ const (
 )
 
 type opencodeJSONEvent struct {
-	Type string `json:"type"`
-	Part struct {
+	Type      string `json:"type"`
+	SessionID string `json:"sessionID"`
+	Part      struct {
 		Type string `json:"type"`
 		Text string `json:"text"`
 	} `json:"part"`
@@ -90,6 +91,7 @@ func parseOpenCodeOutput(out []byte, processSucceeded bool) (*TryResult, error) 
 	sawStepFinish := false
 	sawErrorEvent := false
 	var eventError *opencodeJSONError
+	var sessionID string
 
 	scanner := bufio.NewScanner(strings.NewReader(string(out)))
 	scanner.Buffer(make([]byte, 0, 64*1024), 16*1024*1024)
@@ -103,6 +105,9 @@ func parseOpenCodeOutput(out []byte, processSucceeded bool) (*TryResult, error) 
 			continue
 		}
 		sawJSONEvent = true
+		if sessionID == "" && ev.SessionID != "" {
+			sessionID = ev.SessionID
+		}
 		if ev.Type == "text" && ev.Part.Text != "" {
 			textParts = append(textParts, ev.Part.Text)
 		}
@@ -129,6 +134,7 @@ func parseOpenCodeOutput(out []byte, processSucceeded bool) (*TryResult, error) 
 			Completed: false,
 			Summary:   formatOpenCodeError(eventError),
 			ToolCalls: toolCalls,
+			SessionID: sessionID,
 		}, nil
 	}
 	if combined == "" {
@@ -136,6 +142,7 @@ func parseOpenCodeOutput(out []byte, processSucceeded bool) (*TryResult, error) 
 			Completed: cleanCompletion,
 			Summary:   openCodeNoTextSummary(out, sawJSONEvent, sawStepFinish, scanFailed, processSucceeded),
 			ToolCalls: toolCalls,
+			SessionID: sessionID,
 		}, nil
 	}
 
@@ -145,10 +152,12 @@ func parseOpenCodeOutput(out []byte, processSucceeded bool) (*TryResult, error) 
 			Completed: cleanCompletion,
 			Summary:   combined,
 			ToolCalls: toolCalls,
+			SessionID: sessionID,
 		}, nil
 	}
 	tr.Completed = tr.Completed && cleanCompletion
 	tr.ToolCalls = toolCalls
+	tr.SessionID = sessionID
 	return &tr, nil
 }
 

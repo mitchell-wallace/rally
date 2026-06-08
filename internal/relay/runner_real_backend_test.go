@@ -350,23 +350,45 @@ func TestRealBackend_OpenCodeRelay(t *testing.T) {
 		}
 	}
 
-	// If the run failed (e.g. rate-limited), the agent should be paused — not
-	// frozen indefinitely. This verifies resilient execution handles the case.
+	// If the run failed, behaviour depends on the failure classification. Under
+	// current semantics only repeated INFRA failures (rate limits, connection
+	// refused, etc.) pause the agent; a plain non-infra failure (e.g. opencode
+	// just made no changes) correctly does NOT pause — the relay rotates off it
+	// by exhausting retries. So only require a paused event when the try log
+	// actually contains an infra signal.
 	lastTry := tries[len(tries)-1]
 	if !lastTry.Completed {
-		statusEvents, err := s.GetAgentStatus("opencode", "opencode-go/kimi-k2.6")
-		if err != nil {
-			t.Fatal(err)
-		}
-		paused := false
-		for _, ev := range statusEvents {
-			if ev.EventType == "paused" {
-				paused = true
-				break
+		infra := false
+		if lastTry.LogPath != "" {
+			if logData, err := os.ReadFile(lastTry.LogPath); err == nil {
+				low := strings.ToLower(string(logData))
+				if strings.Contains(low, "rate limit") ||
+					strings.Contains(low, "too many requests") ||
+					strings.Contains(low, "usage limit") {
+					infra = true
+				}
 			}
 		}
-		if !paused {
-			t.Error("opencode run failed but no paused event recorded — resilient execution did not handle the failure")
+
+		if infra {
+			// Infra failure: the agent should be paused — not frozen
+			// indefinitely. This verifies resilient execution handles the case.
+			statusEvents, err := s.GetAgentStatus("opencode", "opencode-go/kimi-k2.6")
+			if err != nil {
+				t.Fatal(err)
+			}
+			paused := false
+			for _, ev := range statusEvents {
+				if ev.EventType == "paused" {
+					paused = true
+					break
+				}
+			}
+			if !paused {
+				t.Error("opencode run failed with an infra error but no paused event recorded — resilient execution did not handle the failure")
+			}
+		} else {
+			t.Logf("opencode run failed with a non-infra error; relay handled it by exhausting retries without pausing (valid under current semantics). last summary: %.300s", lastTry.Summary)
 		}
 	}
 }
@@ -441,10 +463,21 @@ func TestRealBackend_ResilienceRetryBudget(t *testing.T) {
 
 	s := newTestStore(t, rallyDir)
 
-	// Use a funcExecutor that always fails so we can exhaust retries quickly.
+	// Use a funcExecutor that simulates an INFRA failure (rate limit) so that
+	// repeated failures (infraFailures > 1) trigger a resilience pause. Under
+	// current semantics, only repeated infra failures pause the agent; plain
+	// agent task-failures do not. ClassifyError reads the last lines of the try
+	// log file, so we write an infra-pattern line ("rate limit") to opts.LogPath
+	// in addition to returning the failing TryResult.
 	failExec := &funcExecutor{
 		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
-			return &agent.TryResult{Completed: false, Summary: "intentional failure for retry test"}, nil
+			if opts.LogPath != "" {
+				if f, err := os.OpenFile(opts.LogPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644); err == nil {
+					_, _ = f.WriteString("error: rate limit exceeded (429 too many requests)\n")
+					_ = f.Close()
+				}
+			}
+			return &agent.TryResult{Completed: false, Summary: "intentional rate-limit failure for retry test"}, nil
 		},
 	}
 	executors := map[string]agent.Executor{"claude": failExec}
@@ -459,9 +492,22 @@ func TestRealBackend_ResilienceRetryBudget(t *testing.T) {
 		TargetIterations: 1,
 		RetryBudget:      2,
 		TaskPrompt:       "Will fail intentionally.",
+		// Pin a concrete model ("default") so the recorded pause event is keyed
+		// to claude:default and matches the GetAgentStatus query below — the
+		// store requires a non-empty model, and the relay records pause state
+		// per harness+model.
+		Resolver: func(spec string) (agent.ResolvedAgent, error) {
+			return agent.ResolvedAgent{Harness: "claude", Model: "default"}, nil
+		},
 	}, executors)
+	// Stub the rate-limit cooldown sleep so both attempts run immediately within
+	// the test's context budget. Without this, the infra (rate-limit) cooldown
+	// would block ~1m between attempts and only one try would execute.
+	r.sleepFunc = func(time.Duration) {}
 
-	// The relay should exhaust retries and pause the agent — not return an error.
+	// The relay should exhaust retries and pause the agent. After pausing, the
+	// relay waits for recovery until the context deadline, so Run returns
+	// context.DeadlineExceeded here — that is the expected resilience behaviour.
 	_ = r.Run(ctx)
 
 	// There should be retry records (2 attempts).

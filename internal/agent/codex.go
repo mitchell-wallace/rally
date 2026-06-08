@@ -257,8 +257,8 @@ func runCodexCommand(cmd *exec.Cmd, logPath string, onStart func(pid int), onSes
 		scanErr <- scanner.Err()
 	}()
 
-	waitErr := cmd.Wait()
 	streamErr := <-scanErr
+	waitErr := cmd.Wait()
 	if streamErr != nil {
 		return buf.Bytes(), streamErr
 	}
