@@ -44,3 +44,19 @@ These are carried forward from the original consolidate-rally-gry design and sho
 - Go dependencies added: `github.com/charmbracelet/bubbles`
 - CLI interface change: default (no subcommand) launches TUI instead of showing help
 - Relay runner gains OnStatus callback interface for TUI integration
+
+## Update Notes
+
+### 2026-06-08T20:53:42+10:00
+
+- Directional update: this change may no longer want to be a full takeover TUI
+  runtime in the style of lazygit or neovim. A lighter path may be more useful:
+  start-of-run interactive configuration for the same knobs currently exposed by
+  CLI args, plus inflight steering enhancements.
+- Candidate scope to revisit: per-relay route/agent-mix selection, iteration
+  count, temporary harness/model enablement or disablement, and later inflight
+  updates to agent mix, role config, or target iterations.
+- The existing `rally config` command can be a baseline, but its linear prompt
+  flow is not ideal. A menu-like config surface, where the operator can navigate
+  to one option and change it, may be the better shared model for startup config
+  and any future inflight config update command.
