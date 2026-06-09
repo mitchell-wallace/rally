@@ -77,6 +77,11 @@ with display labels:
 | `short_rate_limit` | `rate limit` (+ `waiting 2m`) | wait parsed `Retry-After`, else short default; resume |
 | `provider_overloaded` | `provider overloaded` | resume within retry budget |
 | `transient_infra` | `infra error` | API timeout, network/connection/TLS failure, non-overload 5xx; resume within budget |
+| `invalid_model` | `invalid model` | exhaust entry, route away; no identical retry |
+| `auth_or_proxy` | `auth/proxy error` | route away; one attempt then route |
+| `harness_launch` | `harness launch error` | fresh restart or rotate by subtype |
+| `incomplete_finalization` | `incomplete: file changes without finalization` | resume + retry with finalization guidance |
+| `agent_error` | `agent error` | existing retry/fresh (default) |
 
 Discriminator for the two transient infra categories: a 5xx whose status/body
 matches a known provider-overload signal (HTTP 529, `overloaded_error`,
@@ -84,11 +89,6 @@ matches a known provider-overload signal (HTTP 529, `overloaded_error`,
 other 5xx, API timeouts, and connection/TLS failures classify `transient_infra`.
 Both map to infra-class and resume within budget, so a misclassification between
 the two is behaviourally harmless — the split exists for display/triage clarity.
-| `invalid_model` | `invalid model` | exhaust entry, route away; no identical retry |
-| `auth_or_proxy` | `auth/proxy error` | route away; one attempt then route |
-| `harness_launch` | `harness launch error` | fresh restart or rotate by subtype |
-| `incomplete_finalization` | `incomplete: file changes without finalization` | resume + retry with finalization guidance |
-| `agent_error` | `agent error` | existing retry/fresh (default) |
 
 The liveness **stall** kill is not a log-text category: the stall path sets an
 infra `FailureClass` directly (`reliability/stall.go`), independent of the
@@ -109,15 +109,24 @@ harness+model) **and** benched (per quota scope). Required mapping:
 
 | Category | FailureClass | Notes |
 |---|---|---|
-| `usage_limit` | **not** `infra` | bench only; bounded by the attempt-loop break, not freeze |
-| `invalid_model` | **not** `infra` | exhaust entry only |
-| `auth_or_proxy` | **not** `infra` | route away; bounded by the attempt-loop break |
+| `usage_limit` | `agent` | bench only; bounded by the attempt-loop break, not freeze; mapped to agent-class so it does not increment the freeze counter |
+| `invalid_model` | `agent` | exhaust entry only; mapped to agent-class so it does not increment the freeze counter |
+| `auth_or_proxy` | `agent` | route away; bounded by the attempt-loop break; mapped to agent-class so it does not increment the freeze counter |
 | `short_rate_limit` | `infra` | transient; existing wait-resume + freeze accounting |
 | `provider_overloaded` | `infra` | transient |
 | `transient_infra` | `infra` | API timeout / network / TLS / non-overload 5xx |
 | `harness_launch` | `infra` | transient launch fault |
 | `incomplete_finalization` | `incomplete` | unchanged |
 | `agent_error` | `agent` | unchanged default |
+
+Freeze accounting derives **solely** from the mapped `FailureClass`: the
+`infraFailures++` increment (`runner.go:1275`) already gates on
+`FailureClass == FailureInfra`, so this mapping table is the single source of
+truth for what counts toward the freeze cascade. The agent-class assignment for
+`usage_limit`/`invalid_model`/`auth_or_proxy` is the deliberate lever that keeps
+them out of freeze accounting; no separate per-`Category` check is added at the
+increment site (a category-keyed predicate there would be a second, redundant
+source of truth — the mapping table is authoritative).
 
 **4. Harness-aware quota scope.** A standalone pure resolver
 `QuotaScope(harness, model) string` (routing/config layer, **not** an `Executor`
@@ -132,10 +141,17 @@ method) groups entries sharing a quota bucket:
 - **direct harnesses** (`claude`, `codex`, `gemini`) — per harness (the account
   front); the model is ignored, so a stray `/` cannot mis-split.
 
-**5. Benching mechanism (current code does not yet support benching from a
-category).** Five plumbing changes, because the category never reaches the bench
-layer today and the existing recovery/wait paths would undo or mis-handle a
-bench:
+**5. Benching mechanism — a deadline-carrying resilience state, not a parallel
+rotation axis.** The scheduler's `EntryState.Benched` bit is **not** an
+independent source of truth: `syncRecoverySignals` (`route_runtime.go:247`)
+recomputes it from `resilience.GetState(key)` every selection cycle
+(`StatePaused`→bench, elapsed→reset, `StateFrozen`→bench, `StateActive`→unbench).
+`StatePaused` already implements "bench until a deadline, wait it out via
+`selectionWaitError`, then reset → reselect → re-pause if still failing" — exactly
+the usage-limit lifecycle, missing only (a) a *variable* deadline (vs the fixed
+`PauseDuration`) and (b) *quota scope* (pause keys `{Harness, Model}`). So
+usage-limit benching is modelled as a new resilience state reusing that pipeline,
+rather than a second out-of-rotation axis on `EntryState`. Changes:
 
 1. **Break the attempt loop on first detection.** `usage_limit` and
    `auth_or_proxy` MUST terminate `runOne`'s attempt loop
@@ -144,40 +160,54 @@ bench:
    mapping means the freeze counter does not bound them.
 2. **Surface the category up.** Extend `runOne`'s return contract
    (`runner.go:906`) to carry the resolved `FailureCategory` + reset evidence to
-   the routing dispatch loop (`runner.go:520-593`) where `OnAgentFailed` is
+   the routing dispatch loop (`runner.go:520-593`) where the route runtime is
    reachable.
-3. **Reset-deadline state + scope-keyed benching.** Add `BenchUntil *time.Time`
-   (or equivalent) to `EntryState` (`scheduler.go:8`) and a scope-keyed bench
-   helper that benches every entry whose `QuotaScope` matches.
-4. **Make `BenchUntil` survive recovery sync.** `syncRecoverySignals`
-   unconditionally unbenches benched-but-*active* entries
-   (`route_runtime.go:257-260`). Because `usage_limit` benches without touching
-   resilience `AgentState`, the entry stays `StateActive` and would be unbenched
-   on the next `Next()` cycle, evaporating the bench. The `StateActive` branch
-   MUST NOT unbench an entry whose `BenchUntil` is still in the future;
-   `BenchUntil` takes precedence. Recovery fires when `now >= BenchUntil`, then
-   re-probes once. This guard is scoped to the `StateActive` arm **only** — it
-   MUST NOT be added to the `StateProbation` / `StatePaused` arms, or it would
-   block the probation one-shot unbench (`route_runtime.go:280-281`), which is
-   governed by the probation cycle, not by `BenchUntil`.
-5. **Wait out an all-benched lane.** When the scope-keyed bench takes down every
-   entry in a lane, `Next()` returns "all exhausted" and `selectionWaitError`
-   (`route_runtime.go:313`) currently derives a wait only from `StatePaused`
-   entries (`:330`), falling through to `AllFrozen` → the relay-stall capture
-   (`runner.go:433`) fails the relay. `selectionWaitError` MUST derive a wait
-   from the minimum pending `BenchUntil` and treat "all benched with a future
-   reset" as a wait, not a frozen lockout.
+3. **New `StateBenched` resilience state with a reset deadline.** Add
+   `StateBenched` to `AgentState` (`resilience.go:13`) and a `benched`
+   `AgentStatusEvent` type (`records.go:62`) carrying `reset_at` + `quota_scope`.
+   `GetState` (`resilience.go:59`) returns `StateBenched` while `now < reset_at`
+   and surfaces the key as `StateActive` for a single re-probe once the deadline
+   passes — mirroring the existing pure-read frozen→probation decay
+   (`resilience.go:89-93`). A `BenchAgent(key, resetAt, scope, relayID)` method
+   persists the event alongside `PauseAgent`/`FreezeAgent`.
+4. **Bench the whole quota scope from one write site.** On a `usage_limit`, a
+   route-runtime `benchQuotaScope` helper (mirroring `forceUnpauseAll`,
+   `route_runtime.go:360`) iterates every scheduler's entries, resolves each
+   `{Harness, Model}` key and its `QuotaScope` (Decision 4), and writes a
+   `benched` event for every distinct matching key. All scope fan-out is
+   contained here; `GetState`, the sync, and the wait stay per-key and unchanged.
+5. **One new sync arm — no guard.** `syncRecoverySignals` (`route_runtime.go:256`)
+   gains `case StateBenched: OnAgentFailed(state, "quota", true)`. Because a
+   benched key is **never** `StateActive`, the existing `StateActive`→unbench arm
+   never touches it, and the `StatePaused`/`StateProbation`/`StateFrozen` arms are
+   untouched. The fragile "unbench guard scoped to `StateActive` only" that a
+   parallel `EntryState` axis would require is unnecessary.
+6. **Wait out an all-benched lane.** `selectionWaitError` (`route_runtime.go:313`)
+   currently derives a wait only from `StatePaused` entries (`:330`); widen that
+   predicate to also include `StateBenched` and derive the wait from the earliest
+   `reset_at`, so an all-benched lane waits instead of falling through to
+   `AllFrozen` → the relay-stall capture (`runner.go:433`). `forceUnpauseAll`
+   likewise widens to clear `StateBenched` on operator skip.
 
-**6. Reset persistence (resolved product call).** The reset deadline is persisted
-as a new `agent_status.jsonl` resilience event carrying `reset_at` + `quota_scope`
-(the store is the only persistence layer; `EntryState` is in-memory only). The
-bench **persists across relays** on the same machine — a still-unreset quota is
-still unreset for the next relay — and on the first selection after a persisted
-deadline passes the scope is **re-probed once**, so a manually-topped-up quota
-recovers without operator action. If that single re-probe again returns
+**6. Reset persistence and recovery semantics (resolved product call).**
+Persistence is **intrinsic** to Decision 5's `StateBenched`: the `benched` event
+in `agent_status.jsonl` is the only persistence layer (`EntryState` is in-memory),
+so the bench **persists across relays** on the same machine with *no dedicated
+restoration path* — `GetState` replays it exactly as it does `frozen`. The
+`benched` event MUST be added to the `truncateAgentStatus` retention allow-list
+(`store.go:128`, currently `frozen`/`probation` only) so a multi-day reset is not
+truncated away. On the first selection after a persisted deadline passes, the
+scope surfaces as active for a **single re-probe**; if that re-probe again returns
 `usage_limit`, the scope is re-benched for a fresh window (parsed reset or
 default) rather than treated as permanently exhausted. (Default chosen per plan
 review; reversible.)
+
+This drops the earlier "BenchUntil on `EntryState` + separate persistence event +
+restoration scanner" design, which re-implemented the pause pipeline as a second
+mechanism. The `harden-relay-run-lifecycle` three-concept split (stall / frozen /
+benched) is preserved: `StateBenched` stays distinct from `StateFrozen`, sharing
+the recovery mechanism without conflating the infra circuit-breaker with quota
+exhaustion.
 
 ## Risks / Trade-offs
 

@@ -17,15 +17,17 @@
 
 ## 3. Provider/quota evidence parsers
 
+> **Note:** `harness_launch`, `incomplete_finalization`, and `transient_infra` are NOT executor-parsed — they are classified runner-side (task 2.4a, task 2.2). Executor population targets only the categories with provider-specific structured error signals.
+
 - [ ] 3.1 Add parser helpers + tests for: Antigravity/Gemini `RESOURCE_EXHAUSTED` / `Individual quota reached` / `Resets in <dur>`; Claude `rate_limit_event` five-hour/seven-day, `model_not_found`, `authentication_failed`, 529 overload; Codex usage-limit messages; opencode JSON provider errors
 - [ ] 3.2 Parsers populate `ResetAfter`/`ResetAt`/`RetryAfter`/`StatusCode`/`Provider` on `FailureEvidence`
 - [ ] 3.3 Begin executor population of `FailureEvidence` for the harnesses with signatures above
 
 ## 4. Dirty-path exclusion
 
-- [ ] 4.1 Extract a single shared exclusion helper (e.g. `gitx.IsRallyOwnedOrTransientPath`) in `internal/gitx/git.go`, replacing the duplicated `.rally/`/`.laps/` skips at `git.go:82` and `:112` (and the `filesChanged` record path)
+- [ ] 4.1 Extract a single shared exclusion helper (e.g. `gitx.IsRallyOwnedOrTransientPath`) in `internal/gitx/git.go`, replacing the duplicated `.rally/`/`.laps/` skips at `git.go:82`, `git.go:112`, and `filesChangedList` at `runner.go:1717-1718`
 - [ ] 4.2 Add `.claude/settings.local.json` to the helper; a try whose only dirty paths are excluded has no meaningful task change
-- [ ] 4.3 Tests: only `.claude/settings.local.json` dirty + `RESOURCE_EXHAUSTED` → `usage_limit`; `src/foo.go` dirty without finalization → `incomplete_finalization`; invalid model + only settings dirty → `invalid_model`
+- [ ] 4.3 Tests: Claude `usage_limit` + only `.claude/settings.local.json` dirty → `usage_limit` (not `incomplete`); Antigravity `RESOURCE_EXHAUSTED` + zero meaningful changes → `usage_limit` (not `incomplete`); `src/foo.go` dirty without finalization → `incomplete_finalization`; Claude `invalid_model` + only settings dirty → `invalid_model`
 
 ## 5. Quota scope
 
@@ -40,18 +42,19 @@
 
 ## 7. Benching, reset recovery, and wait
 
-- [ ] 7.1 Add `BenchUntil *time.Time` (or equivalent) to `EntryState` (`scheduler.go:8`) and a scope-keyed bench helper that benches every entry whose `QuotaScope` matches
-- [ ] 7.2 Wire the routing dispatch loop to bench the quota scope (with `BenchUntil` from reset evidence, or a long conservative default) on a `usage_limit`
-- [ ] 7.3 Guard the `StateActive` unbench in `syncRecoverySignals` (`route_runtime.go:257-260`) so a future `BenchUntil` is not undone; unbench + re-probe once when `now >= BenchUntil`
-- [ ] 7.4 Persist the deadline as a new `agent_status.jsonl` event carrying `reset_at` + `quota_scope` (write via `internal/relay/resilience.go`; new event type alongside `probation`/`frozen` in `internal/store`); restore it across relays (design Decision 6). Scope the `BenchUntil` guard to the `StateActive` branch only (`route_runtime.go:257-260`) — do not add it to the `StateProbation`/`StatePaused` branches, or it breaks the probation one-shot. Add the new event type to the truncation retention allow-list in `truncateAgentStatus` (`store.go:128`, currently keeps only `frozen`/`probation`) so a long-lived multi-day reset is not truncated away, and add `reset_at`/`quota_scope` fields to `AgentStatusEvent`
-- [ ] 7.5 Teach `selectionWaitError` (`route_runtime.go:313`) to derive a wait from the minimum pending `BenchUntil` so an all-benched lane waits instead of failing as `AllFrozen` (`runner.go:433`)
-- [ ] 7.6 Tests: (a) a benched-but-active entry is NOT unbenched before `BenchUntil`; (b) all-benched-with-future-reset produces a wait, not an `AllFrozen` relay failure; (c) a persisted reset is restored on the next relay and re-probed once after it passes
+- [ ] 7.1 Add `StateBenched` to `AgentState` (`resilience.go:13`) and a `benched` event type carrying `reset_at` + `quota_scope` on `AgentStatusEvent` (add the fields; update the `EventType` comment at `records.go:65` to list all valid types). Add a `BenchAgent(key, resetAt, scope, relayID)` method (`resilience.go`) that persists the event alongside `PauseAgent`/`FreezeAgent`.
+- [ ] 7.2 Teach `GetState` (`resilience.go:59`) to return `StateBenched` while `now < reset_at`, and to surface the key as `StateActive` for a single re-probe once the deadline passes — mirroring the pure-read frozen→probation decay (`resilience.go:89-93`). Cross-relay persistence and restoration are free via this replay (no bespoke scanner).
+- [ ] 7.3 Add a route-runtime `benchQuotaScope(resilience, scope, resetAt, relayID)` helper (mirroring `forceUnpauseAll`, `route_runtime.go:360`) that iterates every scheduler's entries, resolves each entry's `{Harness,Model}` key and `QuotaScope`, and writes a `benched` event via `BenchAgent` for every distinct matching key. Call it from the routing dispatch loop (`runner.go:520-593`) on a `usage_limit`, using the parsed reset or a long conservative default.
+- [ ] 7.4 Add one arm to `syncRecoverySignals` (`route_runtime.go:256`): `case StateBenched` benches the entry (`OnAgentFailed(state, "quota", true)`). No `StateActive` unbench guard is needed (a benched key is never `StateActive`); leave the `StateActive`/`StatePaused`/`StateProbation`/`StateFrozen` arms untouched.
+- [ ] 7.5 Widen `selectionWaitError` (`route_runtime.go:313`, currently paused-only at `:330`) to also derive a wait from the earliest `StateBenched` `reset_at`, so an all-benched lane waits instead of failing as `AllFrozen` (`runner.go:433`). Widen `forceUnpauseAll` (`route_runtime.go:360`) to also clear `StateBenched` (write an `active` event) on operator skip.
+- [ ] 7.6 Add the `benched` event type to the truncation retention allow-list in `truncateAgentStatus` (`store.go:128`, currently keeps only `frozen`/`probation`) so a long-lived multi-day reset is not truncated away.
+- [ ] 7.7 Tests: (a) a benched key is NOT selected before `reset_at`; (b) all-benched-with-future-reset produces a wait, not an `AllFrozen` relay failure; (c) a persisted reset survives a fresh relay via `GetState` replay and is re-probed once after it passes; (d) a post-deadline re-probe that again returns `usage_limit` re-benches a fresh window; (e) the `benched` event does not interfere with frozen/probation/paused state recovery
 
 ## 8. Display and resume guidance
 
 - [ ] 8.1 Footer and collapsed retry line show the accurate category with reset/wait detail (`usage limit, resets in 123h50m`, `rate limit, waiting 2m`, `invalid model`)
-- [ ] 8.2 Try records / `summary.jsonl` store the stable `Category` separately from the human display reason
-- [ ] 8.3 Include explicit finalization guidance in the resumed prompt on `incomplete_finalization` retries (and laps-backed operator pause/resume)
+- [ ] 8.2 `TryRecord` (`tries.jsonl`) gains a `Category` field storing the stable `FailureCategory` separately from the human-readable `FailReason` display string
+- [ ] 8.3 Verify the existing `incompleteRetryGuidance` constant (`runner.go:151`) is adequate for the `incomplete_finalization` category; update it if needed, then include it in the resumed prompt on `incomplete_finalization` retries (including laps-backed operator pause/resume at `runner.go:1004-1006`)
 - [ ] 8.4 Tests: a genuine incomplete retry receives finalization guidance; the persisted record carries both `Category` and display reason
 
 ## 9. Regression coverage from observed signatures

@@ -1,4 +1,192 @@
 {
- "version": 2,
- "tasks": []
+  "version": 2,
+  "tasks": [
+    {
+      "id": "rall-0326",
+      "title": "Add failure taxonomy, typed evidence, and Category to FailureClass mapping",
+      "description": "Context: OpenSpec change improve-error-categorisation, phase 1 (tasks 1.1-1.5), design Decisions 1-3. This is the foundation every later phase builds on.\n\nOutcome: A stable FailureCategory taxonomy with short display labels; a FailureEvidence struct; StrategyDecision carries a Category and a display label distinct from Reason; TryResult gains an optional Evidence field; and a single Category-\u003eFailureClass mapping function.\n\nFiles \u0026 scope: internal/reliability/ for the taxonomy, FailureEvidence, StrategyDecision extension, and the mapping function. internal/agent/executor.go for the optional `Evidence *FailureEvidence` on TryResult. Leave the Executor interface unchanged.\n\nDesign: Nine categories per the Decision 2 table, including transient_infra. Mapping per Decision 3 is load-bearing: usage_limit, invalid_model, and auth_or_proxy MUST map to the agent FailureClass (NOT infra) so they do not feed the freeze counter; short_rate_limit, provider_overloaded, transient_infra, and harness_launch map to infra; incomplete_finalization maps to incomplete; agent_error stays agent. Display labels carry no harness name unless the category is intentionally harness-specific. FailureEvidence shape follows the Decision 1 struct (Category, Harness, Provider, QuotaScope, Message, StatusCode, ResetAfter, ResetAt, RetryAfter, RawSignal).\n\nAcceptance: Tests assert every category maps to exactly one FailureClass; usage_limit/invalid_model/auth_or_proxy are NOT FailureInfra; display labels carry no harness name unless intentionally harness-specific. `go test ./internal/reliability/...` and `go build ./...` green. Do not tick tasks.md boxes.",
+      "assignee": "SENIOR",
+      "isDone": false,
+      "order": 65536,
+      "createdAt": "2026-06-09T06:45:39.168253515Z",
+      "updatedAt": "2026-06-09T06:45:39.168253515Z",
+      "completedAt": null
+    },
+    {
+      "id": "rall-463e",
+      "title": "Reorder ClassifyError and make it harness-scoped",
+      "description": "Context: phase 2 (tasks 2.1-2.5), depends on the taxonomy/evidence types from the previous lap. Today ClassifyError checks the dirty-tree incomplete context first (patterns.go:241), then walks a global containsSubstring ErrorPatterns table (patterns.go:250), defaulting to agent_error. The single call site is runner.go:1272, where the failing harness is already in scope as picked.Harness.\n\nOutcome: ClassifyError is harness-aware and reordered to: (1) typed executor Evidence, (2) provider/config/quota detection, (3) dirty-tree incomplete check, (4) harness-scoped text patterns, (5) agent_error default. No cross-harness mislabelling.\n\nFiles \u0026 scope: internal/reliability/patterns.go, and the call site at internal/relay/runner.go:1272.\n\nDesign: Thread picked.Harness into ClassifyError and add an optional harness constraint to each Pattern; a pattern matches only when the failing harness matches, or when the pattern is harness-agnostic. Strip harness names from generic display labels. Assign a FailureCategory to every existing ErrorPatterns entry; the harness-agnostic API timeout / connection / network / TLS / non-overload 5xx patterns map to transient_infra with no behavior regression vs today's infra classification. Make ClassifyError tolerate nil/empty Evidence (process-level harness_launch failures have no TryResult). Move the dirty-tree incomplete pre-check below provider/config/quota detection (the inverse of today's order).\n\nAcceptance: Test that a Codex log tail containing the prose 'rate-limit' does NOT classify as a Claude rate limit. Existing reliability tests stay green. Do not tick tasks.md boxes.",
+      "assignee": "SENIOR",
+      "isDone": false,
+      "order": 131072,
+      "createdAt": "2026-06-09T06:45:39.168273893Z",
+      "updatedAt": "2026-06-09T06:45:39.168273893Z",
+      "completedAt": null
+    },
+    {
+      "id": "rall-0d80",
+      "title": "Verify phase 1-2: taxonomy, mapping, and classification reorder",
+      "description": "Use the openspec-verify-change skill against improve-error-categorisation, then focus your report on phases 1-2. Before diffing, identify the intended merge target from the user, PR metadata, repo docs, branch config, or recent history, and treat work that predates the first lap of this batch as pre-existing.\n\nTrace the actual code, not just green tests: confirm the Category-\u003eFailureClass mapping really maps usage_limit/invalid_model/auth_or_proxy to agent-class (so they never increment the freeze counter), that ClassifyError's new priority order is executor-evidence -\u003e provider/config/quota -\u003e dirty-tree incomplete -\u003e harness-scoped patterns -\u003e agent_error, that harness scoping prevents cross-harness mislabelling, and that nil Evidence is tolerated.\n\nCheck off tasks.md boxes 1.1-1.5 and 2.1-2.5 only for work you verified as correct and sufficiently thorough. Fix only tiny safe one-liners inline; for anything larger, add a focused lap at the head of the queue with `laps add head`.",
+      "assignee": "VERIFY",
+      "isDone": false,
+      "order": 196608,
+      "createdAt": "2026-06-09T06:45:39.168277038Z",
+      "updatedAt": "2026-06-09T06:45:39.168277038Z",
+      "completedAt": null
+    },
+    {
+      "id": "rall-bc41",
+      "title": "Parse Antigravity/Gemini and Claude failure signatures into evidence",
+      "description": "Context: phase 3 (tasks 3.1/3.2, Antigravity/Gemini + Claude subset), depends on the FailureEvidence struct. Note from tasks.md: harness_launch, incomplete_finalization, and transient_infra are NOT executor-parsed; this lap targets only categories with provider-specific structured signals.\n\nOutcome: Parser helpers that turn Antigravity/Gemini and Claude error signatures into a populated FailureEvidence.\n\nFiles \u0026 scope: internal/reliability/ parser helpers plus their tests.\n\nDesign: Antigravity/Gemini signatures: RESOURCE_EXHAUSTED, 'Individual quota reached', 'Resets in \u003cdur\u003e'. Claude signatures: rate_limit_event five-hour vs seven-day, model_not_found, authentication_failed, 529 overload. Populate ResetAfter/ResetAt/RetryAfter/StatusCode/Provider on FailureEvidence. Map signatures to categories: quota/seven-day -\u003e usage_limit, five-hour throttle -\u003e short_rate_limit, model_not_found -\u003e invalid_model, authentication_failed -\u003e auth_or_proxy, 529 overload -\u003e provider_overloaded.\n\nAcceptance: Table tests per signature asserting the resolved category and parsed timing fields. `go test ./internal/reliability/...` green. Do not tick tasks.md boxes.",
+      "assignee": "JUNIOR",
+      "isDone": false,
+      "order": 262144,
+      "createdAt": "2026-06-09T06:45:39.168279582Z",
+      "updatedAt": "2026-06-09T06:45:39.168279582Z",
+      "completedAt": null
+    },
+    {
+      "id": "rall-4ded",
+      "title": "Parse Codex and opencode failure signatures into evidence",
+      "description": "Context: phase 3 (tasks 3.1/3.2, Codex + opencode subset), depends on the FailureEvidence struct and follows the same parser pattern as the Antigravity/Claude lap.\n\nOutcome: Parser helpers that turn Codex and opencode error signatures into a populated FailureEvidence.\n\nFiles \u0026 scope: internal/reliability/ parser helpers plus their tests.\n\nDesign: Codex usage-limit messages -\u003e usage_limit (parse any reset/retry timing where present). opencode JSON provider errors -\u003e map to the matching category and capture the provider segment into Provider. Populate ResetAfter/ResetAt/RetryAfter/StatusCode/Provider on FailureEvidence as the signature exposes them.\n\nAcceptance: Table tests per signature asserting category and parsed fields. `go test ./internal/reliability/...` green. Do not tick tasks.md boxes.",
+      "assignee": "JUNIOR",
+      "isDone": false,
+      "order": 327680,
+      "createdAt": "2026-06-09T06:45:39.168281307Z",
+      "updatedAt": "2026-06-09T06:45:39.168281307Z",
+      "completedAt": null
+    },
+    {
+      "id": "rall-a705",
+      "title": "Populate FailureEvidence from the per-harness executors",
+      "description": "Context: phase 3 (task 3.3), depends on the two parser laps. Per design Decision 1, executors populate FailureEvidence where they can; the runner-side fallback parser stays for everything else and for harnesses without signatures.\n\nOutcome: The per-harness executor adapters that have structured error output (Antigravity/Gemini, Claude, Codex, opencode) populate TryResult.Evidence using the new parsers.\n\nFiles \u0026 scope: internal/agent/ per-harness adapters. Do not change the Executor interface.\n\nDesign: Populate Evidence on TryResult where the adapter can observe structured/bounded error output; leave it nil where it cannot, since the runner fallback owns those cases (including process-level harness_launch failures with no TryResult).\n\nAcceptance: Adapter tests verifying Evidence is populated for a representative signature per harness. `go build ./...` and `go test ./internal/agent/...` green. Do not tick tasks.md boxes.",
+      "assignee": "JUNIOR",
+      "isDone": false,
+      "order": 393216,
+      "createdAt": "2026-06-09T06:45:39.168283364Z",
+      "updatedAt": "2026-06-09T06:45:39.168283364Z",
+      "completedAt": null
+    },
+    {
+      "id": "rall-22c1",
+      "title": "Extract shared dirty-path exclusion helper and add integration coverage",
+      "description": "Context: phase 4 (tasks 4.1-4.3). The .rally/ and .laps/ skip logic is duplicated at git.go:82, git.go:112, and in filesChangedList at runner.go:1717-1718. The 4.3 tests are integration tests that depend on the reordered classification and evidence parsers from earlier laps.\n\nOutcome: A single gitx.IsRallyOwnedOrTransientPath helper replaces the three duplicated skip sites; .claude/settings.local.json is excluded; a try whose only dirty paths are excluded has no meaningful task change.\n\nFiles \u0026 scope: internal/gitx/git.go for the helper, and its three call sites (git.go:82, git.go:112, runner.go:1717-1718).\n\nDesign: Replace the duplicated .rally/.laps skips with the shared helper. Add known harness-local transient paths starting conservatively with .claude/settings.local.json (the open question notes this set grows with evidence).\n\nAcceptance: Integration tests: Claude usage_limit + only .claude/settings.local.json dirty -\u003e usage_limit (not incomplete); Antigravity RESOURCE_EXHAUSTED + zero meaningful changes -\u003e usage_limit (not incomplete); src/foo.go dirty without finalization -\u003e incomplete_finalization; Claude invalid_model + only settings dirty -\u003e invalid_model. `go test ./...` green for touched packages. Do not tick tasks.md boxes.",
+      "assignee": "JUNIOR",
+      "isDone": false,
+      "order": 458752,
+      "createdAt": "2026-06-09T06:45:39.168285043Z",
+      "updatedAt": "2026-06-09T06:45:39.168285043Z",
+      "completedAt": null
+    },
+    {
+      "id": "rall-6ced",
+      "title": "Add the harness-aware QuotaScope resolver",
+      "description": "Context: phase 5 (tasks 5.1-5.2), design Decision 4. Needed by the phase 7 benching machinery so that benching one model benches its whole quota bucket.\n\nOutcome: A standalone pure resolver QuotaScope(harness, model) string at the routing/config layer (explicitly NOT an Executor method).\n\nFiles \u0026 scope: the routing/config layer plus tests.\n\nDesign: antigravity -\u003e per model family via case-insensitive substring matching, because antigravity model names are free-form display labels (antigravity.go:16, e.g. 'Gemini 3.5 Flash (High)'), so claude / flash / pro are separate quotas. opencode -\u003e per provider, the segment before the first '/' in ResolvedAgent.Model (e.g. zai-coding-plan/glm-5.1). direct harnesses (claude, codex, gemini) -\u003e per harness; the model is ignored so a stray '/' cannot mis-split.\n\nAcceptance: Tests: antigravity claude vs flash vs pro resolve to distinct scopes from free-form labels; opencode splits on the first '/'; a direct-harness model with a stray '/' is not mis-split. `go test` green for the touched package. Do not tick tasks.md boxes.",
+      "assignee": "JUNIOR",
+      "isDone": false,
+      "order": 524288,
+      "createdAt": "2026-06-09T06:45:39.16828663Z",
+      "updatedAt": "2026-06-09T06:45:39.16828663Z",
+      "completedAt": null
+    },
+    {
+      "id": "rall-7f80",
+      "title": "Verify phase 3-5: evidence parsers, exclusion helper, quota scope",
+      "description": "Use the openspec-verify-change skill against improve-error-categorisation, then focus on phases 3-5 (the evidence/scope primitives slice). Identify the merge target before diffing and treat pre-batch work as pre-existing.\n\nTrace actual behavior: confirm the parsers populate the real timing/status/provider fields for each harness signature, that executors populate TryResult.Evidence where expected, that the single gitx exclusion helper replaced all three duplicated skip sites and is what the integration tests exercise, and that QuotaScope produces distinct scopes for the antigravity families, the opencode provider split, and the direct-harness case.\n\nCheck off tasks.md boxes 3.1-3.3, 4.1-4.3, and 5.1-5.2 only for verified-correct, sufficiently thorough work. Tiny one-liner fixes only inline; larger gaps become focused head laps via `laps add head`.",
+      "assignee": "VERIFY",
+      "isDone": false,
+      "order": 589824,
+      "createdAt": "2026-06-09T06:45:39.168288194Z",
+      "updatedAt": "2026-06-09T06:45:39.168288194Z",
+      "completedAt": null
+    },
+    {
+      "id": "rall-761e",
+      "title": "Short-circuit the attempt loop and surface category up the return contract",
+      "description": "Context: phase 6 (tasks 6.1-6.3), design Decision 5 items 1-2. runOne's attempt loop is runner.go:1269-1301; runOne's return contract is runner.go:906; the routing dispatch loop where OnAgentFailed is reachable is runner.go:520-593.\n\nOutcome: usage_limit and auth_or_proxy terminate runOne's attempt loop on first detection (exactly one attempt), and runOne surfaces the resolved FailureCategory plus reset evidence up to the routing dispatch loop.\n\nFiles \u0026 scope: internal/relay/runner.go.\n\nDesign: Break the attempt loop on first detection of these terminal categories by reusing the skip short-circuit or a terminal strategy. Their non-infra (agent-class) mapping means the freeze counter does not bound them, so the loop break is what bounds them to one attempt. Extend runOne's return contract to carry the resolved FailureCategory + reset evidence to the dispatch loop (520-593).\n\nAcceptance: Test that a usage_limit makes exactly one attempt (does not loop the retry budget) before control returns to the routing loop. `go test ./internal/relay/...` green. Do not tick tasks.md boxes.",
+      "assignee": "SENIOR",
+      "isDone": false,
+      "order": 655360,
+      "createdAt": "2026-06-09T06:45:39.168292079Z",
+      "updatedAt": "2026-06-09T06:45:39.168292079Z",
+      "completedAt": null
+    },
+    {
+      "id": "rall-f4b1",
+      "title": "Add StateBenched resilience state with reset-deadline decay",
+      "description": "Context: phase 7 (tasks 7.1, 7.2, 7.6), design Decisions 5-6. Usage-limit benching is modelled as a persisted resilience state reusing the existing pause pipeline, NOT a parallel EntryState axis. Anchors: AgentState consts resilience.go:13; GetState resilience.go:59 with the pure-read frozen-\u003eprobation decay at resilience.go:89-93 as the precedent to mirror; AgentStatusEvent + EventType comment records.go:62-65; truncateAgentStatus store.go:128 (currently keeps only frozen/probation).\n\nOutcome: A new StateBenched AgentState and a `benched` agent_status event carrying reset_at + quota_scope; GetState returns StateBenched while now \u003c reset_at and surfaces the key as StateActive for a single re-probe once the deadline passes; a BenchAgent(key, resetAt, scope, relayID) method persists the event alongside PauseAgent/FreezeAgent; the truncation retention allow-list keeps `benched`.\n\nFiles \u0026 scope: internal/relay/resilience.go, internal/store/records.go, internal/store/store.go.\n\nDesign: Mirror the frozen-\u003eprobation decay (resilience.go:89-93) for the post-deadline single re-probe; do NOT build a bespoke restoration scanner — cross-relay persistence is free via GetState replay (this is why this approach is leaner than the dropped BenchUntil-on-EntryState design). Add reset_at/quota_scope fields to AgentStatusEvent and update the EventType comment to list all valid types. Add `benched` to the truncateAgentStatus allow-list so a multi-day reset is not truncated away.\n\nAcceptance: Unit tests: GetState returns StateBenched before reset_at and StateActive (one re-probe) after; a `benched` event survives truncation. `go build ./...` and `go test ./internal/relay/... ./internal/store/...` green. Do not tick tasks.md boxes.",
+      "assignee": "SENIOR",
+      "isDone": false,
+      "order": 851968,
+      "createdAt": "2026-06-09T07:26:46.948274124Z",
+      "updatedAt": "2026-06-09T07:26:46.948274124Z",
+      "completedAt": null
+    },
+    {
+      "id": "rall-0f26",
+      "title": "Bench the quota scope on usage_limit and wait it out",
+      "description": "Context: phase 7 (tasks 7.3, 7.4, 7.5), design Decision 5 items 4-6. Depends on the StateBenched state + BenchAgent (previous lap), the QuotaScope resolver, and the runOne return contract (phase 6). Anchors: dispatch loop runner.go:520-593; syncRecoverySignals switch route_runtime.go:256; selectionWaitError route_runtime.go:313 (paused-only derivation at :330); forceUnpauseAll route_runtime.go:360; AllFrozen relay-stall capture runner.go:433.\n\nOutcome: On a usage_limit the dispatch loop benches the whole quota scope; the recovery sync keeps benched entries out of rotation; an all-benched lane waits for the earliest reset instead of failing AllFrozen; operator skip clears benches.\n\nFiles \u0026 scope: internal/relay/route_runtime.go, internal/relay/runner.go.\n\nDesign: Add a route-runtime benchQuotaScope(resilience, scope, resetAt, relayID) that iterates every scheduler's entries (r.schedulers), resolves each entry's {Harness,Model} key and QuotaScope, and writes a `benched` event via BenchAgent for every distinct matching key — mirror the iterate-all-schedulers pattern in forceUnpauseAll (route_runtime.go:360-385). Call it from the dispatch loop on a usage_limit using the parsed reset or a long conservative default. Add ONE arm to syncRecoverySignals: `case StateBenched: OnAgentFailed(state, \"quota\", true)` — no StateActive unbench guard is needed because a benched key is never StateActive; leave the StateActive/StatePaused/StateProbation/StateFrozen arms untouched. Widen selectionWaitError to also derive a wait from the earliest StateBenched reset_at. Widen forceUnpauseAll to also clear StateBenched (write an active event) on skip.\n\nAcceptance: Unit tests: a usage_limit benches every key in the scope across lanes; syncRecoverySignals keeps a benched entry out of Next(); an all-benched lane returns a wait, not AllFrozen. `go test ./internal/relay/...` green. Do not tick tasks.md boxes.",
+      "assignee": "SENIOR",
+      "isDone": false,
+      "order": 950272,
+      "createdAt": "2026-06-09T07:26:46.948282752Z",
+      "updatedAt": "2026-06-09T07:26:46.948282752Z",
+      "completedAt": null
+    },
+    {
+      "id": "rall-da71",
+      "title": "Test the benching state machine end to end",
+      "description": "Context: phase 7 (task 7.7), validates the two preceding phase-7 laps. Dedicated state-machine test lap for the highest-risk subsystem.\n\nOutcome: The full 7.7 test matrix.\n\nFiles \u0026 scope: tests under internal/relay/, internal/routing/, internal/store/ as needed.\n\nDesign / cases: (a) a benched key is NOT selected before reset_at; (b) all-benched-with-future-reset produces a wait, not an AllFrozen relay failure; (c) a persisted reset survives a fresh relay via GetState replay and is re-probed once after it passes; (d) a post-deadline re-probe that again returns usage_limit re-benches a fresh window; (e) the `benched` event does not interfere with frozen/probation/paused state recovery.\n\nAcceptance: All five cases pass. `go test ./internal/relay/... ./internal/routing/... ./internal/store/...` green. Do not tick tasks.md boxes.",
+      "assignee": "SENIOR",
+      "isDone": false,
+      "order": 999424,
+      "createdAt": "2026-06-09T07:26:46.948286203Z",
+      "updatedAt": "2026-06-09T07:26:46.948286203Z",
+      "completedAt": null
+    },
+    {
+      "id": "rall-90ed",
+      "title": "Verify phase 6-7: short-circuit, StateBenched, reset recovery",
+      "description": "Use the openspec-verify-change skill against improve-error-categorisation, then focus on phases 6-7 — the highest-risk concentration. Identify the merge target before diffing; treat pre-batch work as pre-existing; do not rewrite git history.\n\nTrace the load-bearing lines, not just green tests: the attempt-loop break for usage_limit/auth_or_proxy (runner.go:1269-1301), the extended runOne return contract (runner.go:906) reaching the dispatch loop (runner.go:520-593), the StateBenched decay in GetState (mirroring resilience.go:89-93), BenchAgent persistence + the truncation allow-list (store.go:128), benchQuotaScope fan-out across all schedulers, the single StateBenched arm in syncRecoverySignals (CONFIRM no StateActive unbench guard was added and the StatePaused/StateProbation/StateFrozen arms are untouched), the selectionWaitError wait derivation replacing the AllFrozen path (runner.go:433), and cross-relay restoration via GetState replay (confirm NO bespoke restoration scanner was added — that would re-introduce the duplication this design removed). Confirm a usage_limit benches its scope rather than looping one-minute waits, an all-benched lane waits, and a persisted reset re-probes once.\n\nCheck off tasks.md boxes 6.1-6.3 and 7.1-7.7 only for verified-correct, sufficiently thorough work. Tiny one-liners only inline; larger gaps become focused head laps via `laps add head` (additive/revert commits only).",
+      "assignee": "VERIFY",
+      "isDone": false,
+      "order": 1024000,
+      "createdAt": "2026-06-09T07:26:46.948287708Z",
+      "updatedAt": "2026-06-09T07:26:46.948287708Z",
+      "completedAt": null
+    },
+    {
+      "id": "rall-3d66",
+      "title": "Show categorised failures and carry finalization guidance on incomplete retries",
+      "description": "Context: phase 8 (tasks 8.1-8.4). The incompleteRetryGuidance constant is at runner.go:151; the laps-backed operator pause/resume path is at runner.go:1004-1006.\n\nOutcome: The footer and the collapsed retry line show the accurate category with reset/wait detail; TryRecord (tries.jsonl) gains a Category field storing the stable FailureCategory separately from the human-readable FailReason display string; and incomplete_finalization retries include finalization guidance in the resumed prompt.\n\nFiles \u0026 scope: the footer/retry-line display code, internal/store TryRecord, and the runner.go resume path (including runner.go:1004-1006).\n\nDesign: Display examples: 'usage limit, resets in 123h50m', 'rate limit, waiting 2m', 'invalid model'. Verify the existing incompleteRetryGuidance constant (runner.go:151) is adequate for incomplete_finalization; update it if needed, then include it in the resumed prompt on incomplete_finalization retries, including the laps-backed operator pause/resume at runner.go:1004-1006.\n\nAcceptance: Tests: a genuine incomplete retry receives finalization guidance; the persisted record carries both Category and the display reason. `go test ./...` green for touched packages. Do not tick tasks.md boxes.",
+      "assignee": "JUNIOR",
+      "isDone": false,
+      "order": 1048576,
+      "createdAt": "2026-06-09T06:45:39.168308428Z",
+      "updatedAt": "2026-06-09T06:45:39.168308428Z",
+      "completedAt": null
+    },
+    {
+      "id": "rall-2eb6",
+      "title": "Add regression coverage for the observed failure signatures",
+      "description": "Context: phase 9 (tasks 9.1-9.6). These are the end-to-end guard tests for the real signatures that motivated the change; they should fail against the old classifier and pass against the new one.\n\nOutcome: Six regression tests.\n\nFiles \u0026 scope: tests in the relevant packages (internal/reliability/, internal/relay/).\n\nCases: 9.1 Antigravity quota with zero changed files -\u003e usage_limit; 9.2 Antigravity quota + only .claude/settings.local.json dirty -\u003e usage_limit (not incomplete); 9.3 Codex VERIFY log tail mentioning 'rate-limit' as prose -\u003e not a Claude rate limit; 9.4 Claude invalid model + settings dirty -\u003e invalid_model (not incomplete); 9.5 real task-file dirty with no finalization -\u003e incomplete_finalization; 9.6 an API timeout / connection-reset log tail -\u003e transient_infra (infra-class), not agent_error.\n\nAcceptance: All six pass. `go test ./...` green. Do not tick tasks.md boxes.",
+      "assignee": "JUNIOR",
+      "isDone": false,
+      "order": 1114112,
+      "createdAt": "2026-06-09T06:45:39.168310609Z",
+      "updatedAt": "2026-06-09T06:45:39.168310609Z",
+      "completedAt": null
+    },
+    {
+      "id": "rall-77a6",
+      "title": "Final full-change verification for improve-error-categorisation",
+      "description": "Run the complete openspec-verify-change skill for improve-error-categorisation and inspect the whole diff. Identify the intended merge target first (from the user, PR metadata, repo docs, branch config, or recent history) and use `git diff \u003ctarget\u003e...HEAD`; treat work predating the first lap of this batch as pre-existing unless the user asks to include it.\n\nConfirm all 39 tasks are done correctly and coherently, and that the single taxonomy is used consistently across classification, display, try records, the scheduler, and persistence — one taxonomy, one priority order, one typed evidence shape. Re-confirm the load-bearing invariants: agent-class mapping for usage_limit/invalid_model/auth_or_proxy, dirty-tree incomplete demoted below provider/config/quota, harness-scoped classification, usage limits bench rather than loop, and reset recovery across relays. Run the full `go test ./...`, `go build ./...`, and the project lint.\n\nCheck off any remaining tasks.md boxes only for verified-correct work, ensuring every box reflects verified-done. For substantive gaps, add focused head laps (additive or revert commits, no history rewrite); do not turn verification into a hidden implementation phase.",
+      "assignee": "VERIFY",
+      "isDone": false,
+      "order": 1179648,
+      "createdAt": "2026-06-09T06:45:39.168316092Z",
+      "updatedAt": "2026-06-09T06:45:39.168316092Z",
+      "completedAt": null
+    }
+  ]
 }
