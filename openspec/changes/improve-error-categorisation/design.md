@@ -76,11 +76,23 @@ with display labels:
 | `usage_limit` | `usage limit` (+ `resets in 118h44m`) | bench quota scope until reset; route away; one attempt then bench |
 | `short_rate_limit` | `rate limit` (+ `waiting 2m`) | wait parsed `Retry-After`, else short default; resume |
 | `provider_overloaded` | `provider overloaded` | resume within retry budget |
+| `transient_infra` | `infra error` | API timeout, network/connection/TLS failure, non-overload 5xx; resume within budget |
+
+Discriminator for the two transient infra categories: a 5xx whose status/body
+matches a known provider-overload signal (HTTP 529, `overloaded_error`,
+`503 Service Unavailable` "Overloaded") classifies `provider_overloaded`; all
+other 5xx, API timeouts, and connection/TLS failures classify `transient_infra`.
+Both map to infra-class and resume within budget, so a misclassification between
+the two is behaviourally harmless — the split exists for display/triage clarity.
 | `invalid_model` | `invalid model` | exhaust entry, route away; no identical retry |
 | `auth_or_proxy` | `auth/proxy error` | route away; one attempt then route |
 | `harness_launch` | `harness launch error` | fresh restart or rotate by subtype |
 | `incomplete_finalization` | `incomplete: file changes without finalization` | resume + retry with finalization guidance |
 | `agent_error` | `agent error` | existing retry/fresh (default) |
+
+The liveness **stall** kill is not a log-text category: the stall path sets an
+infra `FailureClass` directly (`reliability/stall.go`), independent of the
+`FailureCategory` assigned from output. It is left as-is.
 
 `ClassifyError` is reordered to: (1) typed `FailureEvidence` from the executor;
 (2) provider/config/quota evidence from structured data or bounded snippets;
@@ -102,6 +114,7 @@ harness+model) **and** benched (per quota scope). Required mapping:
 | `auth_or_proxy` | **not** `infra` | route away; bounded by the attempt-loop break |
 | `short_rate_limit` | `infra` | transient; existing wait-resume + freeze accounting |
 | `provider_overloaded` | `infra` | transient |
+| `transient_infra` | `infra` | API timeout / network / TLS / non-overload 5xx |
 | `harness_launch` | `infra` | transient launch fault |
 | `incomplete_finalization` | `incomplete` | unchanged |
 | `agent_error` | `agent` | unchanged default |
@@ -143,7 +156,10 @@ bench:
    on the next `Next()` cycle, evaporating the bench. The `StateActive` branch
    MUST NOT unbench an entry whose `BenchUntil` is still in the future;
    `BenchUntil` takes precedence. Recovery fires when `now >= BenchUntil`, then
-   re-probes once.
+   re-probes once. This guard is scoped to the `StateActive` arm **only** — it
+   MUST NOT be added to the `StateProbation` / `StatePaused` arms, or it would
+   block the probation one-shot unbench (`route_runtime.go:280-281`), which is
+   governed by the probation cycle, not by `BenchUntil`.
 5. **Wait out an all-benched lane.** When the scope-keyed bench takes down every
    entry in a lane, `Next()` returns "all exhausted" and `selectionWaitError`
    (`route_runtime.go:313`) currently derives a wait only from `StatePaused`
@@ -158,7 +174,10 @@ as a new `agent_status.jsonl` resilience event carrying `reset_at` + `quota_scop
 bench **persists across relays** on the same machine — a still-unreset quota is
 still unreset for the next relay — and on the first selection after a persisted
 deadline passes the scope is **re-probed once**, so a manually-topped-up quota
-recovers without operator action. (Default chosen per plan review; reversible.)
+recovers without operator action. If that single re-probe again returns
+`usage_limit`, the scope is re-benched for a fresh window (parsed reset or
+default) rather than treated as permanently exhausted. (Default chosen per plan
+review; reversible.)
 
 ## Risks / Trade-offs
 

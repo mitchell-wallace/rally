@@ -1,6 +1,6 @@
 ## 1. Taxonomy and typed evidence
 
-- [ ] 1.1 Add `FailureCategory` constants + display labels in `internal/reliability/` (the eight categories from design Decision 2)
+- [ ] 1.1 Add `FailureCategory` constants + display labels in `internal/reliability/` (the nine categories from design Decision 2, including `transient_infra`)
 - [ ] 1.2 Add the `FailureEvidence` struct and extend `StrategyDecision` with `Category` and a display label separate from `Reason`
 - [ ] 1.3 Add an optional `Evidence *FailureEvidence` field to `TryResult` (`internal/agent/executor.go`); leave the `Executor` interface unchanged
 - [ ] 1.4 Define the Category → `FailureClass` mapping (design Decision 3) as a single function; tests assert `usage_limit`/`invalid_model`/`auth_or_proxy` are NOT `FailureInfra`
@@ -11,6 +11,7 @@
 - [ ] 2.1 Thread `picked.Harness` into `ClassifyError` (`runner.go:1272`) and add an optional harness constraint to each `Pattern`
 - [ ] 2.2 Reorder `ClassifyError` (`patterns.go:237`): executor `Evidence` first, then provider/config/quota detection, then the dirty-tree `incomplete` pre-check (move it below `:241`), then harness-scoped patterns, then `agent_error`
 - [ ] 2.3 Strip harness names from generic display labels; a pattern matches only when the failing harness matches (or the pattern is harness-agnostic)
+- [ ] 2.4a Assign a `FailureCategory` to every existing `ErrorPatterns` entry; the harness-agnostic API timeout / connection / network / TLS / non-overload 5xx patterns map to `transient_infra` (no behavior regression vs today's infra classification)
 - [ ] 2.4 Make `ClassifyError` tolerate nil/empty `Evidence` (process-level `harness_launch` failures have no `TryResult`)
 - [ ] 2.5 Tests: a Codex log tail containing the prose "rate-limit" does NOT classify as a Claude rate limit
 
@@ -42,7 +43,7 @@
 - [ ] 7.1 Add `BenchUntil *time.Time` (or equivalent) to `EntryState` (`scheduler.go:8`) and a scope-keyed bench helper that benches every entry whose `QuotaScope` matches
 - [ ] 7.2 Wire the routing dispatch loop to bench the quota scope (with `BenchUntil` from reset evidence, or a long conservative default) on a `usage_limit`
 - [ ] 7.3 Guard the `StateActive` unbench in `syncRecoverySignals` (`route_runtime.go:257-260`) so a future `BenchUntil` is not undone; unbench + re-probe once when `now >= BenchUntil`
-- [ ] 7.4 Persist the deadline as a new `agent_status.jsonl` event carrying `reset_at` + `quota_scope`; restore it across relays (design Decision 6)
+- [ ] 7.4 Persist the deadline as a new `agent_status.jsonl` event carrying `reset_at` + `quota_scope` (write via `internal/relay/resilience.go`; new event type alongside `probation`/`frozen` in `internal/store`); restore it across relays (design Decision 6). Scope the `BenchUntil` guard to the `StateActive` branch only (`route_runtime.go:257-260`) — do not add it to the `StateProbation`/`StatePaused` branches, or it breaks the probation one-shot. Add the new event type to the truncation retention allow-list in `truncateAgentStatus` (`store.go:128`, currently keeps only `frozen`/`probation`) so a long-lived multi-day reset is not truncated away, and add `reset_at`/`quota_scope` fields to `AgentStatusEvent`
 - [ ] 7.5 Teach `selectionWaitError` (`route_runtime.go:313`) to derive a wait from the minimum pending `BenchUntil` so an all-benched lane waits instead of failing as `AllFrozen` (`runner.go:433`)
 - [ ] 7.6 Tests: (a) a benched-but-active entry is NOT unbenched before `BenchUntil`; (b) all-benched-with-future-reset produces a wait, not an `AllFrozen` relay failure; (c) a persisted reset is restored on the next relay and re-probed once after it passes
 
@@ -60,3 +61,4 @@
 - [ ] 9.3 Codex VERIFY log tail mentioning `rate-limit` as prose → not a Claude rate limit
 - [ ] 9.4 Claude invalid model + settings dirty → `invalid_model` (not `incomplete`)
 - [ ] 9.5 Real task-file dirty with no finalization → `incomplete_finalization`
+- [ ] 9.6 An API timeout / connection-reset log tail classifies `transient_infra` (infra-class), not `agent_error` (guards the no-regression intent of the new category)

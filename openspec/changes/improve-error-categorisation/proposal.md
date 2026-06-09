@@ -28,9 +28,11 @@ Concretely, today (`internal/reliability/patterns.go`, `internal/relay/runner.go
 ## What Changes
 
 - **A typed failure taxonomy** of stable `FailureCategory` values
-  (`usage_limit`, `short_rate_limit`, `provider_overloaded`, `invalid_model`,
-  `auth_or_proxy`, `harness_launch`, `incomplete_finalization`, `agent_error`)
-  with short display labels, replacing the overloaded `rate limit` pattern names.
+  (`usage_limit`, `short_rate_limit`, `provider_overloaded`, `transient_infra`,
+  `invalid_model`, `auth_or_proxy`, `harness_launch`, `incomplete_finalization`,
+  `agent_error`) with short display labels, replacing the overloaded `rate limit`
+  pattern names. (Liveness stall remains handled by the stall path, not as a
+  log-text category.)
 - **Reordered classification priority**: structured executor evidence and
   provider/config/quota detection beat the dirty-tree `incomplete` check, so
   harness-local dirty files never mask a stronger failure.

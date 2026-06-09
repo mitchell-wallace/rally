@@ -2,7 +2,7 @@
 
 ### Requirement: Failure detection
 The system SHALL consider a try failed if the agent reports `Completed: false`, exits with an error, or produces no meaningful work (no file changes and runs less than 3 minutes). The system SHALL assign each failure a stable `FailureCategory` (see "Failure taxonomy and evidence") and SHALL map that category onto one of three resilience classes:
-- **infra-class**: short rate limit, provider overload, harness/launch error (e.g. `argument list too long`, `fork/exec`), API timeout / network stall, or liveness stall detection.
+- **infra-class**: short rate limit, provider overload, harness/launch error (e.g. `argument list too long`, `fork/exec`), transient infrastructure error (`transient_infra`: API timeout, network/connection/TLS failure, non-overload 5xx), or liveness stall detection.
 - **agent-class**: ordinary agent error or short no-op.
 - **incomplete**: file changes were produced but the agent did not finalize the lap (`laps done` or `laps handoff`).
 
@@ -70,7 +70,7 @@ An incomplete try SHALL have its auto-commit suppressed, leaving changes uncommi
 ## ADDED Requirements
 
 ### Requirement: Failure taxonomy and evidence
-The system SHALL classify each failure into one stable `FailureCategory`: `usage_limit`, `short_rate_limit`, `provider_overloaded`, `invalid_model`, `auth_or_proxy`, `harness_launch`, `incomplete_finalization`, or `agent_error`. Each category SHALL have a short, human-readable display label distinct from the machine-readable category, and SHALL map to exactly one resilience `FailureClass` per the Category→FailureClass mapping (`usage_limit`, `invalid_model`, and `auth_or_proxy` map to neither infra nor the freeze counter). Classification SHALL prefer, in order: (1) typed `FailureEvidence` supplied by the executor; (2) provider/configuration/quota evidence from structured data or bounded error snippets; (3) meaningful task-file change (`incomplete_finalization`); (4) harness-scoped text patterns; (5) `agent_error` as the default. The system SHALL tolerate absent evidence and fall back to log-tail classification.
+The system SHALL classify each failure into one stable `FailureCategory`: `usage_limit`, `short_rate_limit`, `provider_overloaded`, `transient_infra`, `invalid_model`, `auth_or_proxy`, `harness_launch`, `incomplete_finalization`, or `agent_error`. (`transient_infra` covers API timeout, network/connection/TLS failure, and non-overload 5xx; the liveness stall kill is not a log-text category and continues to set an infra class directly via the stall path.) Each category SHALL have a short, human-readable display label distinct from the machine-readable category, and SHALL map to exactly one resilience `FailureClass` per the Category→FailureClass mapping (`usage_limit`, `invalid_model`, and `auth_or_proxy` map to neither infra nor the freeze counter). Classification SHALL prefer, in order: (1) typed `FailureEvidence` supplied by the executor; (2) provider/configuration/quota evidence from structured data or bounded error snippets; (3) meaningful task-file change (`incomplete_finalization`); (4) harness-scoped text patterns; (5) `agent_error` as the default. The system SHALL tolerate absent evidence and fall back to log-tail classification.
 
 #### Scenario: Structured evidence wins over text patterns
 - **WHEN** the executor supplies `FailureEvidence` with a category
@@ -107,7 +107,7 @@ The system SHALL terminate a run's per-try attempt loop on the first detection o
 - **THEN** the run SHALL make exactly one attempt and route away
 
 ### Requirement: Usage-limit benching and reset recovery
-On a `usage_limit` failure the system SHALL bench every route entry sharing the failed runner's quota scope until the limit resets, instead of waiting a short fixed cooldown and retrying. When reset timing is parseable the bench SHALL last until that reset; otherwise a long conservative default SHALL be used and the runner routed away. A benched-but-active entry SHALL NOT be returned to rotation before its bench deadline by the resilience recovery sync. When every entry in a lane is benched with a future reset, the system SHALL wait until the earliest reset rather than ending the relay as "all agents frozen". The reset deadline SHALL be persisted (with its quota scope) so it survives across relays on the same machine, and on the first selection after a persisted deadline passes the scope SHALL be re-probed once.
+On a `usage_limit` failure the system SHALL bench every route entry sharing the failed runner's quota scope until the limit resets, instead of waiting a short fixed cooldown and retrying. When reset timing is parseable the bench SHALL last until that reset; otherwise a long conservative default SHALL be used and the runner routed away. A benched-but-active entry SHALL NOT be returned to rotation before its bench deadline by the resilience recovery sync. This guard SHALL apply only to the resilience-active recovery path; it SHALL NOT block the probation one-shot unbench, which is governed by the probation cycle, not by the bench deadline. When every entry in a lane is benched with a future reset, the system SHALL wait until the earliest reset rather than ending the relay as "all agents frozen". The reset deadline SHALL be persisted (with its quota scope) so it survives across relays on the same machine, and on the first selection after a persisted deadline passes the scope SHALL be re-probed once.
 
 #### Scenario: Usage limit benches the quota scope until reset
 - **WHEN** a try fails with `usage_limit` carrying a parsed reset window
@@ -120,10 +120,15 @@ On a `usage_limit` failure the system SHALL bench every route entry sharing the 
 #### Scenario: All-benched lane waits for reset
 - **WHEN** every entry in a lane is benched with a future reset deadline
 - **THEN** the system SHALL wait until the earliest reset rather than failing the relay as "all agents frozen"
+- **NOTE**: this differs from "All agents frozen ends the current pass" (Error resilience cascade) — a frozen lane with no pending reset still ends the pass; only a future bench deadline produces a wait
 
 #### Scenario: Reset persists across relays and re-probes once
 - **WHEN** a relay starts and a persisted reset deadline for a quota scope has not yet passed
 - **THEN** the scope SHALL remain benched; and once the deadline passes the scope SHALL be re-probed a single time before normal selection resumes
+
+#### Scenario: Re-probe still exhausted re-benches a fresh window
+- **WHEN** the single post-deadline re-probe again returns `usage_limit`
+- **THEN** the scope SHALL be re-benched for a fresh window (parsed reset or default) rather than treated as permanently exhausted
 
 ### Requirement: Harness-aware quota scope
 The system SHALL resolve a quota scope key from a runner's harness and model via a single resolver, so benching applies to all route entries sharing an account/quota bucket. The resolver SHALL key antigravity per model family (case-insensitive substring over the free-form display label: `claude` / `flash` / `pro`), opencode per provider (the segment before the first `/` in the model id), and direct harnesses (`claude`, `codex`, `gemini`) per harness with the model ignored.
