@@ -355,7 +355,16 @@ These are agent-CLI behaviours that affect how tests appear. None are rally bugs
 - **Codex**: `--full-auto` / `--dangerously-bypass-approvals-and-sandbox` conflict resolved (commit history) — only the bypass flag is passed now. `TestRealBackend_CodexRelay` guards this.
 - **OpenCode**: Model availability varies by provider. Use the built-in `op` alias — NOT a custom harness with `command = ["opencode"]` (which starts TUI mode). Rally warns on this at startup. When rate-limited (`opencode-go` free tier in particular), opencode maintains TCP connections silently for ~2 minutes then disconnects; `classicFrozen` fires ~130s after start regardless of freeze threshold (provided threshold < 130s). After freeze, rally marks the agent paused and retries later. Free tier resets roughly every 12h.
 
-### Session resume per harness (verified 2026-06-08)
+### Session resume per harness (verified 2026-06-09)
+
+Re-validated headless **resume-with-prompt** end-to-end on 2026-06-09 with a 2-step
+codeword probe against the live CLIs (codex 0.136.0, opencode 1.16.2, agy 1.0.6): codex,
+opencode, and antigravity each reused the SAME captured session id on step 2 and recalled
+the step-1 codeword. All three pass a *new prompt* on resume (codex/agy/op accept a fresh
+prompt alongside the resume flag), which is the headless analogue of the interactive
+"continue this session with X" the user couldn't find a manual command for. Note the
+interactive `codex resume <id>` (TUI) has no way to inject a prompt non-interactively —
+the headless path `codex exec resume <id> <prompt>` is the one that works.
 
 Resume reuses a harness's prior session on pause/resume and on any retry that has a
 tracked session ID. The runner is harness-agnostic: it carries `result.SessionID` into
@@ -378,6 +387,12 @@ not "fix" it to true. If you find a harness reporting `ResumeSupported()=true` w
 `parseXxxOutput` never sets `TryResult.SessionID`, resume is silently dead (that was the
 opencode bug). Drive a real 2-step resume check: have the agent memorize a codeword in
 try 1, then resume and ask for it.
+
+Stdin gotcha when probing codex by hand: `codex exec` treats a *piped, still-open* stdin
+as appended `<stdin>` input and hangs on "Reading additional input from stdin...". Rally
+is unaffected (Go connects the child's stdin to /dev/null → immediate EOF), but a manual
+probe launched under a shell/agent that holds stdin open will hang. Redirect `< /dev/null`
+to faithfully mimic rally.
 
 **Linux freeze behavior**: Two paths — `classicFrozen` (log silent + no connections) fires once connections drop (either after task completion or after rate-limit timeout). `connectedFrozen` (log silent + connections open + no syscall I/O for 5 min) catches agents holding a connection open indefinitely (e.g., different rate-limit behavior). The `TestRealBackend_OpenCodeRelay` test takes ~3 minutes when opencode-go is rate-limited (2m10s for freeze + 50s for ctx expiry); this is expected and the test passes.
 
