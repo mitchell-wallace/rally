@@ -171,11 +171,11 @@
       "title": "Verify phase 6-7: short-circuit, StateBenched, reset recovery",
       "description": "Use the openspec-verify-change skill against improve-error-categorisation, then focus on phases 6-7 — the highest-risk concentration. Identify the merge target before diffing; treat pre-batch work as pre-existing; do not rewrite git history.\n\nTrace the load-bearing lines, not just green tests: the attempt-loop break for usage_limit/auth_or_proxy (runner.go:1269-1301), the extended runOne return contract (runner.go:906) reaching the dispatch loop (runner.go:520-593), the StateBenched decay in GetState (mirroring resilience.go:89-93), BenchAgent persistence + the truncation allow-list (store.go:128), benchQuotaScope fan-out across all schedulers, the single StateBenched arm in syncRecoverySignals (CONFIRM no StateActive unbench guard was added and the StatePaused/StateProbation/StateFrozen arms are untouched), the selectionWaitError wait derivation replacing the AllFrozen path (runner.go:433), and cross-relay restoration via GetState replay (confirm NO bespoke restoration scanner was added — that would re-introduce the duplication this design removed). Confirm a usage_limit benches its scope rather than looping one-minute waits, an all-benched lane waits, and a persisted reset re-probes once.\n\nCheck off tasks.md boxes 6.1-6.3 and 7.1-7.7 only for verified-correct, sufficiently thorough work. Tiny one-liners only inline; larger gaps become focused head laps via `laps add head` (additive/revert commits only).",
       "assignee": "VERIFY",
-      "isDone": false,
+      "isDone": true,
       "order": 1024000,
       "createdAt": "2026-06-09T07:26:46.948287708Z",
-      "updatedAt": "2026-06-09T07:26:46.948287708Z",
-      "completedAt": null
+      "updatedAt": "2026-06-10T11:14:42.228939019Z",
+      "completedAt": "2026-06-10T11:14:42.228939019Z"
     },
     {
       "id": "rall-3d66",
