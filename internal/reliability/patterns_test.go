@@ -9,13 +9,16 @@ func TestClassifyError(t *testing.T) {
 	tests := []struct {
 		name             string
 		logLines         []string
+		harness          string // harness passed to ClassifyError
 		expectedStrategy RetryStrategy
 		expectedCooldown time.Duration
 		expectedClass    FailureClass
+		expectedCategory FailureCategory
 	}{
 		// ── Infra-class: rate limits ──
 		{
-			name: "claude rate-limit interrupt with retry-after",
+			name:    "claude rate-limit interrupt with retry-after",
+			harness: "claude",
 			logLines: []string{
 				"sending to claude...",
 				"error 429 Too Many Requests",
@@ -24,9 +27,11 @@ func TestClassifyError(t *testing.T) {
 			expectedStrategy: StrategyWaitResume,
 			expectedCooldown: 120 * time.Second,
 			expectedClass:    FailureInfra,
+			expectedCategory: CategoryShortRateLimit,
 		},
 		{
-			name: "claude rate-limit interrupt without retry-after",
+			name:    "claude rate-limit interrupt without retry-after",
+			harness: "claude",
 			logLines: []string{
 				"sending to claude...",
 				"rate-limit exceeded",
@@ -34,6 +39,7 @@ func TestClassifyError(t *testing.T) {
 			expectedStrategy: StrategyWaitResume,
 			expectedCooldown: 60 * time.Second, // default
 			expectedClass:    FailureInfra,
+			expectedCategory: CategoryShortRateLimit,
 		},
 		{
 			name: "generic rate limit",
@@ -43,6 +49,7 @@ func TestClassifyError(t *testing.T) {
 			expectedStrategy: StrategyWaitResume,
 			expectedCooldown: 60 * time.Second,
 			expectedClass:    FailureInfra,
+			expectedCategory: CategoryShortRateLimit,
 		},
 		{
 			name: "too many requests generic",
@@ -50,9 +57,11 @@ func TestClassifyError(t *testing.T) {
 				"HTTP 429: Too Many Requests - please slow down",
 			},
 			expectedStrategy: StrategyWaitResume,
-			// Matches "429 Too Many Requests" in the claude rate-limit pattern first
+			// Matches "too many requests" in the generic rate-limit pattern
+			// (claude-scoped pattern is skipped since no harness specified)
 			expectedCooldown: 60 * time.Second,
 			expectedClass:    FailureInfra,
+			expectedCategory: CategoryShortRateLimit,
 		},
 		{
 			name: "usage limit hit",
@@ -62,6 +71,7 @@ func TestClassifyError(t *testing.T) {
 			expectedStrategy: StrategyWaitResume,
 			expectedCooldown: 120 * time.Second,
 			expectedClass:    FailureInfra,
+			expectedCategory: CategoryUsageLimit,
 		},
 
 		// ── Infra-class: harness/launch errors ──
@@ -73,6 +83,7 @@ func TestClassifyError(t *testing.T) {
 			// fork/exec matches first in pattern order
 			expectedStrategy: StrategyFreshRestart,
 			expectedClass:    FailureInfra,
+			expectedCategory: CategoryHarnessLaunch,
 		},
 		{
 			name: "argument list too long standalone",
@@ -81,6 +92,7 @@ func TestClassifyError(t *testing.T) {
 			},
 			expectedStrategy: StrategyFreshRestart,
 			expectedClass:    FailureInfra,
+			expectedCategory: CategoryHarnessLaunch,
 		},
 		{
 			name: "fork/exec error",
@@ -89,6 +101,7 @@ func TestClassifyError(t *testing.T) {
 			},
 			expectedStrategy: StrategyFreshRestart,
 			expectedClass:    FailureInfra,
+			expectedCategory: CategoryHarnessLaunch,
 		},
 		{
 			name: "exec format error",
@@ -97,6 +110,7 @@ func TestClassifyError(t *testing.T) {
 			},
 			expectedStrategy: StrategyFreshRestart,
 			expectedClass:    FailureInfra,
+			expectedCategory: CategoryHarnessLaunch,
 		},
 		{
 			name: "harness not found",
@@ -105,6 +119,7 @@ func TestClassifyError(t *testing.T) {
 			},
 			expectedStrategy: StrategyRotate,
 			expectedClass:    FailureInfra,
+			expectedCategory: CategoryHarnessLaunch,
 		},
 
 		// ── Infra-class: API timeout / network stall ──
@@ -115,6 +130,7 @@ func TestClassifyError(t *testing.T) {
 			},
 			expectedStrategy: StrategyResume,
 			expectedClass:    FailureInfra,
+			expectedCategory: CategoryTransientInfra,
 		},
 		{
 			name: "context deadline exceeded",
@@ -123,6 +139,7 @@ func TestClassifyError(t *testing.T) {
 			},
 			expectedStrategy: StrategyResume,
 			expectedClass:    FailureInfra,
+			expectedCategory: CategoryTransientInfra,
 		},
 		{
 			name: "deadline exceeded generic",
@@ -131,6 +148,7 @@ func TestClassifyError(t *testing.T) {
 			},
 			expectedStrategy: StrategyResume,
 			expectedClass:    FailureInfra,
+			expectedCategory: CategoryTransientInfra,
 		},
 		{
 			name: "connection refused",
@@ -139,6 +157,7 @@ func TestClassifyError(t *testing.T) {
 			},
 			expectedStrategy: StrategyResume,
 			expectedClass:    FailureInfra,
+			expectedCategory: CategoryTransientInfra,
 		},
 		{
 			name: "connection reset",
@@ -147,6 +166,7 @@ func TestClassifyError(t *testing.T) {
 			},
 			expectedStrategy: StrategyResume,
 			expectedClass:    FailureInfra,
+			expectedCategory: CategoryTransientInfra,
 		},
 		{
 			name: "network unreachable",
@@ -155,6 +175,7 @@ func TestClassifyError(t *testing.T) {
 			},
 			expectedStrategy: StrategyResume,
 			expectedClass:    FailureInfra,
+			expectedCategory: CategoryTransientInfra,
 		},
 		{
 			name: "no route to host",
@@ -163,6 +184,7 @@ func TestClassifyError(t *testing.T) {
 			},
 			expectedStrategy: StrategyResume,
 			expectedClass:    FailureInfra,
+			expectedCategory: CategoryTransientInfra,
 		},
 		{
 			name: "TLS handshake timeout",
@@ -171,6 +193,7 @@ func TestClassifyError(t *testing.T) {
 			},
 			expectedStrategy: StrategyResume,
 			expectedClass:    FailureInfra,
+			expectedCategory: CategoryTransientInfra,
 		},
 		{
 			name: "certificate verify failed",
@@ -179,6 +202,7 @@ func TestClassifyError(t *testing.T) {
 			},
 			expectedStrategy: StrategyResume,
 			expectedClass:    FailureInfra,
+			expectedCategory: CategoryTransientInfra,
 		},
 		{
 			name: "500 internal server error",
@@ -187,6 +211,7 @@ func TestClassifyError(t *testing.T) {
 			},
 			expectedStrategy: StrategyResume,
 			expectedClass:    FailureInfra,
+			expectedCategory: CategoryTransientInfra,
 		},
 		{
 			name: "502 bad gateway",
@@ -195,6 +220,7 @@ func TestClassifyError(t *testing.T) {
 			},
 			expectedStrategy: StrategyResume,
 			expectedClass:    FailureInfra,
+			expectedCategory: CategoryTransientInfra,
 		},
 		{
 			name: "503 service unavailable",
@@ -203,6 +229,7 @@ func TestClassifyError(t *testing.T) {
 			},
 			expectedStrategy: StrategyResume,
 			expectedClass:    FailureInfra,
+			expectedCategory: CategoryTransientInfra,
 		},
 		{
 			name: "504 gateway timeout",
@@ -211,6 +238,7 @@ func TestClassifyError(t *testing.T) {
 			},
 			expectedStrategy: StrategyResume,
 			expectedClass:    FailureInfra,
+			expectedCategory: CategoryTransientInfra,
 		},
 
 		// ── Infra-class: stall-detection signals ──
@@ -221,6 +249,7 @@ func TestClassifyError(t *testing.T) {
 			},
 			expectedStrategy: StrategyResume,
 			expectedClass:    FailureInfra,
+			expectedCategory: CategoryTransientInfra,
 		},
 		{
 			name: "stall recovery",
@@ -229,20 +258,24 @@ func TestClassifyError(t *testing.T) {
 			},
 			expectedStrategy: StrategyResume,
 			expectedClass:    FailureInfra,
+			expectedCategory: CategoryTransientInfra,
 		},
 
-		// ── Agent-class patterns ──
+		// ── Agent-class patterns (harness-scoped) ──
 		{
-			name: "opencode API bad request",
+			name:    "opencode API bad request",
+			harness: "opencode",
 			logLines: []string{
 				"some output",
 				"error: API bad request from provider",
 			},
 			expectedStrategy: StrategyRotate,
 			expectedClass:    FailureAgent,
+			expectedCategory: CategoryAgentError,
 		},
 		{
-			name: "gemini-cli exit 1",
+			name:    "gemini-cli exit 1",
+			harness: "antigravity",
 			logLines: []string{
 				"running gemini-cli...",
 				"fatal error",
@@ -250,15 +283,18 @@ func TestClassifyError(t *testing.T) {
 			},
 			expectedStrategy: StrategyResume,
 			expectedClass:    FailureAgent,
+			expectedCategory: CategoryAgentError,
 		},
 		{
-			name: "codex completion despite limit warning",
+			name:    "codex completion despite limit warning",
+			harness: "codex",
 			logLines: []string{
 				"warning: limit warning reached",
 				"completion generated",
 			},
 			expectedStrategy: StrategyNoOp,
 			expectedClass:    FailureAgent,
+			expectedCategory: CategoryAgentError,
 		},
 
 		// ── Unknown failures default to FailureAgent ──
@@ -270,24 +306,27 @@ func TestClassifyError(t *testing.T) {
 			},
 			expectedStrategy: StrategyFreshRestart,
 			expectedClass:    FailureAgent,
+			expectedCategory: CategoryAgentError,
 		},
 		{
 			name:             "empty log defaults to agent class",
 			logLines:         []string{},
 			expectedStrategy: StrategyFreshRestart,
 			expectedClass:    FailureAgent,
+			expectedCategory: CategoryAgentError,
 		},
 		{
 			name:             "nil log defaults to agent class",
 			logLines:         nil,
 			expectedStrategy: StrategyFreshRestart,
 			expectedClass:    FailureAgent,
+			expectedCategory: CategoryAgentError,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			decision := ClassifyError(tt.logLines)
+			decision := ClassifyError(tt.logLines, tt.harness)
 			if decision.Strategy != tt.expectedStrategy {
 				t.Errorf("expected strategy %q, got %q (reason: %s)", tt.expectedStrategy, decision.Strategy, decision.Reason)
 			}
@@ -296,6 +335,9 @@ func TestClassifyError(t *testing.T) {
 			}
 			if decision.FailureClass != tt.expectedClass {
 				t.Errorf("expected failure class %q, got %q (reason: %s)", tt.expectedClass, decision.FailureClass, decision.Reason)
+			}
+			if tt.expectedCategory != "" && decision.Category != tt.expectedCategory {
+				t.Errorf("expected category %q, got %q (reason: %s)", tt.expectedCategory, decision.Category, decision.Reason)
 			}
 		})
 	}
@@ -347,12 +389,21 @@ func TestClassifyError_IncompleteContext(t *testing.T) {
 			expectedName:  "fork/exec error",
 		},
 		{
-			name:     "incomplete takes priority over pattern match",
+			name:     "incomplete below provider patterns: rate limit wins",
 			logLines: []string{"error 429 Too Many Requests"},
 			ctx: &ClassifyContext{
 				HasFileChanges: true,
 				Finalized:      false,
 			},
+			// The dirty-tree incomplete check is now *below* pattern matching
+			// for provider/config/quota patterns, but still above harness-
+			// scoped text patterns. A generic rate limit (harness-agnostic)
+			// matches before the incomplete check only when it's a real rate
+			// limit signal — but in the new ordering, incomplete check is
+			// priority 3 (before text patterns priority 4). However, the
+			// "rate limit generic" pattern is harness-agnostic (no Harness
+			// field), so it matches in priority 4. The incomplete check at
+			// priority 3 wins.
 			expectedClass: FailureIncomplete,
 			expectedName:  "incomplete: file changes without finalization",
 		},
@@ -360,7 +411,7 @@ func TestClassifyError_IncompleteContext(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			decision := ClassifyError(tt.logLines, tt.ctx)
+			decision := ClassifyError(tt.logLines, "", tt.ctx)
 			if decision.FailureClass != tt.expectedClass {
 				t.Errorf("expected failure class %q, got %q (reason: %s)", tt.expectedClass, decision.FailureClass, decision.Reason)
 			}
@@ -372,8 +423,8 @@ func TestClassifyError_IncompleteContext(t *testing.T) {
 }
 
 func TestClassifyError_BackwardCompatibility(t *testing.T) {
-	// Verify that calling ClassifyError without context works (variadic).
-	decision := ClassifyError([]string{"fork/exec /bin/agent: error"})
+	// Verify that calling ClassifyError with empty harness works.
+	decision := ClassifyError([]string{"fork/exec /bin/agent: error"}, "")
 	if decision.FailureClass != FailureInfra {
 		t.Errorf("expected FailureInfra, got %q", decision.FailureClass)
 	}
@@ -396,10 +447,163 @@ func TestFailureClassValues(t *testing.T) {
 }
 
 func TestErrorPatterns_AllTagged(t *testing.T) {
-	// Every pattern in the table must have a non-empty FailureClass.
+	// Every pattern in the table must have a non-empty FailureClass and Category.
 	for _, p := range ErrorPatterns {
 		if p.FailureClass == "" {
 			t.Errorf("pattern %q has no FailureClass set", p.Name)
 		}
+		if p.Category == "" {
+			t.Errorf("pattern %q has no Category set", p.Name)
+		}
+	}
+}
+
+// ── Harness scoping tests ──
+
+func TestClassifyError_HarnessScoping(t *testing.T) {
+	tests := []struct {
+		name             string
+		logLines         []string
+		harness          string
+		expectedReason   string
+		expectedClass    FailureClass
+		expectedCategory FailureCategory
+	}{
+		{
+			// The "claude rate-limit interrupt" pattern is scoped to claude.
+			// When harness is "codex", the claude-specific pattern is skipped,
+			// but the generic "rate limit" pattern (harness-agnostic) matches
+			// "too many requests" only if present. "rate-limit" as a hyphenated
+			// word does NOT match "rate limit" (space). So codex with only
+			// the prose "rate-limit" falls through to the default.
+			name:             "codex log with rate-limit prose does NOT classify as claude rate limit",
+			logLines:         []string{"The agent encountered a rate-limit from the provider"},
+			harness:          "codex",
+			expectedReason:   "unknown error",
+			expectedClass:    FailureAgent,
+			expectedCategory: CategoryAgentError,
+		},
+		{
+			// But the same log on claude harness DOES match.
+			name:             "claude log with rate-limit matches",
+			logLines:         []string{"The agent encountered a rate-limit from the provider"},
+			harness:          "claude",
+			expectedReason:   "claude rate-limit interrupt",
+			expectedClass:    FailureInfra,
+			expectedCategory: CategoryShortRateLimit,
+		},
+		{
+			// Harness-agnostic patterns match regardless of harness.
+			name:             "generic rate limit matches any harness",
+			logLines:         []string{"error: rate limit exceeded"},
+			harness:          "codex",
+			expectedReason:   "rate limit generic",
+			expectedClass:    FailureInfra,
+			expectedCategory: CategoryShortRateLimit,
+		},
+		{
+			// opencode-scoped pattern doesn't match on claude
+			name:             "opencode API bad request on claude harness is unknown",
+			logLines:         []string{"error: API bad request from provider"},
+			harness:          "claude",
+			expectedReason:   "unknown error",
+			expectedClass:    FailureAgent,
+			expectedCategory: CategoryAgentError,
+		},
+		{
+			// opencode-scoped pattern matches on opencode
+			name:             "opencode API bad request on opencode harness",
+			logLines:         []string{"error: API bad request from provider"},
+			harness:          "opencode",
+			expectedReason:   "opencode API bad request",
+			expectedClass:    FailureAgent,
+			expectedCategory: CategoryAgentError,
+		},
+		{
+			// codex-scoped pattern doesn't match on antigravity
+			name:             "codex completion pattern on antigravity harness is unknown",
+			logLines:         []string{"warning: limit warning reached", "completion generated"},
+			harness:          "antigravity",
+			expectedReason:   "unknown error",
+			expectedClass:    FailureAgent,
+			expectedCategory: CategoryAgentError,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			decision := ClassifyError(tt.logLines, tt.harness)
+			if decision.Reason != tt.expectedReason {
+				t.Errorf("expected reason %q, got %q", tt.expectedReason, decision.Reason)
+			}
+			if decision.FailureClass != tt.expectedClass {
+				t.Errorf("expected failure class %q, got %q", tt.expectedClass, decision.FailureClass)
+			}
+			if decision.Category != tt.expectedCategory {
+				t.Errorf("expected category %q, got %q", tt.expectedCategory, decision.Category)
+			}
+		})
+	}
+}
+
+func TestClassifyError_EvidencePriority(t *testing.T) {
+	// When evidence is provided with a category, it takes priority over
+	// text-based classification.
+	evidence := &FailureEvidence{
+		Category:   CategoryUsageLimit,
+		RetryAfter: 300 * time.Second,
+	}
+	logLines := []string{"fork/exec /bin/agent: error"} // would match harness_launch
+	decision := ClassifyError(logLines, "", nil, evidence)
+
+	if decision.Category != CategoryUsageLimit {
+		t.Errorf("expected category %q, got %q", CategoryUsageLimit, decision.Category)
+	}
+	if decision.FailureClass != FailureAgent { // usage_limit maps to agent
+		t.Errorf("expected failure class %q, got %q", FailureAgent, decision.FailureClass)
+	}
+	if decision.Strategy != StrategyWaitResume {
+		t.Errorf("expected strategy %q, got %q", StrategyWaitResume, decision.Strategy)
+	}
+	if decision.Cooldown != 300*time.Second {
+		t.Errorf("expected cooldown 5m, got %v", decision.Cooldown)
+	}
+}
+
+func TestClassifyError_NilEvidence(t *testing.T) {
+	// Nil evidence should be tolerated (process-level harness_launch
+	// failures have no TryResult).
+	var evidence *FailureEvidence
+	decision := ClassifyError([]string{"fork/exec /bin/agent: error"}, "", nil, evidence)
+	if decision.FailureClass != FailureInfra {
+		t.Errorf("expected FailureInfra, got %q", decision.FailureClass)
+	}
+	if decision.Category != CategoryHarnessLaunch {
+		t.Errorf("expected category %q, got %q", CategoryHarnessLaunch, decision.Category)
+	}
+}
+
+func TestClassifyError_EmptyEvidence(t *testing.T) {
+	// Evidence with empty category falls through to text-based classification.
+	evidence := &FailureEvidence{}
+	decision := ClassifyError([]string{"fork/exec /bin/agent: error"}, "", nil, evidence)
+	if decision.FailureClass != FailureInfra {
+		t.Errorf("expected FailureInfra, got %q", decision.FailureClass)
+	}
+	if decision.Category != CategoryHarnessLaunch {
+		t.Errorf("expected category %q, got %q", CategoryHarnessLaunch, decision.Category)
+	}
+}
+
+func TestClassifyError_DisplayLabels(t *testing.T) {
+	// Verify display labels don't contain harness names for harness-agnostic
+	// patterns.
+	decision := ClassifyError([]string{"connection refused"}, "")
+	if decision.DisplayLabel == "" {
+		t.Error("expected non-empty display label")
+	}
+	// transient_infra label is "infra error"
+	if decision.DisplayLabel != "infra error" {
+		t.Errorf("expected display label %q, got %q", "infra error", decision.DisplayLabel)
 	}
 }

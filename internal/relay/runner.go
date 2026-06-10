@@ -1269,7 +1269,7 @@ attemptLoop:
 		// Error classification and strategy dispatch.
 		if failed && !lapPinMismatch {
 			logLines := readLastNLines(tryLogPath, 50)
-			decision := reliability.ClassifyError(logLines, &reliability.ClassifyContext{HasFileChanges: incomplete, Finalized: finalized})
+			decision := reliability.ClassifyError(logLines, picked.Harness, &reliability.ClassifyContext{HasFileChanges: incomplete, Finalized: finalized})
 			attemptFailureClass = decision.FailureClass
 			failureClass = decision.FailureClass
 			if decision.FailureClass == reliability.FailureInfra {

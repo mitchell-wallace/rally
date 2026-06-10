@@ -71,13 +71,22 @@ type Pattern struct {
 	Strategy     RetryStrategy
 	FailureClass FailureClass
 	Extract      func(logLines []string) time.Duration
+	// Category is the FailureCategory for this pattern. Used to populate
+	// StrategyDecision.Category and derive the display label.
+	Category FailureCategory
+	// Harness constrains this pattern to a specific harness. When non-empty,
+	// the pattern matches only when the failing harness equals this value
+	// (case-insensitive). When empty, the pattern is harness-agnostic.
+	Harness string
 }
 
 var claudeRateLimitRegex = regexp.MustCompile(`retry-after:?\s*(\d+)`)
 
 // ErrorPatterns is the ordered table of error classification rules.
 // Patterns are evaluated top-to-bottom; the first match wins.
-// Each pattern is tagged with a FailureClass for the resilience cascade.
+// Each pattern is tagged with a FailureClass and FailureCategory for the
+// resilience cascade. Patterns with a non-empty Harness field match only
+// when the failing harness matches.
 var ErrorPatterns = []Pattern{
 	// ── Infra-class: rate limits ──
 	{
@@ -87,6 +96,8 @@ var ErrorPatterns = []Pattern{
 		},
 		Strategy:     StrategyWaitResume,
 		FailureClass: FailureInfra,
+		Category:     CategoryShortRateLimit,
+		Harness:      "claude",
 		Extract: func(lines []string) time.Duration {
 			for _, line := range lines {
 				if match := claudeRateLimitRegex.FindStringSubmatch(strings.ToLower(line)); len(match) > 1 {
@@ -105,6 +116,7 @@ var ErrorPatterns = []Pattern{
 		},
 		Strategy:     StrategyWaitResume,
 		FailureClass: FailureInfra,
+		Category:     CategoryShortRateLimit,
 		Extract: func(lines []string) time.Duration {
 			return 60 * time.Second
 		},
@@ -116,6 +128,7 @@ var ErrorPatterns = []Pattern{
 		},
 		Strategy:     StrategyWaitResume,
 		FailureClass: FailureInfra,
+		Category:     CategoryUsageLimit,
 		Extract: func(lines []string) time.Duration {
 			return 120 * time.Second
 		},
@@ -127,18 +140,21 @@ var ErrorPatterns = []Pattern{
 		Match:        func(lines []string) bool { return containsSubstring(lines, "argument list too long") },
 		Strategy:     StrategyFreshRestart,
 		FailureClass: FailureInfra,
+		Category:     CategoryHarnessLaunch,
 	},
 	{
 		Name:         "fork/exec error",
 		Match:        func(lines []string) bool { return containsSubstring(lines, "fork/exec") },
 		Strategy:     StrategyFreshRestart,
 		FailureClass: FailureInfra,
+		Category:     CategoryHarnessLaunch,
 	},
 	{
 		Name:         "exec format error",
 		Match:        func(lines []string) bool { return containsSubstring(lines, "exec format error") },
 		Strategy:     StrategyFreshRestart,
 		FailureClass: FailureInfra,
+		Category:     CategoryHarnessLaunch,
 	},
 	{
 		Name: "no such file or directory (harness)",
@@ -147,6 +163,7 @@ var ErrorPatterns = []Pattern{
 		},
 		Strategy:     StrategyRotate,
 		FailureClass: FailureInfra,
+		Category:     CategoryHarnessLaunch,
 	},
 
 	// ── Infra-class: API timeout / network stall ──
@@ -157,6 +174,7 @@ var ErrorPatterns = []Pattern{
 		},
 		Strategy:     StrategyResume,
 		FailureClass: FailureInfra,
+		Category:     CategoryTransientInfra,
 	},
 	{
 		Name: "connection refused",
@@ -165,6 +183,7 @@ var ErrorPatterns = []Pattern{
 		},
 		Strategy:     StrategyResume,
 		FailureClass: FailureInfra,
+		Category:     CategoryTransientInfra,
 	},
 	{
 		Name: "network unreachable",
@@ -173,6 +192,7 @@ var ErrorPatterns = []Pattern{
 		},
 		Strategy:     StrategyResume,
 		FailureClass: FailureInfra,
+		Category:     CategoryTransientInfra,
 	},
 	{
 		Name: "TLS handshake timeout",
@@ -181,6 +201,7 @@ var ErrorPatterns = []Pattern{
 		},
 		Strategy:     StrategyResume,
 		FailureClass: FailureInfra,
+		Category:     CategoryTransientInfra,
 	},
 	{
 		Name: "server error 5xx",
@@ -189,6 +210,7 @@ var ErrorPatterns = []Pattern{
 		},
 		Strategy:     StrategyResume,
 		FailureClass: FailureInfra,
+		Category:     CategoryTransientInfra,
 	},
 
 	// ── Infra-class: stall-detection signals ──
@@ -199,6 +221,7 @@ var ErrorPatterns = []Pattern{
 		},
 		Strategy:     StrategyResume,
 		FailureClass: FailureInfra,
+		Category:     CategoryTransientInfra,
 	},
 
 	// ── Agent-class: harness-specific patterns ──
@@ -207,6 +230,8 @@ var ErrorPatterns = []Pattern{
 		Match:        func(lines []string) bool { return containsSubstring(lines, "API bad request") },
 		Strategy:     StrategyRotate,
 		FailureClass: FailureAgent,
+		Category:     CategoryAgentError,
+		Harness:      "opencode",
 	},
 	{
 		Name: "gemini-cli exit 1",
@@ -215,6 +240,8 @@ var ErrorPatterns = []Pattern{
 		},
 		Strategy:     StrategyResume,
 		FailureClass: FailureAgent,
+		Category:     CategoryAgentError,
+		Harness:      "antigravity",
 	},
 	{
 		Name: "codex completion despite limit warning",
@@ -223,6 +250,8 @@ var ErrorPatterns = []Pattern{
 		},
 		Strategy:     StrategyNoOp,
 		FailureClass: FailureAgent,
+		Category:     CategoryAgentError,
+		Harness:      "codex",
 	},
 }
 
@@ -237,31 +266,115 @@ func containsSubstring(lines []string, sub string) bool {
 }
 
 // ClassifyError matches against the last N lines of the try log post-failure.
-// It returns a StrategyDecision that includes the retry strategy and failure
-// class. An optional ClassifyContext can be provided to detect incomplete
+// It returns a StrategyDecision that includes the retry strategy, failure
+// class, and category. The harness parameter scopes harness-specific patterns;
+// pass "" for harness-agnostic classification.
+//
+// An optional ClassifyContext can be provided to detect incomplete
 // failures (file changes without finalization). Pass nil if no context is
-// available.
+// available. An optional *FailureEvidence can be provided as the third
+// variadic argument; when present and carrying a non-empty Category, it takes
+// priority over all text-based classification.
+//
+// Classification priority:
+//  1. Typed executor Evidence (when non-nil with a Category)
+//  2. Provider/config/quota detection (future; placeholder for evidence parsers)
+//  3. Dirty-tree incomplete check (file changes without finalization)
+//  4. Harness-scoped text patterns from ErrorPatterns
+//  5. Default agent_error
 //
 // Unknown/unmatched errors default to FailureAgent (the does-not-freeze side).
-func ClassifyError(logLines []string, ctx ...*ClassifyContext) StrategyDecision {
-	// Check for incomplete classification first if context is provided.
-	if len(ctx) > 0 && ctx[0] != nil {
-		c := ctx[0]
-		if c.HasFileChanges && !c.Finalized {
-			return StrategyDecision{
-				Strategy:     StrategyResume,
-				Reason:       "incomplete: file changes without finalization",
-				FailureClass: FailureIncomplete,
+func ClassifyError(logLines []string, harness string, opts ...interface{}) StrategyDecision {
+	// Parse variadic opts: first *ClassifyContext, then *FailureEvidence.
+	var ctx *ClassifyContext
+	var evidence *FailureEvidence
+	for _, opt := range opts {
+		switch v := opt.(type) {
+		case *ClassifyContext:
+			if ctx == nil {
+				ctx = v
+			}
+		case *FailureEvidence:
+			if evidence == nil {
+				evidence = v
 			}
 		}
 	}
 
+	// ── Priority 1: Typed executor Evidence ──
+	// When the executor has already resolved a category, trust it.
+	if evidence != nil && evidence.Category != "" {
+		cat := evidence.Category
+		class := CategoryToClass(cat)
+		decision := StrategyDecision{
+			Category:     cat,
+			FailureClass: class,
+			DisplayLabel: CategoryDisplayLabel(cat),
+			Reason:       string(cat),
+		}
+		// Derive strategy from the category.
+		switch cat {
+		case CategoryShortRateLimit, CategoryProviderOverloaded:
+			decision.Strategy = StrategyWaitResume
+			if evidence.RetryAfter > 0 {
+				decision.Cooldown = evidence.RetryAfter
+			} else {
+				decision.Cooldown = 60 * time.Second
+			}
+		case CategoryUsageLimit:
+			decision.Strategy = StrategyWaitResume
+			if evidence.RetryAfter > 0 {
+				decision.Cooldown = evidence.RetryAfter
+			} else {
+				decision.Cooldown = 120 * time.Second
+			}
+		case CategoryTransientInfra:
+			decision.Strategy = StrategyResume
+		case CategoryHarnessLaunch:
+			decision.Strategy = StrategyFreshRestart
+		case CategoryInvalidModel, CategoryAuthOrProxy:
+			decision.Strategy = StrategyRotate
+		case CategoryIncompleteFinalization:
+			decision.Strategy = StrategyResume
+		default:
+			decision.Strategy = StrategyFreshRestart
+		}
+		return decision
+	}
+
+	// ── Priority 2: Provider/config/quota detection ──
+	// (Future: runner-side fallback parsers will populate evidence here.
+	//  For now this is a placeholder; no behavior change vs today.)
+
+	// ── Priority 3: Dirty-tree incomplete check ──
+	if ctx != nil && ctx.HasFileChanges && !ctx.Finalized {
+		return StrategyDecision{
+			Strategy:     StrategyResume,
+			Reason:       "incomplete: file changes without finalization",
+			FailureClass: FailureIncomplete,
+			Category:     CategoryIncompleteFinalization,
+			DisplayLabel: CategoryDisplayLabel(CategoryIncompleteFinalization),
+		}
+	}
+
+	// ── Priority 4: Harness-scoped text patterns ──
+	lowerHarness := strings.ToLower(harness)
 	for _, pattern := range ErrorPatterns {
+		// Skip harness-scoped patterns when harness doesn't match.
+		if pattern.Harness != "" && !strings.EqualFold(pattern.Harness, lowerHarness) {
+			continue
+		}
 		if pattern.Match(logLines) {
+			cat := pattern.Category
+			if cat == "" {
+				cat = CategoryAgentError
+			}
 			decision := StrategyDecision{
 				Strategy:     pattern.Strategy,
 				Reason:       pattern.Name,
 				FailureClass: pattern.FailureClass,
+				Category:     cat,
+				DisplayLabel: CategoryDisplayLabel(cat),
 			}
 			if pattern.Extract != nil {
 				decision.Cooldown = pattern.Extract(logLines)
@@ -270,10 +383,12 @@ func ClassifyError(logLines []string, ctx ...*ClassifyContext) StrategyDecision 
 		}
 	}
 
-	// Unknown failures default to FailureAgent (task 5.6 — does-not-freeze side).
+	// ── Priority 5: Default agent_error ──
 	return StrategyDecision{
 		Strategy:     StrategyFreshRestart,
 		Reason:       "unknown error",
 		FailureClass: FailureAgent,
+		Category:     CategoryAgentError,
+		DisplayLabel: CategoryDisplayLabel(CategoryAgentError),
 	}
 }
