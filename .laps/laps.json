@@ -61,11 +61,11 @@
       "title": "Parse Antigravity/Gemini and Claude failure signatures into evidence",
       "description": "Context: phase 3 (tasks 3.1/3.2, Antigravity/Gemini + Claude subset), depends on the FailureEvidence struct. Note from tasks.md: harness_launch, incomplete_finalization, and transient_infra are NOT executor-parsed; this lap targets only categories with provider-specific structured signals.\n\nOutcome: Parser helpers that turn Antigravity/Gemini and Claude error signatures into a populated FailureEvidence.\n\nFiles \u0026 scope: internal/reliability/ parser helpers plus their tests.\n\nDesign: Antigravity/Gemini signatures: RESOURCE_EXHAUSTED, 'Individual quota reached', 'Resets in \u003cdur\u003e'. Claude signatures: rate_limit_event five-hour vs seven-day, model_not_found, authentication_failed, 529 overload. Populate ResetAfter/ResetAt/RetryAfter/StatusCode/Provider on FailureEvidence. Map signatures to categories: quota/seven-day -\u003e usage_limit, five-hour throttle -\u003e short_rate_limit, model_not_found -\u003e invalid_model, authentication_failed -\u003e auth_or_proxy, 529 overload -\u003e provider_overloaded.\n\nAcceptance: Table tests per signature asserting the resolved category and parsed timing fields. `go test ./internal/reliability/...` green. Do not tick tasks.md boxes.",
       "assignee": "JUNIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 262144,
       "createdAt": "2026-06-09T06:45:39.168279582Z",
-      "updatedAt": "2026-06-09T06:45:39.168279582Z",
-      "completedAt": null
+      "updatedAt": "2026-06-10T10:00:12.201143892Z",
+      "completedAt": "2026-06-10T10:00:12.201143892Z"
     },
     {
       "id": "rall-4ded",
