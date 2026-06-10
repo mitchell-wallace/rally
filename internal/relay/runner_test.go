@@ -5499,11 +5499,89 @@ func TestLapPinMismatchClearsFailureClass(t *testing.T) {
 
 // TestRunOneHonorsExecutorEvidence verifies the live runner path wires
 // TryResult.Evidence into ClassifyError so executor evidence participates in
-// real classification. The executor reports usage_limit evidence while the try
+// real classification. The executor reports a non-infra category while the try
 // log also carries an infra-matching ("fork/exec") line: evidence must win over
 // the text-pattern fallback, classify as FailureAgent, and — critically — NOT
 // increment the infra freeze counter.
 func TestRunOneHonorsExecutorEvidence(t *testing.T) {
+	tests := []struct {
+		name     string
+		category reliability.FailureCategory
+	}{
+		{name: "usage_limit", category: reliability.CategoryUsageLimit},
+		{name: "invalid_model", category: reliability.CategoryInvalidModel},
+		{name: "auth_or_proxy", category: reliability.CategoryAuthOrProxy},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			workspaceDir := t.TempDir()
+			rallyDir := store.RallyDir(workspaceDir)
+			os.MkdirAll(rallyDir, 0o755)
+			initRepo(t, workspaceDir)
+			runGit(t, workspaceDir, "commit", "--allow-empty", "-m", "initial", "--no-verify")
+
+			s := newTestStore(t, rallyDir)
+			exec := &funcExecutor{
+				fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+					// Log tail would classify as harness_launch (infra) on its own.
+					if opts.LogPath != "" {
+						_ = os.WriteFile(opts.LogPath, []byte("fork/exec /bin/agent: failed\n"), 0o644)
+					}
+					return &agent.TryResult{
+						Completed: false,
+						Summary:   "failed",
+						Evidence:  &reliability.FailureEvidence{Category: tt.category},
+					}, nil
+				},
+			}
+
+			r := NewRunner(s, Config{
+				WorkspaceDir:     workspaceDir,
+				DataDir:          t.TempDir(),
+				AgentMixSpecs:    []string{"op:dsf"},
+				TargetIterations: 1,
+				RetryBudget:      1,
+				LapsEnabled:      true,
+				Resolver:         cheapTestResolver,
+			}, map[string]agent.Executor{"opencode": exec})
+
+			_, _, _, _, failureClass, infraFailures, err := r.runOne(
+				context.Background(),
+				&store.RelayRecord{ID: 1, TargetIterations: 1},
+				0,
+				agent.ResolvedAgent{Harness: "opencode", Model: cheapTestModel},
+				runTask{Name: "task", Prompt: "do work", Assignee: "senior"},
+				nil,
+				nil,
+				false,
+				false,
+				nil,
+				nil,
+				io.Discard,
+			)
+			if err != nil {
+				t.Fatalf("runOne error = %v", err)
+			}
+			if failureClass != reliability.FailureAgent {
+				t.Fatalf("failureClass = %v, want FailureAgent (evidence %s must win over infra text pattern)", failureClass, tt.category)
+			}
+			if infraFailures != 0 {
+				t.Fatalf("infraFailures = %d, want 0 (%s must not increment the freeze counter)", infraFailures, tt.category)
+			}
+
+			tries := s.AllTries()
+			if len(tries) != 1 {
+				t.Fatalf("tries = %d, want 1", len(tries))
+			}
+			if tries[0].FailReason != string(tt.category) {
+				t.Fatalf("FailReason = %q, want %q", tries[0].FailReason, tt.category)
+			}
+		})
+	}
+}
+
+func TestRunOneEvidenceBeatsIncompleteClassification(t *testing.T) {
 	workspaceDir := t.TempDir()
 	rallyDir := store.RallyDir(workspaceDir)
 	os.MkdirAll(rallyDir, 0o755)
@@ -5513,10 +5591,12 @@ func TestRunOneHonorsExecutorEvidence(t *testing.T) {
 	s := newTestStore(t, rallyDir)
 	exec := &funcExecutor{
 		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
-			// Log tail would classify as harness_launch (infra) on its own.
 			if opts.LogPath != "" {
 				_ = os.WriteFile(opts.LogPath, []byte("fork/exec /bin/agent: failed\n"), 0o644)
 			}
+			// Produce an unfinalized task-file change so runOne computes the
+			// incomplete context; executor evidence must still take priority.
+			_ = os.WriteFile(filepath.Join(workspaceDir, "work.txt"), []byte("dirty\n"), 0o644)
 			return &agent.TryResult{
 				Completed: false,
 				Summary:   "failed",
@@ -5540,7 +5620,7 @@ func TestRunOneHonorsExecutorEvidence(t *testing.T) {
 		&store.RelayRecord{ID: 1, TargetIterations: 1},
 		0,
 		agent.ResolvedAgent{Harness: "opencode", Model: cheapTestModel},
-		runTask{Name: "task", Prompt: "do work", Assignee: "senior"},
+		runTask{Name: "lap task", Prompt: "do work", Assignee: "senior", IsLapsBacked: true},
 		nil,
 		nil,
 		false,
@@ -5552,14 +5632,19 @@ func TestRunOneHonorsExecutorEvidence(t *testing.T) {
 	if err != nil {
 		t.Fatalf("runOne error = %v", err)
 	}
-	// usage_limit maps to FailureAgent via CategoryToClass.
 	if failureClass != reliability.FailureAgent {
-		t.Fatalf("failureClass = %v, want FailureAgent (evidence usage_limit must win over infra text pattern)", failureClass)
+		t.Fatalf("failureClass = %v, want FailureAgent (executor evidence must beat incomplete context)", failureClass)
 	}
-	// Acceptance: usage_limit classified via the real path must not feed the
-	// freeze counter.
 	if infraFailures != 0 {
-		t.Fatalf("infraFailures = %d, want 0 (usage_limit must not increment the freeze counter)", infraFailures)
+		t.Fatalf("infraFailures = %d, want 0", infraFailures)
+	}
+
+	tries := s.AllTries()
+	if len(tries) != 1 {
+		t.Fatalf("tries = %d, want 1", len(tries))
+	}
+	if tries[0].FailReason != string(reliability.CategoryUsageLimit) {
+		t.Fatalf("FailReason = %q, want %q (stronger evidence must beat incomplete classification)", tries[0].FailReason, reliability.CategoryUsageLimit)
 	}
 }
 

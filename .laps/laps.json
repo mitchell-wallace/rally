@@ -24,28 +24,6 @@
       "completedAt": "2026-06-10T09:35:53.800464727Z"
     },
     {
-      "id": "work-dd36",
-      "title": "Make classification honor evidence and CategoryToClass end-to-end",
-      "description": "Context: VERIFY found two load-bearing gaps in improve-error-categorisation phase 1-2. The live runner path at internal/relay/runner.go:1272 does not pass TryResult.Evidence into reliability.ClassifyError, so executor evidence never participates in real classification. Also the text-pattern path returns Pattern.FailureClass directly, which leaves the usage limit pattern infra-class and able to increment infraFailures despite CategoryToClass mapping usage_limit to agent-class.\n\nOutcome: wire result.Evidence through the runner call site, make CategoryToClass the authoritative failure-class derivation for categorized classifications, and add regression coverage for the real path.\n\nFiles \u0026 scope: internal/relay/runner.go, internal/reliability/patterns.go, internal/reliability/patterns_test.go, and any minimal runner-level tests needed.\n\nAcceptance: (1) usage_limit classified via the real code path does not feed the freeze counter, (2) executor-supplied evidence wins before incomplete/text-pattern fallback, (3) harness scoping behavior stays intact, (4) targeted go test packages stay green. Do not tick tasks.md boxes.",
-      "assignee": "SENIOR",
-      "isDone": false,
-      "order": 65536,
-      "createdAt": "2026-06-10T09:40:38.535893775Z",
-      "updatedAt": "2026-06-10T09:40:38.535893775Z",
-      "completedAt": null
-    },
-    {
-      "id": "work-1e8f",
-      "title": "Re-verify phase 1-2 classification invariants after follow-up",
-      "description": "Context: verification found that the phase-1/2 code currently does not honor the intended classification order end-to-end. Re-check only the follow-up implementation against improve-error-categorisation tasks 1.4 and 2.2 before those boxes are ticked.\n\nFocus: confirm runner.go passes TryResult.Evidence into ClassifyError, evidence actually beats incomplete when present, CategoryToClass is the single source of truth for usage_limit/invalid_model/auth_or_proxy so they do not increment infraFailures, and harness scoping still prevents cross-harness mislabelling.\n\nAcceptance: targeted tests and actual code paths confirm the load-bearing invariants, and only then should tasks 1.4 / 2.2 be considered for checkoff.",
-      "assignee": "VERIFY",
-      "isDone": false,
-      "order": 131072,
-      "createdAt": "2026-06-10T09:40:38.46109737Z",
-      "updatedAt": "2026-06-10T09:40:38.46109737Z",
-      "completedAt": null
-    },
-    {
       "id": "rall-0d80",
       "title": "Verify phase 1-2: taxonomy, mapping, and classification reorder",
       "description": "Use the openspec-verify-change skill against improve-error-categorisation, then focus your report on phases 1-2. Before diffing, identify the intended merge target from the user, PR metadata, repo docs, branch config, or recent history, and treat work that predates the first lap of this batch as pre-existing.\n\nTrace the actual code, not just green tests: confirm the Category-\u003eFailureClass mapping really maps usage_limit/invalid_model/auth_or_proxy to agent-class (so they never increment the freeze counter), that ClassifyError's new priority order is executor-evidence -\u003e provider/config/quota -\u003e dirty-tree incomplete -\u003e harness-scoped patterns -\u003e agent_error, that harness scoping prevents cross-harness mislabelling, and that nil Evidence is tolerated.\n\nCheck off tasks.md boxes 1.1-1.5 and 2.1-2.5 only for work you verified as correct and sufficiently thorough. Fix only tiny safe one-liners inline; for anything larger, add a focused lap at the head of the queue with `laps add head`.",
@@ -55,6 +33,28 @@
       "createdAt": "2026-06-09T06:45:39.168277038Z",
       "updatedAt": "2026-06-10T09:42:06Z",
       "completedAt": "2026-06-10T09:42:06Z"
+    },
+    {
+      "id": "work-dd36",
+      "title": "Make classification honor evidence and CategoryToClass end-to-end",
+      "description": "Context: VERIFY found two load-bearing gaps in improve-error-categorisation phase 1-2. The live runner path at internal/relay/runner.go:1272 does not pass TryResult.Evidence into reliability.ClassifyError, so executor evidence never participates in real classification. Also the text-pattern path returns Pattern.FailureClass directly, which leaves the usage limit pattern infra-class and able to increment infraFailures despite CategoryToClass mapping usage_limit to agent-class.\n\nOutcome: wire result.Evidence through the runner call site, make CategoryToClass the authoritative failure-class derivation for categorized classifications, and add regression coverage for the real path.\n\nFiles \u0026 scope: internal/relay/runner.go, internal/reliability/patterns.go, internal/reliability/patterns_test.go, and any minimal runner-level tests needed.\n\nAcceptance: (1) usage_limit classified via the real code path does not feed the freeze counter, (2) executor-supplied evidence wins before incomplete/text-pattern fallback, (3) harness scoping behavior stays intact, (4) targeted go test packages stay green. Do not tick tasks.md boxes.",
+      "assignee": "SENIOR",
+      "isDone": true,
+      "order": 65536,
+      "createdAt": "2026-06-10T09:40:38.535893775Z",
+      "updatedAt": "2026-06-10T09:49:08.149816418Z",
+      "completedAt": "2026-06-10T09:49:08.149816418Z"
+    },
+    {
+      "id": "work-1e8f",
+      "title": "Re-verify phase 1-2 classification invariants after follow-up",
+      "description": "Context: verification found that the phase-1/2 code currently does not honor the intended classification order end-to-end. Re-check only the follow-up implementation against improve-error-categorisation tasks 1.4 and 2.2 before those boxes are ticked.\n\nFocus: confirm runner.go passes TryResult.Evidence into ClassifyError, evidence actually beats incomplete when present, CategoryToClass is the single source of truth for usage_limit/invalid_model/auth_or_proxy so they do not increment infraFailures, and harness scoping still prevents cross-harness mislabelling.\n\nAcceptance: targeted tests and actual code paths confirm the load-bearing invariants, and only then should tasks 1.4 / 2.2 be considered for checkoff.",
+      "assignee": "VERIFY",
+      "isDone": true,
+      "order": 131072,
+      "createdAt": "2026-06-10T09:40:38.46109737Z",
+      "updatedAt": "2026-06-10T09:54:49.057375436Z",
+      "completedAt": "2026-06-10T09:54:49.057375436Z"
     },
     {
       "id": "rall-bc41",

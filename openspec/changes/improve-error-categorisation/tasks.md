@@ -3,13 +3,13 @@
 - [x] 1.1 Add `FailureCategory` constants + display labels in `internal/reliability/` (the nine categories from design Decision 2, including `transient_infra`)
 - [x] 1.2 Add the `FailureEvidence` struct and extend `StrategyDecision` with `Category` and a display label separate from `Reason`
 - [x] 1.3 Add an optional `Evidence *FailureEvidence` field to `TryResult` (`internal/agent/executor.go`); leave the `Executor` interface unchanged
-- [ ] 1.4 Define the Category → `FailureClass` mapping (design Decision 3) as a single function; tests assert `usage_limit`/`invalid_model`/`auth_or_proxy` are NOT `FailureInfra`
+- [x] 1.4 Define the Category → `FailureClass` mapping (design Decision 3) as a single function; tests assert `usage_limit`/`invalid_model`/`auth_or_proxy` are NOT `FailureInfra`
 - [x] 1.5 Tests: every category maps to exactly one `FailureClass`; display labels carry no harness name unless the category is intentionally harness-specific
 
 ## 2. Classification reorder and harness scoping
 
 - [x] 2.1 Thread `picked.Harness` into `ClassifyError` (`runner.go:1272`) and add an optional harness constraint to each `Pattern`
-- [ ] 2.2 Reorder `ClassifyError` (`patterns.go:237`): executor `Evidence` first, then provider/config/quota detection, then the dirty-tree `incomplete` pre-check (move it below `:241`), then harness-scoped patterns, then `agent_error`
+- [x] 2.2 Reorder `ClassifyError` (`patterns.go:237`): executor `Evidence` first, then provider/config/quota detection, then the dirty-tree `incomplete` pre-check (move it below `:241`), then harness-scoped patterns, then `agent_error`
 - [x] 2.3 Strip harness names from generic display labels; a pattern matches only when the failing harness matches (or the pattern is harness-agnostic)
 - [x] 2.4a Assign a `FailureCategory` to every existing `ErrorPatterns` entry; the harness-agnostic API timeout / connection / network / TLS / non-overload 5xx patterns map to `transient_infra` (no behavior regression vs today's infra classification)
 - [x] 2.4 Make `ClassifyError` tolerate nil/empty `Evidence` (process-level `harness_launch` failures have no `TryResult`)
