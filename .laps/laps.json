@@ -50,11 +50,11 @@
       "title": "Verify phase 1-2: taxonomy, mapping, and classification reorder",
       "description": "Use the openspec-verify-change skill against improve-error-categorisation, then focus your report on phases 1-2. Before diffing, identify the intended merge target from the user, PR metadata, repo docs, branch config, or recent history, and treat work that predates the first lap of this batch as pre-existing.\n\nTrace the actual code, not just green tests: confirm the Category-\u003eFailureClass mapping really maps usage_limit/invalid_model/auth_or_proxy to agent-class (so they never increment the freeze counter), that ClassifyError's new priority order is executor-evidence -\u003e provider/config/quota -\u003e dirty-tree incomplete -\u003e harness-scoped patterns -\u003e agent_error, that harness scoping prevents cross-harness mislabelling, and that nil Evidence is tolerated.\n\nCheck off tasks.md boxes 1.1-1.5 and 2.1-2.5 only for work you verified as correct and sufficiently thorough. Fix only tiny safe one-liners inline; for anything larger, add a focused lap at the head of the queue with `laps add head`.",
       "assignee": "VERIFY",
-      "isDone": false,
+      "isDone": true,
       "order": 196608,
       "createdAt": "2026-06-09T06:45:39.168277038Z",
-      "updatedAt": "2026-06-09T06:45:39.168277038Z",
-      "completedAt": null
+      "updatedAt": "2026-06-10T09:42:06Z",
+      "completedAt": "2026-06-10T09:42:06Z"
     },
     {
       "id": "rall-bc41",
