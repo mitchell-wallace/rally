@@ -17,6 +17,7 @@ type TryRecord struct {
 	AttemptNumber int          `json:"attempt_number"`
 	LogPath       string       `json:"log_path,omitempty"`
 	FailReason    string       `json:"fail_reason,omitempty"`
+	Category      string       `json:"category,omitempty"`
 	RuntimeMs     int64        `json:"runtime_ms,omitempty"`
 	LapID         string       `json:"lap_id,omitempty"`
 	LapAssignee   string       `json:"lap_assignee,omitempty"`

@@ -151,6 +151,56 @@ func renderRunFooter(out io.Writer, opts style.FooterOptions) {
 const builtInDefaultFreeRunPrompt = "Continue the relay run. Review the current state of the codebase and continue making progress on the project."
 const incompleteRetryGuidance = "The last run was incomplete. Check any current git changes, finish anything not done, verify correctness, commit when good, then run `laps done`."
 
+func formatCategorizedDisplay(cat reliability.FailureCategory, cooldown time.Duration, evidence *reliability.FailureEvidence) string {
+	label := reliability.CategoryDisplayLabel(cat)
+	switch cat {
+	case reliability.CategoryUsageLimit:
+		dur := usageResetDuration(cooldown, evidence)
+		if dur > 0 {
+			return fmt.Sprintf("%s, resets in %s", label, formatHoursMinutes(dur))
+		}
+		return label
+	case reliability.CategoryShortRateLimit:
+		if cooldown > 0 {
+			return fmt.Sprintf("%s, waiting %s", label, formatMinutesSeconds(cooldown))
+		}
+		return label
+	default:
+		return label
+	}
+}
+
+func usageResetDuration(cooldown time.Duration, evidence *reliability.FailureEvidence) time.Duration {
+	if evidence != nil {
+		if evidence.ResetAfter > 0 {
+			return evidence.ResetAfter
+		}
+		if evidence.ResetAt != nil {
+			if remaining := time.Until(*evidence.ResetAt); remaining > 0 {
+				return remaining
+			}
+		}
+	}
+	return cooldown
+}
+
+func formatHoursMinutes(d time.Duration) string {
+	hours := int(d.Hours())
+	minutes := int(d.Minutes()) % 60
+	if hours > 0 {
+		return fmt.Sprintf("%dh%dm", hours, minutes)
+	}
+	return fmt.Sprintf("%dm", minutes)
+}
+
+func formatMinutesSeconds(d time.Duration) string {
+	minutes := int(d.Minutes())
+	if minutes > 0 {
+		return fmt.Sprintf("%dm", minutes)
+	}
+	return fmt.Sprintf("%ds", int(d.Seconds()))
+}
+
 const (
 	finalSnippetFallbackRuneLimit = 1000
 	finalSnippetTailMarker        = "... [tail truncated] ..."
@@ -1346,7 +1396,7 @@ attemptLoop:
 				infraFailures++
 			}
 			if decision.Reason != "unknown error" && markerAsText == "" {
-				failReason = decision.Reason
+				failReason = formatCategorizedDisplay(failureCategory, decision.Cooldown, resetEvidence)
 			}
 			switch decision.Strategy {
 			case reliability.StrategyNoOp:
@@ -1417,6 +1467,7 @@ attemptLoop:
 			AttemptNumber: attempt,
 			LogPath:       tryLogPath,
 			FailReason:    failReason,
+			Category:      string(failureCategory),
 			RuntimeMs:     runtime.Milliseconds(),
 			LapID:         task.LapID,
 			LapAssignee:   task.Assignee,

@@ -5618,8 +5618,11 @@ func TestRunOneHonorsExecutorEvidence(t *testing.T) {
 			if len(tries) != 1 {
 				t.Fatalf("tries = %d, want 1", len(tries))
 			}
-			if tries[0].FailReason != string(tt.category) {
-				t.Fatalf("FailReason = %q, want %q", tries[0].FailReason, tt.category)
+			if tries[0].Category != string(tt.category) {
+				t.Fatalf("Category = %q, want %q", tries[0].Category, tt.category)
+			}
+			if !strings.Contains(tries[0].FailReason, reliability.CategoryDisplayLabel(tt.category)) {
+				t.Fatalf("FailReason = %q, want display label containing %q", tries[0].FailReason, reliability.CategoryDisplayLabel(tt.category))
 			}
 		})
 	}
@@ -5687,8 +5690,11 @@ func TestRunOneEvidenceBeatsIncompleteClassification(t *testing.T) {
 	if len(tries) != 1 {
 		t.Fatalf("tries = %d, want 1", len(tries))
 	}
-	if tries[0].FailReason != string(reliability.CategoryUsageLimit) {
-		t.Fatalf("FailReason = %q, want %q (stronger evidence must beat incomplete classification)", tries[0].FailReason, reliability.CategoryUsageLimit)
+	if tries[0].Category != string(reliability.CategoryUsageLimit) {
+		t.Fatalf("Category = %q, want %q (stronger evidence must beat incomplete classification)", tries[0].Category, reliability.CategoryUsageLimit)
+	}
+	if !strings.Contains(tries[0].FailReason, "usage limit") {
+		t.Fatalf("FailReason = %q, want display label containing 'usage limit'", tries[0].FailReason)
 	}
 }
 
@@ -6094,5 +6100,248 @@ func TestLeftoverWorkGuidance_OnlyRallyDirty(t *testing.T) {
 	}
 	if strings.Contains(capturedPrompt, "## Leftover Changes") {
 		t.Fatalf("expected NO leftover-work guidance when only .rally/ is dirty, got:\n%s", capturedPrompt)
+	}
+}
+
+func TestIncompleteRetryCarriesFinalizationGuidance(t *testing.T) {
+	oldHeadPull := headPullLap
+	headPullLap = func(context.Context, string) (laps.Lap, error) {
+		return laps.Lap{ID: "lap-1", Title: "test", Description: "finish lap", Assignee: "senior"}, nil
+	}
+	defer func() { headPullLap = oldHeadPull }()
+
+	workspaceDir := t.TempDir()
+	rallyDir := store.RallyDir(workspaceDir)
+	os.MkdirAll(rallyDir, 0o755)
+	initRepo(t, workspaceDir)
+
+	s := newTestStore(t, rallyDir)
+	attempt := 0
+	var retryPrompt string
+	exec := &funcExecutor{
+		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+			attempt++
+			if attempt == 1 {
+				_ = os.WriteFile(filepath.Join(workspaceDir, "partial.txt"), []byte("partial"), 0o644)
+				return &agent.TryResult{Completed: true, Summary: "partial"}, nil
+			}
+			retryPrompt = opts.TaskPrompt
+			if err := progress.RecordLap(workspaceDir, "lap-1"); err != nil {
+				return nil, err
+			}
+			_ = os.WriteFile(filepath.Join(workspaceDir, "done.txt"), []byte("done"), 0o644)
+			return &agent.TryResult{Completed: true, Summary: "done"}, nil
+		},
+	}
+
+	r := NewRunner(s, Config{
+		WorkspaceDir:     workspaceDir,
+		DataDir:          t.TempDir(),
+		AgentMixSpecs:    []string{"op:dsf"},
+		TargetIterations: 1,
+		RetryBudget:      3,
+		LapsEnabled:      true,
+		Resolver:         cheapTestResolver,
+	}, map[string]agent.Executor{"opencode": exec})
+
+	if err := r.Run(context.Background()); err != nil {
+		t.Fatalf("Run error = %v", err)
+	}
+
+	if !strings.Contains(retryPrompt, incompleteRetryGuidance) {
+		t.Fatalf("retry prompt for incomplete_finalization missing guidance: %q", retryPrompt)
+	}
+
+	tries := s.AllTries()
+	if len(tries) < 2 {
+		t.Fatalf("expected at least 2 tries, got %d", len(tries))
+	}
+	first := tries[0]
+	if first.Category != string(reliability.CategoryIncompleteFinalization) {
+		t.Fatalf("first try Category = %q, want %q", first.Category, reliability.CategoryIncompleteFinalization)
+	}
+	if !strings.Contains(first.FailReason, "incomplete") {
+		t.Fatalf("first try FailReason = %q, want display containing 'incomplete'", first.FailReason)
+	}
+	if first.FailReason == string(reliability.CategoryIncompleteFinalization) {
+		t.Fatalf("first try FailReason should be a display string, not the raw category %q", first.FailReason)
+	}
+}
+
+func TestCategorizedTryRecordCarriesCategoryAndDisplayReason(t *testing.T) {
+	tests := []struct {
+		name                string
+		category            reliability.FailureCategory
+		evidence            *reliability.FailureEvidence
+		wantCategory        string
+		wantFailReasonContains string
+	}{
+		{
+			name:                "usage_limit with reset",
+			category:            reliability.CategoryUsageLimit,
+			evidence:            &reliability.FailureEvidence{Category: reliability.CategoryUsageLimit, ResetAfter: 5 * time.Hour},
+			wantCategory:        string(reliability.CategoryUsageLimit),
+			wantFailReasonContains: "usage limit, resets in",
+		},
+		{
+			name:                "short_rate_limit",
+			category:            reliability.CategoryShortRateLimit,
+			evidence:            &reliability.FailureEvidence{Category: reliability.CategoryShortRateLimit, RetryAfter: 90 * time.Second},
+			wantCategory:        string(reliability.CategoryShortRateLimit),
+			wantFailReasonContains: "rate limit, waiting",
+		},
+		{
+			name:                "invalid_model",
+			category:            reliability.CategoryInvalidModel,
+			evidence:            &reliability.FailureEvidence{Category: reliability.CategoryInvalidModel},
+			wantCategory:        string(reliability.CategoryInvalidModel),
+			wantFailReasonContains: "invalid model",
+		},
+		{
+			name:                "auth_or_proxy",
+			category:            reliability.CategoryAuthOrProxy,
+			evidence:            &reliability.FailureEvidence{Category: reliability.CategoryAuthOrProxy},
+			wantCategory:        string(reliability.CategoryAuthOrProxy),
+			wantFailReasonContains: "auth/proxy error",
+		},
+		{
+			name:                "provider_overloaded",
+			category:            reliability.CategoryProviderOverloaded,
+			evidence:            &reliability.FailureEvidence{Category: reliability.CategoryProviderOverloaded},
+			wantCategory:        string(reliability.CategoryProviderOverloaded),
+			wantFailReasonContains: "provider overloaded",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			workspaceDir := t.TempDir()
+			rallyDir := store.RallyDir(workspaceDir)
+			os.MkdirAll(rallyDir, 0o755)
+			initRepo(t, workspaceDir)
+			runGit(t, workspaceDir, "commit", "--allow-empty", "-m", "initial", "--no-verify")
+
+			s := newTestStore(t, rallyDir)
+			exec := &funcExecutor{
+				fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+					if opts.LogPath != "" {
+						_ = os.WriteFile(opts.LogPath, []byte("failed\n"), 0o644)
+					}
+					return &agent.TryResult{Completed: false, Summary: "failed", Evidence: tt.evidence}, nil
+				},
+			}
+
+			r := NewRunner(s, Config{
+				WorkspaceDir:     workspaceDir,
+				DataDir:          t.TempDir(),
+				AgentMixSpecs:    []string{"op:dsf"},
+				TargetIterations: 1,
+				RetryBudget:      1,
+				LapsEnabled:      true,
+				Resolver:         cheapTestResolver,
+			}, map[string]agent.Executor{"opencode": exec})
+
+			_, _, _, _, _, _, _, _, err := r.runOne(
+				context.Background(),
+				&store.RelayRecord{ID: 1, TargetIterations: 1},
+				0,
+				agent.ResolvedAgent{Harness: "opencode", Model: cheapTestModel},
+				runTask{Name: "task", Prompt: "do work", Assignee: "senior"},
+				nil, nil, false, false, nil, nil,
+				io.Discard,
+			)
+			if err != nil {
+				t.Fatalf("runOne error = %v", err)
+			}
+
+			tries := s.AllTries()
+			if len(tries) != 1 {
+				t.Fatalf("tries = %d, want 1", len(tries))
+			}
+			rec := tries[0]
+			if rec.Category != tt.wantCategory {
+				t.Fatalf("Category = %q, want %q", rec.Category, tt.wantCategory)
+			}
+			if !strings.Contains(rec.FailReason, tt.wantFailReasonContains) {
+				t.Fatalf("FailReason = %q, want containing %q", rec.FailReason, tt.wantFailReasonContains)
+			}
+			if rec.Category == rec.FailReason {
+				t.Fatalf("Category and FailReason should differ: both = %q", rec.Category)
+			}
+		})
+	}
+}
+
+func TestFormatCategorizedDisplay(t *testing.T) {
+	tests := []struct {
+		name     string
+		cat      reliability.FailureCategory
+		cooldown time.Duration
+		evidence *reliability.FailureEvidence
+		want     string
+	}{
+		{
+			name:     "usage_limit with reset after",
+			cat:      reliability.CategoryUsageLimit,
+			cooldown: 2 * time.Minute,
+			evidence: &reliability.FailureEvidence{Category: reliability.CategoryUsageLimit, ResetAfter: 123*time.Hour + 50*time.Minute},
+			want:     "usage limit, resets in 123h50m",
+		},
+		{
+			name:     "usage_limit with reset at",
+			cat:      reliability.CategoryUsageLimit,
+			cooldown: 2 * time.Minute,
+			evidence: &reliability.FailureEvidence{
+				Category: reliability.CategoryUsageLimit,
+				ResetAt:  func() *time.Time { t := time.Now().Add(5*time.Hour + 30*time.Minute); return &t }(),
+			},
+		},
+		{
+			name:     "usage_limit fallback to cooldown",
+			cat:      reliability.CategoryUsageLimit,
+			cooldown: 2 * time.Minute,
+			evidence: &reliability.FailureEvidence{Category: reliability.CategoryUsageLimit},
+			want:     "usage limit, resets in 2m",
+		},
+		{
+			name:     "short_rate_limit with cooldown",
+			cat:      reliability.CategoryShortRateLimit,
+			cooldown: 2 * time.Minute,
+			evidence: &reliability.FailureEvidence{Category: reliability.CategoryShortRateLimit},
+			want:     "rate limit, waiting 2m",
+		},
+		{
+			name:     "invalid_model no timing",
+			cat:      reliability.CategoryInvalidModel,
+			evidence: &reliability.FailureEvidence{Category: reliability.CategoryInvalidModel},
+			want:     "invalid model",
+		},
+		{
+			name: "agent_error no timing",
+			cat:  reliability.CategoryAgentError,
+			want: "agent error",
+		},
+		{
+			name: "incomplete_finalization no timing",
+			cat:  reliability.CategoryIncompleteFinalization,
+			want: "incomplete: file changes without finalization",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := formatCategorizedDisplay(tt.cat, tt.cooldown, tt.evidence)
+			if tt.want != "" && got != tt.want {
+				t.Fatalf("formatCategorizedDisplay() = %q, want %q", got, tt.want)
+			}
+			if strings.Contains(tt.name, "reset at") {
+				if !strings.Contains(got, "usage limit, resets in") {
+					t.Fatalf("expected 'usage limit, resets in' in output, got %q", got)
+				}
+				if strings.Contains(got, "0m") && !strings.Contains(got, "0h") {
+					t.Fatalf("expected hours in output for reset_at test, got %q", got)
+				}
+			}
+		})
 	}
 }
