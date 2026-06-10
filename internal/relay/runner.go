@@ -517,7 +517,7 @@ func (r *Runner) Run(ctx context.Context) error {
 			}
 		}
 
-		success, addressed, interrupted, _, failureClass, infraFailures, err := r.runOne(
+		success, addressed, interrupted, _, failureClass, failureCategory, resetEvidence, infraFailures, err := r.runOne(
 			runCtx,
 			relay,
 			runIndex,
@@ -562,6 +562,23 @@ func (r *Runner) Run(ctx context.Context) error {
 		}
 		if !success {
 			selection.Scheduler.OnAgentFailed(selection.Entry, "retry-budget-exhausted", false)
+		}
+
+		// Surface the resolved failure category and any parsed reset deadline
+		// from runOne. This is the hook point where downstream benching of the
+		// quota scope (usage_limit) or routing away (auth_or_proxy) consumes the
+		// reset evidence; for now it records the resolution for operator triage.
+		if !success && failureCategory != "" {
+			resetNote := "none"
+			if resetEvidence != nil {
+				if resetEvidence.ResetAt != nil {
+					resetNote = "reset_at=" + resetEvidence.ResetAt.UTC().Format(time.RFC3339)
+				} else if resetEvidence.ResetAfter > 0 {
+					resetNote = "reset_after=" + resetEvidence.ResetAfter.String()
+				}
+			}
+			fmt.Fprintf(log, "relay %d run %d resolved failure category=%s reset=%s\n",
+				relay.ID, runIndex+1, failureCategory, resetNote)
 		}
 
 		if selection.Probation {
@@ -903,7 +920,7 @@ func (r *Runner) runOne(
 	onStall func(),
 	onStallRecovered func(),
 	log io.Writer,
-) (bool, bool, bool, string, reliability.FailureClass, int, error) {
+) (bool, bool, bool, string, reliability.FailureClass, reliability.FailureCategory, *reliability.FailureEvidence, int, error) {
 	// Initialize run-state for this run.
 	runID := fmt.Sprintf("relay-%d-run-%d", relay.ID, runIndex+1)
 	summaryEntryCountBeforeRun := progressSummaryEntryCount(r.cfg.WorkspaceDir)
@@ -931,12 +948,18 @@ func (r *Runner) runOne(
 	success := false
 	failReason := ""
 	failureClass := reliability.FailureAgent
+	// failureCategory and resetEvidence carry the most recent attempt's resolved
+	// classification up to the routing dispatch loop. The category lets the loop
+	// route/bench on quota exhaustion or auth errors; resetEvidence carries the
+	// parsed reset deadline (ResetAt/ResetAfter) used to size the bench window.
+	var failureCategory reliability.FailureCategory
+	var resetEvidence *reliability.FailureEvidence
 	infraFailures := 0
 	lastAttemptIncomplete := false
 	stallMarked := false
 	roleInstructions, err := r.resolveRoleInstructions(task.Assignee)
 	if err != nil {
-		return false, false, false, "", failureClass, infraFailures, err
+		return false, false, false, "", failureClass, failureCategory, resetEvidence, infraFailures, err
 	}
 
 	// Check for uncommitted non-rally changes at run start. Errors are
@@ -958,10 +981,10 @@ func (r *Runner) runOne(
 attemptLoop:
 	for attempt := 1; attempt <= maxAttempts; attempt++ {
 		if ctx.Err() != nil {
-			return false, false, false, "", failureClass, infraFailures, ctx.Err()
+			return false, false, false, "", failureClass, failureCategory, resetEvidence, infraFailures, ctx.Err()
 		}
 		if r.stopFlag.Load() {
-			return false, false, true, "", failureClass, infraFailures, nil
+			return false, false, true, "", failureClass, failureCategory, resetEvidence, infraFailures, nil
 		}
 
 		if attempt > 1 {
@@ -1010,10 +1033,10 @@ attemptLoop:
 
 		taskPath := store.CurrentTaskPath(r.cfg.WorkspaceDir)
 		if err := os.MkdirAll(filepath.Dir(taskPath), 0o755); err != nil {
-			return false, false, false, "", failureClass, infraFailures, fmt.Errorf("create current_task.md dir: %w", err)
+			return false, false, false, "", failureClass, failureCategory, resetEvidence, infraFailures, fmt.Errorf("create current_task.md dir: %w", err)
 		}
 		if err := os.WriteFile(taskPath, []byte(prompt), 0o644); err != nil {
-			return false, false, false, "", failureClass, infraFailures, fmt.Errorf("write current_task.md: %w", err)
+			return false, false, false, "", failureClass, failureCategory, resetEvidence, infraFailures, fmt.Errorf("write current_task.md: %w", err)
 		}
 
 		tryLogPath := filepath.Join(r.cfg.DataDir, "tries", repoKey(r.cfg.WorkspaceDir), fmt.Sprintf("try-%d.log", r.store.NextTryID()))
@@ -1267,11 +1290,23 @@ attemptLoop:
 		}
 
 		// Error classification and strategy dispatch.
+		//
+		// terminalCategory marks usage_limit / auth_or_proxy: categories whose
+		// non-infra (agent-class) mapping means the freeze counter never bounds
+		// them, so the attempt-loop break below is the only thing that bounds
+		// them to a single attempt. On detection the loop terminates and control
+		// returns to the routing dispatch loop, which benches the quota scope or
+		// routes the entry away using the surfaced category + reset evidence.
+		terminalCategory := false
 		if failed && !lapPinMismatch {
 			logLines := readLastNLines(tryLogPath, 50)
 			decision := reliability.ClassifyError(logLines, picked.Harness, &reliability.ClassifyContext{HasFileChanges: incomplete, Finalized: finalized}, result.Evidence)
 			attemptFailureClass = decision.FailureClass
 			failureClass = decision.FailureClass
+			failureCategory = decision.Category
+			resetEvidence = result.Evidence
+			terminalCategory = decision.Category == reliability.CategoryUsageLimit ||
+				decision.Category == reliability.CategoryAuthOrProxy
 			if decision.FailureClass == reliability.FailureInfra {
 				infraFailures++
 			}
@@ -1285,7 +1320,9 @@ attemptLoop:
 			case reliability.StrategyRotate:
 				r.skipFlag.Store(true)
 			case reliability.StrategyWaitResume:
-				if attempt < maxAttempts && decision.Cooldown > 0 {
+				// A terminal category never resumes within budget, so don't burn
+				// the cooldown only to break the loop immediately afterward.
+				if !terminalCategory && attempt < maxAttempts && decision.Cooldown > 0 {
 					fmt.Println(style.DimStyle.Render(fmt.Sprintf("waiting %v for rate limit...", decision.Cooldown)))
 					if r.sleepFunc != nil {
 						r.sleepFunc(decision.Cooldown)
@@ -1305,10 +1342,10 @@ attemptLoop:
 		// outcome: it gets the neutral, in-place retry line rather than a red
 		// footer. Exactly one coloured footer prints when the run resolves —
 		// green on success, red when the budget is exhausted (or the run breaks
-		// out via skip/stop/lap-pin mismatch). A single-attempt run is terminal
-		// on its first failure, so it colours immediately.
+		// out via skip/stop/lap-pin mismatch/terminal category). A single-attempt
+		// run is terminal on its first failure, so it colours immediately.
 		willRetry := failed && attempt < maxAttempts &&
-			!actionTaken && !r.skipFlag.Load() && !lapPinMismatch && !r.stopFlag.Load()
+			!actionTaken && !r.skipFlag.Load() && !lapPinMismatch && !r.stopFlag.Load() && !terminalCategory
 		renderRunFooter(r.outWriter(), style.FooterOptions{
 			Passed:       !failed,
 			Duration:     runtime,
@@ -1421,15 +1458,15 @@ attemptLoop:
 		trySpan.Finish()
 
 		if err := r.store.AppendTry(tryRecord); err != nil {
-			return false, false, false, "", failureClass, infraFailures, err
+			return false, false, false, "", failureClass, failureCategory, resetEvidence, infraFailures, err
 		}
 
 		if actionTaken {
 			if r.stopFlag.Load() {
-				return false, false, true, "", failureClass, infraFailures, nil
+				return false, false, true, "", failureClass, failureCategory, resetEvidence, infraFailures, nil
 			}
 			if r.skipFlag.Load() {
-				return false, false, false, "", failureClass, infraFailures, nil
+				return false, false, false, "", failureClass, failureCategory, resetEvidence, infraFailures, nil
 			}
 			fmt.Println("Paused — press Enter to resume")
 			bufio.NewReader(os.Stdin).ReadString('\n')
@@ -1462,6 +1499,14 @@ attemptLoop:
 			break attemptLoop
 		}
 		if lapPinMismatch {
+			break attemptLoop
+		}
+		// usage_limit / auth_or_proxy are bounded to a single attempt: break here
+		// so the routing dispatch loop can bench the quota scope or route away
+		// rather than burning the retry budget on a quota/auth failure that a
+		// retry cannot clear.
+		if terminalCategory {
+			lastResult = result
 			break attemptLoop
 		}
 
@@ -1502,7 +1547,7 @@ attemptLoop:
 	if lastResult != nil && lastResult.MessageAddressed != nil {
 		addressed = *lastResult.MessageAddressed
 	}
-	return success, addressed, false, failReason, failureClass, infraFailures, nil
+	return success, addressed, false, failReason, failureClass, failureCategory, resetEvidence, infraFailures, nil
 }
 
 func (r *Runner) newStallController(tryLogPath string, exec agent.Executor) reliability.StallController {

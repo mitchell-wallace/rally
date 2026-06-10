@@ -1071,7 +1071,7 @@ func TestRunOneFreezeRetryResumesAndRecovers(t *testing.T) {
 
 	freezeCalls := 0
 	recoveredCalls := 0
-	success, addressed, interrupted, _, _, _, err := r.runOne(
+	success, addressed, interrupted, _, _, _, _, _, err := r.runOne(
 		context.Background(),
 		&store.RelayRecord{ID: 1, TargetIterations: 1},
 		0,
@@ -4994,7 +4994,7 @@ func TestStallRecovery_VerifyRoleExcluded(t *testing.T) {
 	stallCheckInterval = time.Millisecond
 	defer func() { stallCheckInterval = oldInterval }()
 
-	success, _, _, _, _, _, err := r.runOne(
+	success, _, _, _, _, _, _, _, err := r.runOne(
 		context.Background(),
 		&store.RelayRecord{ID: 1, TargetIterations: 1},
 		0,
@@ -5061,7 +5061,7 @@ func TestStallRecovery_ImplementationRoleRecovers(t *testing.T) {
 	stallCheckInterval = time.Millisecond
 	defer func() { stallCheckInterval = oldInterval }()
 
-	success, _, _, _, _, _, err := r.runOne(
+	success, _, _, _, _, _, _, _, err := r.runOne(
 		context.Background(),
 		&store.RelayRecord{ID: 1, TargetIterations: 1},
 		0,
@@ -5133,7 +5133,7 @@ func TestStallRecovery_VerifyStalledWithCommits_StaysFailed(t *testing.T) {
 	stallCheckInterval = time.Millisecond
 	defer func() { stallCheckInterval = oldInterval }()
 
-	success, _, _, _, _, _, err := r.runOne(
+	success, _, _, _, _, _, _, _, err := r.runOne(
 		context.Background(),
 		&store.RelayRecord{ID: 1, TargetIterations: 1},
 		0,
@@ -5215,7 +5215,7 @@ func TestStallRecovery_ImplementationStalledWithCommits_Recovers(t *testing.T) {
 	stallCheckInterval = time.Millisecond
 	defer func() { stallCheckInterval = oldInterval }()
 
-	success, _, _, _, _, _, err := r.runOne(
+	success, _, _, _, _, _, _, _, err := r.runOne(
 		context.Background(),
 		&store.RelayRecord{ID: 1, TargetIterations: 1},
 		0,
@@ -5400,7 +5400,7 @@ func TestLapPinRejectionInRunOne(t *testing.T) {
 		Resolver:         cheapTestResolver,
 	}, map[string]agent.Executor{"opencode": exec})
 
-	success, _, _, _, _, _, err := r.runOne(
+	success, _, _, _, _, _, _, _, err := r.runOne(
 		context.Background(),
 		&store.RelayRecord{ID: 1, TargetIterations: 1},
 		0,
@@ -5457,7 +5457,7 @@ func TestLapPinMultiLapRejectionInRunOne(t *testing.T) {
 		Resolver:         cheapTestResolver,
 	}, map[string]agent.Executor{"opencode": exec})
 
-	success, _, _, _, _, _, err := r.runOne(
+	success, _, _, _, _, _, _, _, err := r.runOne(
 		context.Background(),
 		&store.RelayRecord{ID: 1, TargetIterations: 1},
 		0,
@@ -5521,7 +5521,7 @@ func TestLapPinMismatchClearsFailureClass(t *testing.T) {
 		Resolver:         cheapTestResolver,
 	}, map[string]agent.Executor{"opencode": exec})
 
-	_, _, _, _, failureClass, _, _ := r.runOne(
+	_, _, _, _, failureClass, _, _, _, _ := r.runOne(
 		context.Background(),
 		&store.RelayRecord{ID: 1, TargetIterations: 1},
 		0,
@@ -5590,7 +5590,7 @@ func TestRunOneHonorsExecutorEvidence(t *testing.T) {
 				Resolver:         cheapTestResolver,
 			}, map[string]agent.Executor{"opencode": exec})
 
-			_, _, _, _, failureClass, infraFailures, err := r.runOne(
+			_, _, _, _, failureClass, _, _, infraFailures, err := r.runOne(
 				context.Background(),
 				&store.RelayRecord{ID: 1, TargetIterations: 1},
 				0,
@@ -5659,7 +5659,7 @@ func TestRunOneEvidenceBeatsIncompleteClassification(t *testing.T) {
 		Resolver:         cheapTestResolver,
 	}, map[string]agent.Executor{"opencode": exec})
 
-	_, _, _, _, failureClass, infraFailures, err := r.runOne(
+	_, _, _, _, failureClass, _, _, infraFailures, err := r.runOne(
 		context.Background(),
 		&store.RelayRecord{ID: 1, TargetIterations: 1},
 		0,
@@ -5689,6 +5689,114 @@ func TestRunOneEvidenceBeatsIncompleteClassification(t *testing.T) {
 	}
 	if tries[0].FailReason != string(reliability.CategoryUsageLimit) {
 		t.Fatalf("FailReason = %q, want %q (stronger evidence must beat incomplete classification)", tries[0].FailReason, reliability.CategoryUsageLimit)
+	}
+}
+
+// TestRunOneTerminalCategorySingleAttempt verifies the attempt-loop
+// short-circuit (design Decision 5 item 1): usage_limit and auth_or_proxy are
+// agent-class, so the freeze counter never bounds them — the loop break is what
+// caps them at exactly one attempt even when the retry budget is larger. The
+// agent_error control proves the cap is category-specific: an ordinary agent
+// error still loops the full budget. The terminal cases also assert runOne
+// surfaces the resolved category + reset evidence (Decision 5 item 2).
+func TestRunOneTerminalCategorySingleAttempt(t *testing.T) {
+	const budget = 5
+	resetAfter := 3 * time.Hour
+
+	tests := []struct {
+		name         string
+		category     reliability.FailureCategory
+		wantAttempts int
+		wantReset    bool
+	}{
+		{name: "usage_limit short-circuits", category: reliability.CategoryUsageLimit, wantAttempts: 1, wantReset: true},
+		{name: "auth_or_proxy short-circuits", category: reliability.CategoryAuthOrProxy, wantAttempts: 1, wantReset: false},
+		{name: "agent_error loops the budget", category: reliability.CategoryAgentError, wantAttempts: budget, wantReset: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			workspaceDir := t.TempDir()
+			rallyDir := store.RallyDir(workspaceDir)
+			os.MkdirAll(rallyDir, 0o755)
+			initRepo(t, workspaceDir)
+			runGit(t, workspaceDir, "commit", "--allow-empty", "-m", "initial", "--no-verify")
+
+			s := newTestStore(t, rallyDir)
+			callCount := 0
+			exec := &funcExecutor{
+				fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+					callCount++
+					if opts.LogPath != "" {
+						_ = os.WriteFile(opts.LogPath, []byte("failed\n"), 0o644)
+					}
+					ev := &reliability.FailureEvidence{Category: tt.category}
+					if tt.wantReset {
+						ev.ResetAfter = resetAfter
+					}
+					return &agent.TryResult{Completed: false, Summary: "failed", Evidence: ev}, nil
+				},
+			}
+
+			r := NewRunner(s, Config{
+				WorkspaceDir:     workspaceDir,
+				DataDir:          t.TempDir(),
+				AgentMixSpecs:    []string{"op:dsf"},
+				TargetIterations: 1,
+				RetryBudget:      budget,
+				LapsEnabled:      true,
+				Resolver:         cheapTestResolver,
+			}, map[string]agent.Executor{"opencode": exec})
+			// sleepFunc is a no-op so any (unexpected) wait+resume cooldown does
+			// not slow the test; the assertion is on attempt count.
+			r.sleepFunc = func(time.Duration) {}
+
+			success, _, _, _, failureClass, failureCategory, resetEvidence, infraFailures, err := r.runOne(
+				context.Background(),
+				&store.RelayRecord{ID: 1, TargetIterations: 1},
+				0,
+				agent.ResolvedAgent{Harness: "opencode", Model: cheapTestModel},
+				runTask{Name: "task", Prompt: "do work", Assignee: "senior"},
+				nil,
+				nil,
+				false,
+				false,
+				nil,
+				nil,
+				io.Discard,
+			)
+			if err != nil {
+				t.Fatalf("runOne error = %v", err)
+			}
+			if success {
+				t.Fatal("expected runOne to report failure")
+			}
+			if callCount != tt.wantAttempts {
+				t.Fatalf("executor called %d times, want %d (retry budget was %d)", callCount, tt.wantAttempts, budget)
+			}
+			if tries := s.AllTries(); len(tries) != tt.wantAttempts {
+				t.Fatalf("recorded %d tries, want %d", len(tries), tt.wantAttempts)
+			}
+
+			// Surfaced contract: category always propagates; the terminal cases
+			// stay agent-class (no freeze) and carry their reset evidence.
+			if failureCategory != tt.category {
+				t.Fatalf("surfaced failureCategory = %q, want %q", failureCategory, tt.category)
+			}
+			if failureClass != reliability.FailureAgent {
+				t.Fatalf("failureClass = %v, want FailureAgent", failureClass)
+			}
+			if infraFailures != 0 {
+				t.Fatalf("infraFailures = %d, want 0 (agent-class must not freeze)", infraFailures)
+			}
+			if tt.wantReset {
+				if resetEvidence == nil {
+					t.Fatal("expected reset evidence surfaced for usage_limit, got nil")
+				} else if resetEvidence.ResetAfter != resetAfter {
+					t.Fatalf("surfaced ResetAfter = %v, want %v", resetEvidence.ResetAfter, resetAfter)
+				}
+			}
+		})
 	}
 }
 
@@ -5722,7 +5830,7 @@ func TestLapPinNormalPassThroughInRunOne(t *testing.T) {
 		Resolver:         cheapTestResolver,
 	}, map[string]agent.Executor{"opencode": exec})
 
-	success, _, _, _, _, _, err := r.runOne(
+	success, _, _, _, _, _, _, _, err := r.runOne(
 		context.Background(),
 		&store.RelayRecord{ID: 1, TargetIterations: 1},
 		0,
@@ -5786,7 +5894,7 @@ func TestLapAttemptRecordedInTryRecord(t *testing.T) {
 		Resolver:         cheapTestResolver,
 	}, map[string]agent.Executor{"opencode": exec})
 
-	success, _, _, _, _, _, err := r.runOne(
+	success, _, _, _, _, _, _, _, err := r.runOne(
 		context.Background(),
 		&store.RelayRecord{ID: 1, TargetIterations: 1},
 		0,

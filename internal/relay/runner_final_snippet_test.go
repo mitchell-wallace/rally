@@ -56,7 +56,7 @@ func TestRunOneFinalSnippetUsesRecordedWrapupSummary(t *testing.T) {
 		LapsEnabled:  true,
 	}, map[string]agent.Executor{"claude": exec})
 
-	_, _, _, _, _, _, err := r.runOne(
+	_, _, _, _, _, _, _, _, err := r.runOne(
 		context.Background(),
 		&store.RelayRecord{ID: 1, TargetIterations: 1},
 		0,
@@ -127,7 +127,7 @@ func TestRunOneFinalSnippetExecutorFallbackConsistentAcrossRetryAndRecords(t *te
 		RetryBudget:  2,
 	}, map[string]agent.Executor{"claude": exec})
 
-	_, _, _, _, _, _, err := r.runOne(
+	_, _, _, _, _, _, _, _, err := r.runOne(
 		context.Background(),
 		&store.RelayRecord{ID: 1, TargetIterations: 1},
 		0,
@@ -249,7 +249,7 @@ func TestRunOneNonOpenCodeInvalidStructuredResultDoesNotPersistTranscript(t *tes
 				RetryBudget:  2,
 			}, map[string]agent.Executor{tc.harness: exec})
 
-			_, _, _, _, _, _, err := r.runOne(
+			_, _, _, _, _, _, _, _, err := r.runOne(
 				context.Background(),
 				&store.RelayRecord{ID: 1, TargetIterations: 1},
 				0,
@@ -336,7 +336,7 @@ func TestRunOneFinalSnippetUsesBoundedLogTailFallback(t *testing.T) {
 		RetryBudget:  1,
 	}, map[string]agent.Executor{"claude": exec})
 
-	_, _, _, _, _, _, err := r.runOne(
+	_, _, _, _, _, _, _, _, err := r.runOne(
 		context.Background(),
 		&store.RelayRecord{ID: 1, TargetIterations: 1},
 		0,
