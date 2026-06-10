@@ -369,10 +369,16 @@ func ClassifyError(logLines []string, harness string, opts ...interface{}) Strat
 			if cat == "" {
 				cat = CategoryAgentError
 			}
+			// CategoryToClass is the authoritative failure-class derivation for
+			// categorized classifications (design Decision 3): the category's
+			// mapping — not the pattern's literal FailureClass — decides what
+			// feeds the freeze counter. This keeps e.g. the usage_limit pattern
+			// from incrementing infraFailures even though its text matches the
+			// rate-limit family.
 			decision := StrategyDecision{
 				Strategy:     pattern.Strategy,
 				Reason:       pattern.Name,
-				FailureClass: pattern.FailureClass,
+				FailureClass: CategoryToClass(cat),
 				Category:     cat,
 				DisplayLabel: CategoryDisplayLabel(cat),
 			}

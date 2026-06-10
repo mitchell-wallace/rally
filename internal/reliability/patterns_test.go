@@ -70,7 +70,10 @@ func TestClassifyError(t *testing.T) {
 			},
 			expectedStrategy: StrategyWaitResume,
 			expectedCooldown: 120 * time.Second,
-			expectedClass:    FailureInfra,
+			// usage_limit maps to FailureAgent via CategoryToClass (the
+			// authoritative class derivation), so it must NOT feed the freeze
+			// counter even though the pattern text resembles a rate limit.
+			expectedClass:    FailureAgent,
 			expectedCategory: CategoryUsageLimit,
 		},
 
@@ -592,6 +595,39 @@ func TestClassifyError_EmptyEvidence(t *testing.T) {
 	}
 	if decision.Category != CategoryHarnessLaunch {
 		t.Errorf("expected category %q, got %q", CategoryHarnessLaunch, decision.Category)
+	}
+}
+
+func TestClassifyError_CategoryToClassAuthoritativeForTextPatterns(t *testing.T) {
+	// The text-pattern path must derive FailureClass from the category via
+	// CategoryToClass, NOT from the pattern's literal FailureClass field. This
+	// guards the load-bearing freeze-counter invariant: a usage_limit text
+	// match maps to FailureAgent (does-not-freeze) even though the pattern
+	// entry is tagged FailureInfra for documentation.
+	decision := ClassifyError([]string{"You've hit your usage limit. Upgrade to Pro."}, "")
+	if decision.Category != CategoryUsageLimit {
+		t.Fatalf("expected category %q, got %q", CategoryUsageLimit, decision.Category)
+	}
+	if decision.FailureClass != CategoryToClass(CategoryUsageLimit) {
+		t.Errorf("expected failure class to equal CategoryToClass(usage_limit)=%q, got %q",
+			CategoryToClass(CategoryUsageLimit), decision.FailureClass)
+	}
+	if decision.FailureClass == FailureInfra {
+		t.Errorf("usage_limit must not classify as FailureInfra (would feed the freeze counter)")
+	}
+
+	// Every categorized pattern's decision class must agree with CategoryToClass
+	// for its category, regardless of the pattern's literal FailureClass field.
+	for _, p := range ErrorPatterns {
+		if p.Category == "" {
+			continue
+		}
+		want := CategoryToClass(p.Category)
+		d := ClassifyError(nil, p.Harness, nil, &FailureEvidence{Category: p.Category})
+		if d.FailureClass != want {
+			t.Errorf("pattern %q (category %q): expected class %q, got %q",
+				p.Name, p.Category, want, d.FailureClass)
+		}
 	}
 }
 
