@@ -6,21 +6,43 @@
       "title": "Add failure taxonomy, typed evidence, and Category to FailureClass mapping",
       "description": "Context: OpenSpec change improve-error-categorisation, phase 1 (tasks 1.1-1.5), design Decisions 1-3. This is the foundation every later phase builds on.\n\nOutcome: A stable FailureCategory taxonomy with short display labels; a FailureEvidence struct; StrategyDecision carries a Category and a display label distinct from Reason; TryResult gains an optional Evidence field; and a single Category-\u003eFailureClass mapping function.\n\nFiles \u0026 scope: internal/reliability/ for the taxonomy, FailureEvidence, StrategyDecision extension, and the mapping function. internal/agent/executor.go for the optional `Evidence *FailureEvidence` on TryResult. Leave the Executor interface unchanged.\n\nDesign: Nine categories per the Decision 2 table, including transient_infra. Mapping per Decision 3 is load-bearing: usage_limit, invalid_model, and auth_or_proxy MUST map to the agent FailureClass (NOT infra) so they do not feed the freeze counter; short_rate_limit, provider_overloaded, transient_infra, and harness_launch map to infra; incomplete_finalization maps to incomplete; agent_error stays agent. Display labels carry no harness name unless the category is intentionally harness-specific. FailureEvidence shape follows the Decision 1 struct (Category, Harness, Provider, QuotaScope, Message, StatusCode, ResetAfter, ResetAt, RetryAfter, RawSignal).\n\nAcceptance: Tests assert every category maps to exactly one FailureClass; usage_limit/invalid_model/auth_or_proxy are NOT FailureInfra; display labels carry no harness name unless intentionally harness-specific. `go test ./internal/reliability/...` and `go build ./...` green. Do not tick tasks.md boxes.",
       "assignee": "SENIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 65536,
       "createdAt": "2026-06-09T06:45:39.168253515Z",
-      "updatedAt": "2026-06-09T06:45:39.168253515Z",
-      "completedAt": null
+      "updatedAt": "2026-06-10T08:58:21.258679893Z",
+      "completedAt": "2026-06-10T08:58:21.258679893Z"
     },
     {
       "id": "rall-463e",
       "title": "Reorder ClassifyError and make it harness-scoped",
       "description": "Context: phase 2 (tasks 2.1-2.5), depends on the taxonomy/evidence types from the previous lap. Today ClassifyError checks the dirty-tree incomplete context first (patterns.go:241), then walks a global containsSubstring ErrorPatterns table (patterns.go:250), defaulting to agent_error. The single call site is runner.go:1272, where the failing harness is already in scope as picked.Harness.\n\nOutcome: ClassifyError is harness-aware and reordered to: (1) typed executor Evidence, (2) provider/config/quota detection, (3) dirty-tree incomplete check, (4) harness-scoped text patterns, (5) agent_error default. No cross-harness mislabelling.\n\nFiles \u0026 scope: internal/reliability/patterns.go, and the call site at internal/relay/runner.go:1272.\n\nDesign: Thread picked.Harness into ClassifyError and add an optional harness constraint to each Pattern; a pattern matches only when the failing harness matches, or when the pattern is harness-agnostic. Strip harness names from generic display labels. Assign a FailureCategory to every existing ErrorPatterns entry; the harness-agnostic API timeout / connection / network / TLS / non-overload 5xx patterns map to transient_infra with no behavior regression vs today's infra classification. Make ClassifyError tolerate nil/empty Evidence (process-level harness_launch failures have no TryResult). Move the dirty-tree incomplete pre-check below provider/config/quota detection (the inverse of today's order).\n\nAcceptance: Test that a Codex log tail containing the prose 'rate-limit' does NOT classify as a Claude rate limit. Existing reliability tests stay green. Do not tick tasks.md boxes.",
       "assignee": "SENIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 131072,
       "createdAt": "2026-06-09T06:45:39.168273893Z",
-      "updatedAt": "2026-06-09T06:45:39.168273893Z",
+      "updatedAt": "2026-06-10T09:35:53.800464727Z",
+      "completedAt": "2026-06-10T09:35:53.800464727Z"
+    },
+    {
+      "id": "work-dd36",
+      "title": "Make classification honor evidence and CategoryToClass end-to-end",
+      "description": "Context: VERIFY found two load-bearing gaps in improve-error-categorisation phase 1-2. The live runner path at internal/relay/runner.go:1272 does not pass TryResult.Evidence into reliability.ClassifyError, so executor evidence never participates in real classification. Also the text-pattern path returns Pattern.FailureClass directly, which leaves the usage limit pattern infra-class and able to increment infraFailures despite CategoryToClass mapping usage_limit to agent-class.\n\nOutcome: wire result.Evidence through the runner call site, make CategoryToClass the authoritative failure-class derivation for categorized classifications, and add regression coverage for the real path.\n\nFiles \u0026 scope: internal/relay/runner.go, internal/reliability/patterns.go, internal/reliability/patterns_test.go, and any minimal runner-level tests needed.\n\nAcceptance: (1) usage_limit classified via the real code path does not feed the freeze counter, (2) executor-supplied evidence wins before incomplete/text-pattern fallback, (3) harness scoping behavior stays intact, (4) targeted go test packages stay green. Do not tick tasks.md boxes.",
+      "assignee": "SENIOR",
+      "isDone": false,
+      "order": 65536,
+      "createdAt": "2026-06-10T09:40:38.535893775Z",
+      "updatedAt": "2026-06-10T09:40:38.535893775Z",
+      "completedAt": null
+    },
+    {
+      "id": "work-1e8f",
+      "title": "Re-verify phase 1-2 classification invariants after follow-up",
+      "description": "Context: verification found that the phase-1/2 code currently does not honor the intended classification order end-to-end. Re-check only the follow-up implementation against improve-error-categorisation tasks 1.4 and 2.2 before those boxes are ticked.\n\nFocus: confirm runner.go passes TryResult.Evidence into ClassifyError, evidence actually beats incomplete when present, CategoryToClass is the single source of truth for usage_limit/invalid_model/auth_or_proxy so they do not increment infraFailures, and harness scoping still prevents cross-harness mislabelling.\n\nAcceptance: targeted tests and actual code paths confirm the load-bearing invariants, and only then should tasks 1.4 / 2.2 be considered for checkoff.",
+      "assignee": "VERIFY",
+      "isDone": false,
+      "order": 131072,
+      "createdAt": "2026-06-10T09:40:38.46109737Z",
+      "updatedAt": "2026-06-10T09:40:38.46109737Z",
       "completedAt": null
     },
     {
