@@ -640,6 +640,50 @@ func TestFilesChangedListFallsBackToDirtyFiles(t *testing.T) {
 	}
 }
 
+func TestFilesChangedListExcludesClaudeSettings(t *testing.T) {
+	workspaceDir := t.TempDir()
+	initRepo(t, workspaceDir)
+
+	os.WriteFile(filepath.Join(workspaceDir, "seed.txt"), []byte("seed\n"), 0o644)
+	os.MkdirAll(filepath.Join(workspaceDir, ".claude"), 0o755)
+	os.WriteFile(filepath.Join(workspaceDir, ".claude", "settings.local.json"), []byte("{}\n"), 0o644)
+	runGit(t, workspaceDir, "add", ".")
+	runGit(t, workspaceDir, "commit", "-m", "init")
+
+	os.WriteFile(filepath.Join(workspaceDir, ".claude", "settings.local.json"), []byte("{\"changed\":true}\n"), 0o644)
+
+	r := &Runner{cfg: Config{WorkspaceDir: workspaceDir}}
+	got := r.filesChangedList(nil, "", "", "")
+	if len(got) != 0 {
+		t.Fatalf("expected empty list when only .claude/settings.local.json is dirty, got %v", got)
+	}
+}
+
+func TestFilesChangedListExcludesAllTransientPaths(t *testing.T) {
+	workspaceDir := t.TempDir()
+	initRepo(t, workspaceDir)
+
+	os.WriteFile(filepath.Join(workspaceDir, "seed.txt"), []byte("seed\n"), 0o644)
+	os.MkdirAll(filepath.Join(workspaceDir, ".claude"), 0o755)
+	os.WriteFile(filepath.Join(workspaceDir, ".claude", "settings.local.json"), []byte("{}\n"), 0o644)
+	os.MkdirAll(store.RallyDir(workspaceDir), 0o755)
+	os.WriteFile(store.RunStatePath(workspaceDir), []byte("{}"), 0o644)
+	runGit(t, workspaceDir, "add", ".")
+	runGit(t, workspaceDir, "commit", "-m", "init")
+
+	os.WriteFile(filepath.Join(workspaceDir, "user.txt"), []byte("change\n"), 0o644)
+	os.WriteFile(store.RunStatePath(workspaceDir), []byte("{\"changed\":true}"), 0o644)
+	os.MkdirAll(filepath.Join(workspaceDir, ".laps"), 0o755)
+	os.WriteFile(filepath.Join(workspaceDir, ".laps", "laps.json"), []byte("{\"changed\":true}\n"), 0o644)
+	os.WriteFile(filepath.Join(workspaceDir, ".claude", "settings.local.json"), []byte("{\"changed\":true}\n"), 0o644)
+
+	r := &Runner{cfg: Config{WorkspaceDir: workspaceDir}}
+	got := r.filesChangedList(nil, "", "", "")
+	if len(got) != 1 || got[0] != "user.txt" {
+		t.Fatalf("expected only user.txt, got %v", got)
+	}
+}
+
 func TestDetectLapsMarkerInText(t *testing.T) {
 	cases := []struct {
 		name    string

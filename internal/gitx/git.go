@@ -52,6 +52,16 @@ func GitUserFallbackConfig(dir string) []string {
 	return cfg
 }
 
+func IsRallyOwnedOrTransientPath(path string) bool {
+	if strings.HasPrefix(path, ".rally/") || strings.HasPrefix(path, ".laps/") {
+		return true
+	}
+	if path == ".claude/settings.local.json" {
+		return true
+	}
+	return false
+}
+
 func IsGitDirty(dir string) (bool, error) {
 	out, err := GitOutput(dir, "status", "--porcelain")
 	if err != nil {
@@ -79,7 +89,7 @@ func IsWorkspaceDirty(dir string) (bool, error) {
 		parts := strings.SplitN(line, " ", 2)
 		if len(parts) == 2 {
 			path := parts[1]
-			if strings.HasPrefix(path, ".rally/") || strings.HasPrefix(path, ".laps/") {
+			if IsRallyOwnedOrTransientPath(path) {
 				continue
 			}
 		}
@@ -109,7 +119,7 @@ func WorkspaceDirtyPaths(dir string) (map[string]string, error) {
 		}
 		xy := line[:2]
 		path := strings.TrimSpace(line[2:])
-		if strings.HasPrefix(path, ".rally/") || strings.HasPrefix(path, ".laps/") {
+		if IsRallyOwnedOrTransientPath(path) {
 			continue
 		}
 		result[path] = xy

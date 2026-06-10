@@ -1714,7 +1714,7 @@ func (r *Runner) filesChangedList(result *agent.TryResult, headBefore, headAfter
 				if len(line) > 3 {
 					path = strings.TrimSpace(line[2:])
 				}
-				if strings.HasPrefix(path, ".rally/") || strings.HasPrefix(path, ".laps/") {
+				if gitx.IsRallyOwnedOrTransientPath(path) {
 					continue
 				}
 				dirty = append(dirty, path)

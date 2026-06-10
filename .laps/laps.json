@@ -83,11 +83,11 @@
       "title": "Populate FailureEvidence from the per-harness executors",
       "description": "Context: phase 3 (task 3.3), depends on the two parser laps. Per design Decision 1, executors populate FailureEvidence where they can; the runner-side fallback parser stays for everything else and for harnesses without signatures.\n\nOutcome: The per-harness executor adapters that have structured error output (Antigravity/Gemini, Claude, Codex, opencode) populate TryResult.Evidence using the new parsers.\n\nFiles \u0026 scope: internal/agent/ per-harness adapters. Do not change the Executor interface.\n\nDesign: Populate Evidence on TryResult where the adapter can observe structured/bounded error output; leave it nil where it cannot, since the runner fallback owns those cases (including process-level harness_launch failures with no TryResult).\n\nAcceptance: Adapter tests verifying Evidence is populated for a representative signature per harness. `go build ./...` and `go test ./internal/agent/...` green. Do not tick tasks.md boxes.",
       "assignee": "JUNIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 393216,
       "createdAt": "2026-06-09T06:45:39.168283364Z",
-      "updatedAt": "2026-06-09T06:45:39.168283364Z",
-      "completedAt": null
+      "updatedAt": "2026-06-10T10:17:59.734875029Z",
+      "completedAt": "2026-06-10T10:17:59.734875029Z"
     },
     {
       "id": "rall-22c1",

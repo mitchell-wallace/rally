@@ -431,3 +431,73 @@ func TestFoldRallyStateCorruptedGitDirIsNoOp(t *testing.T) {
 		t.Fatalf("FoldRallyState on corrupted repo: %v", err)
 	}
 }
+
+func TestIsRallyOwnedOrTransientPath(t *testing.T) {
+	tests := []struct {
+		path string
+		want bool
+	}{
+		{".rally/config.toml", true},
+		{".rally/summary.jsonl", true},
+		{".rally/", true},
+		{".laps/laps.json", true},
+		{".laps/hooks.json", true},
+		{".laps/", true},
+		{".claude/settings.local.json", true},
+		{".claude/settings.json", false},
+		{".claude/other.json", false},
+		{"src/foo.go", false},
+		{"README.md", false},
+		{"pkg/.rally/other", false},
+		{"rally/config.toml", false},
+		{"", false},
+		{".rally", false},
+		{".laps", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.path, func(t *testing.T) {
+			if got := IsRallyOwnedOrTransientPath(tt.path); got != tt.want {
+				t.Errorf("IsRallyOwnedOrTransientPath(%q) = %v, want %v", tt.path, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestIsWorkspaceDirtyExcludesClaudeSettings(t *testing.T) {
+	dir := initRepo(t)
+	writeFile(t, dir, "README.md", "seed\n")
+	writeFile(t, dir, ".claude/settings.local.json", "{}\n")
+	commitAll(t, dir, "initial")
+
+	writeFile(t, dir, ".claude/settings.local.json", "{\"enabled\":true}\n")
+
+	dirty, err := IsWorkspaceDirty(dir)
+	if err != nil {
+		t.Fatalf("IsWorkspaceDirty: %v", err)
+	}
+	if dirty {
+		t.Error("expected clean workspace when only .claude/settings.local.json is dirty")
+	}
+}
+
+func TestWorkspaceDirtyPathsExcludesClaudeSettings(t *testing.T) {
+	dir := initRepo(t)
+	writeFile(t, dir, "README.md", "seed\n")
+	writeFile(t, dir, ".claude/settings.local.json", "{}\n")
+	writeFile(t, dir, "src/foo.go", "package foo\n")
+	commitAll(t, dir, "initial")
+
+	writeFile(t, dir, ".claude/settings.local.json", "{\"enabled\":true}\n")
+	writeFile(t, dir, "src/foo.go", "package bar\n")
+
+	paths, err := WorkspaceDirtyPaths(dir)
+	if err != nil {
+		t.Fatalf("WorkspaceDirtyPaths: %v", err)
+	}
+	if _, ok := paths[".claude/settings.local.json"]; ok {
+		t.Error("expected .claude/settings.local.json to be excluded from dirty paths")
+	}
+	if _, ok := paths["src/foo.go"]; !ok {
+		t.Error("expected src/foo.go to be present in dirty paths")
+	}
+}

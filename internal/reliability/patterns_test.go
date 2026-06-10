@@ -643,3 +643,87 @@ func TestClassifyError_DisplayLabels(t *testing.T) {
 		t.Errorf("expected display label %q, got %q", "infra error", decision.DisplayLabel)
 	}
 }
+
+func TestClassifyError_TransientDirtyPathsExclusion(t *testing.T) {
+	tests := []struct {
+		name           string
+		evidence       *FailureEvidence
+		ctx            *ClassifyContext
+		wantCategory   FailureCategory
+		wantClass      FailureClass
+	}{
+		{
+			name: "Claude usage_limit with only settings dirty is usage_limit not incomplete",
+			evidence: &FailureEvidence{
+				Category:   CategoryUsageLimit,
+				RetryAfter: 120 * time.Second,
+			},
+			ctx: &ClassifyContext{
+				HasFileChanges: false,
+				Finalized:      false,
+			},
+			wantCategory: CategoryUsageLimit,
+			wantClass:    FailureAgent,
+		},
+		{
+			name: "Antigravity RESOURCE_EXHAUSTED with zero meaningful changes is usage_limit not incomplete",
+			evidence: &FailureEvidence{
+				Category:   CategoryUsageLimit,
+				RetryAfter: 300 * time.Second,
+			},
+			ctx: &ClassifyContext{
+				HasFileChanges: false,
+				Finalized:      false,
+			},
+			wantCategory: CategoryUsageLimit,
+			wantClass:    FailureAgent,
+		},
+		{
+			name:     "src/foo.go dirty without finalization is incomplete_finalization",
+			evidence: nil,
+			ctx: &ClassifyContext{
+				HasFileChanges: true,
+				Finalized:      false,
+			},
+			wantCategory: CategoryIncompleteFinalization,
+			wantClass:    FailureIncomplete,
+		},
+		{
+			name: "Claude invalid_model with only settings dirty is invalid_model not incomplete",
+			evidence: &FailureEvidence{
+				Category: CategoryInvalidModel,
+			},
+			ctx: &ClassifyContext{
+				HasFileChanges: false,
+				Finalized:      false,
+			},
+			wantCategory: CategoryInvalidModel,
+			wantClass:    FailureAgent,
+		},
+		{
+			name: "evidence usage_limit wins over dirty-tree with real file changes",
+			evidence: &FailureEvidence{
+				Category:   CategoryUsageLimit,
+				RetryAfter: 120 * time.Second,
+			},
+			ctx: &ClassifyContext{
+				HasFileChanges: true,
+				Finalized:      false,
+			},
+			wantCategory: CategoryUsageLimit,
+			wantClass:    FailureAgent,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			decision := ClassifyError(nil, "", tt.ctx, tt.evidence)
+			if decision.Category != tt.wantCategory {
+				t.Errorf("expected category %q, got %q", tt.wantCategory, decision.Category)
+			}
+			if decision.FailureClass != tt.wantClass {
+				t.Errorf("expected failure class %q, got %q", tt.wantClass, decision.FailureClass)
+			}
+		})
+	}
+}
