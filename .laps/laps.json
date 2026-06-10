@@ -149,22 +149,22 @@
       "title": "Bench the quota scope on usage_limit and wait it out",
       "description": "Context: phase 7 (tasks 7.3, 7.4, 7.5), design Decision 5 items 4-6. Depends on the StateBenched state + BenchAgent (previous lap), the QuotaScope resolver, and the runOne return contract (phase 6). Anchors: dispatch loop runner.go:520-593; syncRecoverySignals switch route_runtime.go:256; selectionWaitError route_runtime.go:313 (paused-only derivation at :330); forceUnpauseAll route_runtime.go:360; AllFrozen relay-stall capture runner.go:433.\n\nOutcome: On a usage_limit the dispatch loop benches the whole quota scope; the recovery sync keeps benched entries out of rotation; an all-benched lane waits for the earliest reset instead of failing AllFrozen; operator skip clears benches.\n\nFiles \u0026 scope: internal/relay/route_runtime.go, internal/relay/runner.go.\n\nDesign: Add a route-runtime benchQuotaScope(resilience, scope, resetAt, relayID) that iterates every scheduler's entries (r.schedulers), resolves each entry's {Harness,Model} key and QuotaScope, and writes a `benched` event via BenchAgent for every distinct matching key — mirror the iterate-all-schedulers pattern in forceUnpauseAll (route_runtime.go:360-385). Call it from the dispatch loop on a usage_limit using the parsed reset or a long conservative default. Add ONE arm to syncRecoverySignals: `case StateBenched: OnAgentFailed(state, \"quota\", true)` — no StateActive unbench guard is needed because a benched key is never StateActive; leave the StateActive/StatePaused/StateProbation/StateFrozen arms untouched. Widen selectionWaitError to also derive a wait from the earliest StateBenched reset_at. Widen forceUnpauseAll to also clear StateBenched (write an active event) on skip.\n\nAcceptance: Unit tests: a usage_limit benches every key in the scope across lanes; syncRecoverySignals keeps a benched entry out of Next(); an all-benched lane returns a wait, not AllFrozen. `go test ./internal/relay/...` green. Do not tick tasks.md boxes.",
       "assignee": "SENIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 950272,
       "createdAt": "2026-06-09T07:26:46.948282752Z",
-      "updatedAt": "2026-06-09T07:26:46.948282752Z",
-      "completedAt": null
+      "updatedAt": "2026-06-10T10:57:47.717974776Z",
+      "completedAt": "2026-06-10T10:57:47.717974776Z"
     },
     {
       "id": "rall-da71",
       "title": "Test the benching state machine end to end",
       "description": "Context: phase 7 (task 7.7), validates the two preceding phase-7 laps. Dedicated state-machine test lap for the highest-risk subsystem.\n\nOutcome: The full 7.7 test matrix.\n\nFiles \u0026 scope: tests under internal/relay/, internal/routing/, internal/store/ as needed.\n\nDesign / cases: (a) a benched key is NOT selected before reset_at; (b) all-benched-with-future-reset produces a wait, not an AllFrozen relay failure; (c) a persisted reset survives a fresh relay via GetState replay and is re-probed once after it passes; (d) a post-deadline re-probe that again returns usage_limit re-benches a fresh window; (e) the `benched` event does not interfere with frozen/probation/paused state recovery.\n\nAcceptance: All five cases pass. `go test ./internal/relay/... ./internal/routing/... ./internal/store/...` green. Do not tick tasks.md boxes.",
       "assignee": "SENIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 999424,
       "createdAt": "2026-06-09T07:26:46.948286203Z",
-      "updatedAt": "2026-06-09T07:26:46.948286203Z",
-      "completedAt": null
+      "updatedAt": "2026-06-10T11:07:36.126813906Z",
+      "completedAt": "2026-06-10T11:07:36.126813906Z"
     },
     {
       "id": "rall-90ed",
