@@ -11,6 +11,8 @@ import (
 	"os/exec"
 	"strings"
 	"sync"
+
+	"github.com/mitchell-wallace/rally/internal/reliability"
 )
 
 type CodexExecutor struct {
@@ -187,7 +189,11 @@ func (c *CodexExecutor) Execute(ctx context.Context, opts RunOptions) (*TryResul
 	out, err := runCodexCommand(cmd, opts.LogPath, opts.OnStart, c.setActiveSessionID)
 	if err != nil {
 		os.Remove(reportPath)
-		return nil, fmt.Errorf("codex exec failed: %w\noutput: %s", err, string(out))
+		execErr := fmt.Errorf("codex exec failed: %w\noutput: %s", err, string(out))
+		if ev := reliability.ParseCodexError(string(out)); ev != nil {
+			return &TryResult{Evidence: ev}, execErr
+		}
+		return nil, execErr
 	}
 
 	reportData, err := os.ReadFile(reportPath)

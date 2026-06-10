@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"os/exec"
 	"strings"
+
+	"github.com/mitchell-wallace/rally/internal/reliability"
 )
 
 type ClaudeExecutor struct {
@@ -57,7 +59,11 @@ func (c *ClaudeExecutor) Execute(ctx context.Context, opts RunOptions) (*TryResu
 	SetProcessGroup(cmd)
 	out, err := runLoggedCommand(cmd, opts.LogPath, true, opts.OnStart)
 	if err != nil {
-		return nil, fmt.Errorf("claude exec failed: %w\noutput: %s", err, string(out))
+		execErr := fmt.Errorf("claude exec failed: %w\noutput: %s", err, string(out))
+		if ev := reliability.ParseClaudeError(string(out)); ev != nil {
+			return &TryResult{Evidence: ev}, execErr
+		}
+		return nil, execErr
 	}
 
 	resultRaw, sessionID, toolCalls := scanClaudeOutput(out)

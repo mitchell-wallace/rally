@@ -8,6 +8,8 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+
+	"github.com/mitchell-wallace/rally/internal/reliability"
 )
 
 type OpenCodeExecutor struct {
@@ -84,6 +86,9 @@ func (o *OpenCodeExecutor) Execute(ctx context.Context, opts RunOptions) (*TryRe
 	tr, err := parseOpenCodeOutput(out, runErr == nil)
 	if err != nil {
 		return nil, err
+	}
+	if ev := reliability.ParseOpencodeError(string(out), model); ev != nil {
+		tr.Evidence = ev
 	}
 	if runErr != nil {
 		return tr, fmt.Errorf("opencode exec failed: %w", runErr)

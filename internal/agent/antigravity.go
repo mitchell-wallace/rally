@@ -11,6 +11,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/mitchell-wallace/rally/internal/reliability"
 )
 
 const DefaultAntigravityModel = "Gemini 3.5 Flash (High)"
@@ -94,7 +96,12 @@ func (a *AntigravityExecutor) Execute(ctx context.Context, opts RunOptions) (*Tr
 	sessionID := scanAntigravityConversationID(agyLogData)
 
 	if runErr != nil {
-		return nil, fmt.Errorf("antigravity exec failed: %w\noutput: %s\nlog: %s", runErr, string(out), tailString(string(agyLogData), 4096))
+		execErr := fmt.Errorf("antigravity exec failed: %w\noutput: %s\nlog: %s", runErr, string(out), tailString(string(agyLogData), 4096))
+		errorText := string(out) + "\n" + string(agyLogData)
+		if ev := reliability.ParseGeminiError(errorText); ev != nil {
+			return &TryResult{Evidence: ev}, execErr
+		}
+		return nil, execErr
 	}
 
 	return parseAntigravityOutput(out, sessionID)

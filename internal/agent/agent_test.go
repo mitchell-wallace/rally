@@ -14,6 +14,7 @@ import (
 
 	"github.com/mitchell-wallace/rally/internal/agent_prompt"
 	"github.com/mitchell-wallace/rally/internal/gitx"
+	"github.com/mitchell-wallace/rally/internal/reliability"
 	"github.com/mitchell-wallace/rally/internal/testutil"
 )
 
@@ -1707,6 +1708,264 @@ done
 	args := string(argsData)
 	if !strings.Contains(args, "resume") || !strings.Contains(args, "sess-resume-77") {
 		t.Errorf("codex args missing resume sess-resume-77, got:\n%s", args)
+	}
+}
+
+func TestAntigravityExecutor_EvidenceOnGeminiQuotaError(t *testing.T) {
+	tmp := t.TempDir()
+	home := filepath.Join(tmp, "home")
+	t.Setenv("HOME", home)
+
+	binDir := filepath.Join(tmp, "bin")
+	if err := os.MkdirAll(binDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	scriptPath := filepath.Join(binDir, "agy")
+	script := `#!/bin/sh
+printf 'RESOURCE_EXHAUSTED\nIndividual quota reached\nResets in 1h30m\n'
+exit 1
+`
+	if err := os.WriteFile(scriptPath, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	exec := &AntigravityExecutor{PrintTimeout: time.Second}
+	tr, err := exec.Execute(context.Background(), RunOptions{Prompt: "do work"})
+	if err == nil {
+		t.Fatal("expected error from antigravity mock")
+	}
+	if tr == nil {
+		t.Fatal("expected TryResult with Evidence, got nil")
+	}
+	if tr.Evidence == nil {
+		t.Fatal("expected Evidence to be populated for RESOURCE_EXHAUSTED")
+	}
+	if tr.Evidence.Category != reliability.CategoryUsageLimit {
+		t.Errorf("Category = %q, want %q", tr.Evidence.Category, reliability.CategoryUsageLimit)
+	}
+	if tr.Evidence.Provider != reliability.ProviderGemini {
+		t.Errorf("Provider = %q, want %q", tr.Evidence.Provider, reliability.ProviderGemini)
+	}
+}
+
+func TestClaudeExecutor_EvidenceOnRateLimitError(t *testing.T) {
+	binDir := filepath.Join(t.TempDir(), "bin")
+	if err := os.MkdirAll(binDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	scriptPath := filepath.Join(binDir, "claude")
+	script := `#!/bin/sh
+printf 'rate_limit_event: five hour window\n'
+exit 1
+`
+	if err := os.WriteFile(scriptPath, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	exec := &ClaudeExecutor{}
+	tr, err := exec.Execute(context.Background(), RunOptions{Prompt: "do work"})
+	if err == nil {
+		t.Fatal("expected error from claude mock")
+	}
+	if tr == nil {
+		t.Fatal("expected TryResult with Evidence, got nil")
+	}
+	if tr.Evidence == nil {
+		t.Fatal("expected Evidence to be populated for rate_limit_event")
+	}
+	if tr.Evidence.Category != reliability.CategoryShortRateLimit {
+		t.Errorf("Category = %q, want %q", tr.Evidence.Category, reliability.CategoryShortRateLimit)
+	}
+	if tr.Evidence.Provider != reliability.ProviderAnthropic {
+		t.Errorf("Provider = %q, want %q", tr.Evidence.Provider, reliability.ProviderAnthropic)
+	}
+}
+
+func TestClaudeExecutor_NoEvidenceOnUnknownError(t *testing.T) {
+	binDir := filepath.Join(t.TempDir(), "bin")
+	if err := os.MkdirAll(binDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	scriptPath := filepath.Join(binDir, "claude")
+	script := `#!/bin/sh
+printf 'something went wrong\n'
+exit 1
+`
+	if err := os.WriteFile(scriptPath, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	exec := &ClaudeExecutor{}
+	tr, err := exec.Execute(context.Background(), RunOptions{Prompt: "do work"})
+	if err == nil {
+		t.Fatal("expected error from claude mock")
+	}
+	if tr != nil {
+		t.Fatalf("expected nil TryResult for unknown error, got %+v", tr)
+	}
+}
+
+func TestCodexExecutor_EvidenceOnUsageLimitError(t *testing.T) {
+	binDir := filepath.Join(t.TempDir(), "bin")
+	if err := os.MkdirAll(binDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	scriptPath := filepath.Join(binDir, "codex")
+	script := `#!/bin/sh
+printf 'You hit your usage limit. Try again at 3:00 PM\n'
+exit 1
+`
+	if err := os.WriteFile(scriptPath, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	exec := &CodexExecutor{}
+	tr, err := exec.Execute(context.Background(), RunOptions{Prompt: "do work"})
+	if err == nil {
+		t.Fatal("expected error from codex mock")
+	}
+	if tr == nil {
+		t.Fatal("expected TryResult with Evidence, got nil")
+	}
+	if tr.Evidence == nil {
+		t.Fatal("expected Evidence to be populated for usage limit")
+	}
+	if tr.Evidence.Category != reliability.CategoryUsageLimit {
+		t.Errorf("Category = %q, want %q", tr.Evidence.Category, reliability.CategoryUsageLimit)
+	}
+	if tr.Evidence.Provider != reliability.ProviderOpenAI {
+		t.Errorf("Provider = %q, want %q", tr.Evidence.Provider, reliability.ProviderOpenAI)
+	}
+}
+
+func TestGeminiExecutor_EvidenceOnQuotaError(t *testing.T) {
+	binDir := filepath.Join(t.TempDir(), "bin")
+	if err := os.MkdirAll(binDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	scriptPath := filepath.Join(binDir, "gemini")
+	script := `#!/bin/sh
+printf 'RESOURCE_EXHAUSTED\nIndividual quota reached\nResets in 1h30m\n' >&2
+exit 1
+`
+	if err := os.WriteFile(scriptPath, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	exec := &GeminiExecutor{}
+	tr, err := exec.Execute(context.Background(), RunOptions{Prompt: "do work"})
+	if err == nil {
+		t.Fatal("expected error from gemini mock")
+	}
+	if tr == nil {
+		t.Fatal("expected TryResult with Evidence, got nil")
+	}
+	if tr.Evidence == nil {
+		t.Fatal("expected Evidence to be populated for RESOURCE_EXHAUSTED")
+	}
+	if tr.Evidence.Category != reliability.CategoryUsageLimit {
+		t.Errorf("Category = %q, want %q", tr.Evidence.Category, reliability.CategoryUsageLimit)
+	}
+	if tr.Evidence.Provider != reliability.ProviderGemini {
+		t.Errorf("Provider = %q, want %q", tr.Evidence.Provider, reliability.ProviderGemini)
+	}
+}
+
+func TestGeminiExecutor_NoEvidenceOnUnknownError(t *testing.T) {
+	binDir := filepath.Join(t.TempDir(), "bin")
+	if err := os.MkdirAll(binDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	scriptPath := filepath.Join(binDir, "gemini")
+	script := `#!/bin/sh
+printf 'something unexpected\n' >&2
+exit 1
+`
+	if err := os.WriteFile(scriptPath, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	exec := &GeminiExecutor{}
+	tr, err := exec.Execute(context.Background(), RunOptions{Prompt: "do work"})
+	if err == nil {
+		t.Fatal("expected error from gemini mock")
+	}
+	if tr != nil {
+		t.Fatalf("expected nil TryResult for unknown error, got %+v", tr)
+	}
+}
+
+func TestOpenCodeExecutor_EvidenceOnRateLimitError(t *testing.T) {
+	binDir := filepath.Join(t.TempDir(), "bin")
+	if err := os.MkdirAll(binDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	scriptPath := filepath.Join(binDir, "opencode")
+	script := `#!/bin/sh
+printf '{"type":"error","error":{"name":"RateLimitError","data":{"message":"rate limit exceeded, retry after 60 seconds"}}}\n'
+exit 1
+`
+	if err := os.WriteFile(scriptPath, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	exec := &OpenCodeExecutor{Model: "anthropic/claude-4"}
+	tr, err := exec.Execute(context.Background(), RunOptions{Prompt: "do work"})
+	if err == nil {
+		t.Fatal("expected error from opencode mock")
+	}
+	if tr == nil {
+		t.Fatal("expected TryResult, got nil")
+	}
+	if tr.Evidence == nil {
+		t.Fatal("expected Evidence to be populated for rate limit error event")
+	}
+	if tr.Evidence.Category != reliability.CategoryShortRateLimit {
+		t.Errorf("Category = %q, want %q", tr.Evidence.Category, reliability.CategoryShortRateLimit)
+	}
+	if tr.Evidence.Provider != "anthropic" {
+		t.Errorf("Provider = %q, want %q", tr.Evidence.Provider, "anthropic")
+	}
+}
+
+func TestOpenCodeExecutor_EvidenceOnUsageLimitError(t *testing.T) {
+	binDir := filepath.Join(t.TempDir(), "bin")
+	if err := os.MkdirAll(binDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	scriptPath := filepath.Join(binDir, "opencode")
+	script := `#!/bin/sh
+printf '{"type":"error","error":{"name":"UsageLimitError","data":{"message":"usage limit exceeded"}}}\n'
+exit 1
+`
+	if err := os.WriteFile(scriptPath, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	exec := &OpenCodeExecutor{Model: "openai/gpt-4o"}
+	tr, err := exec.Execute(context.Background(), RunOptions{Prompt: "do work"})
+	if err == nil {
+		t.Fatal("expected error from opencode mock")
+	}
+	if tr == nil {
+		t.Fatal("expected TryResult, got nil")
+	}
+	if tr.Evidence == nil {
+		t.Fatal("expected Evidence to be populated for usage limit error event")
+	}
+	if tr.Evidence.Category != reliability.CategoryUsageLimit {
+		t.Errorf("Category = %q, want %q", tr.Evidence.Category, reliability.CategoryUsageLimit)
+	}
+	if tr.Evidence.Provider != "openai" {
+		t.Errorf("Provider = %q, want %q", tr.Evidence.Provider, "openai")
 	}
 }
 

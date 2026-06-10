@@ -9,6 +9,8 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+
+	"github.com/mitchell-wallace/rally/internal/reliability"
 )
 
 type GeminiExecutor struct {
@@ -73,10 +75,16 @@ func (g *GeminiExecutor) Execute(ctx context.Context, opts RunOptions) (*TryResu
 	}
 	if err != nil {
 		reason := classifyGeminiExit(err, stderrTail)
+		var execErr error
 		if stderrTail != "" {
-			return nil, fmt.Errorf("gemini exec failed: %w%s\nstderr: %s\noutput: %s", err, reason, stderrTail, string(out))
+			execErr = fmt.Errorf("gemini exec failed: %w%s\nstderr: %s\noutput: %s", err, reason, stderrTail, string(out))
+		} else {
+			execErr = fmt.Errorf("gemini exec failed: %w%s\noutput: %s", err, reason, string(out))
 		}
-		return nil, fmt.Errorf("gemini exec failed: %w%s\noutput: %s", err, reason, string(out))
+		if ev := reliability.ParseGeminiError(stderrBuf.String()); ev != nil {
+			return &TryResult{Evidence: ev}, execErr
+		}
+		return nil, execErr
 	}
 
 	return parseGeminiOutput(out)
