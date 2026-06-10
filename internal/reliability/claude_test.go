@@ -7,101 +7,104 @@ import (
 
 func TestParseClaudeError(t *testing.T) {
 	tests := []struct {
-		name              string
-		stderr            string
-		expectNil         bool
-		expectedCategory  FailureCategory
-		expectedProvider  string
+		name               string
+		stderr             string
+		expectNil          bool
+		expectedCategory   FailureCategory
+		expectedProvider   string
+		expectedResetAfter time.Duration
 		expectedRetryAfter time.Duration
 		expectedStatusCode int
 	}{
 		{
-			name:              "rate_limit_event five-hour",
-			stderr:            `{"type":"error","error":{"type":"rate_limit_error","message":"This request would exceed the five-hour rate limit for your organization."}}`,
-			expectedCategory:  CategoryShortRateLimit,
-			expectedProvider:  ProviderAnthropic,
+			name:               "rate_limit_event five-hour",
+			stderr:             `{"type":"error","error":{"type":"rate_limit_error","message":"This request would exceed the five-hour rate limit for your organization."}}`,
+			expectedCategory:   CategoryShortRateLimit,
+			expectedProvider:   ProviderAnthropic,
 			expectedRetryAfter: 5 * time.Hour,
 			expectedStatusCode: 429,
 		},
 		{
-			name:              "rate_limit_event seven-day",
-			stderr:            `{"type":"error","error":{"type":"rate_limit_error","message":"This request would exceed the seven-day rate limit for your organization."}}`,
-			expectedCategory:  CategoryUsageLimit,
-			expectedProvider:  ProviderAnthropic,
+			name:               "rate_limit_event seven-day",
+			stderr:             `{"type":"error","error":{"type":"rate_limit_error","message":"This request would exceed the seven-day rate limit for your organization."}}`,
+			expectedCategory:   CategoryUsageLimit,
+			expectedProvider:   ProviderAnthropic,
+			expectedResetAfter: 7 * 24 * time.Hour,
 			expectedStatusCode: 429,
 		},
 		{
-			name:              "rate_limit_event five hour no hyphen",
-			stderr:            "error: rate limit: five hour cap exceeded",
-			expectedCategory:  CategoryShortRateLimit,
-			expectedProvider:  ProviderAnthropic,
+			name:               "rate_limit_event five hour no hyphen",
+			stderr:             "error: rate limit: five hour cap exceeded",
+			expectedCategory:   CategoryShortRateLimit,
+			expectedProvider:   ProviderAnthropic,
 			expectedRetryAfter: 5 * time.Hour,
 			expectedStatusCode: 429,
 		},
 		{
-			name:              "rate_limit_event seven day no hyphen",
-			stderr:            "error: rate limit: seven day cap exceeded",
-			expectedCategory:  CategoryUsageLimit,
-			expectedProvider:  ProviderAnthropic,
+			name:               "rate_limit_event seven day no hyphen",
+			stderr:             "error: rate limit: seven day cap exceeded",
+			expectedCategory:   CategoryUsageLimit,
+			expectedProvider:   ProviderAnthropic,
+			expectedResetAfter: 7 * 24 * time.Hour,
 			expectedStatusCode: 429,
 		},
 		{
-			name:              "rate_limit generic without window",
-			stderr:            "error: rate_limit_error: too many requests",
-			expectedCategory:  CategoryShortRateLimit,
-			expectedProvider:  ProviderAnthropic,
+			name:               "rate_limit generic without window",
+			stderr:             "error: rate_limit_error: too many requests",
+			expectedCategory:   CategoryShortRateLimit,
+			expectedProvider:   ProviderAnthropic,
 			expectedRetryAfter: 60 * time.Second,
 			expectedStatusCode: 429,
 		},
 		{
-			name:              "model_not_found",
-			stderr:            `{"type":"error","error":{"type":"not_found_error","message":"model_not_found: The model 'claude-foo' does not exist."}}`,
-			expectedCategory:  CategoryInvalidModel,
-			expectedProvider:  ProviderAnthropic,
+			name:               "model_not_found",
+			stderr:             `{"type":"error","error":{"type":"not_found_error","message":"model_not_found: The model 'claude-foo' does not exist."}}`,
+			expectedCategory:   CategoryInvalidModel,
+			expectedProvider:   ProviderAnthropic,
 			expectedStatusCode: 404,
 		},
 		{
-			name:              "model not found case insensitive",
-			stderr:            "Model Not Found: requested model is unavailable",
-			expectedCategory:  CategoryInvalidModel,
-			expectedProvider:  ProviderAnthropic,
+			name:               "model not found case insensitive",
+			stderr:             "Model Not Found: requested model is unavailable",
+			expectedCategory:   CategoryInvalidModel,
+			expectedProvider:   ProviderAnthropic,
 			expectedStatusCode: 404,
 		},
 		{
-			name:              "authentication_failed",
-			stderr:            `{"type":"error","error":{"type":"authentication_error","message":"authentication_failed: invalid x-api-key"}}`,
-			expectedCategory:  CategoryAuthOrProxy,
-			expectedProvider:  ProviderAnthropic,
+			name:               "authentication_failed",
+			stderr:             `{"type":"error","error":{"type":"authentication_error","message":"authentication_failed: invalid x-api-key"}}`,
+			expectedCategory:   CategoryAuthOrProxy,
+			expectedProvider:   ProviderAnthropic,
 			expectedStatusCode: 401,
 		},
 		{
-			name:              "authentication failed case insensitive",
-			stderr:            "Authentication Failed: permission denied",
-			expectedCategory:  CategoryAuthOrProxy,
-			expectedProvider:  ProviderAnthropic,
+			name:               "authentication failed case insensitive",
+			stderr:             "Authentication Failed: permission denied",
+			expectedCategory:   CategoryAuthOrProxy,
+			expectedProvider:   ProviderAnthropic,
 			expectedStatusCode: 401,
 		},
 		{
-			name:              "529 overload",
-			stderr:            "HTTP 529: Overloaded",
-			expectedCategory:  CategoryProviderOverloaded,
-			expectedProvider:  ProviderAnthropic,
+			name:               "529 overload",
+			stderr:             "HTTP 529: Overloaded",
+			expectedCategory:   CategoryProviderOverloaded,
+			expectedProvider:   ProviderAnthropic,
 			expectedStatusCode: 529,
 			expectedRetryAfter: 30 * time.Second,
 		},
 		{
-			name:              "overloaded_error",
-			stderr:            `{"type":"error","error":{"type":"api_error","message":"Overloaded"}}`,
-			expectedCategory:  CategoryProviderOverloaded,
-			expectedProvider:  ProviderAnthropic,
+			name:               "overloaded_error",
+			stderr:             `{"type":"error","error":{"type":"api_error","message":"Overloaded"}}`,
+			expectedCategory:   CategoryProviderOverloaded,
+			expectedProvider:   ProviderAnthropic,
 			expectedStatusCode: 529,
 			expectedRetryAfter: 30 * time.Second,
 		},
 		{
-			name:              "HTTP 529 without overload word",
-			stderr:            "Received HTTP 529 from upstream",
-			expectedCategory:  CategoryProviderOverloaded,
-			expectedProvider:  ProviderAnthropic,
+			name:               "HTTP 529 without overload word",
+			stderr:             "Received HTTP 529 from upstream",
+			expectedCategory:   CategoryProviderOverloaded,
+			expectedProvider:   ProviderAnthropic,
 			expectedStatusCode: 529,
 			expectedRetryAfter: 30 * time.Second,
 		},
@@ -137,6 +140,9 @@ func TestParseClaudeError(t *testing.T) {
 			}
 			if tt.expectedRetryAfter != 0 && ev.RetryAfter != tt.expectedRetryAfter {
 				t.Errorf("retryAfter = %v, want %v", ev.RetryAfter, tt.expectedRetryAfter)
+			}
+			if tt.expectedResetAfter != 0 && ev.ResetAfter != tt.expectedResetAfter {
+				t.Errorf("resetAfter = %v, want %v", ev.ResetAfter, tt.expectedResetAfter)
 			}
 			if tt.expectedStatusCode != 0 && ev.StatusCode != tt.expectedStatusCode {
 				t.Errorf("statusCode = %d, want %d", ev.StatusCode, tt.expectedStatusCode)

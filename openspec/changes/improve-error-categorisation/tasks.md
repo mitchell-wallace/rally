@@ -19,20 +19,20 @@
 
 > **Note:** `harness_launch`, `incomplete_finalization`, and `transient_infra` are NOT executor-parsed — they are classified runner-side (task 2.4a, task 2.2). Executor population targets only the categories with provider-specific structured error signals.
 
-- [ ] 3.1 Add parser helpers + tests for: Antigravity/Gemini `RESOURCE_EXHAUSTED` / `Individual quota reached` / `Resets in <dur>`; Claude `rate_limit_event` five-hour/seven-day, `model_not_found`, `authentication_failed`, 529 overload; Codex usage-limit messages; opencode JSON provider errors
-- [ ] 3.2 Parsers populate `ResetAfter`/`ResetAt`/`RetryAfter`/`StatusCode`/`Provider` on `FailureEvidence`
-- [ ] 3.3 Begin executor population of `FailureEvidence` for the harnesses with signatures above
+- [x] 3.1 Add parser helpers + tests for: Antigravity/Gemini `RESOURCE_EXHAUSTED` / `Individual quota reached` / `Resets in <dur>`; Claude `rate_limit_event` five-hour/seven-day, `model_not_found`, `authentication_failed`, 529 overload; Codex usage-limit messages; opencode JSON provider errors
+- [x] 3.2 Parsers populate `ResetAfter`/`ResetAt`/`RetryAfter`/`StatusCode`/`Provider` on `FailureEvidence`
+- [x] 3.3 Begin executor population of `FailureEvidence` for the harnesses with signatures above
 
 ## 4. Dirty-path exclusion
 
-- [ ] 4.1 Extract a single shared exclusion helper (e.g. `gitx.IsRallyOwnedOrTransientPath`) in `internal/gitx/git.go`, replacing the duplicated `.rally/`/`.laps/` skips at `git.go:82`, `git.go:112`, and `filesChangedList` at `runner.go:1717-1718`
-- [ ] 4.2 Add `.claude/settings.local.json` to the helper; a try whose only dirty paths are excluded has no meaningful task change
-- [ ] 4.3 Tests: Claude `usage_limit` + only `.claude/settings.local.json` dirty → `usage_limit` (not `incomplete`); Antigravity `RESOURCE_EXHAUSTED` + zero meaningful changes → `usage_limit` (not `incomplete`); `src/foo.go` dirty without finalization → `incomplete_finalization`; Claude `invalid_model` + only settings dirty → `invalid_model`
+- [x] 4.1 Extract a single shared exclusion helper (e.g. `gitx.IsRallyOwnedOrTransientPath`) in `internal/gitx/git.go`, replacing the duplicated `.rally/`/`.laps/` skips at `git.go:82`, `git.go:112`, and `filesChangedList` at `runner.go:1717-1718`
+- [x] 4.2 Add `.claude/settings.local.json` to the helper; a try whose only dirty paths are excluded has no meaningful task change
+- [x] 4.3 Tests: Claude `usage_limit` + only `.claude/settings.local.json` dirty → `usage_limit` (not `incomplete`); Antigravity `RESOURCE_EXHAUSTED` + zero meaningful changes → `usage_limit` (not `incomplete`); `src/foo.go` dirty without finalization → `incomplete_finalization`; Claude `invalid_model` + only settings dirty → `invalid_model`
 
 ## 5. Quota scope
 
-- [ ] 5.1 Add a standalone `QuotaScope(harness, model) string` resolver (design Decision 4): antigravity label-substring family / opencode provider-prefix / direct-harness
-- [ ] 5.2 Tests: antigravity `claude` vs `flash` vs `pro` resolve to distinct scopes from free-form labels; opencode splits on the first `/`; a direct-harness model with a stray `/` is not mis-split
+- [x] 5.1 Add a standalone `QuotaScope(harness, model) string` resolver (design Decision 4): antigravity label-substring family / opencode provider-prefix / direct-harness
+- [x] 5.2 Tests: antigravity `claude` vs `flash` vs `pro` resolve to distinct scopes from free-form labels; opencode splits on the first `/`; a direct-harness model with a stray `/` is not mis-split
 
 ## 6. Attempt-loop short-circuit and return contract
 

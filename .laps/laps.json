@@ -105,22 +105,22 @@
       "title": "Add the harness-aware QuotaScope resolver",
       "description": "Context: phase 5 (tasks 5.1-5.2), design Decision 4. Needed by the phase 7 benching machinery so that benching one model benches its whole quota bucket.\n\nOutcome: A standalone pure resolver QuotaScope(harness, model) string at the routing/config layer (explicitly NOT an Executor method).\n\nFiles \u0026 scope: the routing/config layer plus tests.\n\nDesign: antigravity -\u003e per model family via case-insensitive substring matching, because antigravity model names are free-form display labels (antigravity.go:16, e.g. 'Gemini 3.5 Flash (High)'), so claude / flash / pro are separate quotas. opencode -\u003e per provider, the segment before the first '/' in ResolvedAgent.Model (e.g. zai-coding-plan/glm-5.1). direct harnesses (claude, codex, gemini) -\u003e per harness; the model is ignored so a stray '/' cannot mis-split.\n\nAcceptance: Tests: antigravity claude vs flash vs pro resolve to distinct scopes from free-form labels; opencode splits on the first '/'; a direct-harness model with a stray '/' is not mis-split. `go test` green for the touched package. Do not tick tasks.md boxes.",
       "assignee": "JUNIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 524288,
       "createdAt": "2026-06-09T06:45:39.16828663Z",
-      "updatedAt": "2026-06-09T06:45:39.16828663Z",
-      "completedAt": null
+      "updatedAt": "2026-06-10T10:28:45.499325667Z",
+      "completedAt": "2026-06-10T10:28:45.499325667Z"
     },
     {
       "id": "rall-7f80",
       "title": "Verify phase 3-5: evidence parsers, exclusion helper, quota scope",
       "description": "Use the openspec-verify-change skill against improve-error-categorisation, then focus on phases 3-5 (the evidence/scope primitives slice). Identify the merge target before diffing and treat pre-batch work as pre-existing.\n\nTrace actual behavior: confirm the parsers populate the real timing/status/provider fields for each harness signature, that executors populate TryResult.Evidence where expected, that the single gitx exclusion helper replaced all three duplicated skip sites and is what the integration tests exercise, and that QuotaScope produces distinct scopes for the antigravity families, the opencode provider split, and the direct-harness case.\n\nCheck off tasks.md boxes 3.1-3.3, 4.1-4.3, and 5.1-5.2 only for verified-correct, sufficiently thorough work. Tiny one-liner fixes only inline; larger gaps become focused head laps via `laps add head`.",
       "assignee": "VERIFY",
-      "isDone": false,
+      "isDone": true,
       "order": 589824,
       "createdAt": "2026-06-09T06:45:39.168288194Z",
-      "updatedAt": "2026-06-09T06:45:39.168288194Z",
-      "completedAt": null
+      "updatedAt": "2026-06-10T10:35:31.813228217Z",
+      "completedAt": "2026-06-10T10:35:31.813228217Z"
     },
     {
       "id": "rall-761e",

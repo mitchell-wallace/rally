@@ -60,6 +60,7 @@ func ParseClaudeError(stderr string) *FailureEvidence {
 		if claudeSevenDayRe.MatchString(stderr) {
 			ev.Category = CategoryUsageLimit
 			ev.StatusCode = 429
+			ev.ResetAfter = 7 * 24 * time.Hour
 			return &ev
 		}
 
