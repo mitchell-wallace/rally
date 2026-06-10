@@ -52,16 +52,16 @@
 
 ## 8. Display and resume guidance
 
-- [ ] 8.1 Footer and collapsed retry line show the accurate category with reset/wait detail (`usage limit, resets in 123h50m`, `rate limit, waiting 2m`, `invalid model`)
-- [ ] 8.2 `TryRecord` (`tries.jsonl`) gains a `Category` field storing the stable `FailureCategory` separately from the human-readable `FailReason` display string
-- [ ] 8.3 Verify the existing `incompleteRetryGuidance` constant (`runner.go:151`) is adequate for the `incomplete_finalization` category; update it if needed, then include it in the resumed prompt on `incomplete_finalization` retries (including laps-backed operator pause/resume at `runner.go:1004-1006`)
-- [ ] 8.4 Tests: a genuine incomplete retry receives finalization guidance; the persisted record carries both `Category` and display reason
+- [x] 8.1 Footer and collapsed retry line show the accurate category with reset/wait detail (`usage limit, resets in 123h50m`, `rate limit, waiting 2m`, `invalid model`)
+- [x] 8.2 `TryRecord` (`tries.jsonl`) gains a `Category` field storing the stable `FailureCategory` separately from the human-readable `FailReason` display string
+- [x] 8.3 Verify the existing `incompleteRetryGuidance` constant (`runner.go:151`) is adequate for the `incomplete_finalization` category; update it if needed, then include it in the resumed prompt on `incomplete_finalization` retries (including laps-backed operator pause/resume at `runner.go:1004-1006`)
+- [x] 8.4 Tests: a genuine incomplete retry receives finalization guidance; the persisted record carries both `Category` and display reason
 
 ## 9. Regression coverage from observed signatures
 
-- [ ] 9.1 Antigravity quota with zero changed files → `usage_limit`
-- [ ] 9.2 Antigravity quota + only `.claude/settings.local.json` dirty → `usage_limit` (not `incomplete`)
-- [ ] 9.3 Codex VERIFY log tail mentioning `rate-limit` as prose → not a Claude rate limit
-- [ ] 9.4 Claude invalid model + settings dirty → `invalid_model` (not `incomplete`)
-- [ ] 9.5 Real task-file dirty with no finalization → `incomplete_finalization`
-- [ ] 9.6 An API timeout / connection-reset log tail classifies `transient_infra` (infra-class), not `agent_error` (guards the no-regression intent of the new category)
+- [x] 9.1 Antigravity quota with zero changed files → `usage_limit`
+- [x] 9.2 Antigravity quota + only `.claude/settings.local.json` dirty → `usage_limit` (not `incomplete`)
+- [x] 9.3 Codex VERIFY log tail mentioning `rate-limit` as prose → not a Claude rate limit
+- [x] 9.4 Claude invalid model + settings dirty → `invalid_model` (not `incomplete`)
+- [x] 9.5 Real task-file dirty with no finalization → `incomplete_finalization`
+- [x] 9.6 An API timeout / connection-reset log tail classifies `transient_infra` (infra-class), not `agent_error` (guards the no-regression intent of the new category)
