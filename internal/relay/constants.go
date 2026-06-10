@@ -21,4 +21,11 @@ const (
 	// HourlyRetryMaxAttempts is the per-try retry budget granted to hourly
 	// retries and probation runs.
 	HourlyRetryMaxAttempts = 3
+
+	// BenchDefaultDuration is the conservative fallback bench window applied on
+	// a usage_limit that carries no parsed reset deadline. Usage caps commonly
+	// reset on a daily-to-weekly cadence; a day keeps the exhausted quota scope
+	// out of rotation long enough to avoid hammering the limit while still
+	// re-probing within 24h. Reversible per the design's product call.
+	BenchDefaultDuration = 24 * time.Hour
 )

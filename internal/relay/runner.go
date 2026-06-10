@@ -21,6 +21,7 @@ import (
 	"github.com/mitchell-wallace/rally/internal/monitor"
 	"github.com/mitchell-wallace/rally/internal/progress"
 	"github.com/mitchell-wallace/rally/internal/reliability"
+	"github.com/mitchell-wallace/rally/internal/routing"
 	"github.com/mitchell-wallace/rally/internal/store"
 	"github.com/mitchell-wallace/rally/internal/style"
 	"github.com/mitchell-wallace/rally/internal/telemetry"
@@ -565,9 +566,10 @@ func (r *Runner) Run(ctx context.Context) error {
 		}
 
 		// Surface the resolved failure category and any parsed reset deadline
-		// from runOne. This is the hook point where downstream benching of the
-		// quota scope (usage_limit) or routing away (auth_or_proxy) consumes the
-		// reset evidence; for now it records the resolution for operator triage.
+		// from runOne, then act on it: a usage_limit benches the whole quota
+		// scope until the reset (below); other categories (auth_or_proxy,
+		// invalid_model) are left to the scheduler's normal exhaustion/route-away
+		// path. The log line records the resolution for operator triage.
 		if !success && failureCategory != "" {
 			resetNote := "none"
 			if resetEvidence != nil {
@@ -579,6 +581,23 @@ func (r *Runner) Run(ctx context.Context) error {
 			}
 			fmt.Fprintf(log, "relay %d run %d resolved failure category=%s reset=%s\n",
 				relay.ID, runIndex+1, failureCategory, resetNote)
+
+			// On a usage_limit, bench the entire exhausted quota scope across
+			// every lane until the reset deadline so siblings sharing the same
+			// account front leave rotation together, then wait it out rather
+			// than thrashing the limit. Other terminal categories (auth_or_proxy,
+			// invalid_model) are routed away by the scheduler's normal exhaustion
+			// path and are not benched here.
+			if failureCategory == reliability.CategoryUsageLimit {
+				resetAt := benchResetDeadline(resetEvidence, time.Now())
+				scope := routing.QuotaScope(selection.Agent.Harness, selection.Agent.Model)
+				benched, benchErr := routeRuntime.benchQuotaScope(resilience, scope, resetAt, relay.ID)
+				if benchErr != nil {
+					return benchErr
+				}
+				fmt.Fprintf(log, "relay %d run %d benched quota scope %q until %s (%d key(s))\n",
+					relay.ID, runIndex+1, scope, resetAt.UTC().Format(time.RFC3339), benched)
+			}
 		}
 
 		if selection.Probation {
@@ -905,6 +924,22 @@ actionLoop:
 		}
 	}
 	return out
+}
+
+// benchResetDeadline derives the bench-window end from parsed reset evidence,
+// preferring an absolute ResetAt, then a relative ResetAfter, and finally a
+// conservative BenchDefaultDuration fallback when a usage_limit carried no
+// parsed deadline.
+func benchResetDeadline(ev *reliability.FailureEvidence, now time.Time) time.Time {
+	if ev != nil {
+		if ev.ResetAt != nil {
+			return *ev.ResetAt
+		}
+		if ev.ResetAfter > 0 {
+			return now.Add(ev.ResetAfter)
+		}
+	}
+	return now.Add(BenchDefaultDuration)
 }
 
 func (r *Runner) runOne(

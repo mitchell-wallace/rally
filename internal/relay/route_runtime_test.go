@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/mitchell-wallace/rally/internal/reliability"
 	"github.com/mitchell-wallace/rally/internal/store"
 )
 
@@ -773,5 +774,160 @@ func TestRouteRuntime_MixedLanesWarnsOnlySingleRunner(t *testing.T) {
 	}
 	if !strings.Contains(warnings[0], "fragile") {
 		t.Fatalf("warning = %q, want warning for %q lane", warnings[0], "fragile")
+	}
+}
+
+func TestBenchResetDeadline(t *testing.T) {
+	now := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
+	at := now.Add(5 * time.Hour)
+
+	cases := []struct {
+		name string
+		ev   *reliability.FailureEvidence
+		want time.Time
+	}{
+		{"nil evidence falls back to default", nil, now.Add(BenchDefaultDuration)},
+		{"absolute reset preferred", &reliability.FailureEvidence{ResetAt: &at}, at},
+		{"relative reset", &reliability.FailureEvidence{ResetAfter: 3 * time.Hour}, now.Add(3 * time.Hour)},
+		{"no deadline falls back to default", &reliability.FailureEvidence{}, now.Add(BenchDefaultDuration)},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := benchResetDeadline(tc.ev, now); !got.Equal(tc.want) {
+				t.Fatalf("benchResetDeadline = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
+// TestBenchQuotaScope_BenchesEveryKeyInScopeAcrossLanes verifies that a single
+// usage_limit benches every distinct {Harness,Model} key that shares the
+// exhausted quota scope, fanning out across all lanes, while leaving keys in
+// other scopes untouched.
+func TestBenchQuotaScope_BenchesEveryKeyInScopeAcrossLanes(t *testing.T) {
+	rt, resilience := newResolvedRouteRuntimeOrDie(t, map[string][]string{
+		"default": {"claude:opus-4.7", "codex:gpt-5.5"},
+		"verify":  {"claude:sonnet-4.5", "gemini:gemini-2.5-pro"},
+	}, false)
+
+	now := resilience.NowFunc()
+	resetAt := now.Add(3 * time.Hour)
+
+	// claude is a direct harness: its QuotaScope ignores the model, so both
+	// claude entries (across both lanes) share scope "claude".
+	benched, err := rt.benchQuotaScope(resilience, "claude", resetAt, 7)
+	if err != nil {
+		t.Fatalf("benchQuotaScope: %v", err)
+	}
+	if benched != 2 {
+		t.Fatalf("benched count = %d, want 2 (claude:opus-4.7 + claude:sonnet-4.5)", benched)
+	}
+
+	benchedKeys := []ResilienceKey{
+		{Harness: "claude", Model: "opus-4.7"},
+		{Harness: "claude", Model: "sonnet-4.5"},
+	}
+	for _, k := range benchedKeys {
+		if st, _ := resilience.GetState(k); st != StateBenched {
+			t.Errorf("state(%s) = %s, want benched", k, st)
+		}
+	}
+
+	// Keys in other quota scopes are not benched.
+	for _, k := range []ResilienceKey{
+		{Harness: "codex", Model: "gpt-5.5"},
+		{Harness: "gemini", Model: "gemini-2.5-pro"},
+	} {
+		if st, _ := resilience.GetState(k); st != StateActive {
+			t.Errorf("state(%s) = %s, want active (out of scope)", k, st)
+		}
+	}
+}
+
+// TestSyncRecoverySignals_BenchedEntryKeptOutOfRotation verifies that a benched
+// key is not selected by Next(): syncRecoverySignals benches the entry every
+// cycle while the reset deadline is in the future.
+func TestSyncRecoverySignals_BenchedEntryKeptOutOfRotation(t *testing.T) {
+	rt, resilience := newResolvedRouteRuntimeOrDie(t, map[string][]string{
+		"default": {"claude:opus-4.7:1", "codex:gpt-5.5:1"},
+	}, false)
+
+	now := resilience.NowFunc()
+	claudeKey := ResilienceKey{Harness: "claude", Model: "opus-4.7"}
+	if err := resilience.BenchAgent(claudeKey, now.Add(3*time.Hour), "claude", 1); err != nil {
+		t.Fatalf("BenchAgent: %v", err)
+	}
+
+	// claude is benched, so the only selectable runner is codex.
+	sel := mustNextRouteSelection(t, rt, resilience, "")
+	if got := agentRouteSpec(sel.Agent); got != "codex:gpt-5.5" {
+		t.Fatalf("pick = %q, want codex:gpt-5.5 (claude benched out of rotation)", got)
+	}
+}
+
+// TestSelectionWaitError_AllBenchedLaneWaitsNotFrozen verifies that a lane whose
+// every key is benched with a future reset returns a positive wait derived from
+// the earliest reset_at, rather than falling through to AllFrozen.
+func TestSelectionWaitError_AllBenchedLaneWaitsNotFrozen(t *testing.T) {
+	rt, resilience := newResolvedRouteRuntimeOrDie(t, map[string][]string{
+		"default": {"claude:opus-4.7:1", "claude:sonnet-4.5:1"},
+	}, false)
+
+	now := resilience.NowFunc()
+	// Two distinct reset deadlines; the wait must follow the earliest (2h).
+	if err := resilience.BenchAgent(ResilienceKey{Harness: "claude", Model: "opus-4.7"}, now.Add(5*time.Hour), "claude", 1); err != nil {
+		t.Fatalf("BenchAgent(opus): %v", err)
+	}
+	if err := resilience.BenchAgent(ResilienceKey{Harness: "claude", Model: "sonnet-4.5"}, now.Add(2*time.Hour), "claude", 1); err != nil {
+		t.Fatalf("BenchAgent(sonnet): %v", err)
+	}
+
+	_, err := rt.next(runTask{}, resilience)
+	if err == nil {
+		t.Fatal("next() error = nil, want wait condition for all-benched lane")
+	}
+
+	var routeErr *routeSelectionError
+	if !errors.As(err, &routeErr) {
+		t.Fatalf("error = %T, want *routeSelectionError", err)
+	}
+	if routeErr.AllFrozen {
+		t.Fatalf("route error = %+v, want benched wait, not AllFrozen", routeErr)
+	}
+	if routeErr.Wait != 2*time.Hour {
+		t.Fatalf("route error wait = %v, want 2h (earliest reset_at)", routeErr.Wait)
+	}
+}
+
+// TestForceUnpauseAll_ClearsBenchOnSkip verifies that an operator skip during
+// the wait clears benched keys (writing an active event) so the lane retries
+// immediately instead of serving out the reset window.
+func TestForceUnpauseAll_ClearsBenchOnSkip(t *testing.T) {
+	rt, resilience := newResolvedRouteRuntimeOrDie(t, map[string][]string{
+		"default": {"claude:opus-4.7:1", "codex:gpt-5.5:1"},
+	}, false)
+
+	now := resilience.NowFunc()
+	benchedKey := ResilienceKey{Harness: "claude", Model: "opus-4.7"}
+	pausedKey := ResilienceKey{Harness: "codex", Model: "gpt-5.5"}
+	if err := resilience.BenchAgent(benchedKey, now.Add(5*time.Hour), "claude", 1); err != nil {
+		t.Fatalf("BenchAgent: %v", err)
+	}
+	if err := resilience.PauseAgent(pausedKey, 1); err != nil {
+		t.Fatalf("PauseAgent: %v", err)
+	}
+
+	cleared, err := rt.forceUnpauseAll(resilience, 1)
+	if err != nil {
+		t.Fatalf("forceUnpauseAll: %v", err)
+	}
+	if cleared != 2 {
+		t.Errorf("cleared count = %d, want 2 (benched + paused)", cleared)
+	}
+	if st, _ := resilience.GetState(benchedKey); st != StateActive {
+		t.Errorf("benched key state = %s, want active after skip", st)
+	}
+	if st, _ := resilience.GetState(pausedKey); st != StateActive {
+		t.Errorf("paused key state = %s, want active after skip", st)
 	}
 }

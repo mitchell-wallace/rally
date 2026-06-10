@@ -286,6 +286,13 @@ func (r *routeRuntime) syncRecoverySignals(scheduler *routing.Scheduler, resilie
 			if !(state.Benched && state.Exhausted) {
 				scheduler.OnAgentFailed(state, "frozen", true)
 			}
+		case StateBenched:
+			// A benched key is sidelined until its usage-limit reset deadline.
+			// No StateActive-scoped unbench guard is needed: GetState only
+			// reports StateBenched while now < reset_at, so once the deadline
+			// passes the key surfaces as StateActive and the StateActive arm
+			// above unbenches the entry for its single re-probe.
+			scheduler.OnAgentFailed(state, "quota", true)
 		}
 	}
 }
@@ -327,11 +334,23 @@ func (r *routeRuntime) selectionWaitError(scheduler *routing.Scheduler, resilien
 		seenKeys[key] = struct{}{}
 
 		status, since := resilience.GetState(key)
-		if status != StatePaused {
+		var wait time.Duration
+		switch status {
+		case StatePaused:
+			wait = since.Add(resilience.PauseDuration).Sub(resilience.NowFunc())
+		case StateBenched:
+			// Benched keys wait out their usage-limit reset deadline, not the
+			// fixed PauseDuration. GetState reports StateBenched only while
+			// now < reset_at, so a positive wait is expected here.
+			resetAt, ok := r.benchResetAt(resilience, key)
+			if !ok {
+				continue
+			}
+			wait = resetAt.Sub(resilience.NowFunc())
+		default:
 			continue
 		}
 
-		wait := since.Add(resilience.PauseDuration).Sub(resilience.NowFunc())
 		if wait < 0 {
 			wait = 0
 		}
@@ -344,7 +363,7 @@ func (r *routeRuntime) selectionWaitError(scheduler *routing.Scheduler, resilien
 	if waitSet {
 		return &routeSelectionError{
 			Wait:    minWait,
-			message: "all agents paused",
+			message: "all agents paused or benched",
 		}
 	}
 
@@ -372,7 +391,11 @@ func (r *routeRuntime) forceUnpauseAll(resilience *Resilience, relayID int) (int
 			}
 			seen[key] = struct{}{}
 			status, _ := resilience.GetState(key)
-			if status != StatePaused {
+			// A skip during the wait clears both pause and bench: UnpauseAgent
+			// writes an active event for any non-active state, ending the bench
+			// early so the lane retries immediately rather than serving out the
+			// usage-limit reset window.
+			if status != StatePaused && status != StateBenched {
 				continue
 			}
 			if err := resilience.UnpauseAgent(key, relayID); err != nil {
@@ -382,6 +405,63 @@ func (r *routeRuntime) forceUnpauseAll(resilience *Resilience, relayID int) (int
 		}
 	}
 	return unpaused, nil
+}
+
+// benchQuotaScope sidelines every runner across the runtime's schedulers whose
+// QuotaScope matches scope, writing a benched event (via BenchAgent) for each
+// distinct {Harness,Model} key until resetAt. Called on a usage_limit so the
+// whole exhausted quota bucket — not just the failing entry — leaves rotation.
+// All quota-scope fan-out is contained here; GetState, syncRecoverySignals, and
+// selectionWaitError stay per-key. Mirrors the iterate-all-schedulers pattern in
+// forceUnpauseAll. Returns the number of distinct keys benched.
+func (r *routeRuntime) benchQuotaScope(resilience *Resilience, scope string, resetAt time.Time, relayID int) (int, error) {
+	seen := map[ResilienceKey]struct{}{}
+	benched := 0
+	for _, scheduler := range r.schedulers {
+		for _, state := range scheduler.EntryStates() {
+			resolved, err := resolveAgentSpec(state.Entry.Spec, nil)
+			if err != nil {
+				continue
+			}
+			key := KeyFromAgent(resolved)
+			if _, ok := seen[key]; ok {
+				continue
+			}
+			seen[key] = struct{}{}
+			if routing.QuotaScope(key.Harness, key.Model) != scope {
+				continue
+			}
+			if err := resilience.BenchAgent(key, resetAt, scope, relayID); err != nil {
+				return benched, err
+			}
+			benched++
+		}
+	}
+	return benched, nil
+}
+
+// benchResetAt returns the reset deadline of the key's in-force bench. It is
+// only meaningful when GetState reports StateBenched: it reads back to the
+// latest benched event, returning false if a later recovery/failure event has
+// since superseded it.
+func (r *routeRuntime) benchResetAt(resilience *Resilience, key ResilienceKey) (time.Time, bool) {
+	events, err := resilience.Store.GetAgentStatus(key.Harness, key.Model)
+	if err != nil {
+		return time.Time{}, false
+	}
+	for i := len(events) - 1; i >= 0; i-- {
+		switch events[i].EventType {
+		case "benched":
+			resetAt, err := time.Parse(time.RFC3339, events[i].ResetAt)
+			if err != nil {
+				return time.Time{}, false
+			}
+			return resetAt, true
+		case "active", "unfrozen", "frozen", "paused", "probation", "retry_failed":
+			return time.Time{}, false
+		}
+	}
+	return time.Time{}, false
 }
 
 func legacyMixRouteEntries(specs []string, resolver Resolver) ([]string, string, error) {

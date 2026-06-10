@@ -127,22 +127,22 @@
       "title": "Short-circuit the attempt loop and surface category up the return contract",
       "description": "Context: phase 6 (tasks 6.1-6.3), design Decision 5 items 1-2. runOne's attempt loop is runner.go:1269-1301; runOne's return contract is runner.go:906; the routing dispatch loop where OnAgentFailed is reachable is runner.go:520-593.\n\nOutcome: usage_limit and auth_or_proxy terminate runOne's attempt loop on first detection (exactly one attempt), and runOne surfaces the resolved FailureCategory plus reset evidence up to the routing dispatch loop.\n\nFiles \u0026 scope: internal/relay/runner.go.\n\nDesign: Break the attempt loop on first detection of these terminal categories by reusing the skip short-circuit or a terminal strategy. Their non-infra (agent-class) mapping means the freeze counter does not bound them, so the loop break is what bounds them to one attempt. Extend runOne's return contract to carry the resolved FailureCategory + reset evidence to the dispatch loop (520-593).\n\nAcceptance: Test that a usage_limit makes exactly one attempt (does not loop the retry budget) before control returns to the routing loop. `go test ./internal/relay/...` green. Do not tick tasks.md boxes.",
       "assignee": "SENIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 655360,
       "createdAt": "2026-06-09T06:45:39.168292079Z",
-      "updatedAt": "2026-06-09T06:45:39.168292079Z",
-      "completedAt": null
+      "updatedAt": "2026-06-10T10:47:55.54970917Z",
+      "completedAt": "2026-06-10T10:47:55.54970917Z"
     },
     {
       "id": "rall-f4b1",
       "title": "Add StateBenched resilience state with reset-deadline decay",
       "description": "Context: phase 7 (tasks 7.1, 7.2, 7.6), design Decisions 5-6. Usage-limit benching is modelled as a persisted resilience state reusing the existing pause pipeline, NOT a parallel EntryState axis. Anchors: AgentState consts resilience.go:13; GetState resilience.go:59 with the pure-read frozen-\u003eprobation decay at resilience.go:89-93 as the precedent to mirror; AgentStatusEvent + EventType comment records.go:62-65; truncateAgentStatus store.go:128 (currently keeps only frozen/probation).\n\nOutcome: A new StateBenched AgentState and a `benched` agent_status event carrying reset_at + quota_scope; GetState returns StateBenched while now \u003c reset_at and surfaces the key as StateActive for a single re-probe once the deadline passes; a BenchAgent(key, resetAt, scope, relayID) method persists the event alongside PauseAgent/FreezeAgent; the truncation retention allow-list keeps `benched`.\n\nFiles \u0026 scope: internal/relay/resilience.go, internal/store/records.go, internal/store/store.go.\n\nDesign: Mirror the frozen-\u003eprobation decay (resilience.go:89-93) for the post-deadline single re-probe; do NOT build a bespoke restoration scanner — cross-relay persistence is free via GetState replay (this is why this approach is leaner than the dropped BenchUntil-on-EntryState design). Add reset_at/quota_scope fields to AgentStatusEvent and update the EventType comment to list all valid types. Add `benched` to the truncateAgentStatus allow-list so a multi-day reset is not truncated away.\n\nAcceptance: Unit tests: GetState returns StateBenched before reset_at and StateActive (one re-probe) after; a `benched` event survives truncation. `go build ./...` and `go test ./internal/relay/... ./internal/store/...` green. Do not tick tasks.md boxes.",
       "assignee": "SENIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 851968,
       "createdAt": "2026-06-09T07:26:46.948274124Z",
-      "updatedAt": "2026-06-09T07:26:46.948274124Z",
-      "completedAt": null
+      "updatedAt": "2026-06-10T10:51:06.01057746Z",
+      "completedAt": "2026-06-10T10:51:06.01057746Z"
     },
     {
       "id": "rall-0f26",
