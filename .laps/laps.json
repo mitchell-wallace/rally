@@ -182,11 +182,11 @@
       "title": "Show categorised failures and carry finalization guidance on incomplete retries",
       "description": "Context: phase 8 (tasks 8.1-8.4). The incompleteRetryGuidance constant is at runner.go:151; the laps-backed operator pause/resume path is at runner.go:1004-1006.\n\nOutcome: The footer and the collapsed retry line show the accurate category with reset/wait detail; TryRecord (tries.jsonl) gains a Category field storing the stable FailureCategory separately from the human-readable FailReason display string; and incomplete_finalization retries include finalization guidance in the resumed prompt.\n\nFiles \u0026 scope: the footer/retry-line display code, internal/store TryRecord, and the runner.go resume path (including runner.go:1004-1006).\n\nDesign: Display examples: 'usage limit, resets in 123h50m', 'rate limit, waiting 2m', 'invalid model'. Verify the existing incompleteRetryGuidance constant (runner.go:151) is adequate for incomplete_finalization; update it if needed, then include it in the resumed prompt on incomplete_finalization retries, including the laps-backed operator pause/resume at runner.go:1004-1006.\n\nAcceptance: Tests: a genuine incomplete retry receives finalization guidance; the persisted record carries both Category and the display reason. `go test ./...` green for touched packages. Do not tick tasks.md boxes.",
       "assignee": "JUNIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 1048576,
       "createdAt": "2026-06-09T06:45:39.168308428Z",
-      "updatedAt": "2026-06-09T06:45:39.168308428Z",
-      "completedAt": null
+      "updatedAt": "2026-06-10T11:45:54.498409525Z",
+      "completedAt": "2026-06-10T11:45:54.498409525Z"
     },
     {
       "id": "rall-2eb6",
