@@ -649,6 +649,59 @@ func TestAgentStatusTruncationPreservesProbationTimestamps(t *testing.T) {
 	}
 }
 
+func TestAgentStatusTruncationPreservesBenchedEvent(t *testing.T) {
+	_, store := setupTempStore(t)
+
+	benchedAt := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	resetAt := benchedAt.Add(72 * time.Hour)
+	_ = store.AppendAgentStatus(AgentStatusEvent{
+		AgentType:  "claude",
+		Model:      "opus",
+		EventType:  "benched",
+		Timestamp:  benchedAt.Format(time.RFC3339),
+		ResetAt:    resetAt.Format(time.RFC3339),
+		QuotaScope: "claude",
+		RelayID:    1,
+	})
+
+	for i := 0; i < agentStatusWindowSize+10; i++ {
+		_ = store.AppendAgentStatus(AgentStatusEvent{
+			AgentType: "codex",
+			Model:     "",
+			EventType: "paused",
+			Timestamp: time.Now().Add(time.Duration(i) * time.Second).Format(time.RFC3339),
+			RelayID:   1,
+		})
+	}
+
+	events, err := store.GetAgentStatus("claude", "opus")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(events) == 0 {
+		t.Fatal("expected benched event to survive truncation (multi-day reset must not be dropped)")
+	}
+
+	foundSummary := false
+	for _, e := range events {
+		if e.EventType == "benched" && e.Reason == "truncation summary" {
+			foundSummary = true
+			if e.Timestamp != benchedAt.Format(time.RFC3339) {
+				t.Fatalf("expected preserved timestamp %q, got %q", benchedAt.Format(time.RFC3339), e.Timestamp)
+			}
+			if e.ResetAt != resetAt.Format(time.RFC3339) {
+				t.Fatalf("expected preserved reset_at %q, got %q", resetAt.Format(time.RFC3339), e.ResetAt)
+			}
+			if e.QuotaScope != "claude" {
+				t.Fatalf("expected preserved quota_scope %q, got %q", "claude", e.QuotaScope)
+			}
+		}
+	}
+	if !foundSummary {
+		t.Fatal("expected truncation summary event for benched agent")
+	}
+}
+
 func TestTryCommitHistory(t *testing.T) {
 	dir := t.TempDir()
 	s, err := NewStore(dir)

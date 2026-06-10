@@ -15,6 +15,10 @@ const (
 	StatePaused    AgentState = "paused"
 	StateFrozen    AgentState = "frozen"
 	StateProbation AgentState = "probation"
+	// StateBenched marks an agent sidelined until a usage-limit reset deadline.
+	// It reuses the pause pipeline rather than a parallel state axis; GetState
+	// surfaces it as active for a single re-probe once the deadline passes.
+	StateBenched AgentState = "benched"
 )
 
 // ResilienceKey identifies a specific harness+model pair for resilience tracking.
@@ -63,6 +67,7 @@ func (r *Resilience) GetState(key ResilienceKey) (AgentState, time.Time) {
 	}
 	var state AgentState = StateActive
 	var since time.Time
+	var resetAt time.Time
 	for _, e := range events {
 		t, err := time.Parse(time.RFC3339, e.Timestamp)
 		if err != nil {
@@ -78,6 +83,10 @@ func (r *Resilience) GetState(key ResilienceKey) (AgentState, time.Time) {
 		case "probation":
 			state = StateProbation
 			since = t
+		case "benched":
+			state = StateBenched
+			since = t
+			resetAt, _ = time.Parse(time.RFC3339, e.ResetAt)
 		case "active", "unfrozen":
 			state = StateActive
 			since = t
@@ -89,6 +98,17 @@ func (r *Resilience) GetState(key ResilienceKey) (AgentState, time.Time) {
 	if state == StateFrozen && r.FreezeDuration > 0 && !since.IsZero() {
 		if !r.NowFunc().Before(since.Add(r.FreezeDuration)) {
 			state = StateProbation
+		}
+	}
+	// Pure-read bench decay: once a benched agent's reset deadline passes,
+	// surface it as active so it is re-probed exactly once. The on-disk event
+	// log is untouched; if the re-probe fails, BenchAgent records a fresh
+	// deadline, otherwise an active/success event keeps it active. This mirrors
+	// the frozen->probation decay above and makes cross-relay persistence free
+	// via replay, avoiding a bespoke restoration scanner.
+	if state == StateBenched && !resetAt.IsZero() {
+		if !r.NowFunc().Before(resetAt) {
+			state = StateActive
 		}
 	}
 	return state, since
@@ -225,6 +245,25 @@ func (r *Resilience) FreezeAgent(key ResilienceKey, relayID int, reason string) 
 		Timestamp: r.NowFunc().UTC().Format(time.RFC3339),
 		RelayID:   relayID,
 		Reason:    reason,
+	})
+}
+
+// BenchAgent persists a benched event sidelining the agent until resetAt, the
+// usage-limit reset deadline. scope identifies the exhausted quota bucket (see
+// routing.QuotaScope). Unlike FreezeAgent it always appends: a re-probe after
+// the deadline that hits the limit again records a fresh deadline. GetState
+// replays these events, so the bench survives across relays without a separate
+// restoration scanner.
+func (r *Resilience) BenchAgent(key ResilienceKey, resetAt time.Time, scope string, relayID int) error {
+	return r.Store.AppendAgentStatus(store.AgentStatusEvent{
+		AgentType:  key.Harness,
+		Model:      key.Model,
+		EventType:  "benched",
+		Timestamp:  r.NowFunc().UTC().Format(time.RFC3339),
+		RelayID:    relayID,
+		ResetAt:    resetAt.UTC().Format(time.RFC3339),
+		QuotaScope: scope,
+		Reason:     "usage limit reached",
 	})
 }
 

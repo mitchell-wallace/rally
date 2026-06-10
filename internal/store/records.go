@@ -62,8 +62,15 @@ type RelayRecord struct {
 type AgentStatusEvent struct {
 	AgentType string `json:"agent_type"`
 	Model     string `json:"model,omitempty"`
-	EventType string `json:"event_type"` // paused, unfrozen, frozen, active
+	// EventType is one of: paused, retry_failed, frozen, probation, benched,
+	// active, unfrozen.
+	EventType string `json:"event_type"`
 	Timestamp string `json:"timestamp"`
 	RelayID   int    `json:"relay_id,omitempty"`
 	Reason    string `json:"reason,omitempty"`
+	// ResetAt and QuotaScope are set on benched events: ResetAt is the RFC3339
+	// deadline after which the agent is re-probed, and QuotaScope identifies the
+	// usage-limit quota bucket that was exhausted.
+	ResetAt    string `json:"reset_at,omitempty"`
+	QuotaScope string `json:"quota_scope,omitempty"`
 }

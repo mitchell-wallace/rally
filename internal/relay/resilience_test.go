@@ -590,6 +590,96 @@ func TestResilience_ResilienceKey_String(t *testing.T) {
 	}
 }
 
+func TestResilience_BenchAgent_WritesBenchedEvent(t *testing.T) {
+	s := newResilienceTestStore(t)
+	now := time.Now()
+	r := testResilience(s, now)
+	k := key("claude", "opus")
+	resetAt := now.Add(5 * time.Hour)
+
+	if err := r.BenchAgent(k, resetAt, "claude", 7); err != nil {
+		t.Fatal(err)
+	}
+
+	events, err := s.GetAgentStatus(k.Harness, k.Model)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(events) != 1 {
+		t.Fatalf("expected 1 event, got %d", len(events))
+	}
+	e := events[0]
+	if e.EventType != "benched" {
+		t.Fatalf("expected event type benched, got %s", e.EventType)
+	}
+	if e.QuotaScope != "claude" {
+		t.Fatalf("expected quota_scope claude, got %q", e.QuotaScope)
+	}
+	if e.RelayID != 7 {
+		t.Fatalf("expected relay_id 7, got %d", e.RelayID)
+	}
+	gotReset, perr := time.Parse(time.RFC3339, e.ResetAt)
+	if perr != nil {
+		t.Fatalf("reset_at not RFC3339: %v", perr)
+	}
+	if !gotReset.Equal(resetAt.UTC().Truncate(time.Second)) {
+		t.Fatalf("expected reset_at %v, got %v", resetAt.UTC().Truncate(time.Second), gotReset)
+	}
+}
+
+func TestResilience_GetState_BenchedBeforeResetDeadline(t *testing.T) {
+	s := newResilienceTestStore(t)
+	now := time.Now()
+	r := testResilience(s, now)
+	k := key("claude", "opus")
+
+	// Reset is in the future: agent stays benched.
+	if err := r.BenchAgent(k, now.Add(3*time.Hour), "claude", 1); err != nil {
+		t.Fatal(err)
+	}
+
+	st, _ := r.GetState(k)
+	if st != StateBenched {
+		t.Fatalf("expected StateBenched before reset deadline, got %s", st)
+	}
+}
+
+func TestResilience_GetState_BenchedDecaysToActiveAfterReset(t *testing.T) {
+	s := newResilienceTestStore(t)
+	benchedAt := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	resetAt := benchedAt.Add(2 * time.Hour)
+	// now is past the reset deadline.
+	now := resetAt.Add(time.Minute)
+	r := testResilience(s, now)
+	k := key("claude", "opus")
+
+	if err := s.AppendAgentStatus(store.AgentStatusEvent{
+		AgentType: k.Harness,
+		Model:     k.Model,
+		EventType: "benched",
+		Timestamp: benchedAt.UTC().Format(time.RFC3339),
+		ResetAt:   resetAt.UTC().Format(time.RFC3339),
+		RelayID:   1,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Single re-probe: GetState surfaces the key as active once the deadline
+	// passes. The on-disk log still holds only the benched event.
+	st, _ := r.GetState(k)
+	if st != StateActive {
+		t.Fatalf("expected StateActive (re-probe) after reset deadline, got %s", st)
+	}
+
+	events, err := s.GetAgentStatus(k.Harness, k.Model)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(events) != 1 || events[0].EventType != "benched" {
+		t.Fatalf("expected on-disk log untouched (1 benched event), got %+v", events)
+	}
+}
+
 func TestResilience_GetState_FrozenDecaysToProbation(t *testing.T) {
 	s := newResilienceTestStore(t)
 	now := time.Now()

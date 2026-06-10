@@ -106,9 +106,10 @@ func (s *Store) AppendAgentStatus(e AgentStatusEvent) error {
 }
 
 // truncateAgentStatus truncates the agent status log while preserving summary
-// events for any active frozen or probation entries that would otherwise be
-// lost. This ensures that after truncation, the resilience state machine can
-// still correctly identify agents that are frozen or in probation.
+// events for any active frozen, probation, or benched entries that would
+// otherwise be lost. This ensures that after truncation, the resilience state
+// machine can still correctly identify agents that are frozen, in probation, or
+// benched (a multi-day usage-limit reset must not be truncated away).
 func (s *Store) truncateAgentStatus(path string) error {
 	events := s.cache.AgentStatus
 	if len(events) <= agentStatusWindowSize {
@@ -125,7 +126,7 @@ func (s *Store) truncateAgentStatus(path string) error {
 	summaryEvents := make(map[agentKey]AgentStatusEvent)
 
 	for _, e := range dropped {
-		if e.EventType != "frozen" && e.EventType != "probation" {
+		if e.EventType != "frozen" && e.EventType != "probation" && e.EventType != "benched" {
 			continue
 		}
 		key := agentKey{AgentType: e.AgentType, Model: e.Model}
@@ -141,11 +142,13 @@ func (s *Store) truncateAgentStatus(path string) error {
 	var summaries []AgentStatusEvent
 	for _, e := range summaryEvents {
 		summaries = append(summaries, AgentStatusEvent{
-			AgentType: e.AgentType,
-			Model:     e.Model,
-			EventType: e.EventType,
-			Timestamp: e.Timestamp,
-			Reason:    "truncation summary",
+			AgentType:  e.AgentType,
+			Model:      e.Model,
+			EventType:  e.EventType,
+			Timestamp:  e.Timestamp,
+			ResetAt:    e.ResetAt,
+			QuotaScope: e.QuotaScope,
+			Reason:     "truncation summary",
 		})
 	}
 
