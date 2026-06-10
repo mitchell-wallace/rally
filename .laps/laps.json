@@ -94,11 +94,11 @@
       "title": "Extract shared dirty-path exclusion helper and add integration coverage",
       "description": "Context: phase 4 (tasks 4.1-4.3). The .rally/ and .laps/ skip logic is duplicated at git.go:82, git.go:112, and in filesChangedList at runner.go:1717-1718. The 4.3 tests are integration tests that depend on the reordered classification and evidence parsers from earlier laps.\n\nOutcome: A single gitx.IsRallyOwnedOrTransientPath helper replaces the three duplicated skip sites; .claude/settings.local.json is excluded; a try whose only dirty paths are excluded has no meaningful task change.\n\nFiles \u0026 scope: internal/gitx/git.go for the helper, and its three call sites (git.go:82, git.go:112, runner.go:1717-1718).\n\nDesign: Replace the duplicated .rally/.laps skips with the shared helper. Add known harness-local transient paths starting conservatively with .claude/settings.local.json (the open question notes this set grows with evidence).\n\nAcceptance: Integration tests: Claude usage_limit + only .claude/settings.local.json dirty -\u003e usage_limit (not incomplete); Antigravity RESOURCE_EXHAUSTED + zero meaningful changes -\u003e usage_limit (not incomplete); src/foo.go dirty without finalization -\u003e incomplete_finalization; Claude invalid_model + only settings dirty -\u003e invalid_model. `go test ./...` green for touched packages. Do not tick tasks.md boxes.",
       "assignee": "JUNIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 458752,
       "createdAt": "2026-06-09T06:45:39.168285043Z",
-      "updatedAt": "2026-06-09T06:45:39.168285043Z",
-      "completedAt": null
+      "updatedAt": "2026-06-10T10:25:11.198040977Z",
+      "completedAt": "2026-06-10T10:25:11.198040977Z"
     },
     {
       "id": "rall-6ced",
