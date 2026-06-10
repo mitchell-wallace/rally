@@ -54,6 +54,15 @@ type StrategyDecision struct {
 	Cooldown     time.Duration
 	Reason       string
 	FailureClass FailureClass
+	// Category is the stable FailureCategory taxonomy value. May be empty
+	// for decisions produced by legacy code paths that have not yet been
+	// updated to populate it.
+	Category FailureCategory
+	// DisplayLabel is a short, human-readable label for the failure,
+	// distinct from Reason (which is typically the pattern name).
+	// Carries no harness name unless the category is intentionally
+	// harness-specific.
+	DisplayLabel string
 }
 
 type Pattern struct {
