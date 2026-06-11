@@ -102,11 +102,11 @@ func TestVersionWarningCompatibleLaps(t *testing.T) {
 	}
 }
 
-func TestVersionWarningRequiresLaps070(t *testing.T) {
+func TestVersionWarningRequiresLaps081(t *testing.T) {
 	ws := withLapsWorkspace(t)
-	writeFakeLaps(t, "0.6.1")
-	if w := VersionWarning(ws); !strings.Contains(w, "required v0.7.0") {
-		t.Fatalf("expected v0.7.0 requirement warning, got %q", w)
+	writeFakeLaps(t, "0.8.0")
+	if w := VersionWarning(ws); !strings.Contains(w, "required v0.8.1") {
+		t.Fatalf("expected v0.8.1 requirement warning, got %q", w)
 	}
 }
 

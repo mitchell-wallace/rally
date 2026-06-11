@@ -5,9 +5,12 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/mitchell-wallace/rally/internal/agent"
+	"github.com/mitchell-wallace/rally/internal/laps"
+	"github.com/mitchell-wallace/rally/internal/progress"
 	"github.com/mitchell-wallace/rally/internal/store"
 	"github.com/mitchell-wallace/rally/internal/testutil"
 )
@@ -35,6 +38,16 @@ func TestRunnerUsesRealLapsHeadTask(t *testing.T) {
 			receivedTaskName = opts.TaskName
 			receivedRequirements = opts.TaskRequirements
 			receivedTaskPrompt = opts.TaskPrompt
+			claimedID, err := (&laps.Adapter{WorkspaceDir: workspaceDir}).ReadClaim()
+			if err != nil {
+				return nil, err
+			}
+			if claimedID == "" {
+				return nil, fmt.Errorf("expected claimed lap")
+			}
+			if err := progress.RecordLap(workspaceDir, claimedID); err != nil {
+				return nil, err
+			}
 			changeCounter++
 			f, _ := os.OpenFile(filepath.Join(workspaceDir, "changes.txt"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
 			fmt.Fprintf(f, "change %d\n", changeCounter)
@@ -63,7 +76,10 @@ func TestRunnerUsesRealLapsHeadTask(t *testing.T) {
 	if receivedTaskPrompt != "Add login and session handling." {
 		t.Errorf("task prompt = %q, want %q", receivedTaskPrompt, "Add login and session handling.")
 	}
-	if receivedRequirements != "Assignee: alice" {
-		t.Errorf("task requirements = %q, want %q", receivedRequirements, "Assignee: alice")
+	if !strings.Contains(receivedRequirements, "Lap ID: ") {
+		t.Errorf("task requirements = %q, want Lap ID", receivedRequirements)
+	}
+	if !strings.Contains(receivedRequirements, "Assignee: alice") {
+		t.Errorf("task requirements = %q, want Assignee: alice", receivedRequirements)
 	}
 }

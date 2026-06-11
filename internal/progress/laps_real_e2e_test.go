@@ -51,13 +51,24 @@ func TestRealLapsDoneWrapupFlow(t *testing.T) {
 		"--assignee", "alice",
 	)
 
+	claimOutput := testutil.RunCommand(t, workspaceDir, "laps", "claim")
+	if !strings.Contains(claimOutput, "Implement auth") {
+		t.Fatalf("expected claim output to include lap title, got %q", claimOutput)
+	}
+	claimedID, err := (&laps.Adapter{WorkspaceDir: workspaceDir}).ReadClaim()
+	if err != nil {
+		t.Fatalf("ReadClaim error: %v", err)
+	}
+	if claimedID == "" {
+		t.Fatal("expected laps claim to write .laps/claim")
+	}
+
 	doneOutput := testutil.RunCommand(t, workspaceDir, "laps", "done")
 	if !strings.Contains(doneOutput, "laps wrapup --summary") {
 		t.Fatalf("expected wrapup instructions in laps done output, got %q", doneOutput)
 	}
-	doneID := firstNonEmptyLine(doneOutput)
-	if doneID == "" || strings.HasPrefix(doneID, "Marked done.") {
-		t.Fatalf("expected laps done to print a lap ID before passback, got %q", doneOutput)
+	if first := firstNonEmptyLine(doneOutput); first != "Implement auth" {
+		t.Fatalf("expected laps done to print completed lap title first, got %q in %q", first, doneOutput)
 	}
 
 	wrapupOutput := testutil.RunCommand(t, workspaceDir, "laps", "wrapup",
@@ -83,8 +94,8 @@ func TestRealLapsDoneWrapupFlow(t *testing.T) {
 		t.Errorf("Summary = %q, want Implemented auth", entry.Summary)
 	}
 	lapsCompleted, ok := entry.LapsCompleted.([]interface{})
-	if !ok || len(lapsCompleted) != 1 || lapsCompleted[0] != doneID {
-		t.Errorf("LapsCompleted = %v, want [%s]", entry.LapsCompleted, doneID)
+	if !ok || len(lapsCompleted) != 1 || lapsCompleted[0] != claimedID {
+		t.Errorf("LapsCompleted = %v, want [%s]", entry.LapsCompleted, claimedID)
 	}
 	if entry.Handoff != nil {
 		t.Errorf("expected no handoff entry, got %+v", entry.Handoff)

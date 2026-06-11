@@ -204,7 +204,7 @@ func (r *Runner) agentStateName(picked agent.ResolvedAgent) string {
 }
 
 var headPullLap = func(ctx context.Context, workspaceDir string) (laps.Lap, error) {
-	return (&laps.Adapter{WorkspaceDir: workspaceDir}).HeadPull(ctx)
+	return (&laps.Adapter{WorkspaceDir: workspaceDir}).ClaimHead(ctx)
 }
 
 var queueSize = func(ctx context.Context, workspaceDir string) (int, error) {
@@ -238,7 +238,7 @@ func renderRunFooter(out io.Writer, opts style.FooterOptions) {
 }
 
 const builtInDefaultFreeRunPrompt = "Continue the relay run. Review the current state of the codebase and continue making progress on the project."
-const incompleteRetryGuidance = "The last run was incomplete. Check any current git changes, finish anything not done, verify correctness, commit when good, then run `laps done`."
+const incompleteRetryGuidance = "The last run was incomplete. Check any current git changes, finish anything not done, verify correctness, commit when good, then run `laps done` for the claimed lap."
 
 func formatCategorizedDisplay(cat reliability.FailureCategory, cooldown time.Duration, evidence *reliability.FailureEvidence) string {
 	label := reliability.CategoryDisplayLabel(cat)
@@ -1281,8 +1281,8 @@ attemptLoop:
 
 		var lapsStarted, lapsTotal int
 		if task.IsLapsBacked {
-			// task.LapsRemaining is the current queue size including the head
-			// (HeadPull reads but does not dequeue), so total = completed + queue.
+			// task.LapsRemaining is the current queue size including the claimed
+			// head (claim pins but does not dequeue), so total = completed + queue.
 			lapsStarted = runIndex + 1
 			lapsTotal = runIndex + task.LapsRemaining
 		}
@@ -1853,7 +1853,7 @@ func (r *Runner) resolveRunTask(ctx context.Context) (runTask, error) {
 
 	lap, err := headPullLap(ctx, r.cfg.WorkspaceDir)
 	if err != nil {
-		return runTask{}, fmt.Errorf("pull head lap: %w", err)
+		return runTask{}, fmt.Errorf("claim head lap: %w", err)
 	}
 	if lap == laps.NoLap {
 		return runTask{}, errQueueEmpty

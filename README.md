@@ -711,9 +711,10 @@ rally update
 
 If the companion `laps` binary is installed next to `rally` (the default for new installations), `rally update` will automatically upgrade `laps` to its corresponding compatible release as well.
 
-Current Rally source and its checked-in agent workflows support `laps v0.7.0`
-or newer. In particular, `prepare-laps` uses the batch JSON task-creation
-interface introduced in `v0.7.0`. Run `rally update` to install or upgrade the
+Current Rally source and its checked-in agent workflows support `laps v0.8.1`
+or newer. Rally relies on the claim file introduced in the `v0.8.x` line so a
+bare `laps done` completes the lap Rally assigned, even when follow-up laps are
+added to the head of the queue. Run `rally update` to install or upgrade the
 bundled companion.
 
 ## Architecture

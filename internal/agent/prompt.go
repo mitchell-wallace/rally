@@ -79,9 +79,11 @@ func BuildPrompt(opts RunOptions) string {
 
 	if opts.LapsEnabled {
 		fmt.Fprintf(&b, "## Run Exit Conditions\n")
+		fmt.Fprintf(&b, "Laps is the task tracker for this run. Rally has already claimed the current lap for you, so a bare `laps done` will mark that claimed lap complete.\n\n")
 		fmt.Fprintf(&b, "These are shell commands. Invoke them via your shell/bash tool — do NOT echo the words \"laps done\" or \"laps handoff\" as plain text in your response. The lap is only recorded when the command actually executes and the hook fires (you will see a follow-up instruction printed to stdout).\n\n")
 		fmt.Fprintf(&b, "When you have finished the current lap, run this shell command:\n  laps done\n\n")
 		fmt.Fprintf(&b, "If you are blocked and cannot proceed, run this shell command:\n  laps handoff\n\n")
+		fmt.Fprintf(&b, "If laps reports that the wrong lap was claimed or completed, use the undo command it prints (`laps claim undo` or `laps done undo`) before continuing.\n\n")
 		fmt.Fprintf(&b, "Follow any further instructions that command prints before ending the turn.\n\n")
 		fmt.Fprintf(&b, "Do not exit the run without actually executing one of the above as a shell command.\n")
 	} else {

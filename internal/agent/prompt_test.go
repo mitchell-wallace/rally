@@ -22,6 +22,12 @@ func TestBuildPrompt_LapsEnabled(t *testing.T) {
 	if !strings.Contains(p, "laps wrapup") {
 		t.Error("expected prompt to contain 'laps wrapup'")
 	}
+	if !strings.Contains(p, "already claimed") {
+		t.Error("expected prompt to explain that Rally already claimed the lap")
+	}
+	if !strings.Contains(p, "laps done undo") {
+		t.Error("expected prompt to mention laps done undo recovery")
+	}
 	if strings.Contains(p, "rally progress") {
 		t.Error("expected prompt NOT to contain 'rally progress'")
 	}

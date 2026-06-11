@@ -22,7 +22,7 @@ The system SHALL provide a `rally update` command that upgrades both the `rally`
 - **THEN** the command SHALL upgrade both `rally` and `laps` to their latest compatible versions
 
 ### Requirement: Minimum laps version check
-On startup the system SHALL check the installed laps version against the minimum required by Rally's companion contract, including installed hooks and checked-in agent workflows, and SHALL warn (without hard-failing) when laps is too old. The minimum supported release for current Rally source SHALL be laps v0.7.0.
+On startup the system SHALL check the installed laps version against the minimum required by Rally's companion contract, including installed hooks and checked-in agent workflows, and SHALL warn (without hard-failing) when laps is too old. The minimum supported release for current Rally source SHALL be laps v0.8.1.
 
 #### Scenario: Outdated laps warns
 - **WHEN** rally starts and detects a laps version below the minimum

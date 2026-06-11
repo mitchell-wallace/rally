@@ -73,8 +73,9 @@ func TestGeneralSnippets(t *testing.T) {
 	if !ok || strings.TrimSpace(fin) == "" {
 		t.Fatal("General(finalize): expected non-empty embedded snippet")
 	}
-	// Finalize guidance must cover commit, laps done/handoff, and laps wrapup.
-	for _, want := range []string{"Commit", "laps done", "laps handoff", "laps wrapup"} {
+	// Finalize guidance must cover commit, claimed-lap completion, handoff,
+	// wrapup, and undo recovery.
+	for _, want := range []string{"Commit", "claimed", "laps done", "laps handoff", "laps wrapup", "laps done undo"} {
 		if !strings.Contains(fin, want) {
 			t.Errorf("finalize.md missing %q guidance", want)
 		}

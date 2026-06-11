@@ -41,6 +41,11 @@ func TestParseLapOutput(t *testing.T) {
 			want:  Lap{Title: "Title", Description: "", Assignee: "bob"},
 		},
 		{
+			name:  "claim output with undo hint",
+			input: "Title\nAssignee: bob\n\nDescription\n\n-----\nNot the lap you intended to claim? Undo with 'laps claim undo'\n",
+			want:  Lap{Title: "Title", Description: "Description", Assignee: "bob"},
+		},
+		{
 			name:    "too short",
 			input:   "Title\n",
 			wantErr: true,
@@ -116,7 +121,23 @@ func TestAdapterHeadPull_RealLaps(t *testing.T) {
 		t.Errorf("assignee = %q, want empty", lap.Assignee)
 	}
 
-	// Mark done → no tasks left.
+	claimed, err := adapter.ClaimHead(ctx)
+	if err != nil {
+		t.Fatalf("ClaimHead error: %v", err)
+	}
+	if claimed.ID == "" {
+		t.Fatalf("claimed ID is empty")
+	}
+	if claimed.Title != "Test" {
+		t.Errorf("claimed title = %q, want Test", claimed.Title)
+	}
+	if claimFileID, err := adapter.ReadClaim(); err != nil {
+		t.Fatalf("ReadClaim error: %v", err)
+	} else if claimFileID != claimed.ID {
+		t.Fatalf("ReadClaim = %q, want %q", claimFileID, claimed.ID)
+	}
+
+	// Mark done → no tasks left. Bare done works because ClaimHead wrote .laps/claim.
 	doneCmd := exec.CommandContext(ctx, "laps", "done")
 	doneCmd.Dir = tmp
 	if out, err := doneCmd.CombinedOutput(); err != nil {
@@ -129,6 +150,30 @@ func TestAdapterHeadPull_RealLaps(t *testing.T) {
 	}
 	if lap != NoLap {
 		t.Fatalf("expected NoLap after done, got %+v", lap)
+	}
+}
+
+func TestAdapterClaimHead_NoLap(t *testing.T) {
+	if _, err := exec.LookPath("laps"); err != nil {
+		t.Skip("laps binary not found on PATH")
+	}
+
+	ctx := context.Background()
+	tmp := t.TempDir()
+
+	_ = os.MkdirAll(filepath.Join(tmp, ".laps"), 0o755)
+	initCmd := exec.CommandContext(ctx, "laps", "init")
+	initCmd.Dir = tmp
+	if out, err := initCmd.CombinedOutput(); err != nil {
+		t.Fatalf("laps init failed: %v\noutput: %s", err, out)
+	}
+
+	lap, err := (&Adapter{WorkspaceDir: tmp}).ClaimHead(ctx)
+	if err != nil {
+		t.Fatalf("ClaimHead error: %v", err)
+	}
+	if lap != NoLap {
+		t.Fatalf("ClaimHead = %+v, want NoLap", lap)
 	}
 }
 

@@ -26,7 +26,7 @@ const latestReleaseURL = "https://api.github.com/repos/" + app.ReleaseOwner + "/
 // contract, including installed hooks and checked-in agent workflows. Bump this
 // when Rally starts relying on a newer laps CLI feature. It is advisory: rally
 // warns but never hard-fails when the installed laps is older.
-const MinLapsVersion = "0.7.0"
+const MinLapsVersion = "0.8.1"
 
 // Tool describes a GitHub-released binary that rally knows how to install and
 // upgrade. Rally ships laps as a first-class companion, so the install/upgrade
