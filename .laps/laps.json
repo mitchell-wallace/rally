@@ -50,11 +50,11 @@
       "title": "Wire rally environment context to capture sites (task 1.3)",
       "description": "EnvironmentContext() exists and FailureEvent supports Contexts, but EnvironmentContext is never called from runner.go. Wire the rally context block (version, go_os, go_arch, term) into: relay span via SetData, relay stall CaptureFailure, try-failure CaptureFailure, and unfinalized-agent CaptureFailure. Use the existing FailureEvent.Contexts field, not flattening into tags. The previous follow-up lap work-b016 was marked done but the work was not actually committed — nothing changed in runner.go.",
       "assignee": "junior",
-      "isDone": false,
+      "isDone": true,
       "order": 196608,
       "createdAt": "2026-06-11T05:10:51.159124428Z",
-      "updatedAt": "2026-06-11T05:10:51.159124428Z",
-      "completedAt": null
+      "updatedAt": "2026-06-11T05:11:10.796170816Z",
+      "completedAt": "2026-06-11T05:11:10.796170816Z"
     },
     {
       "id": "rall-256b",
