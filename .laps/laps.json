@@ -35,6 +35,17 @@
       "completedAt": "2026-06-11T05:05:57.794134165Z"
     },
     {
+      "id": "work-b016",
+      "title": "Wire rally environment context to capture sites (task 1.3)",
+      "description": "EnvironmentContext() exists and FailureEvent supports Contexts, but EnvironmentContext is never called from runner.go. Wire the rally context block (version, go_os, go_arch, term) into: relay span via SetData, relay stall CaptureFailure, try-failure CaptureFailure, and unfinalized-agent CaptureFailure. Use the existing FailureEvent.Contexts field, not flattening into tags.",
+      "assignee": "junior",
+      "isDone": true,
+      "order": 196608,
+      "createdAt": "2026-06-11T05:08:49.44382569Z",
+      "updatedAt": "2026-06-11T05:08:52.932718709Z",
+      "completedAt": "2026-06-11T05:08:52.932718709Z"
+    },
+    {
       "id": "rall-256b",
       "title": "Verify telemetry foundation, DSN activation, and machine identity",
       "description": "Use the openspec-verify-change skill against enrich-failure-telemetry, then focus on OpenSpec tasks 1.1, 1.2, 1.4, 1.5, 2.1-2.5, and 3.1-3.4.\n\nBefore diffing, identify the intended merge target from the user, PR metadata, repo docs, branch config, or recent history; use that target in diff commands. Identify the first lap/try in this batch and treat older branch work as pre-existing unless the user asks to include it. Do not rewrite git history.\n\nTrace the actual implementation, not just tests: confirm CaptureFailure now separates tags from contexts; environment context contains version/os/arch/term and no host identity; Sentry server_name is neutralized; DSN precedence matches the spec exactly including kill switch behavior; release ldflags preserve Version and inject DefaultSentryDSN; machine-id creation happens only for active telemetry and falls back ephemerally on storage failure.\n\nAcceptance: Check off only the tasks in this slice that are verified correct and sufficiently thorough. Run the targeted tests for telemetry/cmd plus `go build ./...`. Fix only tiny safe one-liners inline; larger gaps become focused head laps with `laps add head`.",
