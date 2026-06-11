@@ -105,11 +105,11 @@
       "title": "Add failure-state telemetry event helpers",
       "description": "Context: OpenSpec tasks 6.1, 6.2, 6.7, and helper-level parts of 6.8. The previous change improve-error-categorisation has landed and exposes TryResult.Evidence, FailureCategory, quota scope/reset fields, and active/probation/frozen/benched vocabulary.\n\nOutcome: telemetry has a small event/state helper or input shape that can attach attempt, max_attempts, failure_category, agent_state, quota_scope, reset_at/reset_after, and a `failure_evidence` context for limit categories without re-classifying failures.\n\nFiles \u0026 scope: internal/telemetry/ and minimal type plumbing needed by relay call sites. Do not wire every runner capture site in this lap unless it is needed to keep tests compiling; the next lap owns runner integration.\n\nDesign: Read category and reset data from upstream FailureEvidence/StrategyDecision data supplied by the caller. For usage_limit, short_rate_limit, and provider_overloaded, attach bounded RawSignal and Message as a context block, not tags. For non-limit categories, omit raw signal context entirely. Run all context strings through the scrubber, including home path collapse. Do not include prompt/transcript-looking fields.\n\nAcceptance: Unit tests cover tag names/values for attempt/budget/category/state/reset fields, failure_evidence context presence for limit categories, absence for non-limit categories, scrubbed home paths inside raw signal/message, and no prompt/transcript payload attached. `go test ./internal/telemetry/...` is green. Do not check off OpenSpec tasks.md boxes.",
       "assignee": "SENIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 524288,
       "createdAt": "2026-06-11T03:44:39.708833561Z",
-      "updatedAt": "2026-06-11T03:44:39.708833561Z",
-      "completedAt": null
+      "updatedAt": "2026-06-11T05:31:47.3222651Z",
+      "completedAt": "2026-06-11T05:31:47.3222651Z"
     },
     {
       "id": "rall-5fe8",
