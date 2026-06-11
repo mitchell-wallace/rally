@@ -29,6 +29,12 @@ import (
 
 var Version = "dev"
 
+// DefaultSentryDSN is the baked-in Sentry DSN for release binaries.
+// GoReleaser injects it via -X main.DefaultSentryDSN=... at build time.
+// Dev builds (go build) leave it empty, so telemetry only activates when
+// explicitly configured via env or config file.
+var DefaultSentryDSN = ""
+
 // activeTelemetry holds the process-wide telemetry sink initialised in main.
 // It defaults to a no-op so any command that runs before/without init still
 // has a safe sink. The relay runner reads it via SetTelemetry.
@@ -90,14 +96,15 @@ func resolveWorkspaceDir() (string, error) {
 func loadTelemetryConfig() telemetry.Config {
 	wsDir, err := resolveWorkspaceDir()
 	if err != nil {
-		return telemetry.Config{}
+		return telemetry.Config{DefaultDSN: DefaultSentryDSN}
 	}
 	cfg, err := config.LoadV2(wsDir)
 	if err != nil {
-		return telemetry.Config{}
+		return telemetry.Config{DefaultDSN: DefaultSentryDSN}
 	}
 	return telemetry.Config{
-		SentryDSN: cfg.Telemetry.SentryDSN,
+		SentryDSN:   cfg.Telemetry.SentryDSN,
+		DefaultDSN:  DefaultSentryDSN,
 	}
 }
 

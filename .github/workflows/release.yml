@@ -43,3 +43,4 @@ jobs:
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RALLY_SENTRY_DSN: ${{ secrets.RALLY_SENTRY_DSN }}

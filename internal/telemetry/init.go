@@ -19,7 +19,8 @@ const (
 
 // Config holds the telemetry configuration from [telemetry] in config.toml.
 type Config struct {
-	SentryDSN string
+	SentryDSN  string
+	DefaultDSN string
 }
 
 // Init initialises the telemetry sink. It returns the active Sink and a
@@ -28,9 +29,10 @@ type Config struct {
 //
 // Precedence:
 //  1. RALLY_TELEMETRY=0 → disabled (NoopSink), regardless of DSN.
-//  2. SENTRY_DSN env var → overrides config.toml sentry_dsn.
-//  3. Config SentryDSN → used when env var is empty.
-//  4. No DSN → disabled (NoopSink).
+//  2. SENTRY_DSN env var → overrides config.toml sentry_dsn and default.
+//  3. Config SentryDSN → overrides the baked-in default.
+//  4. Config DefaultDSN → baked-in default (injected by GoReleaser).
+//  5. No DSN → disabled (NoopSink).
 //
 // Errors from Sentry SDK initialisation are swallowed (telemetry is best-
 // effort and must never prevent the CLI from running).
@@ -42,10 +44,13 @@ func Init(cfg Config) (Sink, func()) {
 		return NoopSink{}, noop
 	}
 
-	// DSN resolution: env overrides config.
+	// DSN resolution: env overrides config, config overrides default.
 	dsn := os.Getenv(envSentryDSN)
 	if dsn == "" {
 		dsn = cfg.SentryDSN
+	}
+	if dsn == "" {
+		dsn = cfg.DefaultDSN
 	}
 	if dsn == "" {
 		return NoopSink{}, noop

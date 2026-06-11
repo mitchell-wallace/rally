@@ -126,6 +126,75 @@ func TestNoopSpan_MethodsDoNotPanic(t *testing.T) {
 	span.Finish()
 }
 
+func TestInit_DefaultDSNUsedWhenEnvAndConfigEmpty(t *testing.T) {
+	t.Setenv(envKillSwitch, "")
+	t.Setenv(envSentryDSN, "")
+
+	sink, cleanup := Init(Config{DefaultDSN: "https://defkey@sentry.io/444"})
+	defer cleanup()
+
+	if _, ok := sink.(*SentrySink); !ok {
+		t.Fatalf("expected *SentrySink when DefaultDSN is set and env/config empty, got %T", sink)
+	}
+}
+
+func TestInit_ConfigDSNOverridesDefault(t *testing.T) {
+	t.Setenv(envKillSwitch, "")
+	t.Setenv(envSentryDSN, "")
+
+	sink, cleanup := Init(Config{
+		SentryDSN:  "https://cfgkey@sentry.io/555",
+		DefaultDSN: "https://defkey@sentry.io/666",
+	})
+	defer cleanup()
+
+	if _, ok := sink.(*SentrySink); !ok {
+		t.Fatalf("expected *SentrySink when config DSN overrides default, got %T", sink)
+	}
+}
+
+func TestInit_EnvDSNOverridesConfigAndDefault(t *testing.T) {
+	t.Setenv(envKillSwitch, "")
+	t.Setenv(envSentryDSN, "https://envkey@sentry.io/777")
+
+	sink, cleanup := Init(Config{
+		SentryDSN:  "https://cfgkey@sentry.io/888",
+		DefaultDSN: "https://defkey@sentry.io/999",
+	})
+	defer cleanup()
+
+	if _, ok := sink.(*SentrySink); !ok {
+		t.Fatalf("expected *SentrySink when env DSN overrides config and default, got %T", sink)
+	}
+}
+
+func TestInit_KillSwitchDisablesWithAllDSNSources(t *testing.T) {
+	t.Setenv(envKillSwitch, "0")
+	t.Setenv(envSentryDSN, "https://envkey@sentry.io/aaa")
+
+	sink, cleanup := Init(Config{
+		SentryDSN:  "https://cfgkey@sentry.io/bbb",
+		DefaultDSN: "https://defkey@sentry.io/ccc",
+	})
+	defer cleanup()
+
+	if _, ok := sink.(NoopSink); !ok {
+		t.Fatalf("expected NoopSink when RALLY_TELEMETRY=0 with all DSN sources, got %T", sink)
+	}
+}
+
+func TestInit_EmptyDefaultDSNFallsBackToNoop(t *testing.T) {
+	t.Setenv(envKillSwitch, "")
+	t.Setenv(envSentryDSN, "")
+
+	sink, cleanup := Init(Config{DefaultDSN: ""})
+	defer cleanup()
+
+	if _, ok := sink.(NoopSink); !ok {
+		t.Fatalf("expected NoopSink when all DSN sources are empty, got %T", sink)
+	}
+}
+
 // TestInit_EnvCleanup verifies that t.Setenv restores env vars properly
 // (this is a Go stdlib guarantee, but it documents our reliance on it).
 func TestInit_EnvCleanup(t *testing.T) {
