@@ -215,11 +215,11 @@
       "title": "Validate provider limit-response shapes against Sentry and update parsers/plans",
       "description": "Use the Sentry CLI (`sentry-cli`, installed on the host outside the rally container) to inspect what failure telemetry rally has already captured, and use it to validate the per-harness limit-response parsing that was written partly from memory.\n\nSteps:\n1. Check what we have: authenticate sentry-cli, list recent rally events/issues, and pull any captured failure payloads that include rate-limit / usage-limit / provider-overload output (search for categories `usage_limit`, `short_rate_limit`, `provider_overloaded`, and raw strings like \"rate_limit\", \"resets\", \"RESOURCE_EXHAUSTED\", \"usage limit\"). Note: the dedicated raw limit-signal corpus (bounded RawSignal/Message context) only lands with the `enrich-failure-telemetry` change, so today's events may carry limit shapes only in messages/log excerpts — collect whatever exists.\n2. Compare the real shapes against the assumptions encoded in `internal/reliability/claude.go` (`ParseClaudeError`): limits phrased as `rate_limit` (not \"overload\"); usage resets as a `\\dh \\dm` span or `hh:mm` clock after \"resets\"; five-hour/seven-day windows classified as usage limits with a 5h default bench (`BenchDefaultDuration`). Also spot-check `ParseCodexError` (\"Try again at h:mm AM/PM\"), `ParseGeminiError` (\"RESOURCE_EXHAUSTED\", \"Resets in \u003cdur\u003e\"), and `ParseOpencodeError` (JSON error events).\n3. Update `ParseClaudeError` (and the other parsers where evidence warrants) plus their tests in `internal/reliability/` to match the observed shapes. Keep the reset-anchored regex style so stray durations/timestamps cannot false-positive.\n4. Fold findings into `openspec/changes/improve-harness-consistency/draft.md` (the \"from-memory assumptions\" list and the parser-normalization candidate work item) so the consistency pass starts from validated data instead of memory.\n\nIf Sentry has no usable limit payloads yet, record that result in the draft too — it strengthens the case for the raw limit-signal corpus in `enrich-failure-telemetry` — and leave the parsers as-is.",
       "assignee": "senior",
-      "isDone": false,
+      "isDone": true,
       "order": 65536,
       "createdAt": "2026-06-11T00:16:04.643969251Z",
-      "updatedAt": "2026-06-11T00:16:04.643969251Z",
-      "completedAt": null
+      "updatedAt": "2026-06-11T00:34:12.18893708Z",
+      "completedAt": "2026-06-11T00:34:12.18893708Z"
     }
   ]
 }

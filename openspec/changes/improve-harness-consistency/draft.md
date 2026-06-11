@@ -26,6 +26,14 @@ This is especially visible around headless execution:
   phrased as `rate_limit` (not "overload"); usage resets appear as a
   `\dh \dm` span or an `hh:mm` clock time after "resets"; the five-hour and
   seven-day windows are usage limits (benched), not short rate limits.
+  **Validation attempt (2026-06-11): Sentry holds no rally telemetry at all.**
+  The only Sentry org reachable from the host's `sentry-cli` auth
+  (`moved-by-the-word`) contains two unrelated projects, no rally project, and
+  no rally events. Rally's telemetry init falls back to a `NoopSink` when no
+  DSN is set, and no `sentry_dsn` / `SENTRY_DSN` has ever been configured here
+  (config, env, and git history all show only the README placeholder) — so no
+  failure payloads were ever sent. The from-memory assumptions above remain
+  unvalidated, and the parsers were deliberately left as-is.
 - Summary extraction, error reporting, tool counting, session IDs, and retry
   classification should look uniform to the relay runner.
 
@@ -69,12 +77,18 @@ This is especially visible around headless execution:
 - Normalize the per-harness failure-evidence parsers against real captured
   response shapes rather than remembered ones: `enrich-failure-telemetry` adds a
   raw limit-signal corpus (bounded `RawSignal`/`Message` on limit-category
-  failures) to Sentry for exactly this purpose. Before reworking the parsers,
-  pull what is already captured (`sentry-cli` is available on the host) to
-  confirm or correct each harness's limit phrasing and reset-timing formats,
-  then move evidence population fully into the adapters
-  (per `improve-error-categorisation` design Decision 1) behind one shared
-  contract instead of four ad-hoc parser entry points.
+  failures) to Sentry for exactly this purpose. A first pull was attempted on
+  2026-06-11 and found nothing usable: no rally Sentry project exists and no
+  DSN has been configured, so zero events (limit-shaped or otherwise) have been
+  captured. This strengthens the case for `enrich-failure-telemetry` — until a
+  DSN is wired up and the raw limit-signal corpus lands, there is no captured
+  evidence to validate against, and parser normalization cannot start from
+  data. Prerequisites for this work item: configure a real `sentry_dsn` for
+  rally relays, land `enrich-failure-telemetry`, and let a few limit-category
+  failures accumulate. Then pull the corpus, confirm or correct each harness's
+  limit phrasing and reset-timing formats, and move evidence population fully
+  into the adapters (per `improve-error-categorisation` design Decision 1)
+  behind one shared contract instead of four ad-hoc parser entry points.
 - Document which behavior may be harness-specific and which behavior must be
   uniform at the runner boundary.
 - Consider a harness capability matrix for liveness probe, resume, model
