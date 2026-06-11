@@ -1,25 +1,25 @@
 ## 1. Run-environment context
 
-- [ ] 1.1 Add an environment-context builder in `internal/telemetry/` returning `version` (`internal/buildinfo`), `go_os`, `go_arch`, and `term` (`$TERM` or `"non-tty"` via `golang.org/x/term.IsTerminal(int(os.Stdout.Fd()))`)
-- [ ] 1.2 Extend the telemetry API with a structured failure/event input that carries scalar tags separately from context blocks; update `Sink`, `NoopSink`, `SentrySink`, and existing telemetry test mocks
+- [x] 1.1 Add an environment-context builder in `internal/telemetry/` returning `version` (`internal/buildinfo`), `go_os`, `go_arch`, and `term` (`$TERM` or `"non-tty"` via `golang.org/x/term.IsTerminal(int(os.Stdout.Fd()))`)
+- [x] 1.2 Extend the telemetry API with a structured failure/event input that carries scalar tags separately from context blocks; update `Sink`, `NoopSink`, `SentrySink`, and existing telemetry test mocks
 - [ ] 1.3 Attach the `rally` context block on the relay span and on every captured failure through the structured API, not by flattening context into tags
-- [ ] 1.4 Neutralize Sentry's host-derived `server_name` by setting a static non-host `ClientOptions.ServerName` or clearing `event.ServerName` in `scrubEvent`
-- [ ] 1.5 Tests: context block carries version/os/arch/term; hostname/username are absent; top-level Sentry `server_name` is not host-derived
+- [x] 1.4 Neutralize Sentry's host-derived `server_name` by setting a static non-host `ClientOptions.ServerName` or clearing `event.ServerName` in `scrubEvent`
+- [x] 1.5 Tests: context block carries version/os/arch/term; hostname/username are absent; top-level Sentry `server_name` is not host-derived
 
 ## 2. Product DSN activation
 
-- [ ] 2.1 Add `var DefaultSentryDSN = ""` in `cmd/rally/main.go` and include it in telemetry config loading as the fallback DSN
-- [ ] 2.2 Preserve DSN precedence: `RALLY_TELEMETRY=0` disables all telemetry; `SENTRY_DSN` env var overrides config/default; `.rally/config.toml` `sentry_dsn` overrides the baked default; baked `DefaultSentryDSN` is used only when env/config are empty; empty effective DSN keeps `NoopSink`
-- [ ] 2.3 Update `.goreleaser.yaml` to inject `DefaultSentryDSN` with `-X main.DefaultSentryDSN={{ .Env.RALLY_SENTRY_DSN }}` while preserving the existing `Version` ldflag
-- [ ] 2.4 Update `.github/workflows/release.yml` to pass the GitHub Actions secret `RALLY_SENTRY_DSN` to GoReleaser as an environment variable
-- [ ] 2.5 Tests: env DSN beats config/default; config DSN beats default; baked default activates telemetry when env/config are empty; `RALLY_TELEMETRY=0` disables even with a baked default
+- [x] 2.1 Add `var DefaultSentryDSN = ""` in `cmd/rally/main.go` and include it in telemetry config loading as the fallback DSN
+- [x] 2.2 Preserve DSN precedence: `RALLY_TELEMETRY=0` disables all telemetry; `SENTRY_DSN` env var overrides config/default; `.rally/config.toml` `sentry_dsn` overrides the baked default; baked `DefaultSentryDSN` is used only when env/config are empty; empty effective DSN keeps `NoopSink`
+- [x] 2.3 Update `.goreleaser.yaml` to inject `DefaultSentryDSN` with `-X main.DefaultSentryDSN={{ .Env.RALLY_SENTRY_DSN }}` while preserving the existing `Version` ldflag
+- [x] 2.4 Update `.github/workflows/release.yml` to pass the GitHub Actions secret `RALLY_SENTRY_DSN` to GoReleaser as an environment variable
+- [x] 2.5 Tests: env DSN beats config/default; config DSN beats default; baked default activates telemetry when env/config are empty; `RALLY_TELEMETRY=0` disables even with a baked default
 
 ## 3. Anonymous machine-local hash
 
-- [ ] 3.1 Add `DataDir` to `telemetry.Config`; pass the resolved data dir from `cmd/rally/main.go` into `telemetry.Init` before sink creation
-- [ ] 3.2 Add a machine-id helper: read `<dataDir>/machine-id`; if absent, generate a random 128-bit value (`crypto/rand`), hex-encode, and write it `0600`
-- [ ] 3.3 Only create the file when the sink is active; fall back to an ephemeral per-process value when the file is unreadable/unwritable or no data dir is available
-- [ ] 3.4 Tests: id is stable across reads; absent file is created once; the value is not derived from any machine attribute; disabled telemetry writes no file; init with no data dir uses ephemeral identity
+- [x] 3.1 Add `DataDir` to `telemetry.Config`; pass the resolved data dir from `cmd/rally/main.go` into `telemetry.Init` before sink creation
+- [x] 3.2 Add a machine-id helper: read `<dataDir>/machine-id`; if absent, generate a random 128-bit value (`crypto/rand`), hex-encode, and write it `0600`
+- [x] 3.3 Only create the file when the sink is active; fall back to an ephemeral per-process value when the file is unreadable/unwritable or no data dir is available
+- [x] 3.4 Tests: id is stable across reads; absent file is created once; the value is not derived from any machine attribute; disabled telemetry writes no file; init with no data dir uses ephemeral identity
 
 ## 4. Globally-unique relay identity
 
