@@ -486,7 +486,7 @@ func (r *Runner) Run(ctx context.Context) error {
 					// A relay ending with every agent type frozen is a lockout
 					// that warrants operator attention — capture it as an Issue.
 					r.tel().CaptureFailure(ctx, fmt.Sprintf("relay %d stalled: all agents frozen", relay.ID),
-						telemetry.Tags(telemetry.EventInfo{RelayID: relay.ID, Repo: repoKey(r.cfg.WorkspaceDir)}))
+						telemetry.FailureEvent{Tags: telemetry.Tags(telemetry.EventInfo{RelayID: relay.ID, Repo: repoKey(r.cfg.WorkspaceDir)})})
 					_ = CompleteRelay(r.store, relay.ID)
 					return fmt.Errorf("relay failed: all agents frozen")
 				}
@@ -1581,7 +1581,7 @@ attemptLoop:
 				lapPinMismatch ||
 				strings.Contains(strings.ToLower(failReason), "panic")
 			if issueWorthy {
-				r.tel().CaptureFailure(tryCtx, fmt.Sprintf("relay %d run %d try %d failed: %s", relay.ID, runIndex+1, tryRecord.ID, failReason), tryTags)
+				r.tel().CaptureFailure(tryCtx, fmt.Sprintf("relay %d run %d try %d failed: %s", relay.ID, runIndex+1, tryRecord.ID, failReason), telemetry.FailureEvent{Tags: tryTags})
 			}
 		}
 		trySpan.Finish()
@@ -1661,7 +1661,7 @@ attemptLoop:
 		// "agent exited without finalizing" is an operator-worthy recognized
 		// failure — the agent process ended without `laps done`/`laps handoff`.
 		r.tel().CaptureFailure(ctx, fmt.Sprintf("relay %d run %d: agent exited without finalizing", relay.ID, runIndex+1),
-			telemetry.Tags(telemetry.EventInfo{
+			telemetry.FailureEvent{Tags: telemetry.Tags(telemetry.EventInfo{
 				RelayID: relay.ID,
 				RunID:   runIndex + 1,
 				Role:    task.Assignee,
@@ -1669,7 +1669,7 @@ attemptLoop:
 				Model:   picked.Model,
 				Repo:    repoKey(r.cfg.WorkspaceDir),
 				LapID:   task.LapID,
-			}))
+			})})
 	}
 
 	addressed := false

@@ -50,6 +50,10 @@ func scrubEvent(event *sentry.Event) *sentry.Event {
 
 	event.Message = truncateValue(event.Message)
 
+	// Defense-in-depth: ensure no host-derived server_name is ever
+	// transmitted, even if the SDK overrides ClientOptions.ServerName.
+	event.ServerName = anonymousServerName
+
 	for _, ctx := range event.Contexts {
 		scrubMap(ctx)
 	}

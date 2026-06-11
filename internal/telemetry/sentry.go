@@ -13,6 +13,10 @@ var (
 	_ Span = (*sentrySpan)(nil)
 )
 
+// anonymousServerName is the static value used for Sentry's ServerName field
+// to prevent the SDK from populating it with the host's actual hostname.
+const anonymousServerName = "rally-cli"
+
 // SentrySink is a telemetry sink backed by Sentry. It is created via
 // NewSentrySink and should only be used when a valid DSN is available.
 type SentrySink struct{}
@@ -28,6 +32,10 @@ func NewSentrySink(dsn string) (*SentrySink, error) {
 		AttachStacktrace: true,
 		// EnableTracing enables performance monitoring (spans/transactions).
 		EnableTracing: true,
+		// ServerName is set to a static non-host value to prevent the
+		// Sentry SDK from sending the machine's hostname. This is a
+		// privacy guarantee: no host-derived identity is transmitted.
+		ServerName: anonymousServerName,
 		// before_send scrubber: never ships current_task.md contents or full
 		// transcripts, only summaries and metadata.
 		BeforeSend: func(event *sentry.Event, _ *sentry.EventHint) *sentry.Event {
@@ -74,15 +82,19 @@ func (s *SentrySink) EmitTryLog(ctx context.Context, fields map[string]interface
 }
 
 // CaptureFailure reports an operator-worthy failure as a Sentry event
-// (Issue). Tags are set on a cloned scope so they don't leak.
-func (s *SentrySink) CaptureFailure(ctx context.Context, msg string, tags map[string]string) {
+// (Issue). Tags are set on a cloned scope so they don't leak. Context
+// blocks are attached via scope.SetContext for structured nested data.
+func (s *SentrySink) CaptureFailure(ctx context.Context, msg string, evt FailureEvent) {
 	hub := sentry.GetHubFromContext(ctx)
 	if hub == nil {
 		hub = sentry.CurrentHub()
 	}
 	hub.WithScope(func(scope *sentry.Scope) {
-		for k, v := range tags {
+		for k, v := range evt.Tags {
 			scope.SetTag(k, v)
+		}
+		for name, data := range evt.Contexts {
+			scope.SetContext(name, data)
 		}
 		hub.CaptureMessage(msg)
 	})

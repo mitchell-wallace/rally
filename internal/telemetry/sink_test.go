@@ -113,7 +113,7 @@ func TestNoopSink_MethodsDoNotPanic(t *testing.T) {
 	sink.EmitTryLog(ctx, map[string]interface{}{"foo": "bar"})
 
 	// CaptureFailure
-	sink.CaptureFailure(ctx, "test failure", map[string]string{"k": "v"})
+	sink.CaptureFailure(ctx, "test failure", FailureEvent{Tags: map[string]string{"k": "v"}})
 
 	// Flush
 	sink.Flush(0)

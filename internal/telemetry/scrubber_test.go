@@ -1,6 +1,7 @@
 package telemetry
 
 import (
+	"context"
 	"strings"
 	"testing"
 
@@ -118,3 +119,95 @@ func TestTags_OmitsEmptyAndFormatsRunner(t *testing.T) {
 		t.Errorf("runner with no model = %q, want %q", sparse["runner"], "codex")
 	}
 }
+
+func TestScrubEvent_ServerNameNeutralized(t *testing.T) {
+	// Simulate an event that has a host-derived server_name set by the SDK.
+	event := &sentry.Event{
+		ServerName: "my-actual-hostname.local",
+		Message:    "test event",
+	}
+
+	got := scrubEvent(event)
+
+	if got.ServerName == "my-actual-hostname.local" {
+		t.Error("scrubEvent must not transmit the host-derived server_name")
+	}
+	if got.ServerName != anonymousServerName {
+		t.Errorf("ServerName = %q, want %q", got.ServerName, anonymousServerName)
+	}
+}
+
+func TestScrubEvent_ServerNameNotHostDerived(t *testing.T) {
+	// Even with an empty ServerName, scrubEvent should set the static value.
+	event := &sentry.Event{
+		ServerName: "",
+		Message:    "test",
+	}
+
+	got := scrubEvent(event)
+
+	if got.ServerName != anonymousServerName {
+		t.Errorf("ServerName = %q, want %q", got.ServerName, anonymousServerName)
+	}
+	// The value must not look like a hostname.
+	if strings.Contains(got.ServerName, ".") {
+		t.Errorf("ServerName %q looks like a hostname", got.ServerName)
+	}
+}
+
+func TestFailureEvent_TagContextSeparation(t *testing.T) {
+	// Verify that FailureEvent keeps tags and contexts separate.
+	evt := FailureEvent{
+		Tags: map[string]string{
+			"relay_id": "5",
+			"role":     "senior",
+		},
+		Contexts: map[string]map[string]interface{}{
+			"rally": {
+				"version": "1.0.0",
+				"go_os":   "linux",
+				"go_arch": "amd64",
+				"term":    "xterm-256color",
+			},
+		},
+	}
+
+	// Tags should contain filterable scalars.
+	if evt.Tags["relay_id"] != "5" {
+		t.Errorf("tag relay_id = %q, want %q", evt.Tags["relay_id"], "5")
+	}
+
+	// Contexts should contain the rally block with nested data.
+	rally, ok := evt.Contexts["rally"]
+	if !ok {
+		t.Fatal("expected rally context block")
+	}
+	if rally["version"] != "1.0.0" {
+		t.Errorf("context version = %v, want %q", rally["version"], "1.0.0")
+	}
+	if rally["go_os"] != "linux" {
+		t.Errorf("context go_os = %v, want %q", rally["go_os"], "linux")
+	}
+
+	// Tags must not contain context-only fields.
+	for _, key := range []string{"version", "go_os", "go_arch", "term"} {
+		if _, found := evt.Tags[key]; found {
+			t.Errorf("tag %q should not exist — it belongs in context only", key)
+		}
+	}
+}
+
+func TestNoopSink_CaptureFailureWithContexts(t *testing.T) {
+	var sink NoopSink
+	ctx := context.Background()
+
+	// Calling CaptureFailure with contexts should not panic.
+	evt := FailureEvent{
+		Tags: map[string]string{"k": "v"},
+		Contexts: map[string]map[string]interface{}{
+			"rally": {"version": "1.0.0"},
+		},
+	}
+	sink.CaptureFailure(ctx, "test failure", evt)
+}
+

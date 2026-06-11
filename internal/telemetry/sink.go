@@ -22,12 +22,27 @@ type Sink interface {
 	EmitTryLog(ctx context.Context, fields map[string]interface{})
 
 	// CaptureFailure reports an operator-worthy failure as a Sentry Issue
-	// (or equivalent). Tags are attached to the event for filtering.
-	CaptureFailure(ctx context.Context, msg string, tags map[string]string)
+	// (or equivalent). The FailureEvent carries scalar tags for filtering
+	// and context blocks for structured nested data.
+	CaptureFailure(ctx context.Context, msg string, evt FailureEvent)
 
 	// Flush drains buffered events with a bounded timeout. It must return
 	// promptly even when the network is unreachable.
 	Flush(timeout time.Duration)
+}
+
+// FailureEvent carries structured data for a captured failure. Tags are
+// scalar filterable values (Sentry tags); Contexts are nested structured
+// blocks (Sentry contexts). This separation prevents high-cardinality or
+// nested data from being smuggled into indexed tags.
+type FailureEvent struct {
+	// Tags are scalar key-value pairs attached to the event for filtering
+	// and grouping (e.g., relay_id, run_id, role).
+	Tags map[string]string
+
+	// Contexts are named blocks of structured data attached to the event
+	// (e.g., a "rally" block with version/os/arch/term).
+	Contexts map[string]map[string]interface{}
 }
 
 // Span represents an in-flight trace span (relay, run, or try).

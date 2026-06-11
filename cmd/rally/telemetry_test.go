@@ -27,9 +27,9 @@ func (m *mockSink) EmitTryLog(ctx context.Context, fields map[string]interface{}
 	m.tryLogs = append(m.tryLogs, fields)
 }
 
-func (m *mockSink) CaptureFailure(ctx context.Context, msg string, tags map[string]string) {
+func (m *mockSink) CaptureFailure(ctx context.Context, msg string, evt telemetry.FailureEvent) {
 	m.capturedIssues = append(m.capturedIssues, msg)
-	m.capturedTags = append(m.capturedTags, tags)
+	m.capturedTags = append(m.capturedTags, evt.Tags)
 }
 
 type customExecutor struct {
