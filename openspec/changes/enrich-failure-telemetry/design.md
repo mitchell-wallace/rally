@@ -31,12 +31,15 @@ so the assumed baseline below is the post-error-categorisation runner.
   without the originating machine.
 - Relays are globally identifiable across machines and repos.
 - Zero new PII: anonymous machine hash, home-stripped cwd, no hostname/username/IP.
+- Release binaries can report to Rally's product Sentry project by default without
+  requiring per-container environment injection.
 
 **Non-Goals:**
 - Changing which failures are captured as Issues vs recorded as spans (owned by the
   existing telemetry taxonomy requirement).
 - A non-Sentry backend or sampling changes.
 - Transmitting prompt/transcript content (the scrubber's existing guarantee stands).
+- Building a general secret-management system for container managers.
 
 ## Decisions
 
@@ -49,7 +52,18 @@ hostname field must also be neutralized: set `ClientOptions.ServerName` to a sta
 non-host value (or clear `event.ServerName` in `scrubEvent`) and test that the outgoing
 event has no host-derived `server_name`.
 
-**2. Structured telemetry event input, not ad hoc scope mutation.**
+**2. Default product DSN with override and kill-switch precedence.**
+Add `var DefaultSentryDSN = ""` in `cmd/rally/main.go` next to `Version`. Release
+builds inject it with an ldflag from a GitHub Actions secret, e.g.
+`-X main.DefaultSentryDSN={{ .Env.RALLY_SENTRY_DSN }}`. Wire the release workflow to
+expose that secret only to GoReleaser. The effective DSN precedence is:
+`RALLY_TELEMETRY=0` disables telemetry regardless of any DSN; `SENTRY_DSN` env var
+overrides everything else; `.rally/config.toml` `sentry_dsn` overrides the baked
+default; `DefaultSentryDSN` is the fallback; an empty effective DSN leaves telemetry
+disabled. This preserves the existing local override behavior while making product
+release binaries work out of the box.
+
+**3. Structured telemetry event input, not ad hoc scope mutation.**
 Extend `telemetry.Sink` with a structured failure/event input that can carry filterable
 tags separately from context blocks (for example a `FailureEvent` with `Tags` and
 `Contexts`). Update `NoopSink`, `SentrySink`, and test mocks together. `SentrySink`
@@ -58,7 +72,7 @@ should set scalar filter fields with `scope.SetTag` and attach nested objects wi
 `Span.SetData` or the Sentry equivalent. This keeps the tag/context split testable and
 prevents implementers from smuggling context-only data into high-cardinality tags.
 
-**3. Anonymous machine-local hash, persisted once.**
+**4. Anonymous machine-local hash, persisted once.**
 On first active-telemetry run, generate a random 128-bit value (`crypto/rand`), hex-
 encode it, and write it to `<dataDir>/machine-id` (0600). Subsequent runs read it.
 It is **not** derived from any machine attribute, so it cannot be reversed to a host
@@ -70,22 +84,21 @@ Because `telemetry.Init` currently receives only the DSN, add `DataDir` to
 initializing the active sink. If no data dir is available, use an ephemeral value rather
 than creating files in an implicit location.
 
-**4. Globally-unique relay identity.**
+**5. Globally-unique relay identity.**
 `relay_guid = <machine-id-prefix>-<repo-key>-<YYYYMMDD>-<relay_id>`, where `repo-key`
 is the same hashed repo identifier already emitted as the `repo` tag, the date comes
 from the relay's `StartedAt`, and `relay_id` is the existing workspace-local counter.
 Attach `relay_guid` and `relay_started_at` (RFC3339) at the relay span and on every
 failure capture, and keep emitting the local `relay_id` tag for back-compat and
-within-workspace correlation with `summary.jsonl`. Product call before implementation:
-decide whether the full `machine_id` is a filterable tag, context-only, or replaced by
-a short prefix tag. Default recommendation is `machine_id_prefix` as the filterable tag
-plus the full anonymous id in the `rally` context only, to reduce Sentry tag cardinality
-while retaining correlation when inspecting a specific event.
+within-workspace correlation with `summary.jsonl`. Emit `machine_id_prefix` as the
+filterable machine tag and put the full anonymous machine id only in the `rally`
+context. The prefix gives enough grouping for routine triage while reducing Sentry tag
+cardinality and avoiding a full long-lived pseudonymous identifier as an indexed tag.
 Rationale for a composite over a random UUID: it stays human-greppable and ties back
 to the local store, while the machine prefix + repo key + date guarantee cross-machine
 and cross-repo uniqueness.
 
-**5. Username-stripped working directory.**
+**6. Username-stripped working directory.**
 Attach `cwd` with the user's home prefix collapsed to `~` (compare against
 `os.UserHomeDir()`), e.g. `~/Documents/Mycode/rally-2`. This shows the path shape for
 triage without the username. Implement the stripping in `scrubber.go` (or a helper it
@@ -94,7 +107,7 @@ values in event contexts, breadcrumbs, and span data, including free-text raw-si
 fields, so home paths embedded inside provider text are collapsed too. The existing
 `repo` path-hash tag is retained.
 
-**6. Agent state on failure, with site-specific source rules.**
+**7. Agent state on failure, with site-specific source rules.**
 Extend the failure-capture call sites to pass a small state struct alongside the
 existing tags: `attempt`, `max_attempts`, the stable `failure_category` from
 `improve-error-categorisation` (e.g. `usage_limit`, `short_rate_limit`,
@@ -120,7 +133,7 @@ The three capture sites have different source data:
   `agent_state=frozen` and relay/global context, but omit try-only fields such as
   `attempt`, `max_attempts`, raw signal, and quota reset evidence.
 
-**7. Raw limit-signal corpus for parser validation.**
+**8. Raw limit-signal corpus for parser validation.**
 When the captured failure's category is a provider-limit signal (`usage_limit`,
 `short_rate_limit`, `provider_overloaded`), attach the bounded
 `FailureEvidence.RawSignal` and `Message` to the event as a `failure_evidence`
@@ -150,9 +163,13 @@ are not attached under `failure_evidence`.
   guaranteed stripped.
 - **Context built at init goes stale if the process changes TTY** → the environment
   values are process-stable in practice; rebuilding per-event is unnecessary cost.
-- **Full machine id as a Sentry tag may be high-cardinality** → decide before
-  implementation whether it remains filterable. Default to a prefix tag plus full id in
-  context unless machine-level filtering is required.
+- **Baked DSN can be abused if copied from the binary** → acceptable for Rally's current
+  product posture; DSNs are client-side ingestion endpoints, not privileged API
+  secrets. Keep `RALLY_TELEMETRY=0` as the user kill switch, and treat Sentry key/project
+  rotation or project closure as the deprecation path if the baked endpoint needs to be
+  retired.
+- **Full machine id as a Sentry tag may be high-cardinality** → use only
+  `machine_id_prefix` as a tag and place the full anonymous id in context.
 - **Sentry may populate host-derived `server_name` by default** → explicitly set or
   scrub it so the no-hostname guarantee covers top-level Sentry event fields, not only
   Rally's custom contexts.

@@ -1,5 +1,33 @@
 ## ADDED Requirements
 
+### Requirement: Product telemetry DSN activation
+The system SHALL support a baked default Sentry DSN for release binaries while
+preserving user/operator overrides. The system SHALL resolve the effective DSN in this
+order: `RALLY_TELEMETRY=0` disables telemetry regardless of any configured DSN;
+`SENTRY_DSN` environment variable; `.rally/config.toml` `telemetry.sentry_dsn`; baked
+default DSN; no DSN disables telemetry.
+
+#### Scenario: Baked DSN activates release telemetry
+- **WHEN** no env or config DSN is set
+- **AND** the binary was built with a baked default DSN
+- **THEN** telemetry SHALL initialize with the baked default DSN
+
+#### Scenario: Environment DSN overrides baked default
+- **WHEN** `SENTRY_DSN` is set
+- **AND** a config or baked default DSN is also present
+- **THEN** telemetry SHALL initialize with `SENTRY_DSN`
+
+#### Scenario: Config DSN overrides baked default
+- **WHEN** `.rally/config.toml` contains `telemetry.sentry_dsn`
+- **AND** `SENTRY_DSN` is unset
+- **AND** a baked default DSN is present
+- **THEN** telemetry SHALL initialize with the config DSN
+
+#### Scenario: Kill switch disables baked default
+- **WHEN** `RALLY_TELEMETRY=0` is set
+- **AND** env, config, or baked default DSNs are present
+- **THEN** telemetry SHALL use the no-op sink and SHALL NOT create telemetry side-effect files
+
 ### Requirement: Run-environment context
 When enabled, the system SHALL attach a run-environment context to the relay trace and
 to every captured failure, carrying the rally version, operating system, architecture,
@@ -40,8 +68,9 @@ anonymous value rather than failing the run.
 When enabled, the system SHALL attach a globally-unique relay identifier derived from
 the machine-local identifier, the repo key, the relay start date, and the local relay
 id, together with the relay start timestamp and the decided machine identity field
-placement. The system SHALL continue to emit the local `relay_id` tag for
-within-workspace correlation.
+placement. The system SHALL emit `machine_id_prefix` as the filterable machine tag,
+SHALL keep the full anonymous machine id in event context only, and SHALL continue to
+emit the local `relay_id` tag for within-workspace correlation.
 
 #### Scenario: Relay carries a globally-unique identifier
 - **WHEN** a relay starts with telemetry enabled
@@ -54,6 +83,12 @@ within-workspace correlation.
 #### Scenario: Local relay id retained
 - **WHEN** the globally-unique identifier is attached
 - **THEN** the local `relay_id` tag SHALL still be emitted
+
+#### Scenario: Full machine id is context-only
+- **WHEN** machine identity is attached
+- **THEN** `machine_id_prefix` SHALL be emitted as a tag
+- **AND** the full anonymous machine id SHALL NOT be emitted as a tag
+- **AND** the full anonymous machine id SHALL be available in the `rally` context
 
 ### Requirement: Agent state on captured failures
 When a try failure is captured, the system SHALL attach the failing try's agent state as
