@@ -32,10 +32,12 @@ jobs:
           echo "$HOME/.opencode/bin" >> "$GITHUB_PATH"
 
       - name: Configure opencode auth
-        if: ${{ secrets.OPENCODE_AUTH_JSON != '' }}
+        if: env.OPENCODE_AUTH_JSON != ''
+        env:
+          OPENCODE_AUTH_JSON: ${{ secrets.OPENCODE_AUTH_JSON }}
         run: |
           mkdir -p "$HOME/.local/share/opencode"
-          echo '${{ secrets.OPENCODE_AUTH_JSON }}' > "$HOME/.local/share/opencode/auth.json"
+          printf '%s' "$OPENCODE_AUTH_JSON" > "$HOME/.local/share/opencode/auth.json"
 
       - name: Run tests
         run: go test -count=1 ./...
