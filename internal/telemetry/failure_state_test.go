@@ -133,9 +133,8 @@ func TestFailureEvidenceContext_EmptyWhenNoSignalOrMessage(t *testing.T) {
 }
 
 func TestFailureEvidenceContext_ScrubsHomePaths(t *testing.T) {
-	prev := homeDir
-	homeDir = filepath.FromSlash("/home/alice")
-	defer func() { homeDir = prev }()
+	prev := SetHomeDir(filepath.FromSlash("/home/alice"))
+	defer SetHomeDir(prev)
 
 	rawPath := filepath.FromSlash("/home/alice/.rally/state failed: usage limit")
 	msgPath := filepath.FromSlash("see /home/alice/logs/run.log")
@@ -172,6 +171,115 @@ func TestFailureEvidenceContext_TruncatesOversizedSignal(t *testing.T) {
 	got, _ := ctx["raw_signal"].(string)
 	if !strings.HasSuffix(got, "…[truncated]") {
 		t.Errorf("oversized raw_signal not truncated: len=%d", len(got))
+	}
+}
+
+func TestFailureEvidenceContext_ScrubsRealisticProviderPayload(t *testing.T) {
+	prev := SetHomeDir(filepath.FromSlash("/home/developer"))
+	defer SetHomeDir(prev)
+
+	raw := `error: plan /home/developer/.config/rally/cache/model-4.json: usage limit reached. ` +
+		`prompt="analyze /home/developer/projects/repo/src/main.go" transcript=full output=log`
+	msg := `provider rejected request for /home/developer/.rally/state: quota exhausted. ` +
+		`see /home/developer/logs/agent-trace.log`
+
+	ctx := FailureEvidenceContext(FailureState{
+		Category:  categoryUsageLimit,
+		RawSignal: raw,
+		Message:   msg,
+	})
+
+	rawSignal, _ := ctx["raw_signal"].(string)
+	message, _ := ctx["message"].(string)
+
+	for _, v := range []string{rawSignal, message} {
+		if strings.Contains(v, "developer") {
+			t.Errorf("username leaked into context value %q", v)
+		}
+		if strings.Contains(v, "/home/developer") {
+			t.Errorf("unresolved home path in context value %q", v)
+		}
+	}
+
+	allowed := map[string]struct{}{"raw_signal": {}, "message": {}}
+	for k := range ctx {
+		if _, ok := allowed[k]; !ok {
+			t.Errorf("unexpected key %q in failure_evidence context", k)
+		}
+		if isSensitiveKey(k) {
+			t.Errorf("sensitive key %q must never appear in failure_evidence", k)
+		}
+	}
+
+	if !strings.Contains(rawSignal, "~") {
+		t.Errorf("raw_signal should contain collapsed home path: %q", rawSignal)
+	}
+}
+
+func TestFailureStateTags_AllLimitCategoriesGetQuotaFields(t *testing.T) {
+	reset := time.Date(2026, 6, 11, 12, 0, 0, 0, time.UTC)
+	for _, cat := range []string{categoryUsageLimit, categoryShortRateLimit, categoryProviderOverloaded} {
+		t.Run(cat, func(t *testing.T) {
+			fs := FailureState{
+				Attempt:     1,
+				MaxAttempts: 3,
+				Category:    cat,
+				AgentState:  "active",
+				QuotaScope:  "provider-a",
+				ResetAt:     &reset,
+				ResetAfter:  30 * time.Minute,
+			}
+			tags := FailureStateTags(fs)
+			if tags["quota_scope"] != "provider-a" {
+				t.Errorf("quota_scope = %q, want %q", tags["quota_scope"], "provider-a")
+			}
+			if tags["reset_at"] == "" {
+				t.Error("reset_at tag missing for limit category")
+			}
+			if tags["reset_after"] == "" {
+				t.Error("reset_after tag missing for limit category")
+			}
+		})
+	}
+}
+
+func TestFailureStateTags_NonLimitCategoriesNeverGetQuotaFields(t *testing.T) {
+	reset := time.Date(2026, 6, 11, 12, 0, 0, 0, time.UTC)
+	for _, cat := range []string{"agent_error", "invalid_model", "transient_infra", "auth_or_proxy", "harness_launch", "incomplete_finalization", ""} {
+		t.Run(cat, func(t *testing.T) {
+			fs := FailureState{
+				Attempt:     1,
+				MaxAttempts: 3,
+				Category:    cat,
+				AgentState:  "active",
+				QuotaScope:  "provider-a",
+				ResetAt:     &reset,
+				ResetAfter:  30 * time.Minute,
+				RawSignal:   "some signal text",
+				Message:     "some message",
+			}
+			tags := FailureStateTags(fs)
+			for _, k := range []string{"quota_scope", "reset_at", "reset_after"} {
+				if _, found := tags[k]; found {
+					t.Errorf("tag %q must not appear for non-limit category %q", k, cat)
+				}
+			}
+		})
+	}
+}
+
+func TestFailureEvidenceContext_NonLimitCategory_WithEvidenceFields(t *testing.T) {
+	for _, cat := range []string{"agent_error", "invalid_model", "transient_infra", "harness_launch", "incomplete_finalization", ""} {
+		t.Run(cat, func(t *testing.T) {
+			ctx := FailureEvidenceContext(FailureState{
+				Category:  cat,
+				RawSignal: "provider returned error: you exceeded your usage limit",
+				Message:   "the agent could not complete",
+			})
+			if ctx != nil {
+				t.Errorf("category %q: expected nil failure_evidence context even with raw_signal/message, got %v", cat, ctx)
+			}
+		})
 	}
 }
 

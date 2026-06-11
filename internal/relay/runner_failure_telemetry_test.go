@@ -328,3 +328,371 @@ func findFailureCount(sink *capturingSink, substr string) int {
 	}
 	return n
 }
+
+func wantNoContext(t *testing.T, evt telemetry.FailureEvent, name string) {
+	t.Helper()
+	if _, ok := evt.Contexts[name]; ok {
+		t.Errorf("context %q must not be present", name)
+	}
+}
+
+func wantContextKey(t *testing.T, evt telemetry.FailureEvent, block, key string, want string) {
+	t.Helper()
+	blk, ok := evt.Contexts[block]
+	if !ok {
+		t.Fatalf("context block %q missing", block)
+	}
+	got, _ := blk[key].(string)
+	if got != want {
+		t.Errorf("context[%q][%q] = %q, want %q", block, key, got, want)
+	}
+}
+
+func wantContextNotContains(t *testing.T, evt telemetry.FailureEvent, block, key, substr string) {
+	t.Helper()
+	blk, ok := evt.Contexts[block]
+	if !ok {
+		return
+	}
+	got, _ := blk[key].(string)
+	if strings.Contains(got, substr) {
+		t.Errorf("context[%q][%q] = %q must not contain %q", block, key, got, substr)
+	}
+}
+
+func setupRunnerForFailureTest(t *testing.T) (*store.Store, string, *capturingSink) {
+	t.Helper()
+	workspaceDir := t.TempDir()
+	rallyDir := store.RallyDir(workspaceDir)
+	os.MkdirAll(rallyDir, 0o755)
+	initRepo(t, workspaceDir)
+	runGit(t, workspaceDir, "commit", "--allow-empty", "-m", "initial", "--no-verify")
+	s := newTestStore(t, rallyDir)
+	sink := &capturingSink{}
+	return s, workspaceDir, sink
+}
+
+func makeRunner(t *testing.T, s *store.Store, workspaceDir string, sink *capturingSink, exec agent.Executor, budget int) *Runner {
+	r := NewRunner(s, Config{
+		WorkspaceDir:     workspaceDir,
+		DataDir:          t.TempDir(),
+		AgentMixSpecs:    []string{"op:dsf"},
+		TargetIterations: 1,
+		RetryBudget:      budget,
+		LapsEnabled:      true,
+		Resolver:         cheapTestResolver,
+	}, map[string]agent.Executor{"opencode": exec})
+	r.SetTelemetry(sink)
+	return r
+}
+
+// TestRunOne_TerminalTryFailure_ShortRateLimit verifies a short_rate_limit
+// terminal try failure captures the category, quota fields, and the bounded
+// failure_evidence context with raw_signal and message.
+func TestRunOne_TerminalTryFailure_ShortRateLimit(t *testing.T) {
+	s, workspaceDir, sink := setupRunnerForFailureTest(t)
+
+	reset := time.Now().Add(2 * time.Minute).UTC()
+	exec := &funcExecutor{
+		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+			return &agent.TryResult{
+				Completed: false,
+				Summary:   "rate limited",
+				Evidence: &reliability.FailureEvidence{
+					Category:   reliability.CategoryShortRateLimit,
+					QuotaScope: "anthropic",
+					ResetAt:    &reset,
+					RawSignal:  "429 Too Many Requests retry_after=120",
+					Message:    "short rate limit hit",
+				},
+			}, fmt.Errorf("harness exited non-zero")
+		},
+	}
+
+	r := makeRunner(t, s, workspaceDir, sink, exec, 1)
+
+	if _, err := r.runOne(
+		context.Background(),
+		&store.RelayRecord{ID: 1, TargetIterations: 1},
+		0,
+		agent.ResolvedAgent{Harness: "opencode", Model: cheapTestModel},
+		runTask{Name: "task", Prompt: "do work", Assignee: "senior", IsLapsBacked: true, LapID: "lap-1"},
+		nil, nil, false, false, nil, nil, io.Discard,
+	); err != nil {
+		t.Fatalf("runOne error = %v", err)
+	}
+
+	evt := findFailure(t, sink, "failed:")
+	wantTag(t, evt.Tags, "failure_category", "short_rate_limit")
+	wantTag(t, evt.Tags, "attempt", "1")
+	wantTag(t, evt.Tags, "max_attempts", "1")
+	wantTag(t, evt.Tags, "agent_state", "active")
+	wantTag(t, evt.Tags, "quota_scope", "anthropic")
+	if evt.Tags["reset_at"] == "" {
+		t.Error("reset_at tag missing on short_rate_limit capture")
+	}
+	ev, ok := evt.Contexts["failure_evidence"]
+	if !ok {
+		t.Fatal("failure_evidence context missing on short_rate_limit capture")
+	}
+	if ev["raw_signal"] != "429 Too Many Requests retry_after=120" {
+		t.Errorf("raw_signal = %v", ev["raw_signal"])
+	}
+	if ev["message"] != "short rate limit hit" {
+		t.Errorf("message = %v", ev["message"])
+	}
+}
+
+// TestRunOne_TerminalTryFailure_ProviderOverloaded verifies a
+// provider_overloaded terminal try failure carries the evidence context.
+func TestRunOne_TerminalTryFailure_ProviderOverloaded(t *testing.T) {
+	s, workspaceDir, sink := setupRunnerForFailureTest(t)
+
+	exec := &funcExecutor{
+		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+			return &agent.TryResult{
+				Completed: false,
+				Summary:   "overloaded",
+				Evidence: &reliability.FailureEvidence{
+					Category:  reliability.CategoryProviderOverloaded,
+					RawSignal: "529 Overloaded error: API is temporarily overloaded",
+					Message:   "provider overloaded",
+				},
+			}, fmt.Errorf("harness exited non-zero")
+		},
+	}
+
+	r := makeRunner(t, s, workspaceDir, sink, exec, 1)
+
+	if _, err := r.runOne(
+		context.Background(),
+		&store.RelayRecord{ID: 1, TargetIterations: 1},
+		0,
+		agent.ResolvedAgent{Harness: "opencode", Model: cheapTestModel},
+		runTask{Name: "task", Prompt: "do work", Assignee: "senior", IsLapsBacked: true, LapID: "lap-1"},
+		nil, nil, false, false, nil, nil, io.Discard,
+	); err != nil {
+		t.Fatalf("runOne error = %v", err)
+	}
+
+	evt := findFailure(t, sink, "failed:")
+	wantTag(t, evt.Tags, "failure_category", "provider_overloaded")
+	ev, ok := evt.Contexts["failure_evidence"]
+	if !ok {
+		t.Fatal("failure_evidence context missing on provider_overloaded capture")
+	}
+	if ev["raw_signal"] != "529 Overloaded error: API is temporarily overloaded" {
+		t.Errorf("raw_signal = %v", ev["raw_signal"])
+	}
+	if ev["message"] != "provider overloaded" {
+		t.Errorf("message = %v", ev["message"])
+	}
+}
+
+// TestRunOne_TerminalTryFailure_NonLimitCategory_NoEvidenceContext verifies
+// that a terminal try failure classified as a non-limit category (e.g.
+// invalid_model) does NOT attach the failure_evidence context, even when the
+// TryResult carries a FailureEvidence with RawSignal and Message.
+func TestRunOne_TerminalTryFailure_NonLimitCategory_NoEvidenceContext(t *testing.T) {
+	s, workspaceDir, sink := setupRunnerForFailureTest(t)
+
+	exec := &funcExecutor{
+		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+			return &agent.TryResult{
+				Completed: false,
+				Summary:   "bad model",
+				Evidence: &reliability.FailureEvidence{
+					Category:  reliability.CategoryInvalidModel,
+					RawSignal: "model not found: gpt-6-turbo-preview",
+					Message:   "invalid model requested",
+				},
+			}, fmt.Errorf("harness exited non-zero")
+		},
+	}
+
+	r := makeRunner(t, s, workspaceDir, sink, exec, 1)
+
+	if _, err := r.runOne(
+		context.Background(),
+		&store.RelayRecord{ID: 1, TargetIterations: 1},
+		0,
+		agent.ResolvedAgent{Harness: "opencode", Model: cheapTestModel},
+		runTask{Name: "task", Prompt: "do work", Assignee: "senior", IsLapsBacked: true, LapID: "lap-1"},
+		nil, nil, false, false, nil, nil, io.Discard,
+	); err != nil {
+		t.Fatalf("runOne error = %v", err)
+	}
+
+	evt := findFailure(t, sink, "failed:")
+	wantTag(t, evt.Tags, "failure_category", "invalid_model")
+	for _, k := range []string{"quota_scope", "reset_at", "reset_after"} {
+		wantNoTag(t, evt.Tags, k)
+	}
+	wantNoContext(t, evt, "failure_evidence")
+}
+
+// TestRunOne_TerminalTryFailure_ScrubsHomePathInRawSignal drives a usage-limit
+// failure whose raw_signal and message contain real home-directory paths and
+// prompt/transcript-looking content, and asserts the scrubber collapses paths
+// and the evidence context contains only raw_signal and message keys.
+func TestRunOne_TerminalTryFailure_ScrubsHomePathInRawSignal(t *testing.T) {
+	prev := telemetry.HomeDir()
+	telemetry.SetHomeDir("/home/engineer")
+	defer telemetry.SetHomeDir(prev)
+
+	s, workspaceDir, sink := setupRunnerForFailureTest(t)
+
+	rawWithHomePath := `error reading /home/engineer/.config/rally/cache.json: ` +
+		`you have exceeded your usage limit. prompt="analyze this" transcript=full`
+	msgWithHomePath := `provider error at /home/engineer/.rally/state: ` +
+		`usage limit reached. see /home/engineer/logs/trace.log`
+
+	exec := &funcExecutor{
+		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+			return &agent.TryResult{
+				Completed: false,
+				Summary:   "usage limit",
+				Evidence: &reliability.FailureEvidence{
+					Category:   reliability.CategoryUsageLimit,
+					QuotaScope: "anthropic",
+					RawSignal:  rawWithHomePath,
+					Message:    msgWithHomePath,
+				},
+			}, fmt.Errorf("harness exited non-zero")
+		},
+	}
+
+	r := makeRunner(t, s, workspaceDir, sink, exec, 1)
+
+	if _, err := r.runOne(
+		context.Background(),
+		&store.RelayRecord{ID: 1, TargetIterations: 1},
+		0,
+		agent.ResolvedAgent{Harness: "opencode", Model: cheapTestModel},
+		runTask{Name: "task", Prompt: "do work", Assignee: "senior", IsLapsBacked: true, LapID: "lap-1"},
+		nil, nil, false, false, nil, nil, io.Discard,
+	); err != nil {
+		t.Fatalf("runOne error = %v", err)
+	}
+
+	evt := findFailure(t, sink, "failed:")
+	ev, ok := evt.Contexts["failure_evidence"]
+	if !ok {
+		t.Fatal("failure_evidence context missing")
+	}
+
+	rawSignal, _ := ev["raw_signal"].(string)
+	message, _ := ev["message"].(string)
+
+	for _, v := range []string{rawSignal, message} {
+		if strings.Contains(v, "engineer") {
+			t.Errorf("username leaked into evidence value %q", v)
+		}
+		if strings.Contains(v, "/home/engineer") {
+			t.Errorf("unresolved home path in evidence value %q", v)
+		}
+	}
+
+	allowed := map[string]struct{}{"raw_signal": {}, "message": {}}
+	for k := range ev {
+		if _, ok := allowed[k]; !ok {
+			t.Errorf("unexpected key %q in failure_evidence context", k)
+		}
+	}
+}
+
+// TestRunOne_UnfinalizedAgent_MultiAttemptBudget drives a laps-backed run with a
+// retry budget of 3 where the agent fails without finalizing on the second
+// attempt, and asserts the unfinalized capture carries the correct attempt and
+// budget values and no failure_evidence context.
+func TestRunOne_UnfinalizedAgent_MultiAttemptBudget(t *testing.T) {
+	s, workspaceDir, sink := setupRunnerForFailureTest(t)
+
+	attempt := 0
+	exec := &funcExecutor{
+		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+			attempt++
+			return &agent.TryResult{
+				Completed: false,
+				Summary:   fmt.Sprintf("attempt %d did not finalize", attempt),
+			}, nil
+		},
+	}
+
+	r := makeRunner(t, s, workspaceDir, sink, exec, 3)
+
+	if _, err := r.runOne(
+		context.Background(),
+		&store.RelayRecord{ID: 1, TargetIterations: 1},
+		0,
+		agent.ResolvedAgent{Harness: "opencode", Model: cheapTestModel},
+		runTask{Name: "task", Prompt: "do work", Assignee: "senior", IsLapsBacked: true, LapID: "lap-1"},
+		nil, nil, false, false, nil, nil, io.Discard,
+	); err != nil {
+		t.Fatalf("runOne error = %v", err)
+	}
+
+	evt := findFailure(t, sink, "without finalizing")
+	wantTag(t, evt.Tags, "failure_category", "incomplete_finalization")
+	wantTag(t, evt.Tags, "attempt", "3")
+	wantTag(t, evt.Tags, "max_attempts", "3")
+	wantTag(t, evt.Tags, "agent_state", "active")
+	for _, k := range []string{"quota_scope", "reset_at", "reset_after"} {
+		wantNoTag(t, evt.Tags, k)
+	}
+	wantNoContext(t, evt, "failure_evidence")
+}
+
+// TestRun_AllFrozen_CarriesRallyContext verifies the all-frozen relay stall
+// capture carries the rally context block with relay-level identity and has
+// no try-level or provider-limit fields.
+func TestRun_AllFrozen_CarriesRallyContext(t *testing.T) {
+	workspaceDir := t.TempDir()
+	rallyDir := store.RallyDir(workspaceDir)
+	os.MkdirAll(rallyDir, 0o755)
+	initRepo(t, workspaceDir)
+
+	s := newTestStore(t, rallyDir)
+	resilience := NewResilience(s)
+	if err := resilience.FreezeAgent(ResilienceKey{Harness: "claude"}, 1, "test freeze"); err != nil {
+		t.Fatalf("FreezeAgent: %v", err)
+	}
+
+	exec := &funcExecutor{
+		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+			return &agent.TryResult{Completed: true, Summary: "unused"}, nil
+		},
+	}
+	sink := &capturingSink{}
+	r := NewRunner(s, Config{
+		WorkspaceDir:     workspaceDir,
+		DataDir:          t.TempDir(),
+		AgentMixSpecs:    []string{"cc:1"},
+		TargetIterations: 1,
+		RetryBudget:      1,
+		Resolver:         testResolver,
+	}, map[string]agent.Executor{"claude": exec})
+	r.SetTelemetry(sink)
+
+	err := r.Run(context.Background())
+	if err == nil || !strings.Contains(err.Error(), "all agents frozen") {
+		t.Fatalf("Run error = %v, want 'all agents frozen'", err)
+	}
+
+	evt := findFailure(t, sink, "all agents frozen")
+	wantTag(t, evt.Tags, "agent_state", "frozen")
+	wantTag(t, evt.Tags, "relay_id", "1")
+
+	rallyCtx, ok := evt.Contexts["rally"]
+	if !ok {
+		t.Fatal("rally context block missing on frozen-stall capture")
+	}
+	if _, ok := rallyCtx["version"]; !ok {
+		t.Error("rally context missing version field")
+	}
+
+	for _, k := range []string{"attempt", "max_attempts", "failure_category", "try_id", "run_id", "quota_scope", "reset_at", "reset_after"} {
+		wantNoTag(t, evt.Tags, k)
+	}
+	wantNoContext(t, evt, "failure_evidence")
+}

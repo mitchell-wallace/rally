@@ -8,11 +8,26 @@ import (
 )
 
 // homeDir is resolved once at init so that collapseHomePaths is fast and
-// deterministic. Tests may override this value temporarily.
+// deterministic. Tests may override this value temporarily via SetHomeDir.
 var homeDir string
 
 func init() {
 	homeDir, _ = os.UserHomeDir()
+}
+
+// SetHomeDir sets the home directory used by collapseHomePaths. It returns
+// the previous value so callers can restore it. Intended for use in tests
+// only.
+func SetHomeDir(dir string) string {
+	prev := homeDir
+	homeDir = dir
+	return prev
+}
+
+// HomeDir returns the current home directory used by the scrubber. Intended
+// for use in tests only.
+func HomeDir() string {
+	return homeDir
 }
 
 // collapseHomePaths replaces every occurrence of the user's home directory
