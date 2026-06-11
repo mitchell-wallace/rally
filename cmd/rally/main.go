@@ -44,13 +44,14 @@ func main() {
 	flushUpdateNotice := startBackgroundUpdateCheck(os.Args[1:], os.Stderr)
 
 	// Init telemetry — no-op when no DSN or RALLY_TELEMETRY=0.
-	sink, flushTelemetry := telemetry.Init(loadTelemetryConfig())
-	activeTelemetry = sink
-	defer flushTelemetry()
+	// Machine identity is resolved only when telemetry is active.
+	result := telemetry.InitWithIdentity(loadTelemetryConfig())
+	activeTelemetry = result.Sink
+	defer result.Cleanup()
 
 	if err := rootCmd.Execute(); err != nil {
 		flushUpdateNotice()
-		flushTelemetry()
+		result.Cleanup()
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
@@ -91,20 +92,31 @@ func resolveWorkspaceDir() (string, error) {
 }
 
 // loadTelemetryConfig reads the workspace config and returns the telemetry
-// section. Returns a zero Config on any error — telemetry is best-effort
+// section, including the resolved data directory for machine identity
+// persistence. Returns a zero Config on any error — telemetry is best-effort
 // and must never prevent the CLI from starting.
 func loadTelemetryConfig() telemetry.Config {
+	// Resolve data dir: same logic as runRelay (home-default + config override).
+	dataDir := ""
+	if home, err := os.UserHomeDir(); err == nil {
+		dataDir = filepath.Join(home, ".local", "share", "rally")
+	}
+
 	wsDir, err := resolveWorkspaceDir()
 	if err != nil {
-		return telemetry.Config{DefaultDSN: DefaultSentryDSN}
+		return telemetry.Config{DefaultDSN: DefaultSentryDSN, DataDir: dataDir}
 	}
 	cfg, err := config.LoadV2(wsDir)
 	if err != nil {
-		return telemetry.Config{DefaultDSN: DefaultSentryDSN}
+		return telemetry.Config{DefaultDSN: DefaultSentryDSN, DataDir: dataDir}
+	}
+	if cfg.DataDir != "" {
+		dataDir = cfg.DataDir
 	}
 	return telemetry.Config{
-		SentryDSN:   cfg.Telemetry.SentryDSN,
-		DefaultDSN:  DefaultSentryDSN,
+		SentryDSN:  cfg.Telemetry.SentryDSN,
+		DefaultDSN: DefaultSentryDSN,
+		DataDir:    dataDir,
 	}
 }
 
