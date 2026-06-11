@@ -138,11 +138,11 @@
       "title": "Verify failure-state and raw limit-signal telemetry",
       "description": "Use the openspec-verify-change skill against enrich-failure-telemetry, then focus on OpenSpec tasks 6.1-6.8.\n\nBefore diffing, identify the intended merge target and first lap/try in this batch. Treat pre-batch work as pre-existing. Do not rewrite git history; substantive fixes become focused head laps.\n\nTrace the exact values from the runner path: TryResult.Evidence and StrategyDecision into terminal CaptureFailure; resilience state lookup into agent_state; quota/reset evidence into scalar tags; RawSignal/Message into `failure_evidence` context only for usage_limit/short_rate_limit/provider_overloaded; unfinalized-agent classification; and all-frozen relay-level capture behavior. Confirm telemetry does not re-classify and does not turn agent-class span/log-only failures into Issues.\n\nAcceptance: Check off task 6 boxes only after code inspection plus targeted tests. Run relevant relay and telemetry tests; include any failures or test gaps in the wrapup. Tiny one-liner fixes only inline.",
       "assignee": "VERIFY",
-      "isDone": false,
+      "isDone": true,
       "order": 720896,
       "createdAt": "2026-06-11T03:44:39.708841083Z",
-      "updatedAt": "2026-06-11T03:44:39.708841083Z",
-      "completedAt": null
+      "updatedAt": "2026-06-11T05:51:59.865075911Z",
+      "completedAt": "2026-06-11T05:51:59.865075911Z"
     },
     {
       "id": "rall-41bf",
