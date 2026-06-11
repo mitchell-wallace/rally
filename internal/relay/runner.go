@@ -156,6 +156,40 @@ func rallyFailure(tags map[string]string, rc telemetry.RallyContext) telemetry.F
 	}
 }
 
+// failureStateEvent layers a failure-state snapshot onto a rally failure event:
+// the attempt/max_attempts/failure_category/agent_state tags (plus
+// quota_scope/reset for limit categories), and the bounded failure_evidence
+// context block for limit categories. It is the one place the runner folds the
+// structured failure state onto a captured failure, so the terminal-try,
+// unfinalized, and relay-stall sites attach consistent fields. Telemetry never
+// re-classifies here — callers pass the category/evidence already resolved in
+// runOne. Sites that lack a field (e.g. the relay-level all-frozen capture has
+// no attempt or reset evidence) simply leave it zero, and FailureStateTags omits
+// it.
+func failureStateEvent(baseTags map[string]string, rc telemetry.RallyContext, fs telemetry.FailureState) telemetry.FailureEvent {
+	evt := rallyFailure(baseTags, rc)
+	for k, v := range telemetry.FailureStateTags(fs) {
+		evt.Tags[k] = v
+	}
+	if ec := telemetry.FailureEvidenceContext(fs); ec != nil {
+		evt.Contexts["failure_evidence"] = ec
+	}
+	return evt
+}
+
+// agentStateName reports the failing runner's current resilience standing using
+// the verbatim active/probation/frozen/benched vocabulary, for the agent_state
+// tag on captured failures. It reads persisted state from the store so it
+// reflects the runner's standing at capture time.
+func (r *Runner) agentStateName(picked agent.ResolvedAgent) string {
+	res := r.resilience
+	if res == nil {
+		res = NewResilience(r.store)
+	}
+	state, _ := res.GetState(KeyFromAgent(picked))
+	return string(state)
+}
+
 var headPullLap = func(ctx context.Context, workspaceDir string) (laps.Lap, error) {
 	return (&laps.Adapter{WorkspaceDir: workspaceDir}).HeadPull(ctx)
 }
@@ -529,8 +563,16 @@ func (r *Runner) Run(ctx context.Context) error {
 					fmt.Fprintf(log, "relay %d failed: all agents frozen\n", relay.ID)
 					// A relay ending with every agent type frozen is a lockout
 					// that warrants operator attention — capture it as an Issue.
+					// This is a relay-level state, not a single try: it carries only
+					// agent_state=frozen and the relay/global context, with no
+					// try_id, attempt, or reset evidence (those zero fields are
+					// omitted by FailureStateTags).
 					r.tel().CaptureFailure(ctx, fmt.Sprintf("relay %d stalled: all agents frozen", relay.ID),
-						rallyFailure(telemetry.Tags(telemetry.EventInfo{RelayID: relay.ID, Repo: repoKey(r.cfg.WorkspaceDir)}), rc))
+						failureStateEvent(
+							telemetry.Tags(telemetry.EventInfo{RelayID: relay.ID, Repo: repoKey(r.cfg.WorkspaceDir)}),
+							rc,
+							telemetry.FailureState{AgentState: string(StateFrozen)},
+						))
 					_ = CompleteRelay(r.store, relay.ID)
 					return fmt.Errorf("relay failed: all agents frozen")
 				}
@@ -1129,6 +1171,10 @@ func (r *Runner) runOne(
 	}
 	lastAttemptIncomplete := false
 	stallMarked := false
+	// lastAttempt tracks the final attempt number reached, so the
+	// unfinalized-agent capture below (which runs after the loop) can report the
+	// last known attempt as context.
+	lastAttempt := 0
 	roleInstructions, err := r.resolveRoleInstructions(task.Assignee)
 	if err != nil {
 		return outcome(false, false, false), err
@@ -1152,6 +1198,7 @@ func (r *Runner) runOne(
 	}
 attemptLoop:
 	for attempt := 1; attempt <= maxAttempts; attempt++ {
+		lastAttempt = attempt
 		if ctx.Err() != nil {
 			return outcome(false, false, false), ctx.Err()
 		}
@@ -1625,7 +1672,25 @@ attemptLoop:
 				lapPinMismatch ||
 				strings.Contains(strings.ToLower(failReason), "panic")
 			if issueWorthy {
-				r.tel().CaptureFailure(tryCtx, fmt.Sprintf("relay %d run %d try %d failed: %s", relay.ID, runIndex+1, tryRecord.ID, failReason), rallyFailure(tryTags, r.rallyContext(relay)))
+				// Enrich the terminal-try capture with the structured failure
+				// state already resolved above: attempt/budget, the resolved
+				// failure category, the failing runner's resilience standing, and
+				// — for provider-limit categories — the parsed quota scope/reset
+				// and bounded raw provider signal from TryResult.Evidence.
+				fs := telemetry.FailureState{
+					Attempt:     attempt,
+					MaxAttempts: maxAttempts,
+					Category:    string(failureCategory),
+					AgentState:  r.agentStateName(picked),
+				}
+				if resetEvidence != nil {
+					fs.QuotaScope = resetEvidence.QuotaScope
+					fs.ResetAt = resetEvidence.ResetAt
+					fs.ResetAfter = resetEvidence.ResetAfter
+					fs.RawSignal = resetEvidence.RawSignal
+					fs.Message = resetEvidence.Message
+				}
+				r.tel().CaptureFailure(tryCtx, fmt.Sprintf("relay %d run %d try %d failed: %s", relay.ID, runIndex+1, tryRecord.ID, failReason), failureStateEvent(tryTags, r.rallyContext(relay), fs))
 			}
 		}
 		trySpan.Finish()
@@ -1704,8 +1769,17 @@ attemptLoop:
 	if wroteUnfinalized && !success {
 		// "agent exited without finalizing" is an operator-worthy recognized
 		// failure — the agent process ended without `laps done`/`laps handoff`.
+		// Categorize it as incomplete_finalization and carry run/runner/budget and
+		// the last known attempt; this is not a provider-limit failure, so no
+		// quota/reset/raw-signal fields attach.
+		fs := telemetry.FailureState{
+			Category:    string(reliability.CategoryIncompleteFinalization),
+			Attempt:     lastAttempt,
+			MaxAttempts: maxAttempts,
+			AgentState:  r.agentStateName(picked),
+		}
 		r.tel().CaptureFailure(ctx, fmt.Sprintf("relay %d run %d: agent exited without finalizing", relay.ID, runIndex+1),
-			rallyFailure(telemetry.Tags(telemetry.EventInfo{
+			failureStateEvent(telemetry.Tags(telemetry.EventInfo{
 				RelayID: relay.ID,
 				RunID:   runIndex + 1,
 				Role:    task.Assignee,
@@ -1713,7 +1787,7 @@ attemptLoop:
 				Model:   picked.Model,
 				Repo:    repoKey(r.cfg.WorkspaceDir),
 				LapID:   task.LapID,
-			}), r.rallyContext(relay)))
+			}), r.rallyContext(relay), fs))
 	}
 
 	addressed := false
