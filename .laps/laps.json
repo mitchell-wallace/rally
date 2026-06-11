@@ -116,11 +116,11 @@
       "title": "Wire failure-state telemetry into runner capture sites",
       "description": "Context: OpenSpec tasks 6.3-6.6 and runner-facing parts of 6.8. Failure captures currently happen for terminal try failures, unfinalized agents, and relay stalls; this lap wires the structured state from the real run path.\n\nOutcome: terminal try failure captures carry attempt, max_attempts, failure_category, quota/reset evidence where present, and the selected runner's resilience state; unfinalized-agent captures carry failure_category=incomplete_finalization with run/runner/max-attempt/last-attempt context where available; relay stall/all-frozen captures carry agent_state=frozen and relay/global context while omitting try-only fields. Agent-class failures that are only spans/logs remain unaffected and do not become Issues.\n\nFiles \u0026 scope: internal/relay/runner.go, route/resilience helpers only where needed to read state, cmd/rally telemetry tests or relay tests. Do not re-classify inside telemetry; consume TryResult.Evidence and the StrategyDecision/failure-category already produced in runOne.\n\nDesign: Preserve current issue-worthy criteria except for enriching events that are already captured. Be explicit about site-specific fields: terminal try failures can use attempt and max attempts; unfinalized captures may use last known attempt if available; relay-level all-frozen has no try_id, attempt, reset evidence, or raw signal. Reuse active/probation/frozen/benched names verbatim.\n\nAcceptance: Tests show a captured usage-limit failure includes attempt/budget/category/quota_scope/reset/state tags and raw signal context; unfinalized captures include incomplete_finalization; relay stall captures include frozen state and omit try-only fields; agent-class span/log-only failures remain span/log-only. `go test ./internal/relay/... ./cmd/rally/... ./internal/telemetry/...` is green. Do not check off OpenSpec tasks.md boxes.",
       "assignee": "SENIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 589824,
       "createdAt": "2026-06-11T03:44:39.708835336Z",
-      "updatedAt": "2026-06-11T03:44:39.708835336Z",
-      "completedAt": null
+      "updatedAt": "2026-06-11T05:40:45.603823969Z",
+      "completedAt": "2026-06-11T05:40:45.603823969Z"
     },
     {
       "id": "rall-2f5b",
