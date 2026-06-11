@@ -83,11 +83,11 @@
       "title": "Attach relay identity and rally context to spans and failures",
       "description": "Context: OpenSpec tasks 1.3, 4.1-4.3, 5.2, and the identity/cwd parts of 5.4. This depends on the structured event input, environment context, machine identity, and home-collapse helper.\n\nOutcome: relay spans and captured failures carry a `rally` context block with version/os/arch/term, full anonymous machine id, and home-collapsed cwd; tags include local relay_id, relay_guid, relay_started_at, repo, and machine_id_prefix in the specified locations. Full machine id is context-only, never a tag.\n\nFiles \u0026 scope: internal/telemetry/tags.go or a new context builder, internal/relay/runner.go call sites, telemetry tests, and relay telemetry tests. Reuse the existing repo key from the relay logging/tagging path.\n\nDesign: Compute `relay_guid = \u003cmachine-id-prefix\u003e-\u003crepo-key\u003e-\u003cYYYYMMDD\u003e-\u003crelay_id\u003e` from the machine id, existing repo key, relay StartedAt, and local relay id. Attach the same rally context to the relay span and every CaptureFailure event through the structured API. Keep the local relay_id tag for compatibility with summary/try records.\n\nAcceptance: Tests prove relay_guid is stable for one relay and differs across machine ids, repo keys, and dates; relay_id remains tagged; machine_id_prefix is tagged; full machine_id appears only in context; cwd under home is collapsed to `~/...`; relay span and failure event both receive the rally context. `go test ./internal/telemetry/... ./internal/relay/...` is green. Do not check off OpenSpec tasks.md boxes.",
       "assignee": "SENIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 393216,
       "createdAt": "2026-06-11T03:44:39.708829998Z",
-      "updatedAt": "2026-06-11T03:44:39.708829998Z",
-      "completedAt": null
+      "updatedAt": "2026-06-11T05:25:50.216810308Z",
+      "completedAt": "2026-06-11T05:25:50.216810308Z"
     },
     {
       "id": "rall-64ce",
