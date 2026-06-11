@@ -6,11 +6,11 @@
       "title": "Implement structured telemetry event input and environment context",
       "description": "Context: OpenSpec change enrich-failure-telemetry, tasks 1.1, 1.2, 1.4, and the telemetry-side parts of 1.5. Current telemetry.CaptureFailure accepts only tags, and Sentry can populate host-derived server_name unless explicitly neutralized.\n\nOutcome: internal/telemetry has a structured failure/event input that separates scalar tags from context blocks; Sink, NoopSink, SentrySink, and existing telemetry test mocks use it; an environment-context builder returns rally version, go_os, go_arch, and term; Sentry events never carry host-derived server_name.\n\nFiles \u0026 scope: internal/telemetry/sink.go, noop.go, sentry.go, init/context-related files, tags.go only as needed, telemetry tests, and command/relay mocks that must compile after the interface change. Do not wire relay call-site state yet beyond mechanical signature updates needed for buildability.\n\nDesign: Keep filterable values as tags and nested/process context as contexts. Use internal/buildinfo for version, runtime.GOOS/GOARCH, and golang.org/x/term.IsTerminal(int(os.Stdout.Fd())) with $TERM or non-tty for terminal description. Neutralize Sentry server_name by setting a static non-host ClientOptions.ServerName or clearing event.ServerName in scrubEvent, with a test proving the outgoing event is not host-derived.\n\nAcceptance: Targeted telemetry tests cover environment context fields, absence of hostname/username, tag/context separation, Noop behavior, and server_name neutralization. `go test ./internal/telemetry/... ./cmd/rally/... ./internal/relay/...` is green. Do not check off OpenSpec tasks.md boxes.",
       "assignee": "SENIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 65536,
       "createdAt": "2026-06-11T03:44:39.708813697Z",
-      "updatedAt": "2026-06-11T03:44:39.708813697Z",
-      "completedAt": null
+      "updatedAt": "2026-06-11T04:55:28.936416312Z",
+      "completedAt": "2026-06-11T04:55:28.936416312Z"
     },
     {
       "id": "rall-8e96",
