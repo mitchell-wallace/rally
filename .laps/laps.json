@@ -160,11 +160,11 @@
       "title": "Final full-change verification for enriched failure telemetry",
       "description": "Run the complete openspec-verify-change skill for enrich-failure-telemetry and inspect the whole diff. Identify the intended merge target first and use it in diff commands; identify the first lap/try in this batch and treat earlier branch work as pre-existing unless the user asks otherwise. Do not rewrite git history.\n\nConfirm all 30 OpenSpec tasks are done correctly and coherently: structured telemetry event input; environment context and server_name neutralization; DSN default precedence and release injection; active-only anonymous machine identity; relay_guid and machine identity placement; cwd/home stripping across contexts/breadcrumbs/span data/raw text; failure state and quota/reset tags; raw limit-signal context only for provider-limit categories; docs and privacy guarantees.\n\nReview with depth, not just green tests: trace the core call sites in internal/telemetry, cmd/rally/main.go, release config, and internal/relay/runner.go. Confirm no hostname/username/IP or full machine id leaks into tags; no prompt/transcript content is sent; disabled telemetry creates no machine-id file; and agent-class failures recorded as spans/logs are unaffected.\n\nAcceptance: Run the targeted suites plus full `go test ./...` and `go build ./...`. Check off any remaining tasks.md boxes only for verified-correct work. For substantive gaps, add focused head laps using additive/revert commits only; do not turn final verification into a hidden implementation phase.",
       "assignee": "VERIFY",
-      "isDone": false,
+      "isDone": true,
       "order": 851968,
       "createdAt": "2026-06-11T03:44:39.708844377Z",
-      "updatedAt": "2026-06-11T03:44:39.708844377Z",
-      "completedAt": null
+      "updatedAt": "2026-06-11T05:58:29.473713635Z",
+      "completedAt": "2026-06-11T05:58:29.473713635Z"
     }
   ]
 }
