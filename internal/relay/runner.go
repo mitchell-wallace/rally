@@ -32,6 +32,7 @@ import (
 type Config struct {
 	WorkspaceDir           string
 	DataDir                string
+	MachineID              string
 	AgentMixSpecs          []string
 	RouteSpecs             map[string][]string
 	UseOverrideRoute       bool
@@ -111,6 +112,47 @@ func (r *Runner) tel() telemetry.Sink {
 func applyTags(span telemetry.Span, tags map[string]string) {
 	for k, v := range tags {
 		span.SetTag(k, v)
+	}
+}
+
+// rallyContext builds the telemetry RallyContext for a relay: the anonymous
+// machine identity, relay start, repo key, and home-collapsed cwd attached to
+// the relay span and every captured failure.
+func (r *Runner) rallyContext(relay *store.RelayRecord) telemetry.RallyContext {
+	return telemetry.RallyContext{
+		RelayID:        relay.ID,
+		RelayStartedAt: relay.StartedAt,
+		Repo:           repoKey(r.cfg.WorkspaceDir),
+		MachineID:      r.cfg.MachineID,
+		Cwd:            r.cfg.WorkspaceDir,
+	}
+}
+
+// applyRallyContext attaches the base correlation tags, the machine-identity /
+// relay-guid tags, and the `rally` context block to a span. It is the span-side
+// twin of rallyFailure so the relay span and every captured failure carry the
+// same identity. The full machine id rides only in the `rally` data block, never
+// as a tag.
+func applyRallyContext(span telemetry.Span, baseTags map[string]string, rc telemetry.RallyContext) {
+	applyTags(span, baseTags)
+	applyTags(span, telemetry.MachineTags(rc))
+	span.SetData("rally", telemetry.RallyContextBlock(rc))
+}
+
+// rallyFailure assembles a FailureEvent that carries the correlation tags, the
+// machine-identity / relay-guid tags, and the `rally` context block. The base
+// tags are copied so callers that also applied them to a span are unaffected.
+func rallyFailure(tags map[string]string, rc telemetry.RallyContext) telemetry.FailureEvent {
+	merged := make(map[string]string, len(tags)+3)
+	for k, v := range tags {
+		merged[k] = v
+	}
+	for k, v := range telemetry.MachineTags(rc) {
+		merged[k] = v
+	}
+	return telemetry.FailureEvent{
+		Tags:     merged,
+		Contexts: map[string]map[string]interface{}{"rally": telemetry.RallyContextBlock(rc)},
 	}
 }
 
@@ -428,8 +470,10 @@ func (r *Runner) Run(ctx context.Context) error {
 	r.relayStart = time.Now()
 
 	// Model the relay as a trace transaction; runs and tries are child spans.
+	rc := r.rallyContext(relay)
 	ctx, relaySpan := r.tel().StartSpan(ctx, "relay", fmt.Sprintf("relay-%d", relay.ID))
-	applyTags(relaySpan, telemetry.Tags(telemetry.EventInfo{RelayID: relay.ID, Repo: repoKey(r.cfg.WorkspaceDir)}))
+	relayTags := telemetry.Tags(telemetry.EventInfo{RelayID: relay.ID, Repo: repoKey(r.cfg.WorkspaceDir)})
+	applyRallyContext(relaySpan, relayTags, rc)
 	defer relaySpan.Finish()
 
 	resilience := r.resilience
@@ -486,7 +530,7 @@ func (r *Runner) Run(ctx context.Context) error {
 					// A relay ending with every agent type frozen is a lockout
 					// that warrants operator attention — capture it as an Issue.
 					r.tel().CaptureFailure(ctx, fmt.Sprintf("relay %d stalled: all agents frozen", relay.ID),
-						telemetry.FailureEvent{Tags: telemetry.Tags(telemetry.EventInfo{RelayID: relay.ID, Repo: repoKey(r.cfg.WorkspaceDir)})})
+						rallyFailure(telemetry.Tags(telemetry.EventInfo{RelayID: relay.ID, Repo: repoKey(r.cfg.WorkspaceDir)}), rc))
 					_ = CompleteRelay(r.store, relay.ID)
 					return fmt.Errorf("relay failed: all agents frozen")
 				}
@@ -1581,7 +1625,7 @@ attemptLoop:
 				lapPinMismatch ||
 				strings.Contains(strings.ToLower(failReason), "panic")
 			if issueWorthy {
-				r.tel().CaptureFailure(tryCtx, fmt.Sprintf("relay %d run %d try %d failed: %s", relay.ID, runIndex+1, tryRecord.ID, failReason), telemetry.FailureEvent{Tags: tryTags})
+				r.tel().CaptureFailure(tryCtx, fmt.Sprintf("relay %d run %d try %d failed: %s", relay.ID, runIndex+1, tryRecord.ID, failReason), rallyFailure(tryTags, r.rallyContext(relay)))
 			}
 		}
 		trySpan.Finish()
@@ -1661,7 +1705,7 @@ attemptLoop:
 		// "agent exited without finalizing" is an operator-worthy recognized
 		// failure — the agent process ended without `laps done`/`laps handoff`.
 		r.tel().CaptureFailure(ctx, fmt.Sprintf("relay %d run %d: agent exited without finalizing", relay.ID, runIndex+1),
-			telemetry.FailureEvent{Tags: telemetry.Tags(telemetry.EventInfo{
+			rallyFailure(telemetry.Tags(telemetry.EventInfo{
 				RelayID: relay.ID,
 				RunID:   runIndex + 1,
 				Role:    task.Assignee,
@@ -1669,7 +1713,7 @@ attemptLoop:
 				Model:   picked.Model,
 				Repo:    repoKey(r.cfg.WorkspaceDir),
 				LapID:   task.LapID,
-			})})
+			}), r.rallyContext(relay)))
 	}
 
 	addressed := false

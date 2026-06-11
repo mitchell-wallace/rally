@@ -40,6 +40,11 @@ var DefaultSentryDSN = ""
 // has a safe sink. The relay runner reads it via SetTelemetry.
 var activeTelemetry telemetry.Sink = telemetry.NoopSink{}
 
+// activeMachineID holds the anonymous machine identity resolved at init. It is
+// empty when telemetry is disabled. The relay runner reads it via its Config to
+// build the rally context block and machine-identity tags.
+var activeMachineID string
+
 func main() {
 	flushUpdateNotice := startBackgroundUpdateCheck(os.Args[1:], os.Stderr)
 
@@ -47,6 +52,7 @@ func main() {
 	// Machine identity is resolved only when telemetry is active.
 	result := telemetry.InitWithIdentity(loadTelemetryConfig())
 	activeTelemetry = result.Sink
+	activeMachineID = result.MachineID
 	defer result.Cleanup()
 
 	if err := rootCmd.Execute(); err != nil {
@@ -242,6 +248,7 @@ func runRelay(cmd *cobra.Command, args []string) error {
 	runnerCfg := relay.Config{
 		WorkspaceDir:           workspaceDir,
 		DataDir:                dataDir,
+		MachineID:              activeMachineID,
 		AgentMixSpecs:          selectedSpecs,
 		RouteSpecs:             cfg.Routes,
 		UseOverrideRoute:       usedOverride,
