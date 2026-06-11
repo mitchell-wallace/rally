@@ -29,6 +29,8 @@
 - [ ] 5.2 When the category is a usage/quota failure, also attach the `FailureEvidence` reset fields (`quota_scope`, `reset_at`/`reset_after`) as scalar tags where present
 - [ ] 5.3 Wire the state at the three `CaptureFailure` sites (`runner.go:433`, `:1418`, `:1489`) by reading `TryResult.Evidence`/`StrategyDecision` already in scope — do not re-classify in telemetry
 - [ ] 5.4 Tests: a captured usage-limit failure carries attempt/budget/category/quota_scope/reset/state tags; agent-class failures recorded as spans/logs are unaffected
+- [ ] 5.5 When the category is `usage_limit`/`short_rate_limit`/`provider_overloaded`, attach the bounded `FailureEvidence.RawSignal` + `Message` as a `failure_evidence` context block, so the exact provider limit-response shapes accumulate for the `improve-harness-consistency` parser-normalization pass
+- [ ] 5.6 Tests: a limit-category capture carries the bounded raw signal through the scrubber; non-limit categories attach no raw-signal context
 
 ## 6. Docs
 

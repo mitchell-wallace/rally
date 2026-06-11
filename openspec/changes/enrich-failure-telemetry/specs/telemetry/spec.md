@@ -71,6 +71,26 @@ failure. The harness and model SHALL remain available via the existing `runner` 
 - **WHEN** an agent-class try failure is recorded as a span/log rather than an Issue
 - **THEN** the agent-state tags SHALL NOT change whether it is captured as an Issue
 
+### Requirement: Raw limit-signal capture
+When a captured failure's category is a provider-limit signal (usage limit, short rate
+limit, or provider overload), the system SHALL attach the bounded raw signal and parsed
+message from the failure evidence to the event as a context block, so the exact provider
+response shapes observed in the field can be used to validate and normalize the
+per-harness evidence parsers. The attached raw signal SHALL remain bounded, SHALL pass
+through the PII scrubber, and SHALL NOT include prompt or transcript content.
+
+#### Scenario: Limit failure carries the raw provider signal
+- **WHEN** a failure with a usage-limit, short-rate-limit, or provider-overload category is captured with failure evidence present
+- **THEN** the event SHALL include the bounded raw signal and parsed message as a context block
+
+#### Scenario: Raw signal stays bounded and scrubbed
+- **WHEN** the raw limit signal is attached
+- **THEN** it SHALL be bounded in size, SHALL pass through the `before_send` scrubber, and SHALL NOT contain prompt or transcript content
+
+#### Scenario: Non-limit categories attach no raw signal
+- **WHEN** a captured failure has a category that is not a provider-limit signal
+- **THEN** the system SHALL NOT attach a raw-signal context block
+
 ## MODIFIED Requirements
 
 ### Requirement: Telemetry PII scrubbing

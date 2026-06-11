@@ -17,11 +17,30 @@ func TestParseClaudeError(t *testing.T) {
 		expectedStatusCode int
 	}{
 		{
+			// The five-hour window is quota exhaustion, not a short rate
+			// limit: it benches the quota scope (default 5h) instead of
+			// sleeping inline in the attempt loop.
 			name:               "rate_limit_event five-hour",
 			stderr:             `{"type":"error","error":{"type":"rate_limit_error","message":"This request would exceed the five-hour rate limit for your organization."}}`,
-			expectedCategory:   CategoryShortRateLimit,
+			expectedCategory:   CategoryUsageLimit,
 			expectedProvider:   ProviderAnthropic,
-			expectedRetryAfter: 5 * time.Hour,
+			expectedResetAfter: 5 * time.Hour,
+			expectedStatusCode: 429,
+		},
+		{
+			name:               "five-hour with parsed reset span",
+			stderr:             "Five-hour limit reached · resets in 3h 24m",
+			expectedCategory:   CategoryUsageLimit,
+			expectedProvider:   ProviderAnthropic,
+			expectedResetAfter: 3*time.Hour + 24*time.Minute,
+			expectedStatusCode: 429,
+		},
+		{
+			name:               "rate_limit with reset span but no named window",
+			stderr:             "rate_limit: usage cap hit, resets in 2h 5m",
+			expectedCategory:   CategoryUsageLimit,
+			expectedProvider:   ProviderAnthropic,
+			expectedResetAfter: 2*time.Hour + 5*time.Minute,
 			expectedStatusCode: 429,
 		},
 		{
@@ -35,9 +54,9 @@ func TestParseClaudeError(t *testing.T) {
 		{
 			name:               "rate_limit_event five hour no hyphen",
 			stderr:             "error: rate limit: five hour cap exceeded",
-			expectedCategory:   CategoryShortRateLimit,
+			expectedCategory:   CategoryUsageLimit,
 			expectedProvider:   ProviderAnthropic,
-			expectedRetryAfter: 5 * time.Hour,
+			expectedResetAfter: 5 * time.Hour,
 			expectedStatusCode: 429,
 		},
 		{
@@ -148,6 +167,57 @@ func TestParseClaudeError(t *testing.T) {
 				t.Errorf("statusCode = %d, want %d", ev.StatusCode, tt.expectedStatusCode)
 			}
 		})
+	}
+}
+
+func TestParseClaudeError_ClockReset(t *testing.T) {
+	ev := ParseClaudeError("rate_limit: usage limit reached · resets at 14:30")
+	if ev == nil {
+		t.Fatal("expected non-nil evidence")
+	}
+	if ev.Category != CategoryUsageLimit {
+		t.Errorf("category = %q, want %q", ev.Category, CategoryUsageLimit)
+	}
+	if ev.ResetAt == nil {
+		t.Fatal("expected ResetAt to be populated from clock time")
+	}
+	if got := ev.ResetAt.Minute(); got != 30 {
+		t.Errorf("ResetAt minute = %d, want 30", got)
+	}
+	if got := ev.ResetAt.Hour(); got != 14 {
+		t.Errorf("ResetAt hour = %d, want 14", got)
+	}
+	if !ev.ResetAt.After(time.Now()) {
+		t.Error("ResetAt should be the next occurrence of the clock time")
+	}
+}
+
+func TestParseClaudeError_ClockResetPM(t *testing.T) {
+	ev := ParseClaudeError("five-hour limit · resets at 2:30 PM")
+	if ev == nil {
+		t.Fatal("expected non-nil evidence")
+	}
+	if ev.Category != CategoryUsageLimit {
+		t.Errorf("category = %q, want %q", ev.Category, CategoryUsageLimit)
+	}
+	if ev.ResetAt == nil {
+		t.Fatal("expected ResetAt to be populated")
+	}
+	if got := ev.ResetAt.Hour(); got != 14 {
+		t.Errorf("ResetAt hour = %d, want 14 (2 PM)", got)
+	}
+}
+
+func TestParseClaudeError_PlainRateLimitStaysShort(t *testing.T) {
+	ev := ParseClaudeError("error: rate_limit_error: too many requests")
+	if ev == nil {
+		t.Fatal("expected non-nil evidence")
+	}
+	if ev.Category != CategoryShortRateLimit {
+		t.Errorf("category = %q, want %q (no reset timing, no named window)", ev.Category, CategoryShortRateLimit)
+	}
+	if ev.RetryAfter != 60*time.Second {
+		t.Errorf("retryAfter = %v, want %v", ev.RetryAfter, 60*time.Second)
 	}
 }
 

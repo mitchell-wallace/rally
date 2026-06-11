@@ -87,10 +87,14 @@ func (o *OpenCodeExecutor) Execute(ctx context.Context, opts RunOptions) (*TryRe
 	if err != nil {
 		return nil, err
 	}
-	if ev := reliability.ParseOpencodeError(string(out), model); ev != nil {
-		tr.Evidence = ev
-	}
 	if runErr != nil {
+		// Only attach evidence on a failed run: a successful exit can still
+		// carry an earlier, recovered error event in its JSON stream, and
+		// stale evidence would override log-tail classification if the run
+		// is later judged failed for unrelated reasons (e.g. a no-op try).
+		if ev := reliability.ParseOpencodeError(string(out), model); ev != nil {
+			tr.Evidence = ev
+		}
 		return tr, fmt.Errorf("opencode exec failed: %w", runErr)
 	}
 	return tr, nil

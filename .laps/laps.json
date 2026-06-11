@@ -193,21 +193,32 @@
       "title": "Add regression coverage for the observed failure signatures",
       "description": "Context: phase 9 (tasks 9.1-9.6). These are the end-to-end guard tests for the real signatures that motivated the change; they should fail against the old classifier and pass against the new one.\n\nOutcome: Six regression tests.\n\nFiles \u0026 scope: tests in the relevant packages (internal/reliability/, internal/relay/).\n\nCases: 9.1 Antigravity quota with zero changed files -\u003e usage_limit; 9.2 Antigravity quota + only .claude/settings.local.json dirty -\u003e usage_limit (not incomplete); 9.3 Codex VERIFY log tail mentioning 'rate-limit' as prose -\u003e not a Claude rate limit; 9.4 Claude invalid model + settings dirty -\u003e invalid_model (not incomplete); 9.5 real task-file dirty with no finalization -\u003e incomplete_finalization; 9.6 an API timeout / connection-reset log tail -\u003e transient_infra (infra-class), not agent_error.\n\nAcceptance: All six pass. `go test ./...` green. Do not tick tasks.md boxes.",
       "assignee": "JUNIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 1114112,
       "createdAt": "2026-06-09T06:45:39.168310609Z",
-      "updatedAt": "2026-06-09T06:45:39.168310609Z",
-      "completedAt": null
+      "updatedAt": "2026-06-10T11:51:29.749587391Z",
+      "completedAt": "2026-06-10T11:51:29.749587391Z"
     },
     {
       "id": "rall-77a6",
       "title": "Final full-change verification for improve-error-categorisation",
       "description": "Run the complete openspec-verify-change skill for improve-error-categorisation and inspect the whole diff. Identify the intended merge target first (from the user, PR metadata, repo docs, branch config, or recent history) and use `git diff \u003ctarget\u003e...HEAD`; treat work predating the first lap of this batch as pre-existing unless the user asks to include it.\n\nConfirm all 39 tasks are done correctly and coherently, and that the single taxonomy is used consistently across classification, display, try records, the scheduler, and persistence — one taxonomy, one priority order, one typed evidence shape. Re-confirm the load-bearing invariants: agent-class mapping for usage_limit/invalid_model/auth_or_proxy, dirty-tree incomplete demoted below provider/config/quota, harness-scoped classification, usage limits bench rather than loop, and reset recovery across relays. Run the full `go test ./...`, `go build ./...`, and the project lint.\n\nCheck off any remaining tasks.md boxes only for verified-correct work, ensuring every box reflects verified-done. For substantive gaps, add focused head laps (additive or revert commits, no history rewrite); do not turn verification into a hidden implementation phase.",
       "assignee": "VERIFY",
-      "isDone": false,
+      "isDone": true,
       "order": 1179648,
       "createdAt": "2026-06-09T06:45:39.168316092Z",
-      "updatedAt": "2026-06-09T06:45:39.168316092Z",
+      "updatedAt": "2026-06-10T11:54:27.796150243Z",
+      "completedAt": "2026-06-10T11:54:27.796150243Z"
+    },
+    {
+      "id": "work-451f",
+      "title": "Validate provider limit-response shapes against Sentry and update parsers/plans",
+      "description": "Use the Sentry CLI (`sentry-cli`, installed on the host outside the rally container) to inspect what failure telemetry rally has already captured, and use it to validate the per-harness limit-response parsing that was written partly from memory.\n\nSteps:\n1. Check what we have: authenticate sentry-cli, list recent rally events/issues, and pull any captured failure payloads that include rate-limit / usage-limit / provider-overload output (search for categories `usage_limit`, `short_rate_limit`, `provider_overloaded`, and raw strings like \"rate_limit\", \"resets\", \"RESOURCE_EXHAUSTED\", \"usage limit\"). Note: the dedicated raw limit-signal corpus (bounded RawSignal/Message context) only lands with the `enrich-failure-telemetry` change, so today's events may carry limit shapes only in messages/log excerpts — collect whatever exists.\n2. Compare the real shapes against the assumptions encoded in `internal/reliability/claude.go` (`ParseClaudeError`): limits phrased as `rate_limit` (not \"overload\"); usage resets as a `\\dh \\dm` span or `hh:mm` clock after \"resets\"; five-hour/seven-day windows classified as usage limits with a 5h default bench (`BenchDefaultDuration`). Also spot-check `ParseCodexError` (\"Try again at h:mm AM/PM\"), `ParseGeminiError` (\"RESOURCE_EXHAUSTED\", \"Resets in \u003cdur\u003e\"), and `ParseOpencodeError` (JSON error events).\n3. Update `ParseClaudeError` (and the other parsers where evidence warrants) plus their tests in `internal/reliability/` to match the observed shapes. Keep the reset-anchored regex style so stray durations/timestamps cannot false-positive.\n4. Fold findings into `openspec/changes/improve-harness-consistency/draft.md` (the \"from-memory assumptions\" list and the parser-normalization candidate work item) so the consistency pass starts from validated data instead of memory.\n\nIf Sentry has no usable limit payloads yet, record that result in the draft too — it strengthens the case for the raw limit-signal corpus in `enrich-failure-telemetry` — and leave the parsers as-is.",
+      "assignee": "senior",
+      "isDone": false,
+      "order": 65536,
+      "createdAt": "2026-06-11T00:16:04.643969251Z",
+      "updatedAt": "2026-06-11T00:16:04.643969251Z",
       "completedAt": null
     }
   ]

@@ -67,15 +67,15 @@ var AllCategories = []FailureCategory{
 // display label. Labels carry no harness name unless the category is
 // intentionally harness-specific (none currently are).
 var categoryDisplayLabels = map[FailureCategory]string{
-	CategoryUsageLimit:            "usage limit",
-	CategoryShortRateLimit:        "rate limit",
-	CategoryProviderOverloaded:    "provider overloaded",
-	CategoryTransientInfra:        "infra error",
-	CategoryInvalidModel:          "invalid model",
-	CategoryAuthOrProxy:           "auth/proxy error",
-	CategoryHarnessLaunch:         "harness launch error",
+	CategoryUsageLimit:             "usage limit",
+	CategoryShortRateLimit:         "rate limit",
+	CategoryProviderOverloaded:     "provider overloaded",
+	CategoryTransientInfra:         "infra error",
+	CategoryInvalidModel:           "invalid model",
+	CategoryAuthOrProxy:            "auth/proxy error",
+	CategoryHarnessLaunch:          "harness launch error",
 	CategoryIncompleteFinalization: "incomplete: file changes without finalization",
-	CategoryAgentError:            "agent error",
+	CategoryAgentError:             "agent error",
 }
 
 // CategoryDisplayLabel returns the short display label for a category.
@@ -98,15 +98,15 @@ func CategoryDisplayLabel(c FailureCategory) string {
 //   - incomplete_finalization → FailureIncomplete
 //   - agent_error → FailureAgent
 var categoryToClass = map[FailureCategory]FailureClass{
-	CategoryUsageLimit:            FailureAgent,
-	CategoryShortRateLimit:        FailureInfra,
-	CategoryProviderOverloaded:    FailureInfra,
-	CategoryTransientInfra:        FailureInfra,
-	CategoryInvalidModel:          FailureAgent,
-	CategoryAuthOrProxy:           FailureAgent,
-	CategoryHarnessLaunch:         FailureInfra,
+	CategoryUsageLimit:             FailureAgent,
+	CategoryShortRateLimit:         FailureInfra,
+	CategoryProviderOverloaded:     FailureInfra,
+	CategoryTransientInfra:         FailureInfra,
+	CategoryInvalidModel:           FailureAgent,
+	CategoryAuthOrProxy:            FailureAgent,
+	CategoryHarnessLaunch:          FailureInfra,
 	CategoryIncompleteFinalization: FailureIncomplete,
-	CategoryAgentError:            FailureAgent,
+	CategoryAgentError:             FailureAgent,
 }
 
 // CategoryToClass returns the FailureClass for a given FailureCategory.

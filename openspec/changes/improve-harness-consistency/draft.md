@@ -17,6 +17,15 @@ This is especially visible around headless execution:
 - Claude Code has some special rate-limit handling; equivalent infra-class
   handling for other harnesses should flow through common reliability
   classification rather than bespoke runner branches.
+- `improve-error-categorisation` introduced per-harness failure-evidence
+  parsers in `internal/reliability/` (`ParseClaudeError`, `ParseCodexError`,
+  `ParseGeminiError`, `ParseOpencodeError`). They are lopsided: each encodes
+  its provider's rate-limit / usage-limit response shapes ad hoc, partly from
+  memory rather than captured data. Known from-memory assumptions baked into
+  `ParseClaudeError` that need validation against real responses: limits are
+  phrased as `rate_limit` (not "overload"); usage resets appear as a
+  `\dh \dm` span or an `hh:mm` clock time after "resets"; the five-hour and
+  seven-day windows are usage limits (benched), not short rate limits.
 - Summary extraction, error reporting, tool counting, session IDs, and retry
   classification should look uniform to the relay runner.
 
@@ -57,6 +66,15 @@ This is especially visible around headless execution:
   no final text, infra/rate-limit error, tool use, and session ID behavior.
 - Refactor harness-specific rate-limit and infra detection into shared
   reliability classification utilities where possible.
+- Normalize the per-harness failure-evidence parsers against real captured
+  response shapes rather than remembered ones: `enrich-failure-telemetry` adds a
+  raw limit-signal corpus (bounded `RawSignal`/`Message` on limit-category
+  failures) to Sentry for exactly this purpose. Before reworking the parsers,
+  pull what is already captured (`sentry-cli` is available on the host) to
+  confirm or correct each harness's limit phrasing and reset-timing formats,
+  then move evidence population fully into the adapters
+  (per `improve-error-categorisation` design Decision 1) behind one shared
+  contract instead of four ad-hoc parser entry points.
 - Document which behavior may be harness-specific and which behavior must be
   uniform at the runner boundary.
 - Consider a harness capability matrix for liveness probe, resume, model

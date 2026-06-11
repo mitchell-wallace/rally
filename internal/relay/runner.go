@@ -155,8 +155,11 @@ func formatCategorizedDisplay(cat reliability.FailureCategory, cooldown time.Dur
 	label := reliability.CategoryDisplayLabel(cat)
 	switch cat {
 	case reliability.CategoryUsageLimit:
-		dur := usageResetDuration(cooldown, evidence)
-		if dur > 0 {
+		// Only show a reset time backed by parsed evidence. The classifier's
+		// cooldown is a legacy wait default, not the quota reset — the actual
+		// bench window without evidence is BenchDefaultDuration, so echoing
+		// the cooldown would display a deadline that does not match the bench.
+		if dur := usageResetDuration(evidence); dur > 0 {
 			return fmt.Sprintf("%s, resets in %s", label, formatHoursMinutes(dur))
 		}
 		return label
@@ -170,18 +173,19 @@ func formatCategorizedDisplay(cat reliability.FailureCategory, cooldown time.Dur
 	}
 }
 
-func usageResetDuration(cooldown time.Duration, evidence *reliability.FailureEvidence) time.Duration {
-	if evidence != nil {
-		if evidence.ResetAfter > 0 {
-			return evidence.ResetAfter
-		}
-		if evidence.ResetAt != nil {
-			if remaining := time.Until(*evidence.ResetAt); remaining > 0 {
-				return remaining
-			}
+func usageResetDuration(evidence *reliability.FailureEvidence) time.Duration {
+	if evidence == nil {
+		return 0
+	}
+	if evidence.ResetAfter > 0 {
+		return evidence.ResetAfter
+	}
+	if evidence.ResetAt != nil {
+		if remaining := time.Until(*evidence.ResetAt); remaining > 0 {
+			return remaining
 		}
 	}
-	return cooldown
+	return 0
 }
 
 func formatHoursMinutes(d time.Duration) string {
@@ -568,7 +572,7 @@ func (r *Runner) Run(ctx context.Context) error {
 			}
 		}
 
-		success, addressed, interrupted, _, failureClass, failureCategory, resetEvidence, infraFailures, err := r.runOne(
+		res, err := r.runOne(
 			runCtx,
 			relay,
 			runIndex,
@@ -591,7 +595,7 @@ func (r *Runner) Run(ctx context.Context) error {
 			fmt.Fprintf(log, "relay %d run %d error: %v\n", relay.ID, runIndex+1, err)
 			return err
 		}
-		if interrupted {
+		if res.Interrupted {
 			fmt.Fprintf(log, "relay %d stop requested, halting\n", relay.ID)
 			break
 		}
@@ -611,7 +615,7 @@ func (r *Runner) Run(ctx context.Context) error {
 			}
 			continue
 		}
-		if !success {
+		if !res.Success {
 			selection.Scheduler.OnAgentFailed(selection.Entry, "retry-budget-exhausted", false)
 		}
 
@@ -620,17 +624,17 @@ func (r *Runner) Run(ctx context.Context) error {
 		// scope until the reset (below); other categories (auth_or_proxy,
 		// invalid_model) are left to the scheduler's normal exhaustion/route-away
 		// path. The log line records the resolution for operator triage.
-		if !success && failureCategory != "" {
+		if !res.Success && res.Category != "" {
 			resetNote := "none"
-			if resetEvidence != nil {
-				if resetEvidence.ResetAt != nil {
-					resetNote = "reset_at=" + resetEvidence.ResetAt.UTC().Format(time.RFC3339)
-				} else if resetEvidence.ResetAfter > 0 {
-					resetNote = "reset_after=" + resetEvidence.ResetAfter.String()
+			if res.ResetEvidence != nil {
+				if res.ResetEvidence.ResetAt != nil {
+					resetNote = "reset_at=" + res.ResetEvidence.ResetAt.UTC().Format(time.RFC3339)
+				} else if res.ResetEvidence.ResetAfter > 0 {
+					resetNote = "reset_after=" + res.ResetEvidence.ResetAfter.String()
 				}
 			}
 			fmt.Fprintf(log, "relay %d run %d resolved failure category=%s reset=%s\n",
-				relay.ID, runIndex+1, failureCategory, resetNote)
+				relay.ID, runIndex+1, res.Category, resetNote)
 
 			// On a usage_limit, bench the entire exhausted quota scope across
 			// every lane until the reset deadline so siblings sharing the same
@@ -638,8 +642,8 @@ func (r *Runner) Run(ctx context.Context) error {
 			// than thrashing the limit. Other terminal categories (auth_or_proxy,
 			// invalid_model) are routed away by the scheduler's normal exhaustion
 			// path and are not benched here.
-			if failureCategory == reliability.CategoryUsageLimit {
-				resetAt := benchResetDeadline(resetEvidence, time.Now())
+			if res.Category == reliability.CategoryUsageLimit {
+				resetAt := benchResetDeadline(res.ResetEvidence, time.Now())
 				scope := routing.QuotaScope(selection.Agent.Harness, selection.Agent.Model)
 				benched, benchErr := routeRuntime.benchQuotaScope(resilience, scope, resetAt, relay.ID)
 				if benchErr != nil {
@@ -651,7 +655,7 @@ func (r *Runner) Run(ctx context.Context) error {
 		}
 
 		if selection.Probation {
-			if success || failureClass == reliability.FailureIncomplete {
+			if res.Success || res.FailureClass == reliability.FailureIncomplete {
 				if err := resilience.UnpauseAgent(KeyFromAgent(selection.Agent), relay.ID); err != nil {
 					return err
 				}
@@ -661,27 +665,27 @@ func (r *Runner) Run(ctx context.Context) error {
 				}
 			}
 		} else if selection.HourlyRetry {
-			if success {
+			if res.Success {
 				if err := resilience.UnpauseAgent(KeyFromAgent(selection.Agent), relay.ID); err != nil {
 					return err
 				}
-			} else if failureClass == reliability.FailureInfra && infraFailures > 1 {
+			} else if res.FailureClass == reliability.FailureInfra && res.InfraFailures > 1 {
 				if err := resilience.RecordHourlyFailure(KeyFromAgent(selection.Agent), relay.ID); err != nil {
 					return err
 				}
 			}
 		} else {
-			if !success && failureClass == reliability.FailureInfra && infraFailures > 1 {
+			if !res.Success && res.FailureClass == reliability.FailureInfra && res.InfraFailures > 1 {
 				if err := resilience.PauseAgent(KeyFromAgent(selection.Agent), relay.ID); err != nil {
 					return err
 				}
 			}
 		}
 
-		if success {
+		if res.Success {
 			relay.CompletedIterations++
 			runIndex++
-			if consumedMsg != nil && addressed {
+			if consumedMsg != nil && res.Addressed {
 				consumedMsg.Status = "addressed"
 				now := time.Now().UTC().Format(time.RFC3339)
 				consumedMsg.UpdatedAt = now
@@ -693,7 +697,7 @@ func (r *Runner) Run(ctx context.Context) error {
 					relay.ConsumedMessageIDs = append(relay.ConsumedMessageIDs, consumedMsg.ID)
 				}
 			}
-			if relayMsg != nil && addressed && relayMsg.Status == "pending" {
+			if relayMsg != nil && res.Addressed && relayMsg.Status == "pending" {
 				relayMsg.Status = "addressed"
 				now := time.Now().UTC().Format(time.RFC3339)
 				relayMsg.UpdatedAt = now
@@ -992,6 +996,31 @@ func benchResetDeadline(ev *reliability.FailureEvidence, now time.Time) time.Tim
 	return now.Add(BenchDefaultDuration)
 }
 
+// runOutcome carries the result of one run (one runner assigned to one lap)
+// back to the routing dispatch loop in Run.
+type runOutcome struct {
+	// Success reports whether the run finalized successfully.
+	Success bool
+	// Addressed reports whether the consumed inbox/relay message was
+	// addressed, from the final try's MessageAddressed.
+	Addressed bool
+	// Interrupted reports that the run ended on an operator stop request.
+	Interrupted bool
+	// FailReason is the display-formatted reason of the most recent failed
+	// attempt; empty for unknown errors.
+	FailReason string
+	// FailureClass is the resilience class of the most recent failed attempt.
+	FailureClass reliability.FailureClass
+	// Category is the resolved FailureCategory of the most recent failed
+	// attempt; empty when no failed attempt was classified.
+	Category reliability.FailureCategory
+	// ResetEvidence carries parsed reset timing (ResetAt/ResetAfter) used to
+	// size the bench window on a usage_limit.
+	ResetEvidence *reliability.FailureEvidence
+	// InfraFailures counts attempts classified infra-class within this run.
+	InfraFailures int
+}
+
 func (r *Runner) runOne(
 	ctx context.Context,
 	relay *store.RelayRecord,
@@ -1005,7 +1034,7 @@ func (r *Runner) runOne(
 	onStall func(),
 	onStallRecovered func(),
 	log io.Writer,
-) (bool, bool, bool, string, reliability.FailureClass, reliability.FailureCategory, *reliability.FailureEvidence, int, error) {
+) (runOutcome, error) {
 	// Initialize run-state for this run.
 	runID := fmt.Sprintf("relay-%d-run-%d", relay.ID, runIndex+1)
 	summaryEntryCountBeforeRun := progressSummaryEntryCount(r.cfg.WorkspaceDir)
@@ -1040,11 +1069,25 @@ func (r *Runner) runOne(
 	var failureCategory reliability.FailureCategory
 	var resetEvidence *reliability.FailureEvidence
 	infraFailures := 0
+	// outcome snapshots the run-scoped failure state for return; only the
+	// success/addressed/interrupted flags vary per return site.
+	outcome := func(succeeded, addressed, interrupted bool) runOutcome {
+		return runOutcome{
+			Success:       succeeded,
+			Addressed:     addressed,
+			Interrupted:   interrupted,
+			FailReason:    failReason,
+			FailureClass:  failureClass,
+			Category:      failureCategory,
+			ResetEvidence: resetEvidence,
+			InfraFailures: infraFailures,
+		}
+	}
 	lastAttemptIncomplete := false
 	stallMarked := false
 	roleInstructions, err := r.resolveRoleInstructions(task.Assignee)
 	if err != nil {
-		return false, false, false, "", failureClass, failureCategory, resetEvidence, infraFailures, err
+		return outcome(false, false, false), err
 	}
 
 	// Check for uncommitted non-rally changes at run start. Errors are
@@ -1066,10 +1109,10 @@ func (r *Runner) runOne(
 attemptLoop:
 	for attempt := 1; attempt <= maxAttempts; attempt++ {
 		if ctx.Err() != nil {
-			return false, false, false, "", failureClass, failureCategory, resetEvidence, infraFailures, ctx.Err()
+			return outcome(false, false, false), ctx.Err()
 		}
 		if r.stopFlag.Load() {
-			return false, false, true, "", failureClass, failureCategory, resetEvidence, infraFailures, nil
+			return outcome(false, false, true), nil
 		}
 
 		if attempt > 1 {
@@ -1118,10 +1161,10 @@ attemptLoop:
 
 		taskPath := store.CurrentTaskPath(r.cfg.WorkspaceDir)
 		if err := os.MkdirAll(filepath.Dir(taskPath), 0o755); err != nil {
-			return false, false, false, "", failureClass, failureCategory, resetEvidence, infraFailures, fmt.Errorf("create current_task.md dir: %w", err)
+			return outcome(false, false, false), fmt.Errorf("create current_task.md dir: %w", err)
 		}
 		if err := os.WriteFile(taskPath, []byte(prompt), 0o644); err != nil {
-			return false, false, false, "", failureClass, failureCategory, resetEvidence, infraFailures, fmt.Errorf("write current_task.md: %w", err)
+			return outcome(false, false, false), fmt.Errorf("write current_task.md: %w", err)
 		}
 
 		tryLogPath := filepath.Join(r.cfg.DataDir, "tries", repoKey(r.cfg.WorkspaceDir), fmt.Sprintf("try-%d.log", r.store.NextTryID()))
@@ -1544,15 +1587,15 @@ attemptLoop:
 		trySpan.Finish()
 
 		if err := r.store.AppendTry(tryRecord); err != nil {
-			return false, false, false, "", failureClass, failureCategory, resetEvidence, infraFailures, err
+			return outcome(false, false, false), err
 		}
 
 		if actionTaken {
 			if r.stopFlag.Load() {
-				return false, false, true, "", failureClass, failureCategory, resetEvidence, infraFailures, nil
+				return outcome(false, false, true), nil
 			}
 			if r.skipFlag.Load() {
-				return false, false, false, "", failureClass, failureCategory, resetEvidence, infraFailures, nil
+				return outcome(false, false, false), nil
 			}
 			fmt.Println("Paused — press Enter to resume")
 			bufio.NewReader(os.Stdin).ReadString('\n')
@@ -1633,7 +1676,7 @@ attemptLoop:
 	if lastResult != nil && lastResult.MessageAddressed != nil {
 		addressed = *lastResult.MessageAddressed
 	}
-	return success, addressed, false, failReason, failureClass, failureCategory, resetEvidence, infraFailures, nil
+	return outcome(success, addressed, false), nil
 }
 
 func (r *Runner) newStallController(tryLogPath string, exec agent.Executor) reliability.StallController {

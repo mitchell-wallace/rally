@@ -329,7 +329,7 @@ func TestClassifyError(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			decision := ClassifyError(tt.logLines, tt.harness)
+			decision := ClassifyError(tt.logLines, tt.harness, nil, nil)
 			if decision.Strategy != tt.expectedStrategy {
 				t.Errorf("expected strategy %q, got %q (reason: %s)", tt.expectedStrategy, decision.Strategy, decision.Reason)
 			}
@@ -414,7 +414,7 @@ func TestClassifyError_IncompleteContext(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			decision := ClassifyError(tt.logLines, "", tt.ctx)
+			decision := ClassifyError(tt.logLines, "", tt.ctx, nil)
 			if decision.FailureClass != tt.expectedClass {
 				t.Errorf("expected failure class %q, got %q (reason: %s)", tt.expectedClass, decision.FailureClass, decision.Reason)
 			}
@@ -427,7 +427,7 @@ func TestClassifyError_IncompleteContext(t *testing.T) {
 
 func TestClassifyError_BackwardCompatibility(t *testing.T) {
 	// Verify that calling ClassifyError with empty harness works.
-	decision := ClassifyError([]string{"fork/exec /bin/agent: error"}, "")
+	decision := ClassifyError([]string{"fork/exec /bin/agent: error"}, "", nil, nil)
 	if decision.FailureClass != FailureInfra {
 		t.Errorf("expected FailureInfra, got %q", decision.FailureClass)
 	}
@@ -450,11 +450,9 @@ func TestFailureClassValues(t *testing.T) {
 }
 
 func TestErrorPatterns_AllTagged(t *testing.T) {
-	// Every pattern in the table must have a non-empty FailureClass and Category.
+	// Every pattern in the table must have a non-empty Category; the
+	// resilience FailureClass is derived from it via CategoryToClass.
 	for _, p := range ErrorPatterns {
-		if p.FailureClass == "" {
-			t.Errorf("pattern %q has no FailureClass set", p.Name)
-		}
 		if p.Category == "" {
 			t.Errorf("pattern %q has no Category set", p.Name)
 		}
@@ -535,7 +533,7 @@ func TestClassifyError_HarnessScoping(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			decision := ClassifyError(tt.logLines, tt.harness)
+			decision := ClassifyError(tt.logLines, tt.harness, nil, nil)
 			if decision.Reason != tt.expectedReason {
 				t.Errorf("expected reason %q, got %q", tt.expectedReason, decision.Reason)
 			}
@@ -604,7 +602,7 @@ func TestClassifyError_CategoryToClassAuthoritativeForTextPatterns(t *testing.T)
 	// guards the load-bearing freeze-counter invariant: a usage_limit text
 	// match maps to FailureAgent (does-not-freeze) even though the pattern
 	// entry is tagged FailureInfra for documentation.
-	decision := ClassifyError([]string{"You've hit your usage limit. Upgrade to Pro."}, "")
+	decision := ClassifyError([]string{"You've hit your usage limit. Upgrade to Pro."}, "", nil, nil)
 	if decision.Category != CategoryUsageLimit {
 		t.Fatalf("expected category %q, got %q", CategoryUsageLimit, decision.Category)
 	}
@@ -634,7 +632,7 @@ func TestClassifyError_CategoryToClassAuthoritativeForTextPatterns(t *testing.T)
 func TestClassifyError_DisplayLabels(t *testing.T) {
 	// Verify display labels don't contain harness names for harness-agnostic
 	// patterns.
-	decision := ClassifyError([]string{"connection refused"}, "")
+	decision := ClassifyError([]string{"connection refused"}, "", nil, nil)
 	if decision.DisplayLabel == "" {
 		t.Error("expected non-empty display label")
 	}
@@ -646,11 +644,11 @@ func TestClassifyError_DisplayLabels(t *testing.T) {
 
 func TestClassifyError_TransientDirtyPathsExclusion(t *testing.T) {
 	tests := []struct {
-		name           string
-		evidence       *FailureEvidence
-		ctx            *ClassifyContext
-		wantCategory   FailureCategory
-		wantClass      FailureClass
+		name         string
+		evidence     *FailureEvidence
+		ctx          *ClassifyContext
+		wantCategory FailureCategory
+		wantClass    FailureClass
 	}{
 		{
 			name: "Claude usage_limit with only settings dirty is usage_limit not incomplete",

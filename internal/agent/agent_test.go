@@ -1775,8 +1775,8 @@ exit 1
 	if tr.Evidence == nil {
 		t.Fatal("expected Evidence to be populated for rate_limit_event")
 	}
-	if tr.Evidence.Category != reliability.CategoryShortRateLimit {
-		t.Errorf("Category = %q, want %q", tr.Evidence.Category, reliability.CategoryShortRateLimit)
+	if tr.Evidence.Category != reliability.CategoryUsageLimit {
+		t.Errorf("Category = %q, want %q (five-hour window is a usage limit)", tr.Evidence.Category, reliability.CategoryUsageLimit)
 	}
 	if tr.Evidence.Provider != reliability.ProviderAnthropic {
 		t.Errorf("Provider = %q, want %q", tr.Evidence.Provider, reliability.ProviderAnthropic)

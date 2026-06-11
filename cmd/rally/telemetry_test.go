@@ -327,9 +327,11 @@ func TestTelemetry_InfraFailure_Issue(t *testing.T) {
 		t.Fatalf("failed to init store: %v", err)
 	}
 
-	// Write "rate-limit exceeded" to the log file to classify as FailureInfra
+	// Write an API-timeout signal to the log file to classify as FailureInfra.
+	// (The rate-limit pattern previously used here is now scoped to the claude
+	// harness; "request timed out" stays harness-agnostic transient infra.)
 	executors := map[string]agent.Executor{
-		"antigravity": &customExecutor{succeedOn: 99, logContent: "rate-limit exceeded\n"},
+		"antigravity": &customExecutor{succeedOn: 99, logContent: "request timed out\n"},
 	}
 
 	cfg := relay.Config{

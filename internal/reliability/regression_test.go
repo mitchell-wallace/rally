@@ -60,7 +60,7 @@ func TestRegression_CodexVerifyRateLimitProse_NotClaudeRateLimit(t *testing.T) {
 		"The upstream provider returned a rate-limit warning; retries may succeed later",
 		"codex exited with code 1",
 	}
-	decision := ClassifyError(logLines, "codex")
+	decision := ClassifyError(logLines, "codex", nil, nil)
 	if decision.Category == CategoryShortRateLimit {
 		t.Errorf("codex harness must NOT match claude-scoped rate-limit pattern; got category %q, reason %q",
 			decision.Category, decision.Reason)
@@ -110,6 +110,7 @@ func TestRegression_TaskFileDirtyNoFinalization_IncompleteFinalization(t *testin
 	}
 	decision := ClassifyError(logLines, "opencode",
 		&ClassifyContext{HasFileChanges: true, Finalized: false},
+		nil,
 	)
 	if decision.Category != CategoryIncompleteFinalization {
 		t.Errorf("category = %q, want %q", decision.Category, CategoryIncompleteFinalization)
@@ -159,7 +160,7 @@ func TestRegression_APITimeoutConnectionReset_TransientInfraNotAgentError(t *tes
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			decision := ClassifyError(tt.logLines, tt.harness)
+			decision := ClassifyError(tt.logLines, tt.harness, nil, nil)
 			if decision.Category != CategoryTransientInfra {
 				t.Errorf("category = %q, want %q (reason: %s)", decision.Category, CategoryTransientInfra, decision.Reason)
 			}

@@ -66,13 +66,14 @@ type StrategyDecision struct {
 }
 
 type Pattern struct {
-	Name         string
-	Match        func(logLines []string) bool
-	Strategy     RetryStrategy
-	FailureClass FailureClass
-	Extract      func(logLines []string) time.Duration
-	// Category is the FailureCategory for this pattern. Used to populate
-	// StrategyDecision.Category and derive the display label.
+	Name     string
+	Match    func(logLines []string) bool
+	Strategy RetryStrategy
+	Extract  func(logLines []string) time.Duration
+	// Category is the FailureCategory for this pattern. The decision's
+	// FailureClass is derived from it via CategoryToClass (design Decision 3),
+	// so the category — not a per-pattern class — is the single source of
+	// truth for what feeds the freeze counter.
 	Category FailureCategory
 	// Harness constrains this pattern to a specific harness. When non-empty,
 	// the pattern matches only when the failing harness equals this value
@@ -84,9 +85,9 @@ var claudeRateLimitRegex = regexp.MustCompile(`retry-after:?\s*(\d+)`)
 
 // ErrorPatterns is the ordered table of error classification rules.
 // Patterns are evaluated top-to-bottom; the first match wins.
-// Each pattern is tagged with a FailureClass and FailureCategory for the
-// resilience cascade. Patterns with a non-empty Harness field match only
-// when the failing harness matches.
+// Each pattern is tagged with a FailureCategory, from which the resilience
+// FailureClass is derived. Patterns with a non-empty Harness field match
+// only when the failing harness matches.
 var ErrorPatterns = []Pattern{
 	// ── Infra-class: rate limits ──
 	{
@@ -94,10 +95,9 @@ var ErrorPatterns = []Pattern{
 		Match: func(lines []string) bool {
 			return containsSubstring(lines, "rate-limit") || containsSubstring(lines, "429 Too Many Requests")
 		},
-		Strategy:     StrategyWaitResume,
-		FailureClass: FailureInfra,
-		Category:     CategoryShortRateLimit,
-		Harness:      "claude",
+		Strategy: StrategyWaitResume,
+		Category: CategoryShortRateLimit,
+		Harness:  "claude",
 		Extract: func(lines []string) time.Duration {
 			for _, line := range lines {
 				if match := claudeRateLimitRegex.FindStringSubmatch(strings.ToLower(line)); len(match) > 1 {
@@ -114,9 +114,8 @@ var ErrorPatterns = []Pattern{
 		Match: func(lines []string) bool {
 			return containsSubstring(lines, "rate limit") || containsSubstring(lines, "too many requests")
 		},
-		Strategy:     StrategyWaitResume,
-		FailureClass: FailureInfra,
-		Category:     CategoryShortRateLimit,
+		Strategy: StrategyWaitResume,
+		Category: CategoryShortRateLimit,
 		Extract: func(lines []string) time.Duration {
 			return 60 * time.Second
 		},
@@ -126,9 +125,8 @@ var ErrorPatterns = []Pattern{
 		Match: func(lines []string) bool {
 			return containsSubstring(lines, "usage limit") || containsSubstring(lines, "hit your usage limit")
 		},
-		Strategy:     StrategyWaitResume,
-		FailureClass: FailureInfra,
-		Category:     CategoryUsageLimit,
+		Strategy: StrategyWaitResume,
+		Category: CategoryUsageLimit,
 		Extract: func(lines []string) time.Duration {
 			return 120 * time.Second
 		},
@@ -136,34 +134,30 @@ var ErrorPatterns = []Pattern{
 
 	// ── Infra-class: harness/launch errors ──
 	{
-		Name:         "argument list too long",
-		Match:        func(lines []string) bool { return containsSubstring(lines, "argument list too long") },
-		Strategy:     StrategyFreshRestart,
-		FailureClass: FailureInfra,
-		Category:     CategoryHarnessLaunch,
+		Name:     "argument list too long",
+		Match:    func(lines []string) bool { return containsSubstring(lines, "argument list too long") },
+		Strategy: StrategyFreshRestart,
+		Category: CategoryHarnessLaunch,
 	},
 	{
-		Name:         "fork/exec error",
-		Match:        func(lines []string) bool { return containsSubstring(lines, "fork/exec") },
-		Strategy:     StrategyFreshRestart,
-		FailureClass: FailureInfra,
-		Category:     CategoryHarnessLaunch,
+		Name:     "fork/exec error",
+		Match:    func(lines []string) bool { return containsSubstring(lines, "fork/exec") },
+		Strategy: StrategyFreshRestart,
+		Category: CategoryHarnessLaunch,
 	},
 	{
-		Name:         "exec format error",
-		Match:        func(lines []string) bool { return containsSubstring(lines, "exec format error") },
-		Strategy:     StrategyFreshRestart,
-		FailureClass: FailureInfra,
-		Category:     CategoryHarnessLaunch,
+		Name:     "exec format error",
+		Match:    func(lines []string) bool { return containsSubstring(lines, "exec format error") },
+		Strategy: StrategyFreshRestart,
+		Category: CategoryHarnessLaunch,
 	},
 	{
 		Name: "no such file or directory (harness)",
 		Match: func(lines []string) bool {
 			return containsSubstring(lines, "exec:") && containsSubstring(lines, "not found")
 		},
-		Strategy:     StrategyRotate,
-		FailureClass: FailureInfra,
-		Category:     CategoryHarnessLaunch,
+		Strategy: StrategyRotate,
+		Category: CategoryHarnessLaunch,
 	},
 
 	// ── Infra-class: API timeout / network stall ──
@@ -172,45 +166,40 @@ var ErrorPatterns = []Pattern{
 		Match: func(lines []string) bool {
 			return containsSubstring(lines, "request timed out") || containsSubstring(lines, "deadline exceeded") || containsSubstring(lines, "context deadline exceeded")
 		},
-		Strategy:     StrategyResume,
-		FailureClass: FailureInfra,
-		Category:     CategoryTransientInfra,
+		Strategy: StrategyResume,
+		Category: CategoryTransientInfra,
 	},
 	{
 		Name: "connection refused",
 		Match: func(lines []string) bool {
 			return containsSubstring(lines, "connection refused") || containsSubstring(lines, "connection reset")
 		},
-		Strategy:     StrategyResume,
-		FailureClass: FailureInfra,
-		Category:     CategoryTransientInfra,
+		Strategy: StrategyResume,
+		Category: CategoryTransientInfra,
 	},
 	{
 		Name: "network unreachable",
 		Match: func(lines []string) bool {
 			return containsSubstring(lines, "network is unreachable") || containsSubstring(lines, "no route to host")
 		},
-		Strategy:     StrategyResume,
-		FailureClass: FailureInfra,
-		Category:     CategoryTransientInfra,
+		Strategy: StrategyResume,
+		Category: CategoryTransientInfra,
 	},
 	{
 		Name: "TLS handshake timeout",
 		Match: func(lines []string) bool {
 			return containsSubstring(lines, "tls handshake timeout") || containsSubstring(lines, "certificate verify failed")
 		},
-		Strategy:     StrategyResume,
-		FailureClass: FailureInfra,
-		Category:     CategoryTransientInfra,
+		Strategy: StrategyResume,
+		Category: CategoryTransientInfra,
 	},
 	{
 		Name: "server error 5xx",
 		Match: func(lines []string) bool {
 			return containsSubstring(lines, "500 internal server error") || containsSubstring(lines, "502 bad gateway") || containsSubstring(lines, "503 service unavailable") || containsSubstring(lines, "504 gateway timeout")
 		},
-		Strategy:     StrategyResume,
-		FailureClass: FailureInfra,
-		Category:     CategoryTransientInfra,
+		Strategy: StrategyResume,
+		Category: CategoryTransientInfra,
 	},
 
 	// ── Infra-class: stall-detection signals ──
@@ -219,39 +208,35 @@ var ErrorPatterns = []Pattern{
 		Match: func(lines []string) bool {
 			return containsSubstring(lines, "stall detected") || containsSubstring(lines, "stall recovery")
 		},
-		Strategy:     StrategyResume,
-		FailureClass: FailureInfra,
-		Category:     CategoryTransientInfra,
+		Strategy: StrategyResume,
+		Category: CategoryTransientInfra,
 	},
 
 	// ── Agent-class: harness-specific patterns ──
 	{
-		Name:         "opencode API bad request",
-		Match:        func(lines []string) bool { return containsSubstring(lines, "API bad request") },
-		Strategy:     StrategyRotate,
-		FailureClass: FailureAgent,
-		Category:     CategoryAgentError,
-		Harness:      "opencode",
+		Name:     "opencode API bad request",
+		Match:    func(lines []string) bool { return containsSubstring(lines, "API bad request") },
+		Strategy: StrategyRotate,
+		Category: CategoryAgentError,
+		Harness:  "opencode",
 	},
 	{
 		Name: "gemini-cli exit 1",
 		Match: func(lines []string) bool {
 			return containsSubstring(lines, "exit status 1") && containsSubstring(lines, "gemini-cli")
 		},
-		Strategy:     StrategyResume,
-		FailureClass: FailureAgent,
-		Category:     CategoryAgentError,
-		Harness:      "antigravity",
+		Strategy: StrategyResume,
+		Category: CategoryAgentError,
+		Harness:  "antigravity",
 	},
 	{
 		Name: "codex completion despite limit warning",
 		Match: func(lines []string) bool {
 			return containsSubstring(lines, "limit warning") && containsSubstring(lines, "completion")
 		},
-		Strategy:     StrategyNoOp,
-		FailureClass: FailureAgent,
-		Category:     CategoryAgentError,
-		Harness:      "codex",
+		Strategy: StrategyNoOp,
+		Category: CategoryAgentError,
+		Harness:  "codex",
 	},
 }
 
@@ -270,11 +255,9 @@ func containsSubstring(lines []string, sub string) bool {
 // class, and category. The harness parameter scopes harness-specific patterns;
 // pass "" for harness-agnostic classification.
 //
-// An optional ClassifyContext can be provided to detect incomplete
-// failures (file changes without finalization). Pass nil if no context is
-// available. An optional *FailureEvidence can be provided as the third
-// variadic argument; when present and carrying a non-empty Category, it takes
-// priority over all text-based classification.
+// ctx may be nil when no incomplete-detection context is available; evidence
+// may be nil when the executor supplied none. Evidence carrying a non-empty
+// Category takes priority over all text-based classification.
 //
 // Classification priority:
 //  1. Typed executor Evidence (when non-nil with a Category)
@@ -284,23 +267,7 @@ func containsSubstring(lines []string, sub string) bool {
 //  5. Default agent_error
 //
 // Unknown/unmatched errors default to FailureAgent (the does-not-freeze side).
-func ClassifyError(logLines []string, harness string, opts ...interface{}) StrategyDecision {
-	// Parse variadic opts: first *ClassifyContext, then *FailureEvidence.
-	var ctx *ClassifyContext
-	var evidence *FailureEvidence
-	for _, opt := range opts {
-		switch v := opt.(type) {
-		case *ClassifyContext:
-			if ctx == nil {
-				ctx = v
-			}
-		case *FailureEvidence:
-			if evidence == nil {
-				evidence = v
-			}
-		}
-	}
-
+func ClassifyError(logLines []string, harness string, ctx *ClassifyContext, evidence *FailureEvidence) StrategyDecision {
 	// ── Priority 1: Typed executor Evidence ──
 	// When the executor has already resolved a category, trust it.
 	if evidence != nil && evidence.Category != "" {
@@ -358,10 +325,9 @@ func ClassifyError(logLines []string, harness string, opts ...interface{}) Strat
 	}
 
 	// ── Priority 4: Harness-scoped text patterns ──
-	lowerHarness := strings.ToLower(harness)
 	for _, pattern := range ErrorPatterns {
 		// Skip harness-scoped patterns when harness doesn't match.
-		if pattern.Harness != "" && !strings.EqualFold(pattern.Harness, lowerHarness) {
+		if pattern.Harness != "" && !strings.EqualFold(pattern.Harness, harness) {
 			continue
 		}
 		if pattern.Match(logLines) {

@@ -83,6 +83,20 @@ category and evidence straight off the `TryResult.Evidence` / `StrategyDecision`
 `improve-error-categorisation` populates — do not re-classify here. Use the resilience
 vocabulary (active / probation / frozen / benched) verbatim.
 
+**6. Raw limit-signal corpus for parser validation.**
+When the captured failure's category is a provider-limit signal (`usage_limit`,
+`short_rate_limit`, `provider_overloaded`), attach the bounded
+`FailureEvidence.RawSignal` and `Message` to the event as a `failure_evidence`
+context block (context, not tags — they are free text, not filterable scalars).
+Purpose: the per-harness evidence parsers in `internal/reliability/`
+(`ParseClaudeError`, `ParseCodexError`, `ParseGeminiError`, `ParseOpencodeError`)
+encode provider response shapes partly from memory; capturing the exact raw
+shapes observed in the field builds the corpus that `improve-harness-consistency`
+needs to validate and normalize those parsers against real data (and to retire
+signatures that never occur). `RawSignal` is already bounded (≤256 runes) and
+contains provider error text — never prompt/transcript content — and it passes
+through the `before_send` scrubber like every other field.
+
 ## Risks / Trade-offs
 
 - **Machine-id file is user-deletable / not portable** → acceptable: deleting it just

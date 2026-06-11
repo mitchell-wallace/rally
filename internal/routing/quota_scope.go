@@ -4,6 +4,13 @@ import "strings"
 
 var antigravityFamilies = []string{"claude", "flash", "pro"}
 
+// QuotaScope resolves the harness-aware quota bucket a runner draws from, used
+// as the bench key when a usage limit is hit so every runner sharing the
+// exhausted quota leaves rotation together. Antigravity quotas are per model
+// family (matched case-insensitively against free-form display labels),
+// opencode quotas are per provider (the segment before '/' in provider/model),
+// and direct harnesses (claude, codex, gemini) are per harness — the model is
+// ignored so a stray '/' cannot mis-split the scope.
 func QuotaScope(harness, model string) string {
 	switch strings.ToLower(harness) {
 	case "antigravity":

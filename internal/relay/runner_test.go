@@ -1071,7 +1071,7 @@ func TestRunOneFreezeRetryResumesAndRecovers(t *testing.T) {
 
 	freezeCalls := 0
 	recoveredCalls := 0
-	success, addressed, interrupted, _, _, _, _, _, err := r.runOne(
+	res, err := r.runOne(
 		context.Background(),
 		&store.RelayRecord{ID: 1, TargetIterations: 1},
 		0,
@@ -1085,6 +1085,7 @@ func TestRunOneFreezeRetryResumesAndRecovers(t *testing.T) {
 		func() { recoveredCalls++ },
 		io.Discard,
 	)
+	success, addressed, interrupted := res.Success, res.Addressed, res.Interrupted
 	if err != nil {
 		t.Fatalf("runOne error = %v", err)
 	}
@@ -4994,7 +4995,7 @@ func TestStallRecovery_VerifyRoleExcluded(t *testing.T) {
 	stallCheckInterval = time.Millisecond
 	defer func() { stallCheckInterval = oldInterval }()
 
-	success, _, _, _, _, _, _, _, err := r.runOne(
+	res, err := r.runOne(
 		context.Background(),
 		&store.RelayRecord{ID: 1, TargetIterations: 1},
 		0,
@@ -5008,6 +5009,7 @@ func TestStallRecovery_VerifyRoleExcluded(t *testing.T) {
 		nil,
 		io.Discard,
 	)
+	success := res.Success
 	if err != nil {
 		t.Fatalf("runOne error = %v", err)
 	}
@@ -5061,7 +5063,7 @@ func TestStallRecovery_ImplementationRoleRecovers(t *testing.T) {
 	stallCheckInterval = time.Millisecond
 	defer func() { stallCheckInterval = oldInterval }()
 
-	success, _, _, _, _, _, _, _, err := r.runOne(
+	res, err := r.runOne(
 		context.Background(),
 		&store.RelayRecord{ID: 1, TargetIterations: 1},
 		0,
@@ -5075,6 +5077,7 @@ func TestStallRecovery_ImplementationRoleRecovers(t *testing.T) {
 		nil,
 		io.Discard,
 	)
+	success := res.Success
 	if err != nil {
 		t.Fatalf("runOne error = %v", err)
 	}
@@ -5133,7 +5136,7 @@ func TestStallRecovery_VerifyStalledWithCommits_StaysFailed(t *testing.T) {
 	stallCheckInterval = time.Millisecond
 	defer func() { stallCheckInterval = oldInterval }()
 
-	success, _, _, _, _, _, _, _, err := r.runOne(
+	res, err := r.runOne(
 		context.Background(),
 		&store.RelayRecord{ID: 1, TargetIterations: 1},
 		0,
@@ -5147,6 +5150,7 @@ func TestStallRecovery_VerifyStalledWithCommits_StaysFailed(t *testing.T) {
 		nil,
 		io.Discard,
 	)
+	success := res.Success
 	if err != nil {
 		t.Fatalf("runOne error = %v", err)
 	}
@@ -5215,7 +5219,7 @@ func TestStallRecovery_ImplementationStalledWithCommits_Recovers(t *testing.T) {
 	stallCheckInterval = time.Millisecond
 	defer func() { stallCheckInterval = oldInterval }()
 
-	success, _, _, _, _, _, _, _, err := r.runOne(
+	res, err := r.runOne(
 		context.Background(),
 		&store.RelayRecord{ID: 1, TargetIterations: 1},
 		0,
@@ -5229,6 +5233,7 @@ func TestStallRecovery_ImplementationStalledWithCommits_Recovers(t *testing.T) {
 		nil,
 		io.Discard,
 	)
+	success := res.Success
 	if err != nil {
 		t.Fatalf("runOne error = %v", err)
 	}
@@ -5400,7 +5405,7 @@ func TestLapPinRejectionInRunOne(t *testing.T) {
 		Resolver:         cheapTestResolver,
 	}, map[string]agent.Executor{"opencode": exec})
 
-	success, _, _, _, _, _, _, _, err := r.runOne(
+	res, err := r.runOne(
 		context.Background(),
 		&store.RelayRecord{ID: 1, TargetIterations: 1},
 		0,
@@ -5414,6 +5419,7 @@ func TestLapPinRejectionInRunOne(t *testing.T) {
 		nil,
 		io.Discard,
 	)
+	success := res.Success
 	if err != nil {
 		t.Fatalf("runOne error = %v", err)
 	}
@@ -5457,7 +5463,7 @@ func TestLapPinMultiLapRejectionInRunOne(t *testing.T) {
 		Resolver:         cheapTestResolver,
 	}, map[string]agent.Executor{"opencode": exec})
 
-	success, _, _, _, _, _, _, _, err := r.runOne(
+	res, err := r.runOne(
 		context.Background(),
 		&store.RelayRecord{ID: 1, TargetIterations: 1},
 		0,
@@ -5471,6 +5477,7 @@ func TestLapPinMultiLapRejectionInRunOne(t *testing.T) {
 		nil,
 		io.Discard,
 	)
+	success := res.Success
 	if err != nil {
 		t.Fatalf("runOne error = %v", err)
 	}
@@ -5521,7 +5528,7 @@ func TestLapPinMismatchClearsFailureClass(t *testing.T) {
 		Resolver:         cheapTestResolver,
 	}, map[string]agent.Executor{"opencode": exec})
 
-	_, _, _, _, failureClass, _, _, _, _ := r.runOne(
+	res, _ := r.runOne(
 		context.Background(),
 		&store.RelayRecord{ID: 1, TargetIterations: 1},
 		0,
@@ -5535,6 +5542,7 @@ func TestLapPinMismatchClearsFailureClass(t *testing.T) {
 		nil,
 		io.Discard,
 	)
+	failureClass := res.FailureClass
 
 	if failureClass != reliability.FailureAgent {
 		t.Fatalf("failureClass = %v, want FailureAgent", failureClass)
@@ -5590,7 +5598,7 @@ func TestRunOneHonorsExecutorEvidence(t *testing.T) {
 				Resolver:         cheapTestResolver,
 			}, map[string]agent.Executor{"opencode": exec})
 
-			_, _, _, _, failureClass, _, _, infraFailures, err := r.runOne(
+			res, err := r.runOne(
 				context.Background(),
 				&store.RelayRecord{ID: 1, TargetIterations: 1},
 				0,
@@ -5604,6 +5612,7 @@ func TestRunOneHonorsExecutorEvidence(t *testing.T) {
 				nil,
 				io.Discard,
 			)
+			failureClass, infraFailures := res.FailureClass, res.InfraFailures
 			if err != nil {
 				t.Fatalf("runOne error = %v", err)
 			}
@@ -5662,7 +5671,7 @@ func TestRunOneEvidenceBeatsIncompleteClassification(t *testing.T) {
 		Resolver:         cheapTestResolver,
 	}, map[string]agent.Executor{"opencode": exec})
 
-	_, _, _, _, failureClass, _, _, infraFailures, err := r.runOne(
+	res, err := r.runOne(
 		context.Background(),
 		&store.RelayRecord{ID: 1, TargetIterations: 1},
 		0,
@@ -5676,6 +5685,7 @@ func TestRunOneEvidenceBeatsIncompleteClassification(t *testing.T) {
 		nil,
 		io.Discard,
 	)
+	failureClass, infraFailures := res.FailureClass, res.InfraFailures
 	if err != nil {
 		t.Fatalf("runOne error = %v", err)
 	}
@@ -5757,7 +5767,7 @@ func TestRunOneTerminalCategorySingleAttempt(t *testing.T) {
 			// not slow the test; the assertion is on attempt count.
 			r.sleepFunc = func(time.Duration) {}
 
-			success, _, _, _, failureClass, failureCategory, resetEvidence, infraFailures, err := r.runOne(
+			res, err := r.runOne(
 				context.Background(),
 				&store.RelayRecord{ID: 1, TargetIterations: 1},
 				0,
@@ -5771,6 +5781,7 @@ func TestRunOneTerminalCategorySingleAttempt(t *testing.T) {
 				nil,
 				io.Discard,
 			)
+			success, failureClass, failureCategory, resetEvidence, infraFailures := res.Success, res.FailureClass, res.Category, res.ResetEvidence, res.InfraFailures
 			if err != nil {
 				t.Fatalf("runOne error = %v", err)
 			}
@@ -5836,7 +5847,7 @@ func TestLapPinNormalPassThroughInRunOne(t *testing.T) {
 		Resolver:         cheapTestResolver,
 	}, map[string]agent.Executor{"opencode": exec})
 
-	success, _, _, _, _, _, _, _, err := r.runOne(
+	res, err := r.runOne(
 		context.Background(),
 		&store.RelayRecord{ID: 1, TargetIterations: 1},
 		0,
@@ -5850,6 +5861,7 @@ func TestLapPinNormalPassThroughInRunOne(t *testing.T) {
 		nil,
 		io.Discard,
 	)
+	success := res.Success
 	if err != nil {
 		t.Fatalf("runOne error = %v", err)
 	}
@@ -5900,7 +5912,7 @@ func TestLapAttemptRecordedInTryRecord(t *testing.T) {
 		Resolver:         cheapTestResolver,
 	}, map[string]agent.Executor{"opencode": exec})
 
-	success, _, _, _, _, _, _, _, err := r.runOne(
+	res, err := r.runOne(
 		context.Background(),
 		&store.RelayRecord{ID: 1, TargetIterations: 1},
 		0,
@@ -5914,6 +5926,7 @@ func TestLapAttemptRecordedInTryRecord(t *testing.T) {
 		nil,
 		io.Discard,
 	)
+	success := res.Success
 	if err != nil {
 		t.Fatalf("runOne error = %v", err)
 	}
@@ -6170,45 +6183,45 @@ func TestIncompleteRetryCarriesFinalizationGuidance(t *testing.T) {
 
 func TestCategorizedTryRecordCarriesCategoryAndDisplayReason(t *testing.T) {
 	tests := []struct {
-		name                string
-		category            reliability.FailureCategory
-		evidence            *reliability.FailureEvidence
-		wantCategory        string
+		name                   string
+		category               reliability.FailureCategory
+		evidence               *reliability.FailureEvidence
+		wantCategory           string
 		wantFailReasonContains string
 	}{
 		{
-			name:                "usage_limit with reset",
-			category:            reliability.CategoryUsageLimit,
-			evidence:            &reliability.FailureEvidence{Category: reliability.CategoryUsageLimit, ResetAfter: 5 * time.Hour},
-			wantCategory:        string(reliability.CategoryUsageLimit),
+			name:                   "usage_limit with reset",
+			category:               reliability.CategoryUsageLimit,
+			evidence:               &reliability.FailureEvidence{Category: reliability.CategoryUsageLimit, ResetAfter: 5 * time.Hour},
+			wantCategory:           string(reliability.CategoryUsageLimit),
 			wantFailReasonContains: "usage limit, resets in",
 		},
 		{
-			name:                "short_rate_limit",
-			category:            reliability.CategoryShortRateLimit,
-			evidence:            &reliability.FailureEvidence{Category: reliability.CategoryShortRateLimit, RetryAfter: 90 * time.Second},
-			wantCategory:        string(reliability.CategoryShortRateLimit),
+			name:                   "short_rate_limit",
+			category:               reliability.CategoryShortRateLimit,
+			evidence:               &reliability.FailureEvidence{Category: reliability.CategoryShortRateLimit, RetryAfter: 90 * time.Second},
+			wantCategory:           string(reliability.CategoryShortRateLimit),
 			wantFailReasonContains: "rate limit, waiting",
 		},
 		{
-			name:                "invalid_model",
-			category:            reliability.CategoryInvalidModel,
-			evidence:            &reliability.FailureEvidence{Category: reliability.CategoryInvalidModel},
-			wantCategory:        string(reliability.CategoryInvalidModel),
+			name:                   "invalid_model",
+			category:               reliability.CategoryInvalidModel,
+			evidence:               &reliability.FailureEvidence{Category: reliability.CategoryInvalidModel},
+			wantCategory:           string(reliability.CategoryInvalidModel),
 			wantFailReasonContains: "invalid model",
 		},
 		{
-			name:                "auth_or_proxy",
-			category:            reliability.CategoryAuthOrProxy,
-			evidence:            &reliability.FailureEvidence{Category: reliability.CategoryAuthOrProxy},
-			wantCategory:        string(reliability.CategoryAuthOrProxy),
+			name:                   "auth_or_proxy",
+			category:               reliability.CategoryAuthOrProxy,
+			evidence:               &reliability.FailureEvidence{Category: reliability.CategoryAuthOrProxy},
+			wantCategory:           string(reliability.CategoryAuthOrProxy),
 			wantFailReasonContains: "auth/proxy error",
 		},
 		{
-			name:                "provider_overloaded",
-			category:            reliability.CategoryProviderOverloaded,
-			evidence:            &reliability.FailureEvidence{Category: reliability.CategoryProviderOverloaded},
-			wantCategory:        string(reliability.CategoryProviderOverloaded),
+			name:                   "provider_overloaded",
+			category:               reliability.CategoryProviderOverloaded,
+			evidence:               &reliability.FailureEvidence{Category: reliability.CategoryProviderOverloaded},
+			wantCategory:           string(reliability.CategoryProviderOverloaded),
 			wantFailReasonContains: "provider overloaded",
 		},
 	}
@@ -6241,7 +6254,7 @@ func TestCategorizedTryRecordCarriesCategoryAndDisplayReason(t *testing.T) {
 				Resolver:         cheapTestResolver,
 			}, map[string]agent.Executor{"opencode": exec})
 
-			_, _, _, _, _, _, _, _, err := r.runOne(
+			_, err := r.runOne(
 				context.Background(),
 				&store.RelayRecord{ID: 1, TargetIterations: 1},
 				0,
@@ -6297,11 +6310,14 @@ func TestFormatCategorizedDisplay(t *testing.T) {
 			},
 		},
 		{
-			name:     "usage_limit fallback to cooldown",
+			// Without parsed reset evidence the label carries no timing: the
+			// classifier cooldown is not the quota reset, and the real bench
+			// window is BenchDefaultDuration.
+			name:     "usage_limit without parsed reset omits timing",
 			cat:      reliability.CategoryUsageLimit,
 			cooldown: 2 * time.Minute,
 			evidence: &reliability.FailureEvidence{Category: reliability.CategoryUsageLimit},
-			want:     "usage limit, resets in 2m",
+			want:     "usage limit",
 		},
 		{
 			name:     "short_rate_limit with cooldown",
