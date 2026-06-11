@@ -28,11 +28,11 @@
       "title": "Add telemetry data dir and anonymous machine identity",
       "description": "Context: OpenSpec tasks 3.1-3.4. The DSN lap gives telemetry a default activation path; active telemetry now needs an anonymous stable machine-local identifier without writing anything when telemetry is disabled.\n\nOutcome: telemetry.Config includes DataDir, cmd/rally/main.go passes the resolved data dir into telemetry.Init before sink creation, and internal/telemetry has a helper that reads or creates `\u003cdataDir\u003e/machine-id` as a random 128-bit hex value with 0600 permissions. Disabled telemetry writes no file; unreadable/unwritable/no-data-dir cases fall back to an ephemeral per-process anonymous value.\n\nFiles \u0026 scope: internal/telemetry/, cmd/rally/main.go, and tests. Do not derive the value from hostname, username, MAC, repo path, or any machine attribute.\n\nDesign: Only resolve/create machine identity after the effective DSN says telemetry is active. Generate with crypto/rand, hex-encode, persist once, and never fail CLI startup because identity storage failed. Keep the helper small and testable so later relay-guid work can consume it without duplicating file handling.\n\nAcceptance: Tests verify stable reads, absent file created once with private permissions, generated values are random-format and not machine-derived, disabled telemetry writes no file, and no data dir/unwritable data dir uses an ephemeral identity without failing. `go test ./internal/telemetry/... ./cmd/rally/...` is green. Do not check off OpenSpec tasks.md boxes.",
       "assignee": "SENIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 196608,
       "createdAt": "2026-06-11T03:44:39.708823957Z",
-      "updatedAt": "2026-06-11T03:44:39.708823957Z",
-      "completedAt": null
+      "updatedAt": "2026-06-11T05:05:57.794134165Z",
+      "completedAt": "2026-06-11T05:05:57.794134165Z"
     },
     {
       "id": "rall-256b",
