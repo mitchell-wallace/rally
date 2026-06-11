@@ -127,11 +127,11 @@
       "title": "Broaden regression coverage for failure evidence scrubbing",
       "description": "Context: OpenSpec tasks 6.6 and 6.8 are high-risk because they combine routing state, failure classification, and privacy scrubbing. This lap is a focused test pass after the runner wiring.\n\nOutcome: Additional regression tests cover the realistic event payloads emitted by terminal try failures, unfinalized-agent failures, all-frozen relay stalls, and limit-category raw-signal captures.\n\nFiles \u0026 scope: internal/relay/*test.go, internal/telemetry/*test.go, and cmd/rally telemetry tests if existing mocks need assertions. Avoid production changes unless a test exposes a tiny obvious fix; larger issues should become head laps.\n\nDesign: Use fixtures that exercise the real CaptureFailure inputs, not isolated map assembly only. Include a raw signal/message containing a home path and prompt/transcript-looking sensitive keys to prove scrubber defense-in-depth. Include a non-limit category to prove no raw-signal context is attached.\n\nAcceptance: The test suite proves all task 6.6 and 6.8 scenarios and stays green for `go test ./internal/telemetry/... ./internal/relay/... ./cmd/rally/...`. Do not check off OpenSpec tasks.md boxes.",
       "assignee": "JUNIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 655360,
       "createdAt": "2026-06-11T03:44:39.708839106Z",
-      "updatedAt": "2026-06-11T03:44:39.708839106Z",
-      "completedAt": null
+      "updatedAt": "2026-06-11T05:48:47.953273768Z",
+      "completedAt": "2026-06-11T05:48:47.953273768Z"
     },
     {
       "id": "rall-85c3",
