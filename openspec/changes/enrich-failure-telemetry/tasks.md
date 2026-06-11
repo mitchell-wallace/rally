@@ -2,7 +2,7 @@
 
 - [x] 1.1 Add an environment-context builder in `internal/telemetry/` returning `version` (`internal/buildinfo`), `go_os`, `go_arch`, and `term` (`$TERM` or `"non-tty"` via `golang.org/x/term.IsTerminal(int(os.Stdout.Fd()))`)
 - [x] 1.2 Extend the telemetry API with a structured failure/event input that carries scalar tags separately from context blocks; update `Sink`, `NoopSink`, `SentrySink`, and existing telemetry test mocks
-- [ ] 1.3 Attach the `rally` context block on the relay span and on every captured failure through the structured API, not by flattening context into tags
+- [x] 1.3 Attach the `rally` context block on the relay span and on every captured failure through the structured API, not by flattening context into tags
 - [x] 1.4 Neutralize Sentry's host-derived `server_name` by setting a static non-host `ClientOptions.ServerName` or clearing `event.ServerName` in `scrubEvent`
 - [x] 1.5 Tests: context block carries version/os/arch/term; hostname/username are absent; top-level Sentry `server_name` is not host-derived
 
@@ -23,16 +23,16 @@
 
 ## 4. Globally-unique relay identity
 
-- [ ] 4.1 In `tags.go` (or a new builder), compute `relay_guid = <machine-id-prefix>-<repo-key>-<YYYYMMDD>-<relay_id>` from the machine id, existing repo key, relay `StartedAt`, and local `relay_id`
-- [ ] 4.2 Attach `relay_guid`, `relay_started_at` (RFC3339), `machine_id_prefix` as the filterable machine tag, and the full anonymous machine id in the `rally` context only; keep emitting local `relay_id`
-- [ ] 4.3 Tests: guid is stable for a relay, unique across machine ids, repo keys, and dates; local `relay_id` still present; `machine_id_prefix` is tagged; full `machine_id` is context-only
+- [x] 4.1 In `tags.go` (or a new builder), compute `relay_guid = <machine-id-prefix>-<repo-key>-<YYYYMMDD>-<relay_id>` from the machine id, existing repo key, relay `StartedAt`, and local `relay_id`
+- [x] 4.2 Attach `relay_guid`, `relay_started_at` (RFC3339), `machine_id_prefix` as the filterable machine tag, and the full anonymous machine id in the `rally` context only; keep emitting local `relay_id`
+- [x] 4.3 Tests: guid is stable for a relay, unique across machine ids, repo keys, and dates; local `relay_id` still present; `machine_id_prefix` is tagged; full `machine_id` is context-only
 
 ## 5. Username-stripped working directory
 
-- [ ] 5.1 Add a home-prefix collapse helper in `internal/telemetry/scrubber.go` (compare against `os.UserHomeDir()`, replace with `~`)
-- [ ] 5.2 Attach `cwd` (home-collapsed) to the `rally` context; retain the existing `repo` path-hash tag
-- [ ] 5.3 Run string values in event contexts, breadcrumbs, and span data through recursive home-prefix collapse as defense-in-depth, including paths embedded inside free text
-- [ ] 5.4 Tests: a home-prefixed cwd is collapsed to `~/...`; a non-home absolute path is left intact but exposes no username; a home path embedded in raw signal/message text is collapsed; the username never appears in the payload
+- [x] 5.1 Add a home-prefix collapse helper in `internal/telemetry/scrubber.go` (compare against `os.UserHomeDir()`, replace with `~`)
+- [x] 5.2 Attach `cwd` (home-collapsed) to the `rally` context; retain the existing `repo` path-hash tag
+- [x] 5.3 Run string values in event contexts, breadcrumbs, and span data through recursive home-prefix collapse as defense-in-depth, including paths embedded inside free text
+- [x] 5.4 Tests: a home-prefixed cwd is collapsed to `~/...`; a non-home absolute path is left intact but exposes no username; a home path embedded in raw signal/message text is collapsed; the username never appears in the payload
 
 ## 6. Agent state on failure
 
