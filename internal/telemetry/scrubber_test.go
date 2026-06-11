@@ -107,9 +107,9 @@ func TestScrubEvent_HomePathCollapseInMessage(t *testing.T) {
 		Message: "failure in /home/testuser/project/main.go:42",
 		Contexts: map[string]sentry.Context{
 			"work": {
-				"cwd":       "/home/testuser/project",
-				"config":    "/etc/rally/config.toml",
-				"log_path":  "/home/testuser/.local/share/rally/log.txt",
+				"cwd":      "/home/testuser/project",
+				"config":   "/etc/rally/config.toml",
+				"log_path": "/home/testuser/.local/share/rally/log.txt",
 			},
 		},
 	}
@@ -172,6 +172,47 @@ func TestScrubEvent_HomePathCollapseInBreadcrumbsAndSpans(t *testing.T) {
 	}
 }
 
+func TestScrubEvent_RecursivelyScrubsNestedValues(t *testing.T) {
+	orig := homeDir
+	homeDir = "/home/testuser"
+	defer func() { homeDir = orig }()
+
+	event := &sentry.Event{
+		Contexts: map[string]sentry.Context{
+			"nested": {
+				"outer": map[string]interface{}{
+					"path":   "/home/testuser/project/file.go",
+					"prompt": "full prompt text",
+					"items": []interface{}{
+						"/home/testuser/.cache/rally/a.log",
+						map[string]interface{}{"transcript": "full transcript", "cwd": "/home/testuser/repo"},
+					},
+				},
+			},
+		},
+	}
+
+	got := scrubEvent(event)
+	outer := got.Contexts["nested"]["outer"].(map[string]interface{})
+	if outer["path"] != "~/project/file.go" {
+		t.Errorf("nested path = %v", outer["path"])
+	}
+	if outer["prompt"] != scrubbedPlaceholder {
+		t.Errorf("nested prompt = %v, want scrubbed", outer["prompt"])
+	}
+	items := outer["items"].([]interface{})
+	if items[0] != "~/.cache/rally/a.log" {
+		t.Errorf("nested slice path = %v", items[0])
+	}
+	itemMap := items[1].(map[string]interface{})
+	if itemMap["transcript"] != scrubbedPlaceholder {
+		t.Errorf("nested transcript = %v, want scrubbed", itemMap["transcript"])
+	}
+	if itemMap["cwd"] != "~/repo" {
+		t.Errorf("nested cwd = %v", itemMap["cwd"])
+	}
+}
+
 func TestScrubEvent_SensitiveKeysStillScrubbedWithHomePaths(t *testing.T) {
 	orig := homeDir
 	homeDir = "/home/testuser"
@@ -180,9 +221,9 @@ func TestScrubEvent_SensitiveKeysStillScrubbedWithHomePaths(t *testing.T) {
 	event := &sentry.Event{
 		Contexts: map[string]sentry.Context{
 			"try": {
-				"prompt":  "/home/testuser/secret/prompt.md",
-				"cwd":     "/home/testuser/project",
-				"role":    "senior",
+				"prompt": "/home/testuser/secret/prompt.md",
+				"cwd":    "/home/testuser/project",
+				"role":   "senior",
 			},
 		},
 	}
@@ -198,6 +239,39 @@ func TestScrubEvent_SensitiveKeysStillScrubbedWithHomePaths(t *testing.T) {
 	}
 	if ctx["role"] != "senior" {
 		t.Errorf("role = %v, want senior", ctx["role"])
+	}
+}
+
+func TestScrubEvent_ScrubsHostIdentityKeys(t *testing.T) {
+	event := &sentry.Event{
+		Contexts: map[string]sentry.Context{
+			"env": {
+				"hostname":    "workstation.local",
+				"username":    "alice",
+				"ip_address":  "192.0.2.10",
+				"server_name": "workstation.local",
+				"go_os":       "linux",
+			},
+		},
+		Breadcrumbs: []*sentry.Breadcrumb{
+			{Data: map[string]interface{}{"host": "workstation.local", "ip": "192.0.2.10"}},
+		},
+	}
+
+	got := scrubEvent(event)
+	ctx := got.Contexts["env"]
+	for _, key := range []string{"hostname", "username", "ip_address", "server_name"} {
+		if ctx[key] != scrubbedPlaceholder {
+			t.Errorf("context identity key %q = %v, want scrubbed", key, ctx[key])
+		}
+	}
+	if ctx["go_os"] != "linux" {
+		t.Errorf("non-sensitive context go_os = %v", ctx["go_os"])
+	}
+	for _, key := range []string{"host", "ip"} {
+		if got.Breadcrumbs[0].Data[key] != scrubbedPlaceholder {
+			t.Errorf("breadcrumb identity key %q = %v, want scrubbed", key, got.Breadcrumbs[0].Data[key])
+		}
 	}
 }
 
@@ -403,4 +477,3 @@ func TestNoopSink_CaptureFailureWithContexts(t *testing.T) {
 	}
 	sink.CaptureFailure(ctx, "test failure", evt)
 }
-

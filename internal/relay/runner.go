@@ -177,6 +177,19 @@ func failureStateEvent(baseTags map[string]string, rc telemetry.RallyContext, fs
 	return evt
 }
 
+func limitSignalEvent(baseTags map[string]string, rc telemetry.RallyContext, fs telemetry.FailureState) (telemetry.Event, bool) {
+	evt := failureStateEvent(baseTags, rc, fs)
+	if _, ok := evt.Contexts["failure_evidence"]; !ok {
+		return telemetry.Event{}, false
+	}
+	evt.Tags["event_kind"] = "limit_signal"
+	return telemetry.Event{
+		Level:    telemetry.LevelInfo,
+		Tags:     evt.Tags,
+		Contexts: evt.Contexts,
+	}, true
+}
+
 // agentStateName reports the failing runner's current resilience standing using
 // the verbatim active/probation/frozen/benched vocabulary, for the agent_state
 // tag on captured failures. It reads persisted state from the store so it
@@ -1662,10 +1675,30 @@ attemptLoop:
 			"prompt_relay_message_bytes":     len(opts.RelayMessage),
 		})
 
-		// Capture operator-worthy failures as Sentry Issues. Ordinary
-		// agent-class retries (recoverable agent errors, short no-ops) stay
-		// spans/logs only to avoid alert noise.
+		// Capture provider-limit evidence as low-severity diagnostic telemetry
+		// regardless of whether the failure is operator-worthy enough to become an
+		// Issue. This builds the parser-validation corpus without broadening alerts.
 		if failed {
+			fs := telemetry.FailureState{
+				Attempt:     attempt,
+				MaxAttempts: maxAttempts,
+				Category:    string(failureCategory),
+				AgentState:  r.agentStateName(picked),
+			}
+			if resetEvidence != nil {
+				fs.QuotaScope = resetEvidence.QuotaScope
+				fs.ResetAt = resetEvidence.ResetAt
+				fs.ResetAfter = resetEvidence.ResetAfter
+				fs.RawSignal = resetEvidence.RawSignal
+				fs.Message = resetEvidence.Message
+			}
+			if evt, ok := limitSignalEvent(tryTags, r.rallyContext(relay), fs); ok {
+				r.tel().CaptureEvent(tryCtx, fmt.Sprintf("relay %d run %d try %d provider limit signal: %s", relay.ID, runIndex+1, tryRecord.ID, failReason), evt)
+			}
+
+			// Capture operator-worthy failures as Sentry Issues. Ordinary
+			// agent-class retries (recoverable agent errors, short no-ops) stay
+			// spans/logs only to avoid alert noise.
 			issueWorthy := failureClass == reliability.FailureInfra ||
 				execErr != nil ||
 				markerAsText != "" ||
@@ -1677,19 +1710,6 @@ attemptLoop:
 				// failure category, the failing runner's resilience standing, and
 				// — for provider-limit categories — the parsed quota scope/reset
 				// and bounded raw provider signal from TryResult.Evidence.
-				fs := telemetry.FailureState{
-					Attempt:     attempt,
-					MaxAttempts: maxAttempts,
-					Category:    string(failureCategory),
-					AgentState:  r.agentStateName(picked),
-				}
-				if resetEvidence != nil {
-					fs.QuotaScope = resetEvidence.QuotaScope
-					fs.ResetAt = resetEvidence.ResetAt
-					fs.ResetAfter = resetEvidence.ResetAfter
-					fs.RawSignal = resetEvidence.RawSignal
-					fs.Message = resetEvidence.Message
-				}
 				r.tel().CaptureFailure(tryCtx, fmt.Sprintf("relay %d run %d try %d failed: %s", relay.ID, runIndex+1, tryRecord.ID, failReason), failureStateEvent(tryTags, r.rallyContext(relay), fs))
 			}
 		}

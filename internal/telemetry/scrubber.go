@@ -60,7 +60,12 @@ const scrubbedPlaceholder = "[scrubbed]"
 var sensitiveKeys = map[string]struct{}{
 	"current_task":     {},
 	"current_task.md":  {},
+	"host":             {},
+	"hostname":         {},
+	"ip":               {},
+	"ip_address":       {},
 	"prompt":           {},
+	"server_name":      {},
 	"task_prompt":      {},
 	"assembled_prompt": {},
 	"transcript":       {},
@@ -69,6 +74,7 @@ var sensitiveKeys = map[string]struct{}{
 	"log":              {},
 	"logs":             {},
 	"output":           {},
+	"username":         {},
 }
 
 func isSensitiveKey(key string) bool {
@@ -106,16 +112,32 @@ func scrubEvent(event *sentry.Event) *sentry.Event {
 	return event
 }
 
-// scrubMap drops sensitive keys and truncates oversized string values in place.
+// scrubMap drops sensitive keys and recursively truncates / home-collapses
+// string values in place.
 func scrubMap(m map[string]interface{}) {
 	for k, v := range m {
 		if isSensitiveKey(k) {
 			m[k] = scrubbedPlaceholder
 			continue
 		}
-		if s, ok := v.(string); ok {
-			m[k] = truncateValue(collapseHomePaths(s))
+		m[k] = scrubValue(v)
+	}
+}
+
+func scrubValue(v interface{}) interface{} {
+	switch x := v.(type) {
+	case string:
+		return truncateValue(collapseHomePaths(x))
+	case map[string]interface{}:
+		scrubMap(x)
+		return x
+	case []interface{}:
+		for i, item := range x {
+			x[i] = scrubValue(item)
 		}
+		return x
+	default:
+		return v
 	}
 }
 

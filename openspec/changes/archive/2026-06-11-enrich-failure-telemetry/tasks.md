@@ -13,6 +13,7 @@
 - [x] 2.3 Update `.goreleaser.yaml` to inject `DefaultSentryDSN` with `-X main.DefaultSentryDSN={{ .Env.RALLY_SENTRY_DSN }}` while preserving the existing `Version` ldflag
 - [x] 2.4 Update `.github/workflows/release.yml` to pass the GitHub Actions secret `RALLY_SENTRY_DSN` to GoReleaser as an environment variable
 - [x] 2.5 Tests: env DSN beats config/default; config DSN beats default; baked default activates telemetry when env/config are empty; `RALLY_TELEMETRY=0` disables even with a baked default
+- [x] 2.6 Initialize telemetry only for relay execution; mechanical commands such as help, version, and update must not create machine-id files or open Sentry solely because a baked DSN exists
 
 ## 3. Anonymous machine-local hash
 
@@ -44,6 +45,7 @@
 - [x] 6.6 Tests: a captured usage-limit failure carries attempt/budget/category/quota_scope/reset/state tags; unfinalized captures carry `incomplete_finalization`; relay stall captures carry frozen state without try-only fields; agent-class failures recorded as spans/logs are unaffected
 - [x] 6.7 When the category is `usage_limit`/`short_rate_limit`/`provider_overloaded`, attach the bounded `FailureEvidence.RawSignal` + `Message` as a `failure_evidence` context block, so the exact provider limit-response shapes accumulate for the `improve-harness-consistency` parser-normalization pass
 - [x] 6.8 Tests: a limit-category capture carries the bounded raw signal through the scrubber; home paths inside raw signal/message are collapsed; prompt/transcript-looking sensitive fields are not attached; non-limit categories attach no raw-signal context
+- [x] 6.9 Emit limit-category raw evidence as a low-severity diagnostic event independent of Issue capture, tagged with an event kind suitable for Sentry filtering; tests cover non-Issue provider-limit failures still producing the diagnostic
 
 ## 7. Docs
 

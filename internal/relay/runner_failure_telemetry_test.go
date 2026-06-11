@@ -22,16 +22,26 @@ type capturedFailure struct {
 	evt telemetry.FailureEvent
 }
 
+type capturedEvent struct {
+	msg string
+	evt telemetry.Event
+}
+
 // capturingSink is a telemetry sink that records CaptureFailure calls. Span and
 // log methods inherit the no-op behavior so only the failure-capture path is
 // observed.
 type capturingSink struct {
 	telemetry.NoopSink
 	failures []capturedFailure
+	events   []capturedEvent
 }
 
 func (c *capturingSink) CaptureFailure(_ context.Context, msg string, evt telemetry.FailureEvent) {
 	c.failures = append(c.failures, capturedFailure{msg: msg, evt: evt})
+}
+
+func (c *capturingSink) CaptureEvent(_ context.Context, msg string, evt telemetry.Event) {
+	c.events = append(c.events, capturedEvent{msg: msg, evt: evt})
 }
 
 // findFailure returns the single captured failure whose message contains substr,
@@ -329,6 +339,24 @@ func findFailureCount(sink *capturingSink, substr string) int {
 	return n
 }
 
+func findEvent(t *testing.T, sink *capturingSink, substr string) telemetry.Event {
+	t.Helper()
+	var matches []telemetry.Event
+	for _, e := range sink.events {
+		if strings.Contains(e.msg, substr) {
+			matches = append(matches, e.evt)
+		}
+	}
+	if len(matches) != 1 {
+		var msgs []string
+		for _, e := range sink.events {
+			msgs = append(msgs, e.msg)
+		}
+		t.Fatalf("want exactly 1 captured event containing %q, got %d (all: %v)", substr, len(matches), msgs)
+	}
+	return matches[0]
+}
+
 func wantNoContext(t *testing.T, evt telemetry.FailureEvent, name string) {
 	t.Helper()
 	if _, ok := evt.Contexts[name]; ok {
@@ -441,6 +469,13 @@ func TestRunOne_TerminalTryFailure_ShortRateLimit(t *testing.T) {
 	if ev["message"] != "short rate limit hit" {
 		t.Errorf("message = %v", ev["message"])
 	}
+
+	diag := findEvent(t, sink, "provider limit signal")
+	if diag.Level != telemetry.LevelInfo {
+		t.Errorf("diagnostic level = %q, want %q", diag.Level, telemetry.LevelInfo)
+	}
+	wantTag(t, diag.Tags, "event_kind", "limit_signal")
+	wantTag(t, diag.Tags, "failure_category", "short_rate_limit")
 }
 
 // TestRunOne_TerminalTryFailure_ProviderOverloaded verifies a
@@ -485,6 +520,60 @@ func TestRunOne_TerminalTryFailure_ProviderOverloaded(t *testing.T) {
 		t.Errorf("raw_signal = %v", ev["raw_signal"])
 	}
 	if ev["message"] != "provider overloaded" {
+		t.Errorf("message = %v", ev["message"])
+	}
+}
+
+func TestRunOne_LimitSignalDiagnostic_EmittedWithoutIssue(t *testing.T) {
+	s, workspaceDir, sink := setupRunnerForFailureTest(t)
+
+	exec := &funcExecutor{
+		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+			return &agent.TryResult{
+				Completed: false,
+				Summary:   "usage limited",
+				Evidence: &reliability.FailureEvidence{
+					Category:   reliability.CategoryUsageLimit,
+					QuotaScope: "anthropic",
+					RawSignal:  "usage limit reached until 5pm",
+					Message:    "usage limit reached",
+				},
+			}, nil
+		},
+	}
+
+	r := makeRunner(t, s, workspaceDir, sink, exec, 1)
+
+	if _, err := r.runOne(
+		context.Background(),
+		&store.RelayRecord{ID: 1, TargetIterations: 1},
+		0,
+		agent.ResolvedAgent{Harness: "opencode", Model: cheapTestModel},
+		runTask{Name: "task", Prompt: "do work", Assignee: "senior", IsLapsBacked: false, LapID: "lap-1"},
+		nil, nil, false, false, nil, nil, io.Discard,
+	); err != nil {
+		t.Fatalf("runOne error = %v", err)
+	}
+
+	if got := findFailureCount(sink, "failed:"); got != 0 {
+		t.Errorf("usage-limit agent-class failure became Issue(s): %d", got)
+	}
+
+	diag := findEvent(t, sink, "provider limit signal")
+	if diag.Level != telemetry.LevelInfo {
+		t.Errorf("diagnostic level = %q, want %q", diag.Level, telemetry.LevelInfo)
+	}
+	wantTag(t, diag.Tags, "event_kind", "limit_signal")
+	wantTag(t, diag.Tags, "failure_category", "usage_limit")
+	wantTag(t, diag.Tags, "quota_scope", "anthropic")
+	ev, ok := diag.Contexts["failure_evidence"]
+	if !ok {
+		t.Fatal("diagnostic missing failure_evidence context")
+	}
+	if ev["raw_signal"] != "usage limit reached until 5pm" {
+		t.Errorf("raw_signal = %v", ev["raw_signal"])
+	}
+	if ev["message"] != "usage limit reached" {
 		t.Errorf("message = %v", ev["message"])
 	}
 }

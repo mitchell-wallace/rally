@@ -5,12 +5,21 @@ The system SHALL support a baked default Sentry DSN for release binaries while
 preserving user/operator overrides. The system SHALL resolve the effective DSN in this
 order: `RALLY_TELEMETRY=0` disables telemetry regardless of any configured DSN;
 `SENTRY_DSN` environment variable; `.rally/config.toml` `telemetry.sentry_dsn`; baked
-default DSN; no DSN disables telemetry.
+default DSN; no DSN disables telemetry. The system SHALL initialize telemetry only for
+commands that run relays, so mechanical commands do not create telemetry side-effect
+files or open a Sentry client solely because a baked default DSN exists.
 
 #### Scenario: Baked DSN activates release telemetry
 - **WHEN** no env or config DSN is set
 - **AND** the binary was built with a baked default DSN
+- **AND** a relay command is executed
 - **THEN** telemetry SHALL initialize with the baked default DSN
+
+#### Scenario: Mechanical commands do not activate baked telemetry
+- **WHEN** the binary was built with a baked default DSN
+- **AND** a mechanical command such as help, version, or update is executed
+- **THEN** telemetry SHALL remain a no-op
+- **AND** the command SHALL NOT create the machine-local identifier file
 
 #### Scenario: Environment DSN overrides baked default
 - **WHEN** `SENTRY_DSN` is set
@@ -121,16 +130,22 @@ and SHALL omit try-only fields.
 
 ### Requirement: Raw limit-signal capture
 The system SHALL attach the bounded raw signal and parsed message from the failure
-evidence to the event as a context block when a captured failure's category is a
-provider-limit signal (usage limit, short rate limit, or provider overload), so the
-exact provider response shapes observed in the field can be used to validate and
-normalize the per-harness evidence parsers. The attached raw signal SHALL remain
-bounded, SHALL pass through the PII scrubber, and SHALL NOT include prompt or
-transcript content.
+evidence to an info-level diagnostic event as a context block whenever a failed try's
+category is a provider-limit signal (usage limit, short rate limit, or provider
+overload), so the exact provider response shapes observed in the field can be used to
+validate and normalize the per-harness evidence parsers. This diagnostic event SHALL be
+emitted independently of whether the failure is captured as an operator-worthy Issue.
+The attached raw signal SHALL remain bounded, SHALL pass through the PII scrubber, and
+SHALL NOT include prompt or transcript content.
 
 #### Scenario: Limit failure carries the raw provider signal
-- **WHEN** a failure with a usage-limit, short-rate-limit, or provider-overload category is captured with failure evidence present
-- **THEN** the event SHALL include the bounded raw signal and parsed message as a context block
+- **WHEN** a failed try has a usage-limit, short-rate-limit, or provider-overload category with failure evidence present
+- **THEN** telemetry SHALL emit an info-level diagnostic event carrying the bounded raw signal and parsed message as a context block
+
+#### Scenario: Limit diagnostic does not depend on Issue capture
+- **WHEN** a provider-limit failure is not operator-worthy enough to be captured as an Issue
+- **THEN** telemetry SHALL still emit the info-level limit-signal diagnostic event
+- **AND** the diagnostic event SHALL be distinguishable by scalar tags such as `event_kind=limit_signal`
 
 #### Scenario: Raw signal stays bounded and scrubbed
 - **WHEN** the raw limit signal is attached
@@ -138,7 +153,8 @@ transcript content.
 
 #### Scenario: Non-limit categories attach no raw signal
 - **WHEN** a captured failure has a category that is not a provider-limit signal
-- **THEN** the system SHALL NOT attach a raw-signal context block
+- **THEN** the system SHALL NOT emit a limit-signal diagnostic event
+- **AND** it SHALL NOT attach a raw-signal context block
 
 ## MODIFIED Requirements
 

@@ -35,29 +35,18 @@ var Version = "dev"
 // explicitly configured via env or config file.
 var DefaultSentryDSN = ""
 
-// activeTelemetry holds the process-wide telemetry sink initialised in main.
-// It defaults to a no-op so any command that runs before/without init still
-// has a safe sink. The relay runner reads it via SetTelemetry.
+// activeTelemetry defaults to a no-op so mechanical commands stay telemetry-free.
+// Relay execution initializes a real sink when telemetry is configured.
 var activeTelemetry telemetry.Sink = telemetry.NoopSink{}
 
-// activeMachineID holds the anonymous machine identity resolved at init. It is
-// empty when telemetry is disabled. The relay runner reads it via its Config to
-// build the rally context block and machine-identity tags.
+// activeMachineID is empty until relay execution initializes telemetry.
 var activeMachineID string
 
 func main() {
 	flushUpdateNotice := startBackgroundUpdateCheck(os.Args[1:], os.Stderr)
 
-	// Init telemetry — no-op when no DSN or RALLY_TELEMETRY=0.
-	// Machine identity is resolved only when telemetry is active.
-	result := telemetry.InitWithIdentity(loadTelemetryConfig())
-	activeTelemetry = result.Sink
-	activeMachineID = result.MachineID
-	defer result.Cleanup()
-
 	if err := rootCmd.Execute(); err != nil {
 		flushUpdateNotice()
-		result.Cleanup()
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
@@ -97,28 +86,7 @@ func resolveWorkspaceDir() (string, error) {
 	return wd, nil
 }
 
-// loadTelemetryConfig reads the workspace config and returns the telemetry
-// section, including the resolved data directory for machine identity
-// persistence. Returns a zero Config on any error — telemetry is best-effort
-// and must never prevent the CLI from starting.
-func loadTelemetryConfig() telemetry.Config {
-	// Resolve data dir: same logic as runRelay (home-default + config override).
-	dataDir := ""
-	if home, err := os.UserHomeDir(); err == nil {
-		dataDir = filepath.Join(home, ".local", "share", "rally")
-	}
-
-	wsDir, err := resolveWorkspaceDir()
-	if err != nil {
-		return telemetry.Config{DefaultDSN: DefaultSentryDSN, DataDir: dataDir}
-	}
-	cfg, err := config.LoadV2(wsDir)
-	if err != nil {
-		return telemetry.Config{DefaultDSN: DefaultSentryDSN, DataDir: dataDir}
-	}
-	if cfg.DataDir != "" {
-		dataDir = cfg.DataDir
-	}
+func telemetryConfigForRelay(cfg config.V2Config, dataDir string) telemetry.Config {
 	return telemetry.Config{
 		SentryDSN:  cfg.Telemetry.SentryDSN,
 		DefaultDSN: DefaultSentryDSN,
@@ -244,6 +212,14 @@ func runRelay(cmd *cobra.Command, args []string) error {
 			}
 		}
 	}
+
+	// Init telemetry only for relay execution. Mechanical commands like help,
+	// version, and update never reach this path, so a baked release DSN cannot
+	// create machine-id files or open a Sentry client for those commands.
+	telemetryResult := telemetry.InitWithIdentity(telemetryConfigForRelay(cfg, dataDir))
+	activeTelemetry = telemetryResult.Sink
+	activeMachineID = telemetryResult.MachineID
+	defer telemetryResult.Cleanup()
 
 	runnerCfg := relay.Config{
 		WorkspaceDir:           workspaceDir,

@@ -24,6 +24,8 @@ func (NoopSink) EmitTryLog(context.Context, map[string]interface{}) {}
 
 func (NoopSink) CaptureFailure(context.Context, string, FailureEvent) {}
 
+func (NoopSink) CaptureEvent(context.Context, string, Event) {}
+
 func (NoopSink) Flush(time.Duration) {}
 
 // NoopSpan is the span returned by NoopSink. All methods are no-ops.

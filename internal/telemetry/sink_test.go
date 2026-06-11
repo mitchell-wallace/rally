@@ -115,6 +115,9 @@ func TestNoopSink_MethodsDoNotPanic(t *testing.T) {
 	// CaptureFailure
 	sink.CaptureFailure(ctx, "test failure", FailureEvent{Tags: map[string]string{"k": "v"}})
 
+	// CaptureEvent
+	sink.CaptureEvent(ctx, "test event", Event{Level: LevelInfo, Tags: map[string]string{"event_kind": "test"}})
+
 	// Flush
 	sink.Flush(0)
 }

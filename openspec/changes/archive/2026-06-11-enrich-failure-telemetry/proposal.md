@@ -37,6 +37,8 @@ limit-category failures is what closes that gap.
   that GoReleaser fills from a GitHub Actions secret for release binaries. DSN
   precedence is: `RALLY_TELEMETRY=0` disables everything; `SENTRY_DSN` env override;
   `.rally/config.toml` `sentry_dsn`; baked `DefaultSentryDSN`; otherwise disabled.
+  Telemetry is initialized only for relay execution, so mechanical commands such as
+  help, version, and update remain side-effect free even when a baked DSN exists.
 - **Anonymous machine-local hash.** Generate a random, stable per-machine identifier
   once and persist it in rally's data dir (e.g. `<dataDir>/machine-id`). It is a
   fresh random value, **not** derived from hostname/MAC/username, so it correlates a
@@ -58,6 +60,10 @@ limit-category failures is what closes that gap.
   `reset_at`), and the agent-type resilience state (active / probation / frozen /
   benched) where known. The category replaces the older infra/agent/incomplete trio so
   triage reads one consistent vocabulary across CLI, records, and Sentry.
+- **Low-severity limit-signal corpus.** Provider-limit evidence (`usage_limit`,
+  `short_rate_limit`, `provider_overloaded`) is emitted as an info-level diagnostic
+  event with `failure_evidence` even when the failed try is not operator-worthy enough
+  to become an Issue. Issue capture stays governed by the existing noise policy.
 
 ## Capabilities
 
@@ -81,9 +87,11 @@ limit-category failures is what closes that gap.
   unfinalized-agent capture).
 - **Behavior**: when telemetry is disabled (`RALLY_TELEMETRY=0`, or no effective DSN
   after env/config/default resolution) nothing changes — the machine-id file is only
-  written when the sink is active. Release binaries can send telemetry by default via
-  the baked DSN. When enabled, captured failures gain environment + identity + state
-  context.
+  written when the relay command initializes an active sink. Release binaries can send
+  telemetry by default via the baked DSN during relay execution. Mechanical commands
+  do not initialize telemetry. When enabled, captured failures gain environment +
+  identity + state context, and provider-limit evidence is recorded as low-severity
+  diagnostic telemetry for parser validation.
 - **Privacy**: no new PII is intentionally transmitted. The machine hash is random and
   anonymous; cwd is home-stripped; hostname/username/IP are never sent; bounded
   provider raw-signal text is scrubbed before sending. The change extends, not relaxes,
@@ -91,7 +99,8 @@ limit-category failures is what closes that gap.
 - **Out of scope**: defining the failure taxonomy itself, and which failures become
   Issues vs spans (owned by `improve-error-categorisation` and the existing telemetry
   spec respectively — this change *consumes* the taxonomy, it does not author it); any
-  non-Sentry backend; sampling-rate changes.
+  non-Sentry backend; sampling-rate changes. Emitting low-severity provider-limit
+  diagnostics is additive and must not broaden the operator-worthy Issue policy.
 - **Coordination**: this change lands **after** `improve-error-categorisation` and
   consumes its typed `FailureCategory`, `quota_scope`, and reset evidence rather than
   re-deriving a failure class. The resilience-state names (active / probation / frozen /

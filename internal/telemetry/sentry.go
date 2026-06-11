@@ -85,11 +85,24 @@ func (s *SentrySink) EmitTryLog(ctx context.Context, fields map[string]interface
 // (Issue). Tags are set on a cloned scope so they don't leak. Context
 // blocks are attached via scope.SetContext for structured nested data.
 func (s *SentrySink) CaptureFailure(ctx context.Context, msg string, evt FailureEvent) {
+	s.captureMessage(ctx, msg, Event{
+		Level:    LevelError,
+		Tags:     evt.Tags,
+		Contexts: evt.Contexts,
+	})
+}
+
+func (s *SentrySink) CaptureEvent(ctx context.Context, msg string, evt Event) {
+	s.captureMessage(ctx, msg, evt)
+}
+
+func (s *SentrySink) captureMessage(ctx context.Context, msg string, evt Event) {
 	hub := sentry.GetHubFromContext(ctx)
 	if hub == nil {
 		hub = sentry.CurrentHub()
 	}
 	hub.WithScope(func(scope *sentry.Scope) {
+		scope.SetLevel(sentryLevel(evt.Level))
 		for k, v := range evt.Tags {
 			scope.SetTag(k, v)
 		}
@@ -98,6 +111,17 @@ func (s *SentrySink) CaptureFailure(ctx context.Context, msg string, evt Failure
 		}
 		hub.CaptureMessage(msg)
 	})
+}
+
+func sentryLevel(level EventLevel) sentry.Level {
+	switch level {
+	case LevelInfo:
+		return sentry.LevelInfo
+	case LevelError:
+		return sentry.LevelError
+	default:
+		return sentry.LevelInfo
+	}
 }
 
 // Flush drains buffered Sentry events with a bounded timeout. Safe to call

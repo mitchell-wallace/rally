@@ -63,6 +63,14 @@ default; `DefaultSentryDSN` is the fallback; an empty effective DSN leaves telem
 disabled. This preserves the existing local override behavior while making product
 release binaries work out of the box.
 
+Initialize the active telemetry sink only from the relay command path after the
+workspace config and data directory have been resolved. Process-start defaults remain
+`NoopSink` plus an empty machine id, so mechanical commands (`--help`, `--version`,
+`update`, and other commands that do not run a relay) do not create the machine-id file,
+open a Sentry client, or send telemetry solely because a release binary has a baked DSN.
+The relay path still uses the same precedence and still defers cleanup/flush for the
+duration of the command.
+
 **3. Structured telemetry event input, not ad hoc scope mutation.**
 Extend `telemetry.Sink` with a structured failure/event input that can carry filterable
 tags separately from context blocks (for example a `FailureEvent` with `Tags` and
@@ -134,10 +142,15 @@ The three capture sites have different source data:
   `attempt`, `max_attempts`, raw signal, and quota reset evidence.
 
 **8. Raw limit-signal corpus for parser validation.**
-When the captured failure's category is a provider-limit signal (`usage_limit`,
-`short_rate_limit`, `provider_overloaded`), attach the bounded
-`FailureEvidence.RawSignal` and `Message` to the event as a `failure_evidence`
-context block (context, not tags — they are free text, not filterable scalars).
+When a failed try's category is a provider-limit signal (`usage_limit`,
+`short_rate_limit`, `provider_overloaded`), emit the bounded
+`FailureEvidence.RawSignal` and `Message` in a `failure_evidence` context block
+(context, not tags — they are free text, not filterable scalars). Emit this as an
+info-level diagnostic event even when the failure is not otherwise captured as an
+operator-worthy Issue. If the same failure is operator-worthy, the Issue event may also
+carry the same context, but the diagnostic emission is the contract that ensures corpus
+coverage.
+
 Purpose: the per-harness evidence parsers in `internal/reliability/`
 (`ParseClaudeError`, `ParseCodexError`, `ParseGeminiError`, `ParseOpencodeError`)
 encode provider response shapes partly from memory; capturing the exact raw
@@ -148,6 +161,11 @@ provider error text. Treat it as untrusted free text anyway: run it through the 
 recursive scrubber as other contexts, collapse home paths inside the string, preserve
 the existing sensitive-key redaction, and add fixtures proving prompt/transcript fields
 are not attached under `failure_evidence`.
+
+Use a structured event API for this path rather than overloading `CaptureFailure`.
+Sentry should receive the diagnostic at info level with tags such as
+`event_kind=limit_signal`; alerting can ignore that event kind/level while Discover
+queries can aggregate the raw provider shapes.
 
 ## Risks / Trade-offs
 
@@ -173,3 +191,9 @@ are not attached under `failure_evidence`.
 - **Sentry may populate host-derived `server_name` by default** → explicitly set or
   scrub it so the no-hostname guarantee covers top-level Sentry event fields, not only
   Rally's custom contexts.
+- **A baked DSN can create side effects for informational commands** → initialize
+  telemetry only in relay execution. Commands that merely report local information
+  remain no-op for telemetry even in release binaries.
+- **Low-severity limit diagnostics can add Sentry volume** → keep them bounded,
+  scrubbed, tagged with `event_kind=limit_signal`, and info-level so they do not create
+  operator alerts.

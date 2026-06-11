@@ -26,10 +26,21 @@ type Sink interface {
 	// and context blocks for structured nested data.
 	CaptureFailure(ctx context.Context, msg string, evt FailureEvent)
 
+	// CaptureEvent reports a non-Issue structured event such as a low-severity
+	// diagnostic signal. Implementations should preserve the event level.
+	CaptureEvent(ctx context.Context, msg string, evt Event)
+
 	// Flush drains buffered events with a bounded timeout. It must return
 	// promptly even when the network is unreachable.
 	Flush(timeout time.Duration)
 }
+
+type EventLevel string
+
+const (
+	LevelInfo  EventLevel = "info"
+	LevelError EventLevel = "error"
+)
 
 // FailureEvent carries structured data for a captured failure. Tags are
 // scalar filterable values (Sentry tags); Contexts are nested structured
@@ -42,6 +53,15 @@ type FailureEvent struct {
 
 	// Contexts are named blocks of structured data attached to the event
 	// (e.g., a "rally" block with version/os/arch/term).
+	Contexts map[string]map[string]interface{}
+}
+
+// Event carries structured data for a non-Issue telemetry event. Tags and
+// contexts follow the same split as FailureEvent, with Level controlling
+// severity in the backend.
+type Event struct {
+	Level    EventLevel
+	Tags     map[string]string
 	Contexts map[string]map[string]interface{}
 }
 

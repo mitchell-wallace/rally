@@ -1,6 +1,7 @@
 package main
 
 import (
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -12,6 +13,7 @@ import (
 	"github.com/mitchell-wallace/rally/internal/gitx"
 	"github.com/mitchell-wallace/rally/internal/relay"
 	"github.com/mitchell-wallace/rally/internal/store"
+	"github.com/mitchell-wallace/rally/internal/telemetry"
 	"github.com/spf13/cobra"
 )
 
@@ -83,6 +85,43 @@ antigravity_model = ""
 		if !strings.Contains(configContent, f) {
 			t.Errorf("init template missing field %q", f)
 		}
+	}
+}
+
+func TestVersionCommandDoesNotInitializeTelemetryWithBakedDSN(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("RALLY_TELEMETRY", "")
+	t.Setenv("SENTRY_DSN", "")
+
+	prevDefaultDSN := DefaultSentryDSN
+	prevTelemetry := activeTelemetry
+	prevMachineID := activeMachineID
+	DefaultSentryDSN = "https://default@example.com/123"
+	activeTelemetry = telemetry.NoopSink{}
+	activeMachineID = ""
+	t.Cleanup(func() {
+		DefaultSentryDSN = prevDefaultDSN
+		activeTelemetry = prevTelemetry
+		activeMachineID = prevMachineID
+		rootCmd.SetArgs(nil)
+		rootCmd.SetOut(os.Stdout)
+		rootCmd.SetErr(os.Stderr)
+	})
+
+	rootCmd.SetArgs([]string{"--version"})
+	rootCmd.SetOut(io.Discard)
+	rootCmd.SetErr(io.Discard)
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("version command failed: %v", err)
+	}
+
+	machineIDPath := filepath.Join(home, ".local", "share", "rally", "machine-id")
+	if _, err := os.Stat(machineIDPath); !os.IsNotExist(err) {
+		t.Fatalf("version command must not create machine-id file, stat err=%v", err)
+	}
+	if activeMachineID != "" {
+		t.Fatalf("version command initialized activeMachineID = %q", activeMachineID)
 	}
 }
 
