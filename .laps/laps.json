@@ -72,11 +72,11 @@
       "title": "Harden home-prefix collapse in telemetry scrubbing",
       "description": "Context: OpenSpec tasks 5.1, 5.3, and privacy portions of 5.4. The current scrubber drops sensitive keys and truncates values; this slice adds username stripping for home paths everywhere telemetry might transmit strings.\n\nOutcome: internal/telemetry/scrubber.go has a home-prefix collapse helper using os.UserHomeDir(), and scrubEvent applies it recursively to string values in event contexts, breadcrumbs, span data, and free text such as raw provider signals/messages.\n\nFiles \u0026 scope: internal/telemetry/scrubber.go and scrubber tests. Keep non-home absolute paths unchanged unless they match an existing sensitive-key rule. Do not add cwd or relay identity fields in this lap; only provide the scrubber/privacy primitive.\n\nDesign: Collapse `/home/\u003cuser\u003e/...` or the platform home path to `~/...`, including when embedded inside longer strings. Preserve existing sensitive-key redaction and size limiting. The helper should be deterministic and easy for later context-building code to reuse.\n\nAcceptance: Tests cover direct cwd-style values, embedded home paths in raw text, username absence after scrubbing, non-home absolute paths remaining intact, and existing prompt/transcript sensitive field behavior still passing. `go test ./internal/telemetry/...` is green. Do not check off OpenSpec tasks.md boxes.",
       "assignee": "JUNIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 327680,
       "createdAt": "2026-06-11T03:44:39.708827898Z",
-      "updatedAt": "2026-06-11T03:44:39.708827898Z",
-      "completedAt": null
+      "updatedAt": "2026-06-11T05:16:38.884534207Z",
+      "completedAt": "2026-06-11T05:16:38.884534207Z"
     },
     {
       "id": "rall-4fae",
