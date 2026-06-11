@@ -149,11 +149,11 @@
       "title": "Document enriched telemetry behavior and privacy controls",
       "description": "Context: OpenSpec task 7.1. Implementation should already be in place; this lap documents the operator-facing behavior without introducing OpenSpec-specific language into generic Rally surfaces.\n\nOutcome: User-facing docs describe baked default DSN behavior, env/config override precedence, RALLY_TELEMETRY=0 kill switch, new context fields, anonymous machine id storage and reset by deleting the file, machine_id_prefix tag vs full machine_id context placement, relay_guid, cwd home-prefix collapse, raw limit-signal privacy handling, and guarantees that hostname/username/IP are not sent.\n\nFiles \u0026 scope: README.md or the existing telemetry/privacy docs if present. Avoid changing code unless doc examples reveal a small naming mismatch.\n\nDesign: Keep the explanation concise and practical. Mention that Sentry DSNs are client ingestion endpoints, not privileged API secrets, but users can disable telemetry with RALLY_TELEMETRY=0. Explain exactly where `\u003cdataDir\u003e/machine-id` lives based on configured/default data dir.\n\nAcceptance: Docs accurately match the implemented names and precedence. Any doc tests or markdown checks used by the repo are green. Do not check off OpenSpec tasks.md boxes.",
       "assignee": "JUNIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 786432,
       "createdAt": "2026-06-11T03:44:39.708842744Z",
-      "updatedAt": "2026-06-11T03:44:39.708842744Z",
-      "completedAt": null
+      "updatedAt": "2026-06-11T05:54:52.600543192Z",
+      "completedAt": "2026-06-11T05:54:52.600543192Z"
     },
     {
       "id": "rall-78f4",
