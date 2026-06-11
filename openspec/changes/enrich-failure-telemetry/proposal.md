@@ -13,6 +13,16 @@ This change enriches the existing sink (it is **not** a new integration) so each
 failure carries enough environment and state to triage without the local machine in
 hand, and so relays are globally identifiable across machines.
 
+Note (2026-06-11): the pre-change sink also does not capture the information
+needed to validate per-harness usage-limit parsing and other exit conditions —
+events carry no raw provider limit-response text, reset phrasing, or
+exit-condition payloads, so the from-memory assumptions in the
+`internal/reliability/` parsers cannot be checked against captured data. A
+validation pull for `improve-harness-consistency` confirmed this empirically
+(no usable limit payloads exist in Sentry). The bounded
+`FailureEvidence.RawSignal`/`Message` corpus this change attaches on
+limit-category failures is what closes that gap.
+
 ## What Changes
 
 - **Run environment context.** Attach a `rally` context to events: rally version
