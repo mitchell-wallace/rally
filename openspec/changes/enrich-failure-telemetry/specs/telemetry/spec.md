@@ -5,7 +5,7 @@ When enabled, the system SHALL attach a run-environment context to the relay tra
 to every captured failure, carrying the rally version, operating system, architecture,
 and a coarse terminal descriptor (the value of `$TERM`, or a non-TTY marker when stdout
 is not a terminal). The system SHALL NOT include hostname, username, or network
-identity in this context.
+identity in this context or in Sentry's top-level `server_name` field.
 
 #### Scenario: Failure carries environment context
 - **WHEN** a failure is captured with telemetry enabled
@@ -14,6 +14,7 @@ identity in this context.
 #### Scenario: Environment context omits host identity
 - **WHEN** the run-environment context is built
 - **THEN** it SHALL NOT contain hostname, username, or IP address
+- **AND** the outgoing event SHALL NOT contain a host-derived `server_name`
 
 ### Requirement: Anonymous machine-local identity
 The system SHALL maintain an anonymous, stable machine-local identifier that is a
@@ -37,31 +38,43 @@ anonymous value rather than failing the run.
 
 ### Requirement: Globally-unique relay identity
 When enabled, the system SHALL attach a globally-unique relay identifier derived from
-the machine-local identifier, the relay start date, and the local relay id, together
-with the relay start timestamp and the machine-local identifier. The system SHALL
-continue to emit the local `relay_id` tag for within-machine correlation.
+the machine-local identifier, the repo key, the relay start date, and the local relay
+id, together with the relay start timestamp and the decided machine identity field
+placement. The system SHALL continue to emit the local `relay_id` tag for
+within-workspace correlation.
 
 #### Scenario: Relay carries a globally-unique identifier
 - **WHEN** a relay starts with telemetry enabled
-- **THEN** its trace and any failures SHALL be tagged with a globally-unique relay identifier, the relay start timestamp, and the machine-local identifier
+- **THEN** its trace and any failures SHALL be tagged with a globally-unique relay identifier and the relay start timestamp, and SHALL carry the anonymous machine identity only in the decided tag/context locations
+
+#### Scenario: Relay identifier is unique across repos
+- **WHEN** two workspaces on the same machine have the same local relay id on the same date
+- **THEN** their globally-unique relay identifiers SHALL differ by repo key
 
 #### Scenario: Local relay id retained
 - **WHEN** the globally-unique identifier is attached
 - **THEN** the local `relay_id` tag SHALL still be emitted
 
 ### Requirement: Agent state on captured failures
-When a failure is captured, the system SHALL attach the failing try's agent state as
+When a try failure is captured, the system SHALL attach the failing try's agent state as
 filterable scalar tags: the current attempt and retry budget, the stable failure
 category (as defined by the error-categorisation taxonomy), and the agent-type
 resilience state (active, probation, frozen, or benched) where known. When the failure
 category is a usage/quota exhaustion, the system SHALL additionally attach the quota
 scope and reset timing where the failure evidence provides them. The system SHALL read
 these values from the failure evidence produced upstream and SHALL NOT re-classify the
-failure. The harness and model SHALL remain available via the existing `runner` tag.
+try failure. The harness and model SHALL remain available via the existing `runner`
+tag. Relay-level captures that have no failing try SHALL attach relay-level state only
+and SHALL omit try-only fields.
 
 #### Scenario: Captured failure carries agent state
 - **WHEN** an operator-worthy failure is captured
 - **THEN** the event SHALL include the attempt, retry budget, failure category, and resilience state tags
+
+#### Scenario: Relay-level stall omits try-only fields
+- **WHEN** a relay-level all-frozen stall is captured
+- **THEN** the event SHALL include relay/global context and `agent_state=frozen`
+- **AND** it SHALL NOT include attempt, retry budget, reset evidence, or raw-signal fields
 
 #### Scenario: Usage-limit failure carries reset evidence
 - **WHEN** a captured failure has a usage/quota-exhaustion category with reset evidence
@@ -72,12 +85,13 @@ failure. The harness and model SHALL remain available via the existing `runner` 
 - **THEN** the agent-state tags SHALL NOT change whether it is captured as an Issue
 
 ### Requirement: Raw limit-signal capture
-When a captured failure's category is a provider-limit signal (usage limit, short rate
-limit, or provider overload), the system SHALL attach the bounded raw signal and parsed
-message from the failure evidence to the event as a context block, so the exact provider
-response shapes observed in the field can be used to validate and normalize the
-per-harness evidence parsers. The attached raw signal SHALL remain bounded, SHALL pass
-through the PII scrubber, and SHALL NOT include prompt or transcript content.
+The system SHALL attach the bounded raw signal and parsed message from the failure
+evidence to the event as a context block when a captured failure's category is a
+provider-limit signal (usage limit, short rate limit, or provider overload), so the
+exact provider response shapes observed in the field can be used to validate and
+normalize the per-harness evidence parsers. The attached raw signal SHALL remain
+bounded, SHALL pass through the PII scrubber, and SHALL NOT include prompt or
+transcript content.
 
 #### Scenario: Limit failure carries the raw provider signal
 - **WHEN** a failure with a usage-limit, short-rate-limit, or provider-overload category is captured with failure evidence present
@@ -99,8 +113,9 @@ payloads from being transmitted. The scrubber SHALL never send the contents of
 `current_task.md` or full agent transcripts; only summaries and metadata SHALL be sent.
 The system SHALL additionally collapse the user's home-directory prefix in any
 transmitted working-directory or path-shaped field (e.g. `/home/<user>/…` → `~/…`) so
-the username is not transmitted, and SHALL NOT transmit hostname, username, or network
-identity in any event.
+the username is not transmitted, SHALL collapse home paths embedded inside transmitted
+free-text context fields such as raw provider signals, and SHALL NOT transmit hostname,
+username, host-derived `server_name`, or network identity in any event.
 
 #### Scenario: Task prompt never shipped
 - **WHEN** an event would otherwise include `current_task.md` contents or a full transcript
@@ -110,6 +125,10 @@ identity in any event.
 - **WHEN** an event includes the working directory or a path under the user's home directory
 - **THEN** the scrubber SHALL collapse the home prefix to `~` so the username is not transmitted
 
+#### Scenario: Raw signal free text is username-stripped
+- **WHEN** a raw provider signal or parsed message contains a path under the user's home directory
+- **THEN** the scrubber SHALL collapse the embedded home prefix to `~` before sending
+
 #### Scenario: Host identity never shipped
 - **WHEN** any event is assembled
-- **THEN** it SHALL NOT contain hostname, username, or IP address
+- **THEN** it SHALL NOT contain hostname, username, host-derived `server_name`, or IP address

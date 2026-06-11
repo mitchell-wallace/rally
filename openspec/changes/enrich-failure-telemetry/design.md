@@ -4,12 +4,15 @@ The telemetry sink (`internal/telemetry/`) is already wired: `Init` resolves a D
 and returns a `Sink`; `SentrySink` implements spans (`StartSpan`), per-try logs
 (`EmitTryLog`), failure capture (`CaptureFailure`), and bounded `Flush`. A
 `before_send` scrubber (`scrubber.go`) drops sensitive keys and truncates oversized
-values. Correlation tags are built in `tags.go` from `EventInfo`.
+values. Correlation tags are built in `tags.go` from `EventInfo`. The current sink
+contract only accepts tags on `CaptureFailure`, so this change must extend the
+telemetry API with a structured event/context input instead of hiding context in tags.
 
 Failures are captured at three sites in `internal/relay/runner.go`: relay stall
-(all agents frozen, `runner.go:433`), per-try failure (`runner.go:1418`), and
-"agent exited without finalizing" (`runner.go:1489`). The relay-level span is tagged
-at `runner.go:377`.
+(all agents frozen), per-try failure, and "agent exited without finalizing". The
+relay-level span is tagged when `Run` starts the relay span. Avoid locking the plan to
+line numbers here; the implementation should update the named blocks in the current
+file.
 
 What is missing is **context that survives leaving the machine**: there is no record
 of rally version, OS, terminal, or working directory, and every identifier
@@ -40,36 +43,58 @@ so the assumed baseline below is the post-error-categorisation runner.
 **1. Run-environment context as a single `rally` context block.**
 Build it once at sink init (values are process-stable) and attach to events:
 `version` (`buildinfo`), `go_os`, `go_arch`, `term` (`$TERM` or `"non-tty"` when
-stdout is not a terminal — reuse the same TTY detection the display path uses).
-Hostname, username, and network identity are deliberately excluded.
+stdout is not a terminal, using `golang.org/x/term.IsTerminal(int(os.Stdout.Fd()))`).
+Hostname, username, and network identity are deliberately excluded. Sentry's own
+hostname field must also be neutralized: set `ClientOptions.ServerName` to a static
+non-host value (or clear `event.ServerName` in `scrubEvent`) and test that the outgoing
+event has no host-derived `server_name`.
 
-**2. Anonymous machine-local hash, persisted once.**
+**2. Structured telemetry event input, not ad hoc scope mutation.**
+Extend `telemetry.Sink` with a structured failure/event input that can carry filterable
+tags separately from context blocks (for example a `FailureEvent` with `Tags` and
+`Contexts`). Update `NoopSink`, `SentrySink`, and test mocks together. `SentrySink`
+should set scalar filter fields with `scope.SetTag` and attach nested objects with
+`scope.SetContext`; relay spans should receive the same `rally` context via
+`Span.SetData` or the Sentry equivalent. This keeps the tag/context split testable and
+prevents implementers from smuggling context-only data into high-cardinality tags.
+
+**3. Anonymous machine-local hash, persisted once.**
 On first active-telemetry run, generate a random 128-bit value (`crypto/rand`), hex-
 encode it, and write it to `<dataDir>/machine-id` (0600). Subsequent runs read it.
 It is **not** derived from any machine attribute, so it cannot be reversed to a host
 or user; it only lets a machine's events be grouped over time. The file is written
 only when the sink is active, so disabled telemetry leaves no trace. If the file is
 unreadable/unwritable, fall back to an ephemeral per-process value (still anonymous).
+Because `telemetry.Init` currently receives only the DSN, add `DataDir` to
+`telemetry.Config` and pass the resolved data dir from `cmd/rally/main.go` before
+initializing the active sink. If no data dir is available, use an ephemeral value rather
+than creating files in an implicit location.
 
-**3. Globally-unique relay identity.**
-`relay_guid = <machine-id-prefix>-<YYYYMMDD>-<relay_id>`, where the date comes from
-the relay's `StartedAt` and `relay_id` is the existing local counter. Attach
-`relay_guid`, `machine_id`, and `relay_started_at` (RFC3339) as tags/context at the
-relay span (`runner.go:377`) and on every failure capture. Keep emitting the local
-`relay_id` tag for back-compat and within-machine correlation with `summary.jsonl`.
+**4. Globally-unique relay identity.**
+`relay_guid = <machine-id-prefix>-<repo-key>-<YYYYMMDD>-<relay_id>`, where `repo-key`
+is the same hashed repo identifier already emitted as the `repo` tag, the date comes
+from the relay's `StartedAt`, and `relay_id` is the existing workspace-local counter.
+Attach `relay_guid` and `relay_started_at` (RFC3339) at the relay span and on every
+failure capture, and keep emitting the local `relay_id` tag for back-compat and
+within-workspace correlation with `summary.jsonl`. Product call before implementation:
+decide whether the full `machine_id` is a filterable tag, context-only, or replaced by
+a short prefix tag. Default recommendation is `machine_id_prefix` as the filterable tag
+plus the full anonymous id in the `rally` context only, to reduce Sentry tag cardinality
+while retaining correlation when inspecting a specific event.
 Rationale for a composite over a random UUID: it stays human-greppable and ties back
-to the local store, while the machine prefix + date guarantee cross-machine
-uniqueness.
+to the local store, while the machine prefix + repo key + date guarantee cross-machine
+and cross-repo uniqueness.
 
-**4. Username-stripped working directory.**
+**5. Username-stripped working directory.**
 Attach `cwd` with the user's home prefix collapsed to `~` (compare against
 `os.UserHomeDir()`), e.g. `~/Documents/Mycode/rally-2`. This shows the path shape for
 triage without the username. Implement the stripping in `scrubber.go` (or a helper it
-calls) so it is enforced centrally and unit-tested, and so an unexpected absolute path
-in any field can be run through the same collapse. The existing `repo` path-hash tag
-is retained.
+calls) so it is enforced centrally and unit-tested. Apply it recursively to string
+values in event contexts, breadcrumbs, and span data, including free-text raw-signal
+fields, so home paths embedded inside provider text are collapsed too. The existing
+`repo` path-hash tag is retained.
 
-**5. Agent state on failure.**
+**6. Agent state on failure, with site-specific source rules.**
 Extend the failure-capture call sites to pass a small state struct alongside the
 existing tags: `attempt`, `max_attempts`, the stable `failure_category` from
 `improve-error-categorisation` (e.g. `usage_limit`, `short_rate_limit`,
@@ -83,7 +108,19 @@ category and evidence straight off the `TryResult.Evidence` / `StrategyDecision`
 `improve-error-categorisation` populates — do not re-classify here. Use the resilience
 vocabulary (active / probation / frozen / benched) verbatim.
 
-**6. Raw limit-signal corpus for parser validation.**
+The three capture sites have different source data:
+- Terminal try failure: attach `attempt`, `max_attempts`, the latest
+  `failureCategory`, `resetEvidence`, quota scope, and the selected runner's current
+  resilience state from the route selection (`active`, `probation`, `benched`, or
+  `frozen` where known).
+- Unfinalized-agent capture: classify as `incomplete_finalization`; include run/runner
+  tags, `max_attempts`, and the last known attempt number if available. Omit reset/quota
+  fields unless upstream evidence exists.
+- Relay stall/all-frozen capture: this is relay-level, not a try failure. Attach
+  `agent_state=frozen` and relay/global context, but omit try-only fields such as
+  `attempt`, `max_attempts`, raw signal, and quota reset evidence.
+
+**7. Raw limit-signal corpus for parser validation.**
 When the captured failure's category is a provider-limit signal (`usage_limit`,
 `short_rate_limit`, `provider_overloaded`), attach the bounded
 `FailureEvidence.RawSignal` and `Message` to the event as a `failure_evidence`
@@ -93,9 +130,11 @@ Purpose: the per-harness evidence parsers in `internal/reliability/`
 encode provider response shapes partly from memory; capturing the exact raw
 shapes observed in the field builds the corpus that `improve-harness-consistency`
 needs to validate and normalize those parsers against real data (and to retire
-signatures that never occur). `RawSignal` is already bounded (≤256 runes) and
-contains provider error text — never prompt/transcript content — and it passes
-through the `before_send` scrubber like every other field.
+signatures that never occur). `RawSignal` is already bounded (<=256 runes) and contains
+provider error text. Treat it as untrusted free text anyway: run it through the same
+recursive scrubber as other contexts, collapse home paths inside the string, preserve
+the existing sensitive-key redaction, and add fixtures proving prompt/transcript fields
+are not attached under `failure_evidence`.
 
 ## Risks / Trade-offs
 
@@ -103,11 +142,17 @@ through the `before_send` scrubber like every other field.
   starts a new anonymous identity; portability across machines is explicitly not a
   goal. Never block a run on the file.
 - **`relay_guid` composite collides if the clock is wrong** → the machine prefix makes
-  cross-machine collision negligible; within a machine the local `relay_id` is already
-  unique, so same-day collisions cannot happen.
+  cross-machine collision negligible; within a repo the local `relay_id` is already
+  unique, and the repo key prevents same-machine cross-repo collisions.
 - **Home-prefix stripping misses non-home absolute paths** (e.g. `/srv/work`) → those
   expose no username, so they are lower-risk; still run all path-shaped fields through
   the collapse helper as defense-in-depth and document that only the home prefix is
   guaranteed stripped.
 - **Context built at init goes stale if the process changes TTY** → the environment
   values are process-stable in practice; rebuilding per-event is unnecessary cost.
+- **Full machine id as a Sentry tag may be high-cardinality** → decide before
+  implementation whether it remains filterable. Default to a prefix tag plus full id in
+  context unless machine-level filtering is required.
+- **Sentry may populate host-derived `server_name` by default** → explicitly set or
+  scrub it so the no-hostname guarantee covers top-level Sentry event fields, not only
+  Rally's custom contexts.

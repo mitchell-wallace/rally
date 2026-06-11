@@ -27,16 +27,18 @@ limit-category failures is what closes that gap.
 
 - **Run environment context.** Attach a `rally` context to events: rally version
   (`internal/buildinfo`), OS + architecture, and a coarse terminal descriptor (TTY
-  vs non-TTY, `$TERM`). No hostname, no username, no IP.
+  vs non-TTY, `$TERM`). No hostname, no username, no IP, including Sentry's top-level
+  `server_name`.
 - **Anonymous machine-local hash.** Generate a random, stable per-machine identifier
   once and persist it in rally's data dir (e.g. `<dataDir>/machine-id`). It is a
   fresh random value, **not** derived from hostname/MAC/username, so it correlates a
   machine's events over time without fingerprinting the operator.
 - **Globally-unique relay identity.** Derive a `relay_guid` from the machine-local
-  hash, the relay's start date, and the local `relay_id`
-  (`<machine-hash>-<YYYYMMDD>-<relay_id>`), and attach it plus `relay_started_at` and
-  `machine_id` as tags/context. The local `relay_id` tag is retained for back-compat;
-  `relay_guid` is the cross-machine-safe key.
+  hash, the repo hash, the relay's start date, and the local `relay_id`
+  (`<machine-id-prefix>-<repo-key>-<YYYYMMDD>-<relay_id>`), and attach it plus
+  `relay_started_at` and the anonymous machine identity as tags/context. The local
+  `relay_id` tag is retained for back-compat; `relay_guid` is the cross-machine-and-
+  repo-safe key.
 - **Username-stripped working directory.** Attach the working directory with the home
   prefix collapsed (`/home/<user>/…` → `~/…`), so the path shape is visible for
   triage without leaking the username. The existing `repo` tag (path-hash) is kept.
@@ -61,17 +63,18 @@ limit-category failures is what closes that gap.
 
 - **Code**: `internal/telemetry/` (`tags.go` for the new tags, a new
   environment/context builder, `scrubber.go` for cwd/home stripping,
-  `sentry.go`/`sink.go` if the context attachment needs a new entry point), a small
-  machine-id helper (new file under `internal/telemetry/` or `internal/buildinfo/`),
-  and the three `CaptureFailure` call sites in `internal/relay/runner.go`
-  (`runner.go:433`, `:1418`, `:1489`) plus the relay span tagging
-  (`runner.go:377`).
+  `sentry.go`/`sink.go` for structured event contexts), `telemetry.Config` and
+  `cmd/rally/main.go` data-dir plumbing for a small machine-id helper (new file under
+  `internal/telemetry/`), and the `CaptureFailure` call sites / relay span tagging in
+  `internal/relay/runner.go` (relay span setup near `Run`, all-frozen route failure,
+  terminal try failure, and unfinalized-agent capture).
 - **Behavior**: when telemetry is disabled (no DSN, or `RALLY_TELEMETRY=0`) nothing
   changes — the machine-id file is only written when the sink is active. When enabled,
   captured failures gain environment + identity + state context.
-- **Privacy**: no new PII is transmitted. The machine hash is random and anonymous;
-  cwd is home-stripped; hostname/username/IP are never sent. The change extends, not
-  relaxes, the existing `before_send` scrubber.
+- **Privacy**: no new PII is intentionally transmitted. The machine hash is random and
+  anonymous; cwd is home-stripped; hostname/username/IP are never sent; bounded
+  provider raw-signal text is scrubbed before sending. The change extends, not relaxes,
+  the existing `before_send` scrubber.
 - **Out of scope**: defining the failure taxonomy itself, and which failures become
   Issues vs spans (owned by `improve-error-categorisation` and the existing telemetry
   spec respectively — this change *consumes* the taxonomy, it does not author it); any
