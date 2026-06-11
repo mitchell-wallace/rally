@@ -8,6 +8,199 @@ import (
 	"github.com/getsentry/sentry-go"
 )
 
+func TestCollapseHomePaths_DirectPaths(t *testing.T) {
+	orig := homeDir
+	homeDir = "/home/testuser"
+	defer func() { homeDir = orig }()
+
+	tests := []struct {
+		name, in, want string
+	}{
+		{"exact home", "/home/testuser", "~"},
+		{"cwd style", "/home/testuser/projects/rally", "~/projects/rally"},
+		{"dotfile", "/home/testuser/.config/rally/config.toml", "~/.config/rally/config.toml"},
+		{"trailing slash", "/home/testuser/", "~/"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := collapseHomePaths(tt.in)
+			if got != tt.want {
+				t.Errorf("collapseHomePaths(%q) = %q, want %q", tt.in, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestCollapseHomePaths_EmbeddedInText(t *testing.T) {
+	orig := homeDir
+	homeDir = "/home/alice"
+	defer func() { homeDir = orig }()
+
+	in := "error at /home/alice/.config/rally/config.toml: permission denied"
+	want := "error at ~/.config/rally/config.toml: permission denied"
+	if got := collapseHomePaths(in); got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+
+	in2 := "cwd=/home/alice/repos/rally, prev=/home/alice/repos/other"
+	want2 := "cwd=~/repos/rally, prev=~/repos/other"
+	if got := collapseHomePaths(in2); got != want2 {
+		t.Errorf("got %q, want %q", got, want2)
+	}
+}
+
+func TestCollapseHomePaths_UsernameStripped(t *testing.T) {
+	orig := homeDir
+	homeDir = "/home/sensitiveuser"
+	defer func() { homeDir = orig }()
+
+	got := collapseHomePaths("/home/sensitiveuser/project/file.go")
+	if strings.Contains(got, "sensitiveuser") {
+		t.Errorf("username still present after collapse: %q", got)
+	}
+	if got != "~/project/file.go" {
+		t.Errorf("got %q, want ~/project/file.go", got)
+	}
+}
+
+func TestCollapseHomePaths_NonHomePathsUntouched(t *testing.T) {
+	orig := homeDir
+	homeDir = "/home/testuser"
+	defer func() { homeDir = orig }()
+
+	tests := []struct {
+		name, in, want string
+	}{
+		{"system path", "/usr/local/bin/go", "/usr/local/bin/go"},
+		{"other user", "/home/otheruser/file.txt", "/home/otheruser/file.txt"},
+		{"tmp", "/tmp/build-output", "/tmp/build-output"},
+		{"empty string", "", ""},
+		{"relative path", "relative/path/to/file", "relative/path/to/file"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := collapseHomePaths(tt.in)
+			if got != tt.want {
+				t.Errorf("collapseHomePaths(%q) = %q, want %q", tt.in, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestCollapseHomePaths_EmptyHomeDir(t *testing.T) {
+	orig := homeDir
+	homeDir = ""
+	defer func() { homeDir = orig }()
+
+	in := "/home/whoever/file.go"
+	if got := collapseHomePaths(in); got != in {
+		t.Errorf("with empty homeDir, got %q, want %q unchanged", got, in)
+	}
+}
+
+func TestScrubEvent_HomePathCollapseInMessage(t *testing.T) {
+	orig := homeDir
+	homeDir = "/home/testuser"
+	defer func() { homeDir = orig }()
+
+	event := &sentry.Event{
+		Message: "failure in /home/testuser/project/main.go:42",
+		Contexts: map[string]sentry.Context{
+			"work": {
+				"cwd":       "/home/testuser/project",
+				"config":    "/etc/rally/config.toml",
+				"log_path":  "/home/testuser/.local/share/rally/log.txt",
+			},
+		},
+	}
+
+	got := scrubEvent(event)
+
+	if strings.Contains(got.Message, "testuser") {
+		t.Errorf("message still contains username: %q", got.Message)
+	}
+	if got.Message != "failure in ~/project/main.go:42" {
+		t.Errorf("message = %q", got.Message)
+	}
+
+	ctx := got.Contexts["work"]
+	if ctx["cwd"] != "~/project" {
+		t.Errorf("cwd = %v, want ~/project", ctx["cwd"])
+	}
+	if ctx["config"] != "/etc/rally/config.toml" {
+		t.Errorf("config = %v, want unchanged", ctx["config"])
+	}
+	if ctx["log_path"] != "~/.local/share/rally/log.txt" {
+		t.Errorf("log_path = %v, want collapsed", ctx["log_path"])
+	}
+}
+
+func TestScrubEvent_HomePathCollapseInBreadcrumbsAndSpans(t *testing.T) {
+	orig := homeDir
+	homeDir = "/home/testuser"
+	defer func() { homeDir = orig }()
+
+	event := &sentry.Event{
+		Breadcrumbs: []*sentry.Breadcrumb{
+			{Data: map[string]interface{}{
+				"path":  "/home/testuser/.cache/rally/state.json",
+				"other": "/opt/rally/bin",
+			}},
+		},
+		Spans: []*sentry.Span{
+			{Data: map[string]interface{}{
+				"signal": "provider responded: /home/testuser/project/output",
+				"count":  42,
+			}},
+		},
+	}
+
+	got := scrubEvent(event)
+
+	if got.Breadcrumbs[0].Data["path"] != "~/.cache/rally/state.json" {
+		t.Errorf("breadcrumb path = %v", got.Breadcrumbs[0].Data["path"])
+	}
+	if got.Breadcrumbs[0].Data["other"] != "/opt/rally/bin" {
+		t.Errorf("breadcrumb other = %v", got.Breadcrumbs[0].Data["other"])
+	}
+	spanData := got.Spans[0].Data
+	if spanData["signal"] != "provider responded: ~/project/output" {
+		t.Errorf("span signal = %v", spanData["signal"])
+	}
+	if spanData["count"] != 42 {
+		t.Errorf("span count altered: %v", spanData["count"])
+	}
+}
+
+func TestScrubEvent_SensitiveKeysStillScrubbedWithHomePaths(t *testing.T) {
+	orig := homeDir
+	homeDir = "/home/testuser"
+	defer func() { homeDir = orig }()
+
+	event := &sentry.Event{
+		Contexts: map[string]sentry.Context{
+			"try": {
+				"prompt":  "/home/testuser/secret/prompt.md",
+				"cwd":     "/home/testuser/project",
+				"role":    "senior",
+			},
+		},
+	}
+
+	got := scrubEvent(event)
+
+	ctx := got.Contexts["try"]
+	if ctx["prompt"] != scrubbedPlaceholder {
+		t.Errorf("sensitive key prompt = %v, want scrubbed", ctx["prompt"])
+	}
+	if ctx["cwd"] != "~/project" {
+		t.Errorf("cwd = %v, want ~/project", ctx["cwd"])
+	}
+	if ctx["role"] != "senior" {
+		t.Errorf("role = %v, want senior", ctx["role"])
+	}
+}
+
 func TestScrubEvent_DropsSensitiveKeys(t *testing.T) {
 	taskBody := strings.Repeat("a", 120_000) // ~120KB current_task.md
 	event := &sentry.Event{

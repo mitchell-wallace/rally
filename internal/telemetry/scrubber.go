@@ -1,10 +1,31 @@
 package telemetry
 
 import (
+	"os"
 	"strings"
 
 	"github.com/getsentry/sentry-go"
 )
+
+// homeDir is resolved once at init so that collapseHomePaths is fast and
+// deterministic. Tests may override this value temporarily.
+var homeDir string
+
+func init() {
+	homeDir, _ = os.UserHomeDir()
+}
+
+// collapseHomePaths replaces every occurrence of the user's home directory
+// path with "~" in the given string. This strips the username from any
+// telemetry value that might reference local paths — cwd-style values, file
+// URIs, error messages, and raw provider signals alike. Non-home absolute
+// paths are left untouched.
+func collapseHomePaths(s string) string {
+	if homeDir == "" {
+		return s
+	}
+	return strings.ReplaceAll(s, homeDir, "~")
+}
 
 // maxValueBytes caps the size of any single string value transmitted in an
 // event payload. Telemetry only ships summaries and metadata, so this is a
@@ -48,7 +69,7 @@ func scrubEvent(event *sentry.Event) *sentry.Event {
 		return nil
 	}
 
-	event.Message = truncateValue(event.Message)
+	event.Message = truncateValue(collapseHomePaths(event.Message))
 
 	// Defense-in-depth: ensure no host-derived server_name is ever
 	// transmitted, even if the SDK overrides ClientOptions.ServerName.
@@ -78,7 +99,7 @@ func scrubMap(m map[string]interface{}) {
 			continue
 		}
 		if s, ok := v.(string); ok {
-			m[k] = truncateValue(s)
+			m[k] = truncateValue(collapseHomePaths(s))
 		}
 	}
 }
