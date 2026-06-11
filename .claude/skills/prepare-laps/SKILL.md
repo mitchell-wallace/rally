@@ -89,6 +89,7 @@ Requires the `laps` CLI v0.7.0 or newer for batch JSON task creation. Rally inje
      ```
 
    - Run `laps list` at the end and sanity-check role order, VERIFY placement, and the final full-outcome verification lap.
+   - Commit the prepared `.laps/laps.json` queue to git after the sanity check unless the user explicitly says not to. If this prepare-laps session also updates this skill, include that skill edit in the same commit so the queue and planning convention land together.
    - Report to the operator any meaningful uncertainties or plan problems you hit while planning — circular or contradictory task dependencies, work that does not map cleanly onto laps, missing prerequisites, or a plan claim that contradicts the working tree. Raise these in your summary to the operator; do not bury them inside lap descriptions or silently plan around them. This planning-time reporting is the planning agent's responsibility, distinct from the `VERIFY` role's mid-change verification.
 
 ## Testing Laps
