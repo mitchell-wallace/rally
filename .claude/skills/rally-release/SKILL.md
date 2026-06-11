@@ -1,6 +1,6 @@
 ---
 name: rally-release
-description: Lightweight ship-it workflow for Rally — push the current feature branch to dev and main, run CI, and (if VERSION was bumped) publish a new auto-tagged release. Use when the user asks to ship, release, merge to main, or run the standard land-and-release flow. Stops on non-trivial merge conflicts, local test/lint failures, CI failures, or when main is already at the current branch tip. Do not use for OpenSpec changes (use openspec-* skills), preparing laps (use prepare-laps), or post-relay forensics (use post-relay-review).
+description: Lightweight ship-it workflow for Rally — land code on main and (if VERSION was bumped) publish a new auto-tagged release. Use proactively whenever the user wants to push a release, merge to main, ship, cut a version, or do anything that results in a new rally binary being published. Also use when the user is on dev and asks to push to main. Starts from either a feature branch (full flow: branch → dev → main) or directly from dev (simplified flow: dev → main). Stops on non-trivial merge conflicts, local test/lint failures, CI failures, or when main is already at the current branch tip. Do not use for OpenSpec changes (use openspec-* skills), preparing laps (use prepare-laps), or post-relay forensics (use post-relay-review).
 license: MIT
 metadata:
   author: rally
@@ -15,9 +15,17 @@ This is a lightweight, ship-fast workflow. It is intentionally low-ceremony and 
 
 ## When to use
 
-- You are on a feature branch whose tip is not on `main`.
-- The user has asked to ship, release, merge to main, or "do the standard land-and-release flow".
-- `main` is **not** already at the current branch tip (the "main already up-to-date" stop condition will trip otherwise).
+Use this skill proactively whenever the user's intent is to land code on `main` and/or publish a release. Typical triggers:
+
+- "push to main", "merge to main", "ship it", "cut a release", "publish a new version"
+- "bump version and release", "do the standard land-and-release flow"
+- The user is on `dev` with accumulated commits and wants them on `main`
+- The user is on a feature branch ready to land
+
+Starting points:
+
+- **Feature branch** (full flow): branch → dev → main. Requires clean working tree on a non-`main`, non-`dev` branch.
+- **`dev` branch** (simplified flow): dev → main. Skips the branch-to-dev merge and branch push. Requires clean working tree on `dev`.
 
 Do **not** use this skill for:
 
@@ -29,13 +37,26 @@ Do **not** use this skill for:
 
 The order matters: CI is configured to run on push to `main` only. Pushing to `dev` does **not** trigger CI. The `auto-tag` and `release` workflows fire as a result of the main push.
 
+### Starting from a feature branch
+
 1. **Sanity check** — `git status --short --branch` and `git branch -vv`. Must be on a non-`main`, non-`dev` branch. Working tree must be clean.
 2. **Local checks** — `just test` and `just check` (which runs `go vet` + a `gofmt` check). Both must be clean. (Fallback: `go test -count=1 ./...`, `go vet ./...`, `gofmt -l .`.)
 3. **Push the branch** — `git push origin <branch>`.
 4. **Merge to dev** — `git checkout dev && git merge --ff-only <branch> && git push origin dev`.
 5. **Merge to main** — `git checkout main && git merge --ff-only dev && git push origin main`. (This push is what triggers CI.)
-6. **Watch CI** — `gh run list --branch main --limit 1 --json databaseId,name,status,conclusion` to find the test, auto-tag, and release run IDs, then `gh run watch <id> --exit-status` for each in order (test → auto-tag → release).
-7. **Install latest binary and smoke test** — after CI passes and the release is published:
+6. Continue to **Watch CI** below.
+
+### Starting from dev
+
+1. **Sanity check** — `git status --short --branch` and `git branch -vv`. Must be on `dev`. Working tree must be clean.
+2. **Local checks** — `just test` and `just check`. Both must be clean. (Fallback: `go test -count=1 ./...`, `go vet ./...`, `gofmt -l .`.)
+3. **Merge to main** — `git checkout main && git merge --ff-only dev && git push origin main`. (This push is what triggers CI.)
+4. Continue to **Watch CI** below.
+
+### Watch CI
+
+7. **Watch CI** — `gh run list --branch main --limit 1 --json databaseId,name,status,conclusion` to find the test, auto-tag, and release run IDs, then `gh run watch <id> --exit-status` for each in order (test → auto-tag → release).
+8. **Install latest binary and smoke test** — after CI passes and the release is published:
    - Run `rally update` locally to fetch the latest published binary.
    - Create a throwaway git repo in `/tmp/rally-smoke-<tag>/` with a trivial prompt (e.g. "Create a file called smoke-test.txt").
    - Run a single-iteration relay with a cheap/free model (e.g. `opencode/minimax-m2.5-free` or `zai-coding-plan/glm-5.1`).
