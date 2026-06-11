@@ -16,11 +16,26 @@ jobs:
         with:
           go-version-file: go.mod
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
       - name: Install laps
         run: |
           mkdir -p "$HOME/.local/bin"
           GOBIN="$HOME/.local/bin" go install github.com/mitchell-wallace/laps/cmd/laps@v0.4.5
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Install opencode
+        run: |
+          npm install -g opencode@latest
+          echo "$HOME/.opencode/bin" >> "$GITHUB_PATH"
+
+      - name: Configure opencode auth
+        if: ${{ secrets.OPENCODE_AUTH_JSON != '' }}
+        run: |
+          mkdir -p "$HOME/.local/share/opencode"
+          echo '${{ secrets.OPENCODE_AUTH_JSON }}' > "$HOME/.local/share/opencode/auth.json"
 
       - name: Run tests
         run: go test -count=1 ./...

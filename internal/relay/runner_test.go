@@ -123,7 +123,7 @@ func testResolver(spec string) (agent.ResolvedAgent, error) {
 	return agent.ResolvedAgent{Harness: harness}, nil
 }
 
-const cheapTestModel = "opencode/deepseek-v4-flash-free"
+const cheapTestModel = "opencode/big-pickle"
 
 func cheapTestResolver(spec string) (agent.ResolvedAgent, error) {
 	if spec == "op:dsf" {
