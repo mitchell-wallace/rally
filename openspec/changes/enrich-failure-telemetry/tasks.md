@@ -47,4 +47,4 @@
 
 ## 7. Docs
 
-- [ ] 7.1 Document the baked default DSN behavior, env/config override precedence, `RALLY_TELEMETRY=0` kill switch, new context fields, anonymous machine id (and how to reset it by deleting the file), machine identity tag/context placement, and privacy guarantees (no hostname/username/IP)
+- [x] 7.1 Document the baked default DSN behavior, env/config override precedence, `RALLY_TELEMETRY=0` kill switch, new context fields, anonymous machine id (and how to reset it by deleting the file), machine identity tag/context placement, and privacy guarantees (no hostname/username/IP)
