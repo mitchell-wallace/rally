@@ -17,11 +17,11 @@
       "title": "Add product DSN fallback and release injection",
       "description": "Context: OpenSpec tasks 2.1-2.5. Rally currently resolves telemetry DSN from RALLY_TELEMETRY, SENTRY_DSN, and config only; release binaries need a baked default while preserving overrides.\n\nOutcome: cmd/rally/main.go defines `DefaultSentryDSN = \"\"`, telemetry config loading passes it as the fallback DSN, GoReleaser injects it with `-X main.DefaultSentryDSN={{ .Env.RALLY_SENTRY_DSN }}`, and the release workflow exposes the `RALLY_SENTRY_DSN` secret only to GoReleaser.\n\nFiles \u0026 scope: cmd/rally/main.go, internal/telemetry/init.go and tests, .goreleaser.yaml, .github/workflows/release.yml. Keep the existing Version ldflag intact.\n\nDesign: Preserve DSN precedence exactly: RALLY_TELEMETRY=0 disables all telemetry; SENTRY_DSN overrides config and default; config telemetry.sentry_dsn overrides the baked default; baked default is used only when env/config are empty; empty effective DSN returns NoopSink.\n\nAcceptance: Tests cover env beats config/default, config beats default, baked default activates telemetry when env/config are empty, and RALLY_TELEMETRY=0 disables even with env/config/default set and creates no telemetry side-effect files. `go test ./internal/telemetry/... ./cmd/rally/...` and `go build ./...` are green. Do not check off OpenSpec tasks.md boxes.",
       "assignee": "JUNIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 131072,
       "createdAt": "2026-06-11T03:44:39.708821124Z",
-      "updatedAt": "2026-06-11T03:44:39.708821124Z",
-      "completedAt": null
+      "updatedAt": "2026-06-11T04:58:06.651044969Z",
+      "completedAt": "2026-06-11T04:58:06.651044969Z"
     },
     {
       "id": "rall-4d4f",
