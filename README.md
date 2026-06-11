@@ -594,17 +594,111 @@ For a fresh repo, `rally init all` is the quickest path to a fully configured wo
 
 ## Telemetry
 
-Rally includes opt-in error reporting via Sentry to help improve reliability. It captures infrastructure and agent-class errors (e.g. rate limits, crashes, stall timeouts) but rigorously scrubs sensitive data.
+Rally sends error and performance telemetry to Sentry when a DSN is
+configured. Release binaries ship with a baked-in product DSN so telemetry
+"just works" without extra setup; source builds report nothing unless you
+provide a DSN.
 
-- **To opt in:** Configure your DSN in `.rally/config.toml` or set the `SENTRY_DSN` environment variable:
-  ```toml
-  [telemetry]
-  sentry_dsn = "https://your-dsn-key@sentry.io/project-id"
-  ```
-  The `SENTRY_DSN` environment variable takes precedence over the config file if both are set.
-- **Kill switch:** You can forcefully disable all telemetry by setting `RALLY_TELEMETRY=0` in your environment.
-- **What is sent:** Rally sends structured error signals for operator-worthy failures (e.g., panics, non-zero command exits, agent pause events, freeze detections, stall timeouts, and lap-integrity violations). Spans include execution metadata like `relay_id`, `run_id`, `try_id`, `role`, `runner`, `repo`, `lap_id`, and prompt metrics (total prompt size and a per-source breakdown of tokens).
-- **What is NOT sent:** Rally NEVER sends your task description, codebase context, file contents, or agent transcripts. All potentially sensitive string fields (such as `prompt`, `output`, `transcript`, and the contents of `current_task.md`) are aggressively dropped or scrubbed locally before transmission.
+### DSN resolution and kill switch
+
+The effective DSN is resolved in this order (first non-empty wins after the
+kill switch):
+
+1. **`RALLY_TELEMETRY=0`** — force-disables all telemetry regardless of any
+   DSN. No network calls, no files written.
+2. **`SENTRY_DSN`** environment variable — overrides everything below.
+3. **`[telemetry] sentry_dsn`** in `.rally/config.toml` — overrides the
+   baked default.
+4. **Baked-in default** (`DefaultSentryDSN`) — injected by GoReleaser at
+   release time; used when env and config are both empty.
+5. **No DSN** — telemetry stays off.
+
+Sentry DSNs are client-side ingestion endpoints (public key + project id),
+not privileged API secrets. If you still prefer to opt out, set
+`RALLY_TELEMETRY=0` or leave all DSN sources empty.
+
+### What is sent
+
+Rally sends structured error signals for operator-worthy failures (panics,
+non-zero exits, freeze detections, stall timeouts, unfinalized agents,
+relay stalls, and lap-integrity violations). Each event carries:
+
+**Tags** (scalar, filterable in Sentry):
+
+| Tag | Example | Purpose |
+|---|---|---|
+| `relay_id` | `3` | Local relay counter (per workspace) |
+| `run_id` | `7` | Local run counter |
+| `try_id` | `12` | Local try counter |
+| `role` | `junior` | Lap assignee |
+| `runner` | `claude:claude-sonnet-4` | Harness and model |
+| `repo` | `rally-a1b2c3` | Hashed repo identifier |
+| `lap_id` | `abc123` | Lap identifier |
+| `relay_guid` | `a1b2c3d4e5f6-rally-a1b2c3-20260610-3` | Globally unique relay id |
+| `relay_started_at` | `2026-06-10T14:30:00Z` | Relay start (RFC 3339) |
+| `machine_id_prefix` | `a1b2c3d4e5f6` | First 12 chars of anonymous machine id |
+| `failure_category` | `usage_limit` | Stable failure taxonomy |
+| `agent_state` | `active` | Runner resilience state |
+| `attempt` / `max_attempts` | `2` / `5` | Retry position and budget |
+| `quota_scope` / `reset_at` / `reset_after` | `claude:opus` / `2026-…Z` / `30s` | Limit reset info (limit categories only) |
+
+**Context blocks** (structured, not indexed):
+
+| Context | Fields | Purpose |
+|---|---|---|
+| `rally` | `version`, `go_os`, `go_arch`, `term`, `machine_id`, `cwd` | Run environment |
+| `failure_evidence` | `raw_signal`, `message` | Bounded provider text (limit categories only) |
+
+Spans trace the relay → run → try hierarchy and carry prompt-size metrics
+(total bytes plus a per-source breakdown). Breadcrumbs record per-try
+structured logs.
+
+### Anonymous machine identity
+
+On first run with telemetry active, Rally generates a random 128-bit
+identifier and stores it at `<dataDir>/machine-id` (permissions `0600`).
+The file location follows the configured data directory — by default
+`~/.local/share/rally/machine-id`. This id is:
+
+- **Not derived** from hostname, username, MAC address, or any host
+  attribute — it is a pure random token.
+- Used to group events from the same machine over time.
+- **Resettable** by deleting the file; Rally generates a new one on the
+  next telemetry-active run.
+- Only written when telemetry is active. Disabled telemetry writes no file.
+
+The first 12 hex characters are emitted as the `machine_id_prefix` tag
+(low-cardinality, for grouping). The full 32-character id appears only in
+the `rally` context block — never as a tag.
+
+### Privacy guarantees
+
+Rally **never** transmits:
+
+- Hostname, username, or IP address. The Sentry `server_name` field is set
+  to the static value `rally-cli`.
+- Task descriptions, codebase context, file contents, or agent
+  transcripts. Fields named `prompt`, `output`, `transcript`,
+  `current_task`, `log`, etc. are replaced with `[scrubbed]`.
+- Your username in paths. Home-directory prefixes are collapsed to `~` in
+  all telemetry values (contexts, breadcrumbs, spans, and free-text fields
+  like raw provider signals).
+- String values longer than 4 KB are truncated.
+
+### Failure categories and raw provider signals
+
+Failures are classified by the error-classification taxonomy
+(`usage_limit`, `short_rate_limit`, `provider_overloaded`,
+`incomplete_finalization`, `agent_error`, …). Telemetry does not
+re-classify — it reads the category straight off the runner's
+`FailureEvidence`.
+
+For the three provider-limit categories (`usage_limit`,
+`short_rate_limit`, `provider_overloaded`), Rally attaches the bounded raw
+provider response (`raw_signal`, max 256 runes) and a human-readable
+`message` as the `failure_evidence` context block. Both are scrubbed
+(home-prefix collapse + sensitive-key redaction + truncation) before
+transmission. Non-limit categories attach no raw-signal context.
 
 ## Self-Updates
 
