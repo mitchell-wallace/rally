@@ -11,7 +11,7 @@ metadata:
 
 Turn a plan into a Rally-native Laps queue that another agent can execute one lap at a time. The output should be concrete enough to keep agents on track, but not so prescriptive that it steals ownership of the fine implementation details.
 
-Requires the `laps` CLI v0.7.0 or newer for batch JSON task creation. Rally injects per-role guidance from `.rally/agents/<assignee>.md` at run time — do not duplicate role intros inside lap descriptions.
+Requires the `laps` CLI v0.8.0 or newer for batch JSON task creation and claim-flow support. Rally injects per-role guidance from `.rally/agents/<assignee>.md` at run time — do not duplicate role intros inside lap descriptions.
 
 ## Core Rules
 
