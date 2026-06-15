@@ -25,6 +25,7 @@ retry_budget          = 5
 
 [harness.cc.models]
 opus   = 'claude-opus-4-8'
+# opus   = 'claude-opus-4-8-disabled' # invalid slug to disable use of expensive model temporarily
 sonnet = 'claude-sonnet-4-6'
 haiku  = 'claude-haiku-4-5'
 
@@ -71,31 +72,12 @@ sonnet = 'Claude Sonnet 4.6 (Thinking)'
 [routes]
 
 
-# --- without 'agy' ---
-
-# Balanced rotation when no role matches the lap assignee.
-# default = ['cc:opus:1', 'cx:g55:1', 'op:zai:1', 'ag:flash:1', 'ag:pro:1', 'op:kimi:1']
-
-# Frontier models to make judgement calls
-# senior = ['cc:opus', 'op:kimi', 'cx:g55', 'op:ds']
-
-# Regular well-defined work. Rotates per iteration.
-# junior = ['op:zai', 'ge:pro', 'op:kimi', 'op:qwen', 'op:dsf']
-
-# UI / visual reasoning. Prefer gemini, fall back to claude sonnet.
-# ui = ['ge:pro', 'op:kimi', 'cc:sonnet', 'op:zai', 'op:zgo']
-
-# Verification / review tasks. Codex first, claude as backup.
-# verify = ['cx:g54', 'op:ds', 'cc:opus', 'op:kimi']
-
-# ------------------ requires `agy` - not yet set up in dune -------------
-
 
 # Balanced rotation when no role matches the lap assignee.
 default = ['cc:opus:1', 'cx:g55:1', 'op:zai:1', 'ag:flash:1', 'ag:pro:1', 'op:kimi:1']
 
 # Frontier models to make judgement calls
-senior = ['ag:opus', 'cc:opus', 'op:kimi', 'op:qwen', 'cx:g55']
+senior = ['ag:opus', 'cx:g55', 'cc:opus', 'op:ds', 'op:kimi']
 
 # Regular well-defined work. Rotates per iteration.
 junior = ['op:zai', 'ge:pro', 'ag:flash', 'ag:pro', 'op:kimi', 'op:zgo']
