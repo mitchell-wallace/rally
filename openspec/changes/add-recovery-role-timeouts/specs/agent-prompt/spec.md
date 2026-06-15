@@ -1,7 +1,7 @@
 ## ADDED Requirements
 
 ### Requirement: RECOVERY role prompt snippet
-The system SHALL embed a `recovery` role prompt snippet (`roles/recovery.md`) resolvable by the same case-insensitive `Role(name)` loader and overridable by an on-disk `.rally/agents/recovery.md`, as for every other role. The embedded RECOVERY snippet SHALL state that the role reconciles incomplete or failed dirty state and continues the task; SHALL contain the five-way classification contract (`continue`, `discard`, `course_correct`, `repair_plan`, `needs_user`) with each option's meaning; SHALL instruct the agent to classify first and then act (never stop at diagnosis unless `needs_user`); SHALL permit adding follow-up laps as a containment strategy without using them to avoid recovery; and SHALL instruct the agent to record its classification and finalize with `laps done`/`laps handoff` + `laps wrapup`. The snippet SHALL remain OpenSpec-agnostic.
+The system SHALL embed a `recovery` role prompt snippet (`roles/recovery.md`) resolvable by the same case-insensitive `Role(name)` loader and overridable by an on-disk `.rally/agents/recovery.md`, as for every other role. The embedded RECOVERY snippet SHALL state that the role reconciles incomplete or failed dirty state and continues the task; SHALL contain the five-way classification contract (`continue`, `discard`, `course_correct`, `repair_plan`, `needs_user`) with each option's meaning; SHALL instruct the agent to classify first and then act (never stop at diagnosis unless `needs_user`); SHALL permit adding follow-up laps as a containment strategy without using them to avoid recovery; and SHALL instruct the agent to record its classification with `laps wrapup --classification <value>` and finalize with `laps done`/`laps handoff` + `laps wrapup`. The snippet SHALL remain OpenSpec-agnostic.
 
 #### Scenario: Recovery role resolves like other roles
 - **WHEN** the `recovery` role prompt is requested
@@ -16,7 +16,7 @@ The system SHALL embed a `recovery` role prompt snippet (`roles/recovery.md`) re
 - **THEN** it SHALL NOT contain OpenSpec-specific instructions (those are injected per-lap by `prepare-laps` only when a lap has a related change)
 
 #### Scenario: Classification instruction appears only on RECOVERY runs
-- **WHEN** a prompt is composed for a run whose assignee resolves to `recovery`
+- **WHEN** a prompt is composed for a run whose effective assignee/prompt role is `recovery`
 - **THEN** the composed prompt SHALL reference recording the recovery classification (the `continue`/`discard`/`course_correct`/`repair_plan`/`needs_user` field)
 
 #### Scenario: Non-recovery prompts omit the classification instruction
@@ -35,7 +35,7 @@ The composed prompt for implementation roles (e.g. JUNIOR, SENIOR, UI) SHALL inc
 - **THEN** it SHALL frame the trigger as the agent's own honest assessment of being stuck and SHALL NOT instruct the agent that Rally measures diff movement or transcript activity to enforce it
 
 ### Requirement: Handoff-only prompt snippet
-The system SHALL provide a handoff-only prompt (a shared `general/` snippet) used solely for the bounded handoff-only resume after a per-try timeout. The snippet SHALL forbid continuing implementation and SHALL direct the agent to summarize the blocker, hypotheses tried, evidence gathered, changed files, and the next decision, then call `laps handoff` followed by `laps wrapup`.
+The system SHALL provide a handoff-only prompt (a shared `general/` snippet) used solely for the bounded handoff-only resume after run-budget exhaustion. The snippet SHALL forbid continuing implementation and SHALL direct the agent to summarize the blocker, hypotheses tried, evidence gathered, changed files, and the next decision, then call `laps handoff` followed by `laps wrapup`.
 
 #### Scenario: Handoff-only prompt forbids implementation
 - **WHEN** the handoff-only prompt is used for a bounded resume

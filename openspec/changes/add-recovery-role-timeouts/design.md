@@ -47,9 +47,9 @@ matches that role. Honest session resume already exists (agent-lifecycle
 - A RECOVERY role/route distinct from SENIOR and VERIFY, defaulting to a stronger
   model, that classifies and acts on **dirty leftover/handed-off** state.
 - Rally-driven recovery routing for the two states that leave a half-finished,
-  suspect tree: a **dirty handoff** (`handoffState != 0 && hasOwnUncommittedChanges`)
-  and `handoff_timeout`. Derived from persisted try records so it survives relay
-  restarts.
+  suspect tree: a **dirty handoff** (`DirtyHandoff`, derived from the current-run
+  handoff entry plus `hasOwnUncommittedChanges`) and `handoff_timeout`. Derived from
+  persisted try records so it survives relay restarts.
 
 **Non-Goals:**
 - Treating ordinary failures as a recovery trigger. A `failed` try (usage limit,
@@ -149,16 +149,16 @@ surfaced through `FailureStateTags`.
 
 RECOVERY engages for the next run on a lap when the lap is not done **and** either:
 
-1. **Dirty handoff** — a handoff occurred (`laps handoff`) yet meaningful
+1. **Dirty handoff** — a handoff completed through `laps wrapup` yet meaningful
    own-uncommitted changes remain (a suspect, half-finished tree). This is *not*
    the `incomplete` `TryOutcome`: in `runOne` `finalized := … || handoffState != 0
    || …` (`runner.go:1425`), so `incomplete := … && hasOwnUncommittedChanges &&
    !finalized` (`runner.go:1427`) is forced **false** whenever a handoff fires —
    the two are mutually exclusive. The trigger is therefore a distinct derived
-   predicate, `handoffState != 0 && hasOwnUncommittedChanges` evaluated at try
-   resolution, not the `incomplete` outcome. A plain `incomplete` outcome (changes,
-   no handoff) keeps its existing resume-with-finalization retry; a clean `handoff`
-   (no leftover dirt) keeps its existing follow-up flow.
+   predicate, `handoffEntryForCurrentRun != nil && hasOwnUncommittedChanges`
+   evaluated at try resolution, not the `incomplete` outcome. A plain `incomplete`
+   outcome (changes, no handoff) keeps its existing resume-with-finalization retry;
+   a clean `handoff` (no leftover dirt) keeps its existing follow-up flow.
 2. **`OutcomeHandoffTimeout`** — incomplete by definition (the bounded handoff
    recovery did not finalize).
 
@@ -168,29 +168,34 @@ resilience paths, not by escalating to RECOVERY. RECOVERY exists specifically to
 reconcile a dirty, handed-off tree — not to react to any failure.
 
 `runOne` already computes `hasOwnUncommittedChanges` (`runner.go:1417-1424`, own
-delta vs the start-of-try `dirtySnapshot`) and `handoffState` (`runner.go:1405`);
-the dirty-handoff trigger is this derived predicate, and `handoff_timeout` is read
-from the resolving run's `TryOutcome`.
+delta vs the start-of-try `dirtySnapshot`). Handoff completion MUST be read from
+the durable current-run `progress.HandoffEntry` appended after
+`summaryEntryCountBeforeRun`; the transient `HandoffState` is only reliable for
+the partial/no-wrapup case because the wrapup path clears run-state. The
+dirty-handoff trigger is persisted as `TryRecord.DirtyHandoff`, and
+`handoff_timeout` is read from the resolving run's `TryOutcome`.
 
 **Auto-commit is suppressed on a dirty handoff** (product decision). Today the
 auto-commit gate at `runner.go:1434` (`dirtyBeforeAutoCommit && hasUserFileChanges
 && !incomplete && finalized`) fires on a handoff (because `finalized` is true and
 `incomplete` is false), which would commit the leftover changes before the next run
 starts. To give RECOVERY the *real* half-finished tree to reconcile, the gate MUST
-additionally exclude the dirty-handoff case: when `handoffState != 0 &&
-hasOwnUncommittedChanges`, skip auto-commit and leave the working tree dirty for the
-recovery run. (A clean handoff with no leftover dirt is unaffected — there is
-nothing to commit.) This mirrors the existing `incomplete` branch, which already
-suppresses auto-commit for the same reason.
+additionally exclude the dirty-handoff case: when the current run has a durable
+handoff entry and `hasOwnUncommittedChanges`, skip auto-commit and leave the working
+tree dirty for the recovery run. A clean handoff with no leftover dirt is unaffected
+because there is nothing to commit. This mirrors the existing `incomplete` branch,
+which already suppresses auto-commit for the same reason.
 
 ### 5. `handoff_requested` requires both `laps handoff` and `laps wrapup`
 
-`OutcomeHandoffRequested` is set only when both the `laps handoff` marker and the
-`laps wrapup` completion are observed. A `laps handoff` without a completed `laps
-wrapup` is a failed handoff: in the budget-exhaustion path it becomes
-`OutcomeHandoffTimeout`; in the voluntary path it falls back to the existing
-incomplete/agent-error handling. Detection reuses progress run-state
-(`HandoffState != 0`) plus the durable `progress.HandoffEntry` from `AppendRunEntry`.
+`OutcomeHandoffRequested` is set only when the current run has a durable
+`progress.HandoffEntry` from `AppendRunEntry`, which proves both `laps handoff` and
+`laps wrapup` completed. A `laps handoff` without a completed `laps wrapup` is a
+failed handoff: in the budget-exhaustion path it becomes `OutcomeHandoffTimeout`;
+in the voluntary path it falls back to the existing incomplete/agent-error
+handling. Detection uses entries appended after `summaryEntryCountBeforeRun`; it
+does not rely on `HandoffState` for successful handoffs because the wrapup path
+clears run-state after writing the summary entry.
 
 ### 6. Configuration under `[reliability]`
 
@@ -226,28 +231,45 @@ relay-wide `--route` override that `routeRuntime.next` already forwards
 wins, otherwise the substituted `recovery` assignee resolves the configured
 `recovery` route.
 
+Route substitution must also surface an **effective assignee/prompt role** to the
+runner. The original lap assignee remains persisted as `TryRecord.LapAssignee`
+for queue/audit history, but a recovery-forced run uses `EffectiveAssignee =
+"recovery"` for role prompt resolution (`roles/recovery.md`), run/try telemetry
+role tags, recovery-classification gating, and any prompt-composition tests. Without
+this field, Rally could select a recovery runner for a junior lap while still
+injecting the JUNIOR prompt, silently bypassing the RECOVERY contract.
+
 The recovery-pending *state* is **derived from the try records Rally already
 persists** (`tries.jsonl`), not an in-memory flag:
 
 > A head lap is recovery-pending when it is not done, its most-recent run ended
-> `OutcomeHandoffTimeout` or a **dirty handoff** (`handoffState != 0 &&
-> hasOwnUncommittedChanges`), **and** fewer than 2 consecutive recovery-route runs
-> have already executed for it (the anti-loop cap below).
+> `OutcomeHandoffTimeout` or a **dirty handoff** (`TryRecord.DirtyHandoff`),
+> **and** fewer than 2 consecutive recovery-route runs have already executed for it
+> (the anti-loop cap below).
 
 `TryRecord` already carries `LapID` (`records.go:22`), `Completed`, and (after
-Decision 3) `Outcome`, so this is computable from the store at selection time and
-survives relay restarts for free, with no new persistence and no laps.json
+Decision 3) `Outcome`; this change also adds `DirtyHandoff bool` so a clean
+`handoff_requested` and a dirty handoff remain distinguishable after restart. For a
+dirty handoff that created follow-up laps at the queue head, the try record also
+copies `HandoffCreatedLapIDs []string` from the durable handoff entry. Those
+created followups are treated as recovery-continuation targets for the same dirty
+tree, so the next claimed head followup is routed through RECOVERY instead of
+bypassing the original dirty handoff. The query is therefore computable from the
+store at selection time and survives relay restarts for free, with no laps.json
 mutation. This **follows the same replay-derived pattern** as resilience state —
 `Resilience.GetState` replays `agent_status.jsonl` rather than holding in-memory
 flags — but does **not** reuse that store: resilience state is keyed by
 `harness:model` (a `ResilienceKey`), whereas recovery-pending is per-lap, so
 `tries.jsonl` (which has `LapID`) is the correct source of truth. While recovery is
-pending the dispatch loop does not advance the queue past the lap (`laps claim`
-peeks the head rather than popping it, so the same head lap is re-selected next
-iteration); once a recovery run has executed, the most-recent-run condition no
-longer holds and selection returns to normal — **subject to the anti-loop cap
-below**. A missing `recovery` route falls back to the lap's normal route with a
-warning (a config gap must not deadlock the relay).
+pending the dispatch loop does not advance the queue past the dirty tree: if the
+claimed head is the original dirty lap or a `HandoffCreatedLapIDs` followup from
+that dirty handoff, it is recovery-forced. This handles the existing `laps add
+head` behavior, where handoff followups can appear ahead of the original lap. Once
+a recovery run has executed for the original lap or one of its handoff-created
+followups, the most-recent-run condition no longer holds and selection returns to
+normal — **subject to the anti-loop cap below**. A missing `recovery` route falls
+back to the lap's normal route with a warning (a config gap must not deadlock the
+relay).
 
 **Anti-loop cap (product decision).** A recovery run can itself resolve
 `handoff_timeout` or leave another dirty handoff, which would re-arm the same
@@ -257,9 +279,11 @@ This count cannot use `TryRecord.LapAssignee` — that field stores the lap's
 *unsubstituted* queue assignee (`task.Assignee`, `runner.go:1625`, e.g. `junior`),
 and Decision 7 deliberately substitutes the assignee only at route resolution
 without mutating the lap. A new `ResolvedRoute string` field is therefore persisted
-on `TryRecord` (set from `selection.Route.Name`, available at ~`runner.go:614`), and
-the cap counts tries where `ResolvedRoute == "recovery"` for the `LapID`. Up to **2**
-consecutive recovery runs are allowed; once that cap is reached the lap is **no
+on `TryRecord` (set from `selection.Route.Name`, available at ~`runner.go:614`).
+Because `tries.jsonl` is per attempt, the cap counts distinct consecutive `RunID`s
+for the lap by first reducing each run to its resolving try (the last try for that
+`RunID`), then checking whether that resolving try has `ResolvedRoute == "recovery"`.
+Up to **2** consecutive recovery runs are allowed; once that cap is reached the lap is **no
 longer** recovery-pending — recovery routing stops, Rally raises a `needs_user`
 operator Issue (Decision 10), and the lap falls back to its normal route so the
 relay does not loop. (This Rally-synthesized `needs_user` is an operator-attention
@@ -298,13 +322,15 @@ state this release:
   record), validated against `{continue, discard, course_correct, repair_plan,
   needs_user}`; empty for non-recovery runs.
 - **Capture channel:** the RECOVERY agent records it through the existing laps
-  wrapup/handoff flow. Add a `Classification` field to `progress.HandoffEntry`
-  (which already carries `Summary`/`Followups`/`CreatedLapIDs`); the runner reads
-  it back from run-state/summary and validates it. Reuses the channel that already
-  captures handoff context rather than inventing a side-channel.
+  wrapup flow, regardless of whether it finishes with `laps done` or `laps handoff`.
+  Add a `Classification` field to `progress.RunEntry` plus a
+  `rally progress --classification <value>` flag that `laps wrapup` forwards. The
+  runner reads the current-run summary entry and validates it. Reuses the channel
+  that already captures wrapup context rather than inventing a side-channel, while
+  avoiding a handoff-only field that would lose classifications on `laps done`.
 - **The instruction to record a classification lives in `roles/recovery.md`
-  only.** Because the per-role snippet is injected solely for a run whose assignee
-  resolves to `recovery`, the classification field is referenced in the composed
+  only.** Because the per-role snippet is injected solely for a run whose effective
+  assignee/prompt role is `recovery`, the classification field is referenced in the composed
   prompt **only on RECOVERY runs** — never on JUNIOR/SENIOR/UI/VERIFY runs. The
   shared/general snippets and other role docs MUST NOT mention it. This is the
   dynamic, role-scoped behavior to verify in tests (Decision 8 / task 7.5).

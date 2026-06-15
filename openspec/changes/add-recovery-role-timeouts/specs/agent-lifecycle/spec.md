@@ -6,7 +6,7 @@ When a run's wall-clock budget across retries is exhausted (see relay-runner "Ru
 In the handoff-only phase the agent SHALL NOT continue implementation; the phase exists only to capture a clean handoff. The silence-based stall detector SHALL NOT be applied to this short phase — only the handoff limit bounds it. When the harness does not support resume or no session ID exists, the system SHALL skip the bounded handoff-only resume and proceed directly to the `handoff_timeout` outcome.
 
 #### Scenario: Budget exhaustion triggers a handoff-only resume when supported
-- **WHEN** a run's retry budget across attempts is exhausted, the harness supports resume, and a session ID exists
+- **WHEN** a run's wall-clock budget across attempts is exhausted, the harness supports resume, and a session ID exists
 - **THEN** the system SHALL resume the session with the harness's resume flag and a handoff-only prompt, bounded by the handoff limit
 
 #### Scenario: Handoff-only phase forbids implementation

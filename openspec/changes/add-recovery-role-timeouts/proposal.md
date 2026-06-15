@@ -45,22 +45,22 @@ and continue.
   prompt.
 - **Rally-driven RECOVERY routing on two triggers.** The next run for a lap is
   forced onto the `recovery` route when the lap **handed off yet left meaningful
-  own-uncommitted changes** (a "dirty handoff": `handoffState != 0 &&
-  hasOwnUncommittedChanges` at try resolution — *not* the `incomplete`
-  `TryOutcome`, which is mutually exclusive with a handoff because any handoff
-  sets `finalized`), or ends in `handoff_timeout` — the two states that leave a
-  half-finished, suspect tree needing reconciliation. A plain `incomplete`
-  outcome (changes, no handoff) keeps its existing retry path and a clean
-  `handoff` (no leftover dirt) keeps its existing follow-up flow. An
-  ordinary `failed` try (usage limit, provider instability, agent error) is **not**
-  a recovery trigger — it routes/benches/rotates through the existing resilience
-  paths. A dirty handoff also **suppresses auto-commit** so the recovery session
-  inherits the real half-finished tree to reconcile. Recovery-pending is **derived
-  from the persisted try records** Rally already writes, so it survives relay
-  restarts and never rewrites the work queue. Consecutive recovery runs on a lap are
-  **capped at two**: if a recovery run itself times out or hands off dirty, recovery
-  re-arms only up to the cap, after which the lap resolves `needs_user` (an operator
-  Issue) rather than looping forever.
+  own-uncommitted changes** (a "dirty handoff": the current run has a durable
+  handoff entry and `hasOwnUncommittedChanges` at try resolution — *not* the
+  `incomplete` `TryOutcome`, which is mutually exclusive with a handoff because any
+  handoff sets `finalized`), or ends in `handoff_timeout` — the two states that
+  leave a half-finished, suspect tree needing reconciliation. A plain `incomplete`
+  outcome (changes, no handoff) keeps its existing retry path and a clean `handoff`
+  (no leftover dirt) keeps its existing follow-up flow. An ordinary `failed` try
+  (usage limit, provider instability, agent error) is **not** a recovery trigger —
+  it routes/benches/rotates through the existing resilience paths. A dirty handoff
+  also **suppresses auto-commit** so the recovery session inherits the real
+  half-finished tree to reconcile. Recovery-pending is **derived from the persisted
+  try records** Rally already writes, so it survives relay restarts and never
+  rewrites the work queue. Consecutive recovery runs on a lap are **capped at two**:
+  if a recovery run itself times out or hands off dirty, recovery re-arms only up to
+  the cap, after which the lap resolves `needs_user` (an operator Issue) rather than
+  looping forever.
 - **Voluntary handoff guidance.** Normal implementation roles get explicit prompt
   language to stop grinding and `laps handoff` after five serious, non-progress
   debugging iterations, with a definition of a "debugging iteration".
@@ -105,9 +105,9 @@ route, not a new terminal lifecycle state.
   and the implementation role snippets (voluntary handoff rule),
   `internal/cli/config.go` (reliability timeout fields, `recovery` in the route
   list), `internal/config/config_v2.go` (config parsing/defaults),
-  `internal/store/records.go` (`Outcome`, `RecoveryClassification`, `ResolvedRoute`
-  on `TryRecord`)
-  + `internal/progress/store.go` (`Classification` on `HandoffEntry`),
+  `internal/store/records.go` (`Outcome`, `RecoveryClassification`, `ResolvedRoute`,
+  `DirtyHandoff`, `HandoffCreatedLapIDs` on `TryRecord`)
+  + `internal/progress/store.go` (`Classification` on `RunEntry`),
   `internal/telemetry/` (new `outcome`/`recovery_classification` tags + `Outcome`/
   `RecoveryClassification` fields on `FailureState`, reusing the existing
   `failure_category` tag; Issue taxonomy),

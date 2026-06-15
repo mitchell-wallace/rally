@@ -109,20 +109,24 @@ A bounded handoff recovery SHALL record the try outcome as `handoff_requested` *
 
 ### Requirement: Recovery routing triggers
 The system SHALL route the next run for a lap to the `recovery` route when the lap is not done **and** either recovery trigger holds:
-1. the lap's resolving run was a **dirty handoff** — a handoff occurred (`laps handoff`) yet meaningful own-uncommitted changes remain. This is a derived predicate (`handoffState != 0` together with own-uncommitted changes at try resolution), distinct from the `incomplete` `TryOutcome`, which a handoff makes unreachable because any handoff marks the try finalized;
+1. the lap's resolving run was a **dirty handoff** — a handoff completed through `laps wrapup` yet meaningful own-uncommitted changes remain. This is persisted as `TryRecord.DirtyHandoff`, derived from the current-run durable handoff entry together with own-uncommitted changes at try resolution, distinct from the `incomplete` `TryOutcome`, which a handoff makes unreachable because any handoff marks the try finalized;
 2. the lap's resolving run ended with a `handoff_timeout` outcome.
 
 Recovery is specifically for reconciling a dirty, handed-off tree. An ordinary `failed` try (e.g. usage limit, provider overload, rate limit, agent error) SHALL NOT trigger recovery; such failures SHALL be handled by the existing bench/route/rotate resilience paths. An `incomplete` outcome without a handoff SHALL keep its existing resume-with-finalization-guidance retry path and SHALL NOT, on its own, trigger recovery. A clean handoff that finalized with no meaningful leftover dirty state SHALL keep its existing follow-up flow and SHALL NOT trigger recovery.
 
-Recovery routing SHALL be applied as an in-relay route override that resolves the `recovery` route by assignee, and SHALL NOT rewrite the lap's `assignee` in the work-queue file. While a recovery trigger holds for the head lap, the system SHALL NOT advance the queue past that lap before a recovery run executes. If no `recovery` route is configured, the system SHALL fall back to the lap's normal route and emit a warning rather than deadlocking the relay.
+Recovery routing SHALL be applied as an in-relay route override that resolves the `recovery` route by assignee, and SHALL NOT rewrite the lap's `assignee` in the work-queue file. A recovery-forced run SHALL expose an effective assignee/prompt role of `recovery` for role prompt resolution, telemetry role tags, and recovery-classification gating, while preserving the original lap assignee in persisted queue/audit fields. While a recovery trigger holds for a dirty tree, the system SHALL NOT advance past that dirty tree before a recovery run executes: if handoff followups were inserted at the queue head, any claimed head lap whose ID appears in the triggering try's handoff-created lap IDs SHALL also route to RECOVERY as continuation of the same dirty handoff. If no `recovery` route is configured, the system SHALL fall back to the lap's normal route and emit a warning rather than deadlocking the relay.
 
 #### Scenario: Dirty handoff routes to recovery
-- **WHEN** a try hands off (`laps handoff`) but leaves meaningful own-uncommitted changes
+- **WHEN** a try completes handoff through `laps wrapup` but leaves meaningful own-uncommitted changes
 - **THEN** the system SHALL route the next run for that lap to the `recovery` route without advancing the queue past the lap
 
 #### Scenario: Dirty handoff is not auto-committed
-- **WHEN** a try hands off (`laps handoff`) but leaves meaningful own-uncommitted changes (a dirty handoff)
+- **WHEN** a try completes handoff through `laps wrapup` but leaves meaningful own-uncommitted changes (a dirty handoff)
 - **THEN** the system SHALL NOT auto-commit those leftover changes and SHALL leave the working tree dirty for the recovery run to reconcile
+
+#### Scenario: Recovery-forced run uses the recovery prompt role
+- **WHEN** a junior/senior/ui lap is recovery-pending and the `recovery` route is selected
+- **THEN** the runner SHALL compose the RECOVERY role prompt and tag the run/try telemetry as role `recovery`, while preserving the original lap assignee in queue/audit fields
 
 #### Scenario: Handoff timeout routes to recovery
 - **WHEN** a try resolves as `handoff_timeout`
@@ -145,7 +149,9 @@ Recovery routing SHALL be applied as an in-relay route override that resolves th
 - **THEN** the system SHALL fall back to the lap's normal route and emit a warning
 
 ### Requirement: Recovery-pending derived from persisted records
-The system SHALL determine whether a lap is recovery-pending from the persisted try records (`tries.jsonl`) rather than from in-memory relay state, so the routing decision survives a relay restart. A lap SHALL be recovery-pending when it is not done, its most-recent run ended `handoff_timeout` or a dirty handoff, **and** fewer than the recovery cap (2) consecutive recovery-route runs have already executed for the lap. Try records SHALL carry the lap ID and the `TryOutcome` needed to evaluate the triggers, and the **resolved route name** needed to count consecutive recovery runs. The lap's persisted `lap_assignee` SHALL NOT be used for this count, because it records the unsubstituted queue assignee and recovery routing is applied by in-relay assignee substitution without mutating the lap; the system SHALL instead persist the resolved route on each try record and count tries whose resolved route is `recovery`. After a recovery run has executed for the lap, the most-recent-run condition SHALL no longer hold and selection SHALL return to the lap's normal route, unless a new trigger arises within the cap.
+The system SHALL determine whether a lap is recovery-pending from the persisted try records (`tries.jsonl`) rather than from in-memory relay state, so the routing decision survives a relay restart. A lap SHALL be recovery-pending when it is not done, its most-recent run ended `handoff_timeout` or a dirty handoff, **and** fewer than the recovery cap (2) consecutive recovery-route runs have already executed for the lap. Try records SHALL carry the lap ID, the `TryOutcome` needed to evaluate timeout triggers, the `DirtyHandoff` boolean needed to distinguish clean and dirty handoffs after restart, any `HandoffCreatedLapIDs` that should inherit the dirty-handoff recovery route when claimed at the queue head, and the **resolved route name** needed to count consecutive recovery runs. The lap's persisted `lap_assignee` SHALL NOT be used for this count, because it records the unsubstituted queue assignee and recovery routing is applied by in-relay assignee substitution without mutating the lap.
+
+The system SHALL count the recovery cap by distinct consecutive `RunID`s for the lap, using each run's resolving try (the last try for that `RunID`), not by raw try rows; a single recovery run with multiple retry attempts SHALL count once. After a recovery run has executed for the lap, the most-recent-run condition SHALL no longer hold and selection SHALL return to the lap's normal route, unless a new trigger arises within the cap.
 
 The system SHALL bound consecutive recovery runs per lap: when a recovery-route run itself resolves `handoff_timeout` or a dirty handoff, it SHALL re-arm recovery only until 2 consecutive recovery runs have executed for the lap. On reaching the cap the system SHALL stop routing the lap to recovery, SHALL raise a `needs_user` operator Issue (per the telemetry taxonomy), SHALL fall back to the lap's normal route, and SHALL NOT loop the lap back to recovery indefinitely. This cap-hit `needs_user` is a relay-synthesized operator signal and SHALL NOT be conflated with a RECOVERY agent's recorded `needs_user` classification; the cap-hit decision occurs at selection time with no recovery agent running and SHALL NOT write a recovery classification.
 
@@ -159,13 +165,13 @@ The system SHALL bound consecutive recovery runs per lap: when a recovery-route 
 
 #### Scenario: Repeated recovery failures stop at the cap
 - **WHEN** 2 consecutive recovery-route runs for a lap each resolve `handoff_timeout` or a dirty handoff
-- **THEN** the system SHALL stop routing the lap to recovery, SHALL resolve it as `needs_user` (surfaced as an operator Issue), and SHALL NOT loop the lap back to recovery
+- **THEN** the system SHALL stop routing the lap to recovery, SHALL raise a relay-synthesized `needs_user` operator Issue, SHALL NOT write a recovery classification, SHALL NOT mark the lap done or handed off, SHALL fall back to the normal route, and SHALL NOT loop the lap back to recovery
 
 ### Requirement: Recovery classification recorded
-When a run executes under the `recovery` route, the system SHALL persist the RECOVERY agent's state classification — one of `continue`, `discard`, `course_correct`, `repair_plan`, or `needs_user` — on the try/run record as structured state, read from the agent's recorded wrapup/handoff output (a `Classification` field on the handoff entry) and validated against that closed set. A non-recovery run SHALL leave the classification empty. The classification SHALL be recorded best-effort: an omitted or unrecognised value SHALL leave the field empty and SHALL NOT fail the run.
+When a run executes under the `recovery` route, the system SHALL persist the RECOVERY agent's state classification — one of `continue`, `discard`, `course_correct`, `repair_plan`, or `needs_user` — on the try/run record as structured state, read from the agent's recorded wrapup output (a `Classification` field on the current-run summary entry, supplied through `laps wrapup --classification <value>`) and validated against that closed set. A non-recovery run SHALL leave the classification empty. The classification SHALL be recorded best-effort: an omitted or unrecognised value SHALL leave the field empty and SHALL NOT fail the run.
 
 #### Scenario: Recovery run records a valid classification
-- **WHEN** a recovery run records a classification within the closed set via its wrapup/handoff output
+- **WHEN** a recovery run records a classification within the closed set via `laps wrapup --classification`
 - **THEN** the system SHALL persist that classification on the try/run record
 
 #### Scenario: Non-recovery run has no classification
