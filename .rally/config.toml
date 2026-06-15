@@ -5,10 +5,10 @@ run_hooks_on_autocommit = false
 # (e.g. "claude" / "cc") with no named model attached. Also the fallback
 # when a [harness.<n>.models] lookup misses.
 [defaults]
-claude_model      = 'claude-opus-4-7'
+claude_model      = 'claude-opus-4-8'
 codex_model       = 'gpt-5.5'
 gemini_model      = 'gemini-3.1-pro-preview'
-opencode_model    = 'zai-coding-plan/glm-5.1'
+opencode_model    = 'zai-coding-plan/glm-5.2'
 antigravity_model = 'Gemini 3.5 Flash (High)'
 
 [laps]
@@ -39,10 +39,10 @@ pro   = 'gemini-3.1-pro-preview'
 flash = 'gemini-3-flash-preview'
 
 [harness.op.models]
-zai  = 'zai-coding-plan/glm-5.1'
+zai  = 'zai-coding-plan/glm-5.2'
 zgo = 'opencode-go/glm-5.1'
-kimi = 'opencode-go/kimi-k2.6'
-mini = 'opencode-go/minimax-m2.7'
+kimi = 'opencode-go/kimi-k2.7-code'
+mini = 'opencode-go/minimax-m3'
 ds = 'opencode-go/deepseek-v4-pro'
 dsf = 'opencode/deepseek-v4-flash-free'
 qwen = 'opencode-go/qwen3.7-max'
@@ -95,7 +95,7 @@ sonnet = 'Claude Sonnet 4.6 (Thinking)'
 default = ['cc:opus:1', 'cx:g55:1', 'op:zai:1', 'ag:flash:1', 'ag:pro:1', 'op:kimi:1']
 
 # Frontier models to make judgement calls
-senior = ['ag:opus', 'cc:opus', 'op:qwen', 'op:kimi', 'cx:g55']
+senior = ['ag:opus', 'cc:opus', 'op:kimi', 'op:qwen', 'cx:g55']
 
 # Regular well-defined work. Rotates per iteration.
 junior = ['op:zai', 'ge:pro', 'ag:flash', 'ag:pro', 'op:kimi', 'op:zgo']
