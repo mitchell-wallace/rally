@@ -19,12 +19,11 @@ and continue.
 ## What Changes
 
 - **A hard per-run timeout across retries.** A run gets a configurable wall-clock
-  budget measured across all of its retry attempts (default 60 minutes), so a
+  budget measured across all of its retry attempts (default 75 minutes), so a
   struggling runner cannot grind for hours before the run resolves. A secondary
-  per-attempt cap (default 45 minutes — a single agent session should finish well
-  before an hour) guards against a single runaway try, while the slightly larger
-  run budget leaves buffer for quick non-blocking retries (provider dropout,
-  network blip). Both
+  per-attempt cap (default 60 minutes) guards against a single runaway try, while
+  the slightly larger run budget leaves buffer for quick non-blocking retries
+  (provider dropout, network blip). Both
   are orthogonal to the silence-based stall detector.
 - **A bounded handoff-only recovery on budget exhaustion.** When the run budget is
   spent and the harness has a resumable session, Rally resumes that session once
@@ -113,7 +112,7 @@ route, not a new terminal lifecycle state.
   `RecoveryClassification` fields on `FailureState`, reusing the existing
   `failure_category` tag; Issue taxonomy),
   `internal/buildinfo/VERSION` (→ `0.9.0`).
-- **Behavior**: a stuck run is bounded at ~60 minutes across retries and either
+- **Behavior**: a stuck run is bounded at ~75 minutes across retries and either
   hands off cleanly or is routed to a fresh RECOVERY session; the same tangled
   state is no longer ground on for hours; handoff outcomes are no longer
   mislabelled as infra or usage-limit failures.

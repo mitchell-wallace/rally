@@ -9,7 +9,7 @@
 
 ## 2. Configurable run/try timeouts
 
-- [ ] 2.1 Add `RunTimeoutSecs`, `TryTimeoutSecs`, and `HandoffTimeoutSecs` to `[reliability]` (`internal/config/config_v2.go`), defaulting to 3600, 2700, and 300 when unset/0; surface them on `RunnerConfig` (`runner.go:40`)
+- [ ] 2.1 Add `RunTimeoutSecs`, `TryTimeoutSecs`, and `HandoffTimeoutSecs` to `[reliability]` (`internal/config/config_v2.go`), defaulting to 4500, 3600, and 300 when unset/0; surface them on `RunnerConfig` (`runner.go:40`)
 - [ ] 2.2 Validate/clamp so `handoff_timeout_secs` never reaches/exceeds the effective `try_timeout_secs` or `run_timeout_secs`; when `try_timeout_secs >= run_timeout_secs`, accept the config and apply only the run budget (per-try cap subsumed) rather than erroring
 - [ ] 2.3 Add all three fields to the interactive config form (`internal/cli/config.go`) reliability group
 - [ ] 2.4 Tests: defaults apply when unset; configured values are read; a handoff window ≥ try/run bound is clamped or rejected

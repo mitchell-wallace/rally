@@ -69,12 +69,11 @@ matches that role. Honest session resume already exists (agent-lifecycle
 ### 1. Per-run wall-clock budget across retries (primary), per-try cap (secondary)
 
 The primary hard bound is a **per-run budget measured across all retry attempts**:
-`run_timeout_secs` (config, default **3600** = 60 minutes), excluding the bounded
+`run_timeout_secs` (config, default **4500** = 75 minutes), excluding the bounded
 handoff phase (Decision 2). A secondary **per-try** cap, `try_timeout_secs`
-(default **2700** = 45 minutes — a single agent session should finish well before
-an hour), guards against a single runaway attempt; the run budget sits modestly
-above it so a quick non-blocking retry after a provider dropout or network blip
-still has buffer. Both are
+(default **3600** = 60 minutes), guards against a single runaway attempt; the run
+budget sits modestly above it so a quick non-blocking retry after a provider
+dropout or network blip still has buffer. Both are
 enforced via timers in/around `runActionLoop` (`runner.go:988`) as new select arms
 mirroring `stallTick`: on fire they cancel `attemptCtx` (the existing path), mark
 the attempt timed-out, drain `tryCh`, and break.
@@ -88,8 +87,8 @@ the attempt timed-out, drain `tryCh`, and break.
   handoff (Decision 2).
 
 The per-run budget composes with the silence stall detector; whichever fires first
-wins. Both knobs are retained (product decision): the per-try cap keeps any single
-agent session well under an hour, and the slightly larger run budget gives quick
+wins. Both knobs are retained (product decision): the per-try cap bounds any single
+agent session at an hour, and the slightly larger run budget gives quick
 non-blocking retries room after a transient blip.
 
 ### 2. Bounded handoff-only resume on budget exhaustion
@@ -197,9 +196,9 @@ incomplete/agent-error handling. Detection reuses progress run-state
 
 Three new keys join `stall_threshold_secs`/`retry_budget`/`liveness_probe`:
 
-- `run_timeout_secs` — per-run wall-clock budget across retries; default **3600**
-  (60m).
-- `try_timeout_secs` — secondary per-try cap; default **2700** (45m).
+- `run_timeout_secs` — per-run wall-clock budget across retries; default **4500**
+  (75m).
+- `try_timeout_secs` — secondary per-try cap; default **3600** (60m).
 - `handoff_timeout_secs` — bounded handoff-only resume; default **300** (5m), not
   counted in the run budget. Clamped to never reach/exceed the effective
   `try_timeout_secs`/`run_timeout_secs`.
@@ -355,15 +354,14 @@ change deliberately does not alter mid-run rotation.
 
 ## Risks / Trade-offs
 
-- **`run_timeout_secs` (60m) vs `try_timeout_secs` (45m) vs `retry_budget` (5).**
-  The run budget is the dominant bound; the per-try cap keeps any single session
-  well under an hour. The 15m gap between them is the buffer for a quick
-  non-blocking retry after a transient blip — small by design, not a second full
-  attempt.
+- **`run_timeout_secs` (75m) vs `try_timeout_secs` (60m) vs `retry_budget` (5).**
+  The run budget is the dominant bound; the per-try cap bounds any single session
+  at an hour. The 15m gap between them is the buffer for a quick non-blocking retry
+  after a transient blip — small by design, not a second full attempt.
 - **`TryOutcome` adds a dimension** alongside `FailureCategory`; `Completed bool` is
   retained for back-compat.
 - **Per-run budget excludes the handoff phase**, so worst-case wall clock per run is
-  `run_timeout_secs + handoff_timeout_secs` (≈ 65m by default).
+  `run_timeout_secs + handoff_timeout_secs` (≈ 80m by default).
 - **Deriving recovery-pending from records** assumes try records are written before
   the next selection (they are — `AppendTry` happens in finalization before the loop
   continues).
@@ -377,6 +375,6 @@ change deliberately does not alter mid-run rotation.
   to `needs_user` once the cap is reached; further per-lap Issue escalation deferred).
 - Scope/ownership of the mid-run failover fix (separate change vs folded in later).
 
-(Resolved: keep both `run_timeout_secs` and `try_timeout_secs` with defaults 60m /
-45m; suppress auto-commit on a dirty handoff so RECOVERY gets the real dirty tree;
+(Resolved: keep both `run_timeout_secs` and `try_timeout_secs` with defaults 75m /
+60m; suppress auto-commit on a dirty handoff so RECOVERY gets the real dirty tree;
 cap consecutive recovery runs per lap at 2 before escalating to `needs_user`.)
