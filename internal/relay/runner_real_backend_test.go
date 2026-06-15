@@ -315,7 +315,7 @@ func TestRealBackend_OpenCodeRelay(t *testing.T) {
 
 	s := newTestStore(t, rallyDir)
 	executors := map[string]agent.Executor{
-		"opencode": &agent.OpenCodeExecutor{Model: "opencode-go/kimi-k2.6"},
+		"opencode": &agent.OpenCodeExecutor{Model: "opencode/big-pickle"},
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
@@ -373,7 +373,7 @@ func TestRealBackend_OpenCodeRelay(t *testing.T) {
 		if infra {
 			// Infra failure: the agent should be paused — not frozen
 			// indefinitely. This verifies resilient execution handles the case.
-			statusEvents, err := s.GetAgentStatus("opencode", "opencode-go/kimi-k2.6")
+			statusEvents, err := s.GetAgentStatus("opencode", "opencode/big-pickle")
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -553,7 +553,7 @@ func TestRealBackend_CustomHarnessRelay(t *testing.T) {
 			OutputStrategy: "tail",
 			OutputLines:    50,
 			TailStream:     "stdout",
-			Model:          "opencode-go/kimi-k2.6",
+			Model:          "opencode/big-pickle",
 		},
 	}
 
@@ -572,7 +572,7 @@ func TestRealBackend_CustomHarnessRelay(t *testing.T) {
 			// Resolve "mycode" as a custom harness with its default model.
 			parts := strings.SplitN(spec, ":", 2)
 			if parts[0] == "mycode" {
-				model := "opencode-go/kimi-k2.6"
+				model := "opencode/big-pickle"
 				if len(parts) == 2 {
 					model = parts[1]
 				}
@@ -630,7 +630,7 @@ func TestRealBackend_MultiHarnessRoundRobin(t *testing.T) {
 	executors := map[string]agent.Executor{
 		"claude":   &agent.ClaudeExecutor{Model: "claude-haiku-4-5"},
 		"gemini":   &agent.GeminiExecutor{Model: "gemini-3-flash-preview"},
-		"opencode": &agent.OpenCodeExecutor{Model: "opencode-go/kimi-k2.6"},
+		"opencode": &agent.OpenCodeExecutor{Model: "opencode/big-pickle"},
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
@@ -645,7 +645,7 @@ func TestRealBackend_MultiHarnessRoundRobin(t *testing.T) {
 		models := map[string]string{
 			"claude":   "claude-haiku-4-5",
 			"gemini":   "gemini-3-flash-preview",
-			"opencode": "opencode-go/kimi-k2.6",
+			"opencode": "opencode/big-pickle",
 		}
 		return agent.ResolvedAgent{Harness: harness, Model: models[harness]}, nil
 	}

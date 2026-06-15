@@ -40,4 +40,6 @@ jobs:
           printf '%s' "$OPENCODE_AUTH_JSON" > "$HOME/.local/share/opencode/auth.json"
 
       - name: Run tests
+        env:
+          RALLY_TEST_REAL_AGENTS: "1"
         run: go test -count=1 ./...
