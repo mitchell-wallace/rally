@@ -69,3 +69,37 @@ func TestRepoKey_LogPathScoping(t *testing.T) {
 		t.Errorf("relay paths missing repo key: %q (want %s), %q (want %s)", logA, pathA, logB, pathB)
 	}
 }
+
+func TestRepoNameFromRemote(t *testing.T) {
+	tests := []struct {
+		name   string
+		remote string
+		want   string
+	}{
+		{"https", "https://github.com/mitchell-wallace/rally.git", "rally"},
+		{"ssh scp", "git@github.com:mitchell-wallace/rally.git", "rally"},
+		{"ssh url", "ssh://git@github.com/mitchell-wallace/rally.git", "rally"},
+		{"no suffix", "https://github.com/mitchell-wallace/Prayer-app", "Prayer-app"},
+		{"trailing slash", "https://github.com/mitchell-wallace/rally.git/", "rally"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := repoNameFromRemote(tt.remote); got != tt.want {
+				t.Errorf("repoNameFromRemote(%q) = %q, want %q", tt.remote, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestRepoDisplayName_FallbackDoesNotAffectRepoKey(t *testing.T) {
+	workspace := "/tmp/rally-2"
+	if got := fallbackRepoDisplayName(workspace); got != "rally-2" {
+		t.Errorf("fallbackRepoDisplayName = %q, want checkout basename", got)
+	}
+	if got := repoNameFromRemote("git@github.com:mitchell-wallace/rally.git"); got != "rally" {
+		t.Errorf("remote name = %q, want rally", got)
+	}
+	if key := repoKey(workspace); !strings.HasPrefix(key, "rally-2-") {
+		t.Errorf("repoKey still needs checkout bucket prefix, got %q", key)
+	}
+}

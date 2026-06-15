@@ -12,6 +12,7 @@ func baseRallyContext() RallyContext {
 		RelayID:        7,
 		RelayStartedAt: "2026-06-11T08:30:00Z",
 		Repo:           "repo-abc123",
+		RepoName:       "project",
 		MachineID:      testMachineID,
 		Cwd:            "/srv/work/project",
 	}
@@ -136,6 +137,9 @@ func TestRallyContextBlock_MachineIDOnlyInContext(t *testing.T) {
 	if got := block["machine_id"]; got != testMachineID {
 		t.Errorf("rally context machine_id = %v, want full id", got)
 	}
+	if got := block["repo_name"]; got != "project" {
+		t.Errorf("rally context repo_name = %v, want project", got)
+	}
 	// Environment fields must be carried through.
 	for _, key := range []string{"version", "go_os", "go_arch", "term"} {
 		if _, ok := block[key]; !ok {
@@ -168,5 +172,77 @@ func TestRallyContextBlock_EmptyMachineAndCwdOmitted(t *testing.T) {
 	}
 	if _, found := block["cwd"]; found {
 		t.Error("cwd must be omitted from context when empty")
+	}
+}
+
+func TestTags_IncludesRepoName(t *testing.T) {
+	tags := Tags(EventInfo{
+		RelayID:  1,
+		Repo:     "rally-2-abcd",
+		RepoName: "rally",
+	})
+
+	if got := tags["repo"]; got != "rally-2-abcd" {
+		t.Errorf("repo tag = %q, want path-hash key", got)
+	}
+	if got := tags["repo_name"]; got != "rally" {
+		t.Errorf("repo_name tag = %q, want remote display name", got)
+	}
+}
+
+func TestFailureFingerprint_StableGroupingFields(t *testing.T) {
+	tags := Tags(EventInfo{
+		RelayID:  1,
+		RunID:    2,
+		TryID:    3,
+		Harness:  "opencode",
+		Model:    "anthropic/claude-sonnet-4",
+		Repo:     "rally-2-abcd",
+		RepoName: "rally",
+		LapID:    "lap-123",
+	})
+	tags["failure_category"] = "short_rate_limit"
+
+	got := FailureFingerprint(tags)
+	want := []string{"rally", "failure", "rally", "short_rate_limit", "opencode:anthropic/claude-sonnet-4"}
+	if len(got) != len(want) {
+		t.Fatalf("fingerprint length = %d, want %d (%v)", len(got), len(want), got)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("fingerprint[%d] = %q, want %q", i, got[i], want[i])
+		}
+	}
+
+	changedAttempt := Tags(EventInfo{
+		RelayID:  9,
+		RunID:    9,
+		TryID:    9,
+		Harness:  "opencode",
+		Model:    "anthropic/claude-sonnet-4",
+		Repo:     "rally-2-abcd",
+		RepoName: "rally",
+		LapID:    "different-lap",
+	})
+	changedAttempt["failure_category"] = "short_rate_limit"
+	if got2 := FailureFingerprint(changedAttempt); len(got2) != len(got) {
+		t.Fatalf("fingerprint changed length: %v", got2)
+	} else {
+		for i := range got {
+			if got2[i] != got[i] {
+				t.Fatalf("fingerprint must ignore relay/run/try/lap ids: %v vs %v", got2, got)
+			}
+		}
+	}
+}
+
+func TestFailureFingerprint_CategorySeparatesIssues(t *testing.T) {
+	tags := map[string]string{"repo_name": "rally", "runner": "opencode:model", "failure_category": "short_rate_limit"}
+	shortLimit := FailureFingerprint(tags)
+	tags["failure_category"] = "usage_limit"
+	usageLimit := FailureFingerprint(tags)
+
+	if shortLimit[3] == usageLimit[3] {
+		t.Fatalf("category component did not separate fingerprints: %v vs %v", shortLimit, usageLimit)
 	}
 }

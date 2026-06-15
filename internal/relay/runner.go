@@ -123,6 +123,7 @@ func (r *Runner) rallyContext(relay *store.RelayRecord) telemetry.RallyContext {
 		RelayID:        relay.ID,
 		RelayStartedAt: relay.StartedAt,
 		Repo:           repoKey(r.cfg.WorkspaceDir),
+		RepoName:       repoDisplayName(r.cfg.WorkspaceDir),
 		MachineID:      r.cfg.MachineID,
 		Cwd:            r.cfg.WorkspaceDir,
 	}
@@ -174,6 +175,7 @@ func failureStateEvent(baseTags map[string]string, rc telemetry.RallyContext, fs
 	if ec := telemetry.FailureEvidenceContext(fs); ec != nil {
 		evt.Contexts["failure_evidence"] = ec
 	}
+	evt.Fingerprint = telemetry.FailureFingerprint(evt.Tags)
 	return evt
 }
 
@@ -519,7 +521,7 @@ func (r *Runner) Run(ctx context.Context) error {
 	// Model the relay as a trace transaction; runs and tries are child spans.
 	rc := r.rallyContext(relay)
 	ctx, relaySpan := r.tel().StartSpan(ctx, "relay", fmt.Sprintf("relay-%d", relay.ID))
-	relayTags := telemetry.Tags(telemetry.EventInfo{RelayID: relay.ID, Repo: repoKey(r.cfg.WorkspaceDir)})
+	relayTags := telemetry.Tags(telemetry.EventInfo{RelayID: relay.ID, Repo: rc.Repo, RepoName: rc.RepoName})
 	applyRallyContext(relaySpan, relayTags, rc)
 	defer relaySpan.Finish()
 
@@ -582,7 +584,7 @@ func (r *Runner) Run(ctx context.Context) error {
 					// omitted by FailureStateTags).
 					r.tel().CaptureFailure(ctx, fmt.Sprintf("relay %d stalled: all agents frozen", relay.ID),
 						failureStateEvent(
-							telemetry.Tags(telemetry.EventInfo{RelayID: relay.ID, Repo: repoKey(r.cfg.WorkspaceDir)}),
+							telemetry.Tags(telemetry.EventInfo{RelayID: relay.ID, Repo: rc.Repo, RepoName: rc.RepoName}),
 							rc,
 							telemetry.FailureState{AgentState: string(StateFrozen)},
 						))
@@ -620,13 +622,14 @@ func (r *Runner) Run(ctx context.Context) error {
 		runID := runIndex + 1
 
 		runTags := telemetry.Tags(telemetry.EventInfo{
-			RelayID: relay.ID,
-			RunID:   runID,
-			Role:    task.Assignee,
-			Harness: selection.Agent.Harness,
-			Model:   selection.Agent.Model,
-			Repo:    repoKey(r.cfg.WorkspaceDir),
-			LapID:   task.LapID,
+			RelayID:  relay.ID,
+			RunID:    runID,
+			Role:     task.Assignee,
+			Harness:  selection.Agent.Harness,
+			Model:    selection.Agent.Model,
+			Repo:     rc.Repo,
+			RepoName: rc.RepoName,
+			LapID:    task.LapID,
 		})
 		runCtx, runSpan := r.tel().StartSpan(ctx, "run", fmt.Sprintf("relay-%d-run-%d", relay.ID, runID))
 		applyTags(runSpan, runTags)
@@ -647,7 +650,8 @@ func (r *Runner) Run(ctx context.Context) error {
 				"from_runner": from,
 				"to_runner":   to,
 				"role":        task.Assignee,
-				"repo":        repoKey(r.cfg.WorkspaceDir),
+				"repo":        rc.Repo,
+				"repo_name":   rc.RepoName,
 				"lap_id":      task.LapID,
 			})
 		}
@@ -1136,6 +1140,7 @@ func (r *Runner) runOne(
 ) (runOutcome, error) {
 	// Initialize run-state for this run.
 	runID := fmt.Sprintf("relay-%d-run-%d", relay.ID, runIndex+1)
+	rc := r.rallyContext(relay)
 	summaryEntryCountBeforeRun := progressSummaryEntryCount(r.cfg.WorkspaceDir)
 	_ = progress.SaveRunState(r.cfg.WorkspaceDir, newProgressRunState(runID, task.LapID))
 
@@ -1637,14 +1642,15 @@ attemptLoop:
 		// and byte sizes are emitted — never current_task.md contents or the
 		// transcript (the scrubber is defense-in-depth on top of this).
 		tryTags := telemetry.Tags(telemetry.EventInfo{
-			RelayID: relay.ID,
-			RunID:   runIndex + 1,
-			TryID:   tryRecord.ID,
-			Role:    task.Assignee,
-			Harness: picked.Harness,
-			Model:   picked.Model,
-			Repo:    repoKey(r.cfg.WorkspaceDir),
-			LapID:   task.LapID,
+			RelayID:  relay.ID,
+			RunID:    runIndex + 1,
+			TryID:    tryRecord.ID,
+			Role:     task.Assignee,
+			Harness:  picked.Harness,
+			Model:    picked.Model,
+			Repo:     rc.Repo,
+			RepoName: rc.RepoName,
+			LapID:    task.LapID,
 		})
 		applyTags(trySpan, tryTags)
 		trySpan.SetData("completed", !failed)
@@ -1657,7 +1663,8 @@ attemptLoop:
 			"attempt":                        attempt,
 			"role":                           task.Assignee,
 			"runner":                         telemetry.RunnerLabel(picked.Harness, picked.Model),
-			"repo":                           repoKey(r.cfg.WorkspaceDir),
+			"repo":                           rc.Repo,
+			"repo_name":                      rc.RepoName,
 			"lap_id":                         task.LapID,
 			"completed":                      !failed,
 			"fail_reason":                    failReason,
@@ -1692,7 +1699,7 @@ attemptLoop:
 				fs.RawSignal = resetEvidence.RawSignal
 				fs.Message = resetEvidence.Message
 			}
-			if evt, ok := limitSignalEvent(tryTags, r.rallyContext(relay), fs); ok {
+			if evt, ok := limitSignalEvent(tryTags, rc, fs); ok {
 				r.tel().CaptureEvent(tryCtx, fmt.Sprintf("relay %d run %d try %d provider limit signal: %s", relay.ID, runIndex+1, tryRecord.ID, failReason), evt)
 			}
 
@@ -1710,7 +1717,7 @@ attemptLoop:
 				// failure category, the failing runner's resilience standing, and
 				// — for provider-limit categories — the parsed quota scope/reset
 				// and bounded raw provider signal from TryResult.Evidence.
-				r.tel().CaptureFailure(tryCtx, fmt.Sprintf("relay %d run %d try %d failed: %s", relay.ID, runIndex+1, tryRecord.ID, failReason), failureStateEvent(tryTags, r.rallyContext(relay), fs))
+				r.tel().CaptureFailure(tryCtx, fmt.Sprintf("relay %d run %d try %d failed: %s", relay.ID, runIndex+1, tryRecord.ID, failReason), failureStateEvent(tryTags, rc, fs))
 			}
 		}
 		trySpan.Finish()
@@ -1800,14 +1807,15 @@ attemptLoop:
 		}
 		r.tel().CaptureFailure(ctx, fmt.Sprintf("relay %d run %d: agent exited without finalizing", relay.ID, runIndex+1),
 			failureStateEvent(telemetry.Tags(telemetry.EventInfo{
-				RelayID: relay.ID,
-				RunID:   runIndex + 1,
-				Role:    task.Assignee,
-				Harness: picked.Harness,
-				Model:   picked.Model,
-				Repo:    repoKey(r.cfg.WorkspaceDir),
-				LapID:   task.LapID,
-			}), r.rallyContext(relay), fs))
+				RelayID:  relay.ID,
+				RunID:    runIndex + 1,
+				Role:     task.Assignee,
+				Harness:  picked.Harness,
+				Model:    picked.Model,
+				Repo:     rc.Repo,
+				RepoName: rc.RepoName,
+				LapID:    task.LapID,
+			}), rc, fs))
 	}
 
 	addressed := false

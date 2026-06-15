@@ -10,14 +10,15 @@ import (
 // event so events are filterable and correlate with the local summary.jsonl
 // digest.
 type EventInfo struct {
-	RelayID int
-	RunID   int
-	TryID   int
-	Role    string
-	Harness string
-	Model   string
-	Repo    string
-	LapID   string
+	RelayID  int
+	RunID    int
+	TryID    int
+	Role     string
+	Harness  string
+	Model    string
+	Repo     string
+	RepoName string
+	LapID    string
 }
 
 // RunnerLabel renders the harness+model runner identity used by the `runner`
@@ -54,10 +55,37 @@ func Tags(info EventInfo) map[string]string {
 	if info.Repo != "" {
 		tags["repo"] = info.Repo
 	}
+	if info.RepoName != "" {
+		tags["repo_name"] = info.RepoName
+	}
 	if info.LapID != "" {
 		tags["lap_id"] = info.LapID
 	}
 	return tags
+}
+
+// FailureFingerprint returns explicit grouping keys for operator-worthy
+// failures. It intentionally excludes relay/run/try/lap ids and free-text
+// messages, which would fragment identical failures across attempts. The repo
+// display name is preferred over the path-hash key so dev checkout names such
+// as "rally-2" do not leak into grouping when the Git remote says "rally".
+func FailureFingerprint(tags map[string]string) []string {
+	category := tags["failure_category"]
+	if category == "" {
+		category = "unknown"
+	}
+	runner := tags["runner"]
+	if runner == "" {
+		runner = "unknown"
+	}
+	repo := tags["repo_name"]
+	if repo == "" {
+		repo = tags["repo"]
+	}
+	if repo == "" {
+		repo = "unknown"
+	}
+	return []string{"rally", "failure", repo, category, runner}
 }
 
 // machineIDPrefixLen is the number of leading hex chars of the full anonymous
@@ -74,6 +102,7 @@ type RallyContext struct {
 	RelayID        int
 	RelayStartedAt string // relay StartedAt (RFC3339); also emitted as relay_started_at
 	Repo           string // existing repo path-hash key (also the `repo` tag)
+	RepoName       string // stable display name from Git remote or checkout basename
 	MachineID      string // full anonymous machine id — context-only, never a tag
 	Cwd            string // working directory; home prefix collapsed before send
 }
@@ -137,6 +166,9 @@ func RallyContextBlock(rc RallyContext) map[string]interface{} {
 	}
 	if rc.Cwd != "" {
 		ctx["cwd"] = collapseHomePaths(rc.Cwd)
+	}
+	if rc.RepoName != "" {
+		ctx["repo_name"] = rc.RepoName
 	}
 	return ctx
 }

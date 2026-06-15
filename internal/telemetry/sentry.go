@@ -86,9 +86,10 @@ func (s *SentrySink) EmitTryLog(ctx context.Context, fields map[string]interface
 // blocks are attached via scope.SetContext for structured nested data.
 func (s *SentrySink) CaptureFailure(ctx context.Context, msg string, evt FailureEvent) {
 	s.captureMessage(ctx, msg, Event{
-		Level:    LevelError,
-		Tags:     evt.Tags,
-		Contexts: evt.Contexts,
+		Level:       LevelError,
+		Tags:        evt.Tags,
+		Contexts:    evt.Contexts,
+		Fingerprint: evt.Fingerprint,
 	})
 }
 
@@ -108,6 +109,9 @@ func (s *SentrySink) captureMessage(ctx context.Context, msg string, evt Event) 
 		}
 		for name, data := range evt.Contexts {
 			scope.SetContext(name, data)
+		}
+		if len(evt.Fingerprint) > 0 {
+			scope.SetFingerprint(evt.Fingerprint)
 		}
 		hub.CaptureMessage(msg)
 	})

@@ -54,15 +54,20 @@ type FailureEvent struct {
 	// Contexts are named blocks of structured data attached to the event
 	// (e.g., a "rally" block with version/os/arch/term).
 	Contexts map[string]map[string]interface{}
+
+	// Fingerprint carries explicit backend grouping keys. It must be built
+	// from stable, low-cardinality fields, never from run/try ids or messages.
+	Fingerprint []string
 }
 
 // Event carries structured data for a non-Issue telemetry event. Tags and
 // contexts follow the same split as FailureEvent, with Level controlling
 // severity in the backend.
 type Event struct {
-	Level    EventLevel
-	Tags     map[string]string
-	Contexts map[string]map[string]interface{}
+	Level       EventLevel
+	Tags        map[string]string
+	Contexts    map[string]map[string]interface{}
+	Fingerprint []string
 }
 
 // Span represents an in-flight trace span (relay, run, or try).

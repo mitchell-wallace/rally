@@ -79,6 +79,19 @@ func wantNoTag(t *testing.T, tags map[string]string, key string) {
 	}
 }
 
+func wantFingerprintCategory(t *testing.T, evt telemetry.FailureEvent, want string) {
+	t.Helper()
+	if len(evt.Fingerprint) != 5 {
+		t.Fatalf("fingerprint = %v, want 5 stable components", evt.Fingerprint)
+	}
+	if evt.Fingerprint[0] != "rally" || evt.Fingerprint[1] != "failure" {
+		t.Errorf("fingerprint prefix = %v, want [rally failure]", evt.Fingerprint[:2])
+	}
+	if evt.Fingerprint[3] != want {
+		t.Errorf("fingerprint category = %q, want %q (full fingerprint %v)", evt.Fingerprint[3], want, evt.Fingerprint)
+	}
+}
+
 // TestRunOne_TerminalTryFailure_EnrichesUsageLimitState drives a terminal try
 // failure whose evidence is a usage limit and asserts the capture carries the
 // attempt/budget, resolved category, the runner's resilience state, the parsed
@@ -138,6 +151,7 @@ func TestRunOne_TerminalTryFailure_EnrichesUsageLimitState(t *testing.T) {
 	wantTag(t, evt.Tags, "attempt", "1")
 	wantTag(t, evt.Tags, "max_attempts", "1")
 	wantTag(t, evt.Tags, "failure_category", "usage_limit")
+	wantFingerprintCategory(t, evt, "usage_limit")
 	wantTag(t, evt.Tags, "quota_scope", "anthropic")
 	if evt.Tags["reset_at"] == "" {
 		t.Error("reset_at tag missing on usage-limit capture")
@@ -207,6 +221,7 @@ func TestRunOne_UnfinalizedAgent_CapturesIncompleteFinalization(t *testing.T) {
 
 	evt := findFailure(t, sink, "without finalizing")
 	wantTag(t, evt.Tags, "failure_category", "incomplete_finalization")
+	wantFingerprintCategory(t, evt, "incomplete_finalization")
 	wantTag(t, evt.Tags, "attempt", "1")
 	wantTag(t, evt.Tags, "max_attempts", "1")
 	wantTag(t, evt.Tags, "agent_state", "active")

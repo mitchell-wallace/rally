@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+
+	"github.com/mitchell-wallace/rally/internal/gitx"
 )
 
 var nonAlphanumRe = regexp.MustCompile(`[^a-z0-9]+`)
@@ -35,6 +37,44 @@ func repoKey(workspaceDir string) string {
 	}
 	h := sha256.Sum256([]byte(canonical))
 	return fmt.Sprintf("%s-%x", base, h[:2])
+}
+
+// repoDisplayName returns a stable human-readable repository name for
+// telemetry. Prefer the Git remote slug so a local dev checkout like
+// "rally-2" still reports "rally"; fall back to the checkout directory.
+func repoDisplayName(workspaceDir string) string {
+	if repoRoot, ok, err := gitx.GitRepoRoot(workspaceDir); err == nil && ok {
+		if out, err := gitx.GitOutput(repoRoot, "remote", "get-url", "origin"); err == nil {
+			if name := repoNameFromRemote(strings.TrimSpace(string(out))); name != "" {
+				return name
+			}
+		}
+	}
+	return fallbackRepoDisplayName(workspaceDir)
+}
+
+func fallbackRepoDisplayName(workspaceDir string) string {
+	name := strings.TrimSpace(filepath.Base(workspaceDir))
+	name = strings.TrimSuffix(name, ".git")
+	if name == "" || name == "." || name == string(filepath.Separator) {
+		return "repo"
+	}
+	return name
+}
+
+func repoNameFromRemote(remote string) string {
+	remote = strings.TrimSpace(remote)
+	remote = strings.TrimRight(remote, "/")
+	remote = strings.TrimSuffix(remote, ".git")
+	if remote == "" {
+		return ""
+	}
+	remote = strings.ReplaceAll(remote, ":", "/")
+	name := strings.TrimSpace(filepath.Base(remote))
+	if name == "." || name == string(filepath.Separator) {
+		return ""
+	}
+	return name
 }
 
 func openRelayLog(dataDir, workspaceDir string, relayID int) (io.WriteCloser, error) {
