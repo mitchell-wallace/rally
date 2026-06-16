@@ -125,11 +125,11 @@
       "title": "Verify recovery trigger routing",
       "description": "Use the openspec-verify-change skill against add-recovery-role-timeouts, then focus on tasks 5.1-5.5 and 6.1-6.7.\n\nBefore diffing, identify the intended merge target and first lap/try in this batch. Treat pre-batch work as pre-existing. Do not rewrite git history.\n\nTrace the core dependency chain: durable HandoffEntry detection, hasOwnUncommittedChanges, auto-commit suppression, TryRecord fields, resolving-try selection, HandoffCreatedLapIDs handling, routeRuntime assignee substitution, effective prompt role, relay-wide override precedence, missing recovery route fallback, and anti-loop cap Issue behavior.\n\nAcceptance: Run targeted relay/store/routing tests. Check off only tasks 5 and 6 boxes after code inspection plus tests. Fix only tiny safe one-liners inline; larger gaps become focused head laps.",
       "assignee": "VERIFY",
-      "isDone": false,
+      "isDone": true,
       "order": 655360,
       "createdAt": "2026-06-16T00:17:48.179539834Z",
-      "updatedAt": "2026-06-16T00:17:48.179539834Z",
-      "completedAt": null
+      "updatedAt": "2026-06-16T05:25:01.094701988Z",
+      "completedAt": "2026-06-16T05:25:01.094701988Z"
     },
     {
       "id": "rall-8290",
