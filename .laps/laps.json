@@ -101,6 +101,26 @@
       "completedAt": "2026-06-16T05:11:19.814350348Z"
     },
     {
+      "id": "work-5c00",
+      "title": "Fix persisted recovery routing...",
+      "description": "Fix persisted recovery routing to distinguish runs across relay restarts (use relay-aware run identity/order in internal/store/recovery.go) and add multi-relay regression coverage for resolver selection and recovery-cap counting.",
+      "isDone": false,
+      "order": 524288,
+      "createdAt": "2026-06-16T05:15:10.972483834Z",
+      "updatedAt": "2026-06-16T05:15:10.972483834Z",
+      "completedAt": null
+    },
+    {
+      "id": "work-54ef",
+      "title": "Fix dirty-handoff derivation a...",
+      "description": "Fix dirty-handoff derivation across retries: base recovery trigger and auto-commit suppression on run-scoped own-dirty detection, and add retry-then-handoff regression coverage in internal/relay/runner_outcome_test.go.",
+      "isDone": false,
+      "order": 589824,
+      "createdAt": "2026-06-16T05:15:10.950837206Z",
+      "updatedAt": "2026-06-16T05:15:10.950837206Z",
+      "completedAt": null
+    },
+    {
       "id": "rall-4d49",
       "title": "Verify recovery trigger routing",
       "description": "Use the openspec-verify-change skill against add-recovery-role-timeouts, then focus on tasks 5.1-5.5 and 6.1-6.7.\n\nBefore diffing, identify the intended merge target and first lap/try in this batch. Treat pre-batch work as pre-existing. Do not rewrite git history.\n\nTrace the core dependency chain: durable HandoffEntry detection, hasOwnUncommittedChanges, auto-commit suppression, TryRecord fields, resolving-try selection, HandoffCreatedLapIDs handling, routeRuntime assignee substitution, effective prompt role, relay-wide override precedence, missing recovery route fallback, and anti-loop cap Issue behavior.\n\nAcceptance: Run targeted relay/store/routing tests. Check off only tasks 5 and 6 boxes after code inspection plus tests. Fix only tiny safe one-liners inline; larger gaps become focused head laps.",
