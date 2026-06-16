@@ -1117,6 +1117,8 @@ type runOutcome struct {
 	// Category is the resolved FailureCategory of the most recent failed
 	// attempt; empty when no failed attempt was classified.
 	Category reliability.FailureCategory
+	// Outcome is the lifecycle outcome of the resolving try.
+	Outcome reliability.TryOutcome
 	// ResetEvidence carries parsed reset timing (ResetAt/ResetAfter) used to
 	// size the bench window on a usage_limit.
 	ResetEvidence *reliability.FailureEvidence
@@ -1172,6 +1174,7 @@ func (r *Runner) runOne(
 	// parsed reset deadline (ResetAt/ResetAfter) used to size the bench window.
 	var failureCategory reliability.FailureCategory
 	var resetEvidence *reliability.FailureEvidence
+	var resolvingOutcome reliability.TryOutcome
 	infraFailures := 0
 	// outcome snapshots the run-scoped failure state for return; only the
 	// success/addressed/interrupted flags vary per return site.
@@ -1183,6 +1186,7 @@ func (r *Runner) runOne(
 			FailReason:    failReason,
 			FailureClass:  failureClass,
 			Category:      failureCategory,
+			Outcome:       resolvingOutcome,
 			ResetEvidence: resetEvidence,
 			InfraFailures: infraFailures,
 		}
@@ -1407,6 +1411,7 @@ attemptLoop:
 		if task.IsLapsBacked {
 			recordedLaps = mergeStrings(recordedLaps, progressLapsCompletedForRun(r.cfg.WorkspaceDir, runID))
 		}
+		handoffEntry := recordedHandoffEntryForRun(r.cfg.WorkspaceDir, runID, summaryEntryCountBeforeRun)
 
 		runtime := endedAt.Sub(startedAt)
 		commitHash := ""
@@ -1422,7 +1427,7 @@ attemptLoop:
 				break
 			}
 		}
-		finalized := !task.IsLapsBacked || len(recordedLaps) > 0 || handoffState != 0 || (task.LapID == "" && result != nil && result.Completed)
+		finalized := !task.IsLapsBacked || len(recordedLaps) > 0 || handoffEntry != nil || handoffState != 0 || (task.LapID == "" && result != nil && result.Completed)
 		hasUserFileChanges := len(preCommitFilesChanged) > 0
 		incomplete := task.IsLapsBacked && hasOwnUncommittedChanges && !finalized
 		if headBefore != "" && headAfter != "" && headBefore != headAfter {
@@ -1466,7 +1471,7 @@ attemptLoop:
 		attemptFailureClass := reliability.FailureAgent
 		if incomplete {
 			failed = true
-			failReason = "incomplete run"
+			failReason = reliability.CategoryDisplayLabel(reliability.CategoryIncompleteFinalization)
 			attemptFailureClass = reliability.FailureIncomplete
 		} else if execErr != nil {
 			failed = true
@@ -1526,6 +1531,9 @@ attemptLoop:
 			}
 		}
 
+		hasFailureEvidence := result != nil && result.Evidence != nil && result.Evidence.Category != ""
+		attemptOutcome := tryOutcomeForAttempt(failed, incomplete && !hasFailureEvidence, actionTaken && r.stopFlag.Load(), handoffEntry != nil)
+
 		// Error classification and strategy dispatch.
 		//
 		// terminalCategory marks usage_limit / auth_or_proxy: categories whose
@@ -1534,16 +1542,15 @@ attemptLoop:
 		// them to a single attempt. On detection the loop terminates and control
 		// returns to the routing dispatch loop, which benches the quota scope or
 		// routes the entry away using the surfaced category + reset evidence.
-		terminalCategory := false
-		if failed && !lapPinMismatch {
+		terminalForRun := attemptOutcome.IsTerminalForRun("")
+		if failed && !lapPinMismatch && attemptOutcome.CarriesFailureCategory() {
 			logLines := readLastNLines(tryLogPath, 50)
 			decision := reliability.ClassifyError(logLines, picked.Harness, &reliability.ClassifyContext{HasFileChanges: incomplete, Finalized: finalized}, result.Evidence)
 			attemptFailureClass = decision.FailureClass
 			failureClass = decision.FailureClass
 			failureCategory = decision.Category
 			resetEvidence = result.Evidence
-			terminalCategory = decision.Category == reliability.CategoryUsageLimit ||
-				decision.Category == reliability.CategoryAuthOrProxy
+			terminalForRun = attemptOutcome.IsTerminalForRun(decision.Category)
 			if decision.FailureClass == reliability.FailureInfra {
 				infraFailures++
 			}
@@ -1554,12 +1561,15 @@ attemptLoop:
 			case reliability.StrategyNoOp:
 				failed = false
 				success = true
+				attemptOutcome = tryOutcomeForAttempt(false, false, actionTaken && r.stopFlag.Load(), handoffEntry != nil)
+				terminalForRun = false
+				failureCategory = ""
 			case reliability.StrategyRotate:
 				r.skipFlag.Store(true)
 			case reliability.StrategyWaitResume:
 				// A terminal category never resumes within budget, so don't burn
 				// the cooldown only to break the loop immediately afterward.
-				if !terminalCategory && attempt < maxAttempts && decision.Cooldown > 0 {
+				if !terminalForRun && attempt < maxAttempts && decision.Cooldown > 0 {
 					fmt.Println(style.DimStyle.Render(fmt.Sprintf("waiting %v for rate limit...", decision.Cooldown)))
 					if r.sleepFunc != nil {
 						r.sleepFunc(decision.Cooldown)
@@ -1572,6 +1582,12 @@ attemptLoop:
 					sessionID = ""
 				}
 			}
+		} else {
+			attemptFailureClass = attemptOutcome.FailureClass("")
+			failureClass = attemptFailureClass
+			if !attemptOutcome.CarriesFailureCategory() {
+				failureCategory = ""
+			}
 		}
 		lastAttemptIncomplete = failed && attemptFailureClass == reliability.FailureIncomplete
 
@@ -1582,7 +1598,7 @@ attemptLoop:
 		// out via skip/stop/lap-pin mismatch/terminal category). A single-attempt
 		// run is terminal on its first failure, so it colours immediately.
 		willRetry := failed && attempt < maxAttempts &&
-			!actionTaken && !r.skipFlag.Load() && !lapPinMismatch && !r.stopFlag.Load() && !terminalCategory
+			!actionTaken && !r.skipFlag.Load() && !lapPinMismatch && !r.stopFlag.Load() && !terminalForRun
 		renderRunFooter(r.outWriter(), style.FooterOptions{
 			Passed:       !failed,
 			Duration:     runtime,
@@ -1609,6 +1625,7 @@ attemptLoop:
 			RelayID:       relay.ID,
 			AgentType:     picked.Harness,
 			Completed:     !failed,
+			Outcome:       attemptOutcome,
 			Summary:       "",
 			RemainingWork: "",
 			FilesChanged:  filesChangedList,
@@ -1635,8 +1652,8 @@ attemptLoop:
 				tryRecord.FilesChanged = result.FilesChanged
 			}
 		}
-		fmt.Fprintf(log, "relay %d run %d attempt %d result: completed=%v fail_reason=%q runtime=%s files_changed=%d tool_calls=%d commit=%q lap_id=%q assignee=%q recorded_laps=%v laps_attempted=%v handoff_state=%d\n",
-			relay.ID, runIndex+1, attempt, !failed, failReason, runtime, filesChangedCount, tryRecord.ToolCalls, shortHash, task.LapID, task.Assignee, recordedLaps, lapsAttempted, handoffState)
+		fmt.Fprintf(log, "relay %d run %d attempt %d result: completed=%v outcome=%q fail_reason=%q runtime=%s files_changed=%d tool_calls=%d commit=%q lap_id=%q assignee=%q recorded_laps=%v laps_attempted=%v handoff_state=%d\n",
+			relay.ID, runIndex+1, attempt, !failed, attemptOutcome, failReason, runtime, filesChangedCount, tryRecord.ToolCalls, shortHash, task.LapID, task.Assignee, recordedLaps, lapsAttempted, handoffState)
 
 		// Telemetry: per-try structured log + trace span tags. Only summaries
 		// and byte sizes are emitted — never current_task.md contents or the
@@ -1654,6 +1671,7 @@ attemptLoop:
 		})
 		applyTags(trySpan, tryTags)
 		trySpan.SetData("completed", !failed)
+		trySpan.SetData("outcome", string(attemptOutcome))
 		trySpan.SetData("fail_reason", failReason)
 		r.tel().EmitTryLog(tryCtx, map[string]interface{}{
 			"event":                          "try",
@@ -1667,6 +1685,7 @@ attemptLoop:
 			"repo_name":                      rc.RepoName,
 			"lap_id":                         task.LapID,
 			"completed":                      !failed,
+			"outcome":                        string(attemptOutcome),
 			"fail_reason":                    failReason,
 			"failure_class":                  string(failureClass),
 			"runtime_ms":                     runtime.Milliseconds(),
@@ -1685,7 +1704,7 @@ attemptLoop:
 		// Capture provider-limit evidence as low-severity diagnostic telemetry
 		// regardless of whether the failure is operator-worthy enough to become an
 		// Issue. This builds the parser-validation corpus without broadening alerts.
-		if failed {
+		if failed && attemptOutcome.ShouldCaptureIssue() {
 			fs := telemetry.FailureState{
 				Attempt:     attempt,
 				MaxAttempts: maxAttempts,
@@ -1722,6 +1741,7 @@ attemptLoop:
 		}
 		trySpan.Finish()
 
+		resolvingOutcome = attemptOutcome
 		if err := r.store.AppendTry(tryRecord); err != nil {
 			return outcome(false, false, false), err
 		}
@@ -1770,7 +1790,7 @@ attemptLoop:
 		// so the routing dispatch loop can bench the quota scope or route away
 		// rather than burning the retry budget on a quota/auth failure that a
 		// retry cannot clear.
-		if terminalCategory {
+		if terminalForRun {
 			lastResult = result
 			break attemptLoop
 		}
@@ -2109,6 +2129,42 @@ func progressLapsCompletedForRun(workspaceDir, runID string) []string {
 		}
 	}
 	return out
+}
+
+func recordedHandoffEntryForRun(workspaceDir, runID string, firstNewEntry int) *progress.HandoffEntry {
+	if runID == "" {
+		return nil
+	}
+	entries, err := progress.LoadSummaryEntries(workspaceDir)
+	if err != nil {
+		return nil
+	}
+	if firstNewEntry < 0 {
+		firstNewEntry = 0
+	}
+	for i := len(entries) - 1; i >= firstNewEntry; i-- {
+		entry := entries[i]
+		if entry.RunID == runID && entry.Handoff != nil {
+			return entry.Handoff
+		}
+	}
+	return nil
+}
+
+func tryOutcomeForAttempt(failed, incomplete, interrupted, hasDurableHandoff bool) reliability.TryOutcome {
+	if interrupted {
+		return reliability.OutcomeInterrupted
+	}
+	if !failed {
+		if hasDurableHandoff {
+			return reliability.OutcomeHandoffRequested
+		}
+		return reliability.OutcomeCompleted
+	}
+	if incomplete {
+		return reliability.OutcomeIncomplete
+	}
+	return reliability.OutcomeFailed
 }
 
 // normalizeFinalSnippet selects the one summary value used by retry prompts,

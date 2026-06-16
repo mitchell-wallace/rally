@@ -141,6 +141,16 @@ func TestAllCategories_Count(t *testing.T) {
 	}
 }
 
+func TestAllCategories_DoNotContainLifecycleOutcomes(t *testing.T) {
+	for _, forbidden := range []string{"handoff_requested", "run_timeout", "handoff_timeout"} {
+		for _, cat := range AllCategories {
+			if string(cat) == forbidden {
+				t.Fatalf("FailureCategory must not contain lifecycle outcome %q", forbidden)
+			}
+		}
+	}
+}
+
 func TestAllCategories_NoDuplicates(t *testing.T) {
 	seen := make(map[FailureCategory]bool)
 	for _, cat := range AllCategories {

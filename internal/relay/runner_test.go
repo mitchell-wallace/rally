@@ -5630,6 +5630,9 @@ func TestRunOneHonorsExecutorEvidence(t *testing.T) {
 			if tries[0].Category != string(tt.category) {
 				t.Fatalf("Category = %q, want %q", tries[0].Category, tt.category)
 			}
+			if tries[0].Outcome != reliability.OutcomeFailed {
+				t.Fatalf("Outcome = %q, want %q for categorized failure", tries[0].Outcome, reliability.OutcomeFailed)
+			}
 			if !strings.Contains(tries[0].FailReason, reliability.CategoryDisplayLabel(tt.category)) {
 				t.Fatalf("FailReason = %q, want display label containing %q", tries[0].FailReason, reliability.CategoryDisplayLabel(tt.category))
 			}
@@ -6170,8 +6173,11 @@ func TestIncompleteRetryCarriesFinalizationGuidance(t *testing.T) {
 		t.Fatalf("expected at least 2 tries, got %d", len(tries))
 	}
 	first := tries[0]
-	if first.Category != string(reliability.CategoryIncompleteFinalization) {
-		t.Fatalf("first try Category = %q, want %q", first.Category, reliability.CategoryIncompleteFinalization)
+	if first.Outcome != reliability.OutcomeIncomplete {
+		t.Fatalf("first try Outcome = %q, want %q", first.Outcome, reliability.OutcomeIncomplete)
+	}
+	if first.Category != "" {
+		t.Fatalf("first try Category = %q, want empty because incomplete is a lifecycle outcome", first.Category)
 	}
 	if !strings.Contains(first.FailReason, "incomplete") {
 		t.Fatalf("first try FailReason = %q, want display containing 'incomplete'", first.FailReason)

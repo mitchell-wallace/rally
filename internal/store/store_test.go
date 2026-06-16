@@ -9,6 +9,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/mitchell-wallace/rally/internal/reliability"
 	"github.com/mitchell-wallace/rally/internal/textutil"
 )
 
@@ -63,6 +64,39 @@ func TestJSONLRoundTrip(t *testing.T) {
 	}
 	if len(read) != 1 || read[0].ID != 1 {
 		t.Fatalf("expected 1 record with ID 1, got %v", read)
+	}
+}
+
+func TestTryRecordPersistsOutcomeAndHandoffOnly(t *testing.T) {
+	rallyDir, s := setupTempStore(t)
+
+	if err := s.AppendTry(TryRecord{
+		ID:          1,
+		RunID:       1,
+		AgentType:   "codex",
+		Completed:   true,
+		Outcome:     reliability.OutcomeHandoffRequested,
+		HandoffOnly: true,
+		Category:    "",
+	}); err != nil {
+		t.Fatalf("AppendTry: %v", err)
+	}
+
+	read, err := readJSONL[TryRecord](filepath.Join(rallyDir, "state", "tries.jsonl"))
+	if err != nil {
+		t.Fatalf("read tries: %v", err)
+	}
+	if len(read) != 1 {
+		t.Fatalf("tries = %d, want 1", len(read))
+	}
+	if read[0].Outcome != reliability.OutcomeHandoffRequested {
+		t.Fatalf("Outcome = %q, want %q", read[0].Outcome, reliability.OutcomeHandoffRequested)
+	}
+	if !read[0].HandoffOnly {
+		t.Fatal("HandoffOnly = false, want true")
+	}
+	if read[0].Category != "" {
+		t.Fatalf("Category = %q, want empty for non-failed outcome", read[0].Category)
 	}
 }
 
