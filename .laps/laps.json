@@ -50,11 +50,11 @@
       "title": "Complete timeout enforcement regression tests",
       "description": "Context: OpenSpec add-recovery-role-timeouts, task 3.5. The previous lap wires timer behavior; this lap broadens confidence around the runner timing state machine.\n\nOutcome: The relay test suite covers cumulative retry time crossing run_timeout_secs, a single attempt crossing try_timeout_secs while run budget remains, under-budget completion, and stall firing before either hard timeout.\n\nFiles \u0026 scope: internal/relay tests and minimal testability hooks if the previous lap did not already add them. Avoid production changes unless tests expose a small obvious bug in the timeout wiring.\n\nDesign: Prefer fake clock, injected sleeper, or already-established runner test harness patterns over real multi-second sleeps. Tests should assert outcomes and retry behavior, not only elapsed wall time. Keep failure messages explicit about whether run timeout, try timeout, or stall won.\n\nAcceptance: Targeted relay tests are deterministic and green. Do not check off tasks.md boxes.",
       "assignee": "SENIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 327680,
       "createdAt": "2026-06-16T00:17:48.179530373Z",
-      "updatedAt": "2026-06-16T00:17:48.179530373Z",
-      "completedAt": null
+      "updatedAt": "2026-06-16T03:52:48.46960859Z",
+      "completedAt": "2026-06-16T03:52:48.46960859Z"
     },
     {
       "id": "rall-6799",

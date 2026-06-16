@@ -107,3 +107,5 @@
 {"run_id":"relay-1-run-6","summary":"(agent exited without finalizing)","updated_at":"2026-06-16T01:47:22Z","laps_completed":"none"}
 {"run_id":"relay-1-run-7","summary":"opencode process exited unsuccessfully without a parseable result","updated_at":"2026-06-16T03:03:23Z","laps_completed":"none"}
 {"run_id":"relay-1-run-8","summary":"(agent exited without finalizing)","updated_at":"2026-06-16T03:18:23Z","laps_completed":"none"}
+{"run_id":"relay-2-run-1","summary":"(agent exited without finalizing)","updated_at":"2026-06-16T03:49:20Z","laps_completed":"none"}
+{"run_id":"relay-2-run-2","summary":"Added deterministic relay timeout regression coverage for cumulative run budget, try-cap retry, under-budget completion, and stall precedence.","updated_at":"2026-06-16T03:52:56Z","laps_completed":["rall-31e6"]}
