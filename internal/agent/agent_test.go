@@ -208,6 +208,36 @@ func TestBuildPrompt_SharedGuidanceOrdering(t *testing.T) {
 	}
 }
 
+func TestBuildPrompt_RecoveryClassificationOnlyFromRecoveryRole(t *testing.T) {
+	recoveryRole, ok := agent_prompt.Role("recovery")
+	if !ok {
+		t.Fatal("missing recovery role")
+	}
+	recoveryPrompt := BuildPrompt(RunOptions{
+		RoleInstructions: recoveryRole,
+		LapsEnabled:      true,
+	})
+	if !strings.Contains(recoveryPrompt, "laps wrapup --classification <value>") {
+		t.Fatalf("recovery prompt missing classification instruction:\n%s", recoveryPrompt)
+	}
+
+	for _, role := range []string{"junior", "senior", "ui", "verify"} {
+		roleInstructions, ok := agent_prompt.Role(role)
+		if !ok {
+			t.Fatalf("missing %s role", role)
+		}
+		prompt := BuildPrompt(RunOptions{
+			RoleInstructions: roleInstructions,
+			LapsEnabled:      true,
+		})
+		for _, forbidden := range []string{"laps wrapup --classification", "course_correct", "repair_plan", "needs_user"} {
+			if strings.Contains(prompt, forbidden) {
+				t.Fatalf("%s prompt unexpectedly contains recovery classification marker %q:\n%s", role, forbidden, prompt)
+			}
+		}
+	}
+}
+
 func TestFixtureExecutor_RoundTrip(t *testing.T) {
 	tmp := t.TempDir()
 

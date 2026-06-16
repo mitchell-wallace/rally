@@ -468,11 +468,14 @@ func TestRunInitRoles_OnlyTouchesRoleConfig(t *testing.T) {
 	if _, ok := cfg.Routes["junior"]; !ok {
 		t.Error("missing junior route")
 	}
+	if got := cfg.Routes["recovery"]; len(got) != 1 || got[0] != "claude" {
+		t.Errorf("recovery route = %v, want [claude]", got)
+	}
 	if cfg.Defaults.ClaudeModel != "claude-opus-4-7" {
 		t.Errorf("ClaudeModel = %q, want claude-opus-4-7", cfg.Defaults.ClaudeModel)
 	}
 
-	for _, role := range []string{"junior", "senior", "ui", "verify"} {
+	for _, role := range []string{"junior", "senior", "ui", "verify", "recovery"} {
 		path := filepath.Join(store.AgentsDir(tmp), role+".md")
 		if _, err := os.Stat(path); err != nil {
 			t.Errorf("role instructions for %s not created: %v", role, err)

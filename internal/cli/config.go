@@ -67,7 +67,7 @@ func runConfig(cmd *cobra.Command, _ []string) error {
 
 	// Parallel slices so each huh field can bind directly to &routeValues[i]
 	// and we can read the user's edits back after the form runs.
-	roleNames := []string{"default", "junior", "senior", "ui", "verify"}
+	roleNames := fixedConfigRoleNames()
 	roleSet := map[string]bool{}
 	for _, r := range roleNames {
 		roleSet[r] = true
@@ -78,7 +78,7 @@ func runConfig(cmd *cobra.Command, _ []string) error {
 			roleSet[name] = true
 		}
 	}
-	sort.Strings(roleNames[5:])
+	sort.Strings(roleNames[len(fixedConfigRoleNames()):])
 	routeValues := make([]string, len(roleNames))
 	for i, r := range roleNames {
 		routeValues[i] = strings.Join(cfg.Routes[r], ", ")
@@ -191,6 +191,10 @@ func runConfig(cmd *cobra.Command, _ []string) error {
 	}
 	fmt.Fprintln(cmd.OutOrStdout(), "Wrote .rally/config.toml.")
 	return nil
+}
+
+func fixedConfigRoleNames() []string {
+	return []string{"default", "junior", "senior", "ui", "verify", "recovery"}
 }
 
 // promptCustomRoles loops until the user stops adding new role entries.

@@ -34,6 +34,7 @@ var sources embed.FS
 // shared snippets by a stable name rather than a literal string.
 const (
 	GeneralFinalize     = "finalize"
+	GeneralHandoffOnly  = "handoff_only"
 	GeneralHeadless     = "headless"
 	GeneralLeftoverWork = "leftover_work"
 )
@@ -49,6 +50,13 @@ func General(name string) (string, bool) {
 // laps wrapup). It is always embedded.
 func Finalize() string {
 	s, _ := General(GeneralFinalize)
+	return s
+}
+
+// HandoffOnly returns the bounded handoff-only continuation guidance. It is
+// always embedded.
+func HandoffOnly() string {
+	s, _ := General(GeneralHandoffOnly)
 	return s
 }
 

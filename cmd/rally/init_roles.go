@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 
 	"github.com/mitchell-wallace/rally/internal/agent"
+	"github.com/mitchell-wallace/rally/internal/agent_prompt"
 	"github.com/mitchell-wallace/rally/internal/config"
 	"github.com/mitchell-wallace/rally/internal/store"
 	"github.com/spf13/cobra"
@@ -87,6 +88,10 @@ Your role is to make the interface look and feel good, not merely to make it fun
 			"- Apply small fixes directly when they are clearly correct and only a few lines.\n" +
 			"- Add new laps at the head for substantial fixes, unclear follow-up, or work that deserves its own implementation pass.\n" +
 			"- Do not rewrite git history during verification or cleanup. Avoid reset/rebase/squash/amend-away/force-push strategies unless the user explicitly approves them. Prefer additive commits, revert commits, or a new recovery branch so removed work remains backtrackable.\n",
+	},
+	{
+		Name:  "recovery",
+		Route: []string{"claude"},
 	},
 }
 
@@ -174,7 +179,11 @@ func runRolesSetup(workspaceDir string) error {
 		} else if !os.IsNotExist(err) {
 			return err
 		}
-		if err := os.WriteFile(path, []byte(role.Instructions), 0o644); err != nil {
+		instructions := role.Instructions
+		if embedded, ok := agent_prompt.Role(role.Name); ok {
+			instructions = embedded + "\n"
+		}
+		if err := os.WriteFile(path, []byte(instructions), 0o644); err != nil {
 			return err
 		}
 		created++

@@ -136,11 +136,11 @@
       "title": "Add recovery and handoff prompts",
       "description": "Context: OpenSpec add-recovery-role-timeouts, tasks 7.1-7.5 and the prompt side of agent-lifecycle. This lap owns generic prompt assets and route config defaults.\n\nOutcome: internal/agent_prompt/roles/recovery.md exists and is loadable/overridable like other roles; it contains the five-way classification contract and classify-then-act guidance while staying OpenSpec-agnostic. A general handoff-only snippet forbids implementation and directs blocker summary plus laps handoff and laps wrapup. Implementation role snippets junior/senior/ui include the five-iteration voluntary handoff rule; verify and recovery do not. The config form fixed role list includes recovery, the custom-route sort bound is updated, and defaults seed a senior-class recovery route.\n\nFiles \u0026 scope: internal/agent_prompt/roles and general snippets, agent_prompt loaders/accessors/tests, internal/cli/config.go route role list/defaults, default config seeding, and prompt composition tests. Do not add OpenSpec-specific text to generic role docs.\n\nDesign: The classification instruction must live only in roles/recovery.md so composed prompts mention laps wrapup --classification only when the effective assignee/prompt role is recovery. The voluntary handoff guidance belongs in implementation roles individually, not a shared snippet that would inject into VERIFY/RECOVERY.\n\nAcceptance: Tests cover Role(recovery)/Role(RECOVERY), on-disk override, all five classifications in the snippet, handoff-only prompt forbids implementation, implementation prompts include five-iteration guidance, VERIFY/RECOVERY prompts omit that guidance, and non-recovery prompts omit recovery classification instructions. Do not check off tasks.md boxes.",
       "assignee": "SENIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 720896,
       "createdAt": "2026-06-16T00:17:48.179541657Z",
-      "updatedAt": "2026-06-16T00:17:48.179541657Z",
-      "completedAt": null
+      "updatedAt": "2026-06-16T05:32:27.529329519Z",
+      "completedAt": "2026-06-16T05:32:27.529329519Z"
     },
     {
       "id": "rall-075b",

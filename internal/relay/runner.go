@@ -2108,10 +2108,7 @@ func buildHandoffOnlyPrompt(opts agent.RunOptions) string {
 		fmt.Fprintf(&b, "## Role Instructions\n%s\n\n", opts.RoleInstructions)
 	}
 	fmt.Fprintf(&b, "## Handoff-Only Continuation\n")
-	fmt.Fprintf(&b, "The run budget for the implementation attempt is exhausted. Do not continue implementation, edit files, run broad new debugging loops, or try to finish the task in this continuation.\n\n")
-	fmt.Fprintf(&b, "Your only job is to leave a durable handoff for the next run: summarize the blocker, include the most useful current state and next steps, then run `laps handoff` followed by the `laps wrapup ...` command printed by the hook.\n\n")
-	fmt.Fprintf(&b, "If laps reports that the wrong lap was claimed or handed off, use the undo command it prints before wrapping up.\n\n")
-	fmt.Fprintf(&b, "Do not exit without actually invoking the handoff and wrapup shell commands.\n")
+	fmt.Fprintf(&b, "%s\n", agent_prompt.HandoffOnly())
 	return b.String()
 }
 

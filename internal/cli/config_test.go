@@ -46,6 +46,19 @@ func TestReliabilityFieldTitlesIncludeTimeouts(t *testing.T) {
 	}
 }
 
+func TestFixedConfigRoleNamesIncludeRecoveryBeforeCustomSort(t *testing.T) {
+	got := fixedConfigRoleNames()
+	want := []string{"default", "junior", "senior", "ui", "verify", "recovery"}
+	if len(got) != len(want) {
+		t.Fatalf("fixedConfigRoleNames() = %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("fixedConfigRoleNames() = %v, want %v", got, want)
+		}
+	}
+}
+
 func TestNewReliabilityFormPrefillsAllFields(t *testing.T) {
 	cfg := config.V2Config{Reliability: config.ReliabilityConfig{
 		StallThresholdSecs: 90,
