@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/mitchell-wallace/rally/internal/agent"
+	"github.com/mitchell-wallace/rally/internal/gitx"
 	"github.com/mitchell-wallace/rally/internal/progress"
 	"github.com/mitchell-wallace/rally/internal/reliability"
 	"github.com/mitchell-wallace/rally/internal/store"
@@ -58,7 +59,7 @@ func TestRunOneRecordsHandoffRequestedOutcome(t *testing.T) {
 		&store.RelayRecord{ID: 1, TargetIterations: 1},
 		0,
 		agent.ResolvedAgent{Harness: "opencode", Model: cheapTestModel},
-		runTask{Name: "task", Prompt: "do work", Assignee: "senior", LapID: "lap-1", IsLapsBacked: true, LapsRemaining: 1},
+		runTask{Name: "task", Prompt: "do work", Assignee: "senior", ResolvedRoute: "senior", LapID: "lap-1", IsLapsBacked: true, LapsRemaining: 1},
 		nil,
 		nil,
 		false,
@@ -76,6 +77,12 @@ func TestRunOneRecordsHandoffRequestedOutcome(t *testing.T) {
 	if res.Outcome != reliability.OutcomeHandoffRequested {
 		t.Fatalf("run outcome = %q, want %q", res.Outcome, reliability.OutcomeHandoffRequested)
 	}
+	if res.LapID != "lap-1" {
+		t.Fatalf("run lap id = %q, want lap-1", res.LapID)
+	}
+	if !res.DirtyHandoff {
+		t.Fatal("run dirty handoff = false, want true")
+	}
 	if res.InfraFailures != 0 {
 		t.Fatalf("infra failures = %d, want 0", res.InfraFailures)
 	}
@@ -87,8 +94,193 @@ func TestRunOneRecordsHandoffRequestedOutcome(t *testing.T) {
 	if tries[0].Outcome != reliability.OutcomeHandoffRequested {
 		t.Fatalf("try outcome = %q, want %q", tries[0].Outcome, reliability.OutcomeHandoffRequested)
 	}
+	if tries[0].ResolvedRoute != "senior" {
+		t.Fatalf("resolved route = %q, want senior", tries[0].ResolvedRoute)
+	}
+	if tries[0].LapAssignee != "senior" {
+		t.Fatalf("lap assignee = %q, want senior", tries[0].LapAssignee)
+	}
+	if !tries[0].DirtyHandoff {
+		t.Fatal("dirty handoff = false, want true")
+	}
+	if len(tries[0].HandoffCreatedLapIDs) != 1 || tries[0].HandoffCreatedLapIDs[0] != "lap-followup" {
+		t.Fatalf("handoff created lap ids = %v, want [lap-followup]", tries[0].HandoffCreatedLapIDs)
+	}
+	if tries[0].CommitHash != "" {
+		t.Fatalf("commit hash = %q, want empty dirty-handoff auto-commit suppression", tries[0].CommitHash)
+	}
 	if tries[0].Category != "" {
 		t.Fatalf("try category = %q, want empty for handoff_requested", tries[0].Category)
+	}
+	if dirty, _ := gitx.IsWorkspaceDirty(workspaceDir); !dirty {
+		t.Fatal("workspace dirty = false, want dirty handoff left uncommitted")
+	}
+}
+
+func TestRunOneCleanHandoffDoesNotSetDirtyRecoveryMetadata(t *testing.T) {
+	workspaceDir := t.TempDir()
+	rallyDir := store.RallyDir(workspaceDir)
+	if err := os.MkdirAll(rallyDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	initRepo(t, workspaceDir)
+	runGit(t, workspaceDir, "commit", "--allow-empty", "-m", "initial", "--no-verify")
+
+	s := newTestStore(t, rallyDir)
+	exec := &funcExecutor{
+		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+			if err := progress.AppendRunEntry(workspaceDir, progress.RunEntry{
+				RunID:   "relay-1-run-1",
+				Summary: "blocked cleanly",
+				Handoff: &progress.HandoffEntry{
+					Summary:       "blocked cleanly",
+					Followups:     []string{"follow up"},
+					CreatedLapIDs: []string{"lap-followup"},
+				},
+			}); err != nil {
+				return nil, err
+			}
+			return &agent.TryResult{Completed: true, Summary: "executor summary"}, nil
+		},
+	}
+
+	r := NewRunner(s, Config{
+		WorkspaceDir:     workspaceDir,
+		DataDir:          t.TempDir(),
+		AgentMixSpecs:    []string{"op:dsf"},
+		TargetIterations: 1,
+		RetryBudget:      1,
+		LapsEnabled:      true,
+		Resolver:         cheapTestResolver,
+	}, map[string]agent.Executor{"opencode": exec})
+
+	res, err := r.runOne(
+		context.Background(),
+		&store.RelayRecord{ID: 1, TargetIterations: 1},
+		0,
+		agent.ResolvedAgent{Harness: "opencode", Model: cheapTestModel},
+		runTask{Name: "task", Prompt: "do work", Assignee: "senior", ResolvedRoute: "senior", LapID: "lap-1", IsLapsBacked: true, LapsRemaining: 1},
+		nil,
+		nil,
+		false,
+		false,
+		nil,
+		nil,
+		io.Discard,
+	)
+	if err != nil {
+		t.Fatalf("runOne error = %v", err)
+	}
+	if !res.Success || res.Outcome != reliability.OutcomeHandoffRequested {
+		t.Fatalf("run outcome success=%v outcome=%q, want success handoff_requested", res.Success, res.Outcome)
+	}
+	if res.DirtyHandoff {
+		t.Fatal("run dirty handoff = true, want false")
+	}
+
+	tries := s.AllTries()
+	if len(tries) != 1 {
+		t.Fatalf("tries = %d, want 1", len(tries))
+	}
+	if tries[0].DirtyHandoff {
+		t.Fatal("dirty handoff = true, want false")
+	}
+	if len(tries[0].HandoffCreatedLapIDs) != 1 || tries[0].HandoffCreatedLapIDs[0] != "lap-followup" {
+		t.Fatalf("handoff created lap ids = %v, want [lap-followup]", tries[0].HandoffCreatedLapIDs)
+	}
+	if dirty, _ := gitx.IsWorkspaceDirty(workspaceDir); dirty {
+		t.Fatal("workspace dirty = true, want clean handoff to leave tree clean")
+	}
+}
+
+func TestRunOneIncompleteAndOrdinaryFailedDoNotSetDirtyHandoff(t *testing.T) {
+	tests := []struct {
+		name        string
+		exec        func(string) *funcExecutor
+		wantOutcome reliability.TryOutcome
+	}{
+		{
+			name: "incomplete-alone",
+			exec: func(workspaceDir string) *funcExecutor {
+				return &funcExecutor{fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+					if err := os.WriteFile(filepath.Join(workspaceDir, "work.txt"), []byte("partial\n"), 0o644); err != nil {
+						return nil, err
+					}
+					return &agent.TryResult{Completed: false, Summary: "partial"}, nil
+				}}
+			},
+			wantOutcome: reliability.OutcomeIncomplete,
+		},
+		{
+			name: "ordinary-failed",
+			exec: func(workspaceDir string) *funcExecutor {
+				return &funcExecutor{fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+					return &agent.TryResult{Completed: false, Summary: "failed"}, nil
+				}}
+			},
+			wantOutcome: reliability.OutcomeFailed,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			workspaceDir := t.TempDir()
+			rallyDir := store.RallyDir(workspaceDir)
+			if err := os.MkdirAll(rallyDir, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			initRepo(t, workspaceDir)
+			runGit(t, workspaceDir, "commit", "--allow-empty", "-m", "initial", "--no-verify")
+
+			s := newTestStore(t, rallyDir)
+			r := NewRunner(s, Config{
+				WorkspaceDir:     workspaceDir,
+				DataDir:          t.TempDir(),
+				AgentMixSpecs:    []string{"op:dsf"},
+				TargetIterations: 1,
+				RetryBudget:      1,
+				LapsEnabled:      true,
+				Resolver:         cheapTestResolver,
+			}, map[string]agent.Executor{"opencode": tt.exec(workspaceDir)})
+
+			res, err := r.runOne(
+				context.Background(),
+				&store.RelayRecord{ID: 1, TargetIterations: 1},
+				0,
+				agent.ResolvedAgent{Harness: "opencode", Model: cheapTestModel},
+				runTask{Name: "task", Prompt: "do work", Assignee: "senior", ResolvedRoute: "senior", LapID: "lap-1", IsLapsBacked: true, LapsRemaining: 1},
+				nil,
+				nil,
+				false,
+				false,
+				nil,
+				nil,
+				io.Discard,
+			)
+			if err != nil {
+				t.Fatalf("runOne error = %v", err)
+			}
+			if res.Success {
+				t.Fatal("runOne success = true, want false")
+			}
+			if res.Outcome != tt.wantOutcome {
+				t.Fatalf("run outcome = %q, want %q", res.Outcome, tt.wantOutcome)
+			}
+			if res.DirtyHandoff {
+				t.Fatal("run dirty handoff = true, want false")
+			}
+
+			tries := s.AllTries()
+			if len(tries) != 1 {
+				t.Fatalf("tries = %d, want 1", len(tries))
+			}
+			if tries[0].DirtyHandoff {
+				t.Fatal("dirty handoff = true, want false")
+			}
+			if len(tries[0].HandoffCreatedLapIDs) != 0 {
+				t.Fatalf("handoff created lap ids = %v, want empty", tries[0].HandoffCreatedLapIDs)
+			}
+		})
 	}
 }
 

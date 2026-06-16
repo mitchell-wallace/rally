@@ -152,16 +152,17 @@ func newTimeoutTestRunner(t *testing.T, exec agent.Executor, cfg Config) (*Runne
 func runTimeoutTask() runTask {
 	// A non-laps task: finalize is implicit, so an attempt that completes with a
 	// file change resolves to success without needing laps bookkeeping.
-	return runTask{Name: "task", Prompt: "do work", Assignee: "senior"}
+	return runTask{Name: "task", Prompt: "do work", Assignee: "senior", ResolvedRoute: "senior"}
 }
 
 func runTimeoutLapsTask() runTask {
 	return runTask{
-		Name:         "lap task",
-		Prompt:       "do work",
-		Assignee:     "senior",
-		LapID:        "lap-timeout",
-		IsLapsBacked: true,
+		Name:          "lap task",
+		Prompt:        "do work",
+		Assignee:      "senior",
+		ResolvedRoute: "senior",
+		LapID:         "lap-timeout",
+		IsLapsBacked:  true,
 	}
 }
 

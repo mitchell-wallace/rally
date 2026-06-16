@@ -440,6 +440,7 @@ type runTask struct {
 	Requirements  string
 	Prompt        string
 	Assignee      string
+	ResolvedRoute string
 	LapID         string
 	IsLapsBacked  bool
 	LapsRemaining int
@@ -641,6 +642,7 @@ func (r *Runner) Run(ctx context.Context) error {
 			fmt.Fprintln(os.Stderr, selection.Route.Warning)
 			fmt.Fprintln(log, selection.Route.Warning)
 		}
+		task.ResolvedRoute = selection.Route.Name
 		r.prepareExecutorForSelection(relay.ID, runIndex, selection, log)
 
 		// Consume run-scoped message at start of each run
@@ -1196,6 +1198,11 @@ type runOutcome struct {
 	Category reliability.FailureCategory
 	// Outcome is the lifecycle outcome of the resolving try.
 	Outcome reliability.TryOutcome
+	// LapID is the queue lap resolved by this run.
+	LapID string
+	// DirtyHandoff reports that the resolving try durable-handed off while
+	// leaving own uncommitted work behind.
+	DirtyHandoff bool
 	// ResetEvidence carries parsed reset timing (ResetAt/ResetAfter) used to
 	// size the bench window on a usage_limit.
 	ResetEvidence *reliability.FailureEvidence
@@ -1252,6 +1259,7 @@ func (r *Runner) runOne(
 	var failureCategory reliability.FailureCategory
 	var resetEvidence *reliability.FailureEvidence
 	var resolvingOutcome reliability.TryOutcome
+	var resolvingDirtyHandoff bool
 	infraFailures := 0
 	// outcome snapshots the run-scoped failure state for return; only the
 	// success/addressed/interrupted flags vary per return site.
@@ -1264,6 +1272,8 @@ func (r *Runner) runOne(
 			FailureClass:  failureClass,
 			Category:      failureCategory,
 			Outcome:       resolvingOutcome,
+			LapID:         task.LapID,
+			DirtyHandoff:  resolvingDirtyHandoff,
 			ResetEvidence: resetEvidence,
 			InfraFailures: infraFailures,
 		}
@@ -1292,6 +1302,7 @@ func (r *Runner) runOne(
 	// Check for uncommitted non-rally changes at run start. Errors are
 	// tolerated (treat as clean) so a broken git setup never crashes the run.
 	leftoverWork, _ := gitx.IsWorkspaceDirty(r.cfg.WorkspaceDir)
+	runStartDirtySnapshot, _ := gitx.WorkspaceDirtyPaths(r.cfg.WorkspaceDir)
 
 	exec := r.executors[picked.Harness]
 
@@ -1549,13 +1560,14 @@ attemptLoop:
 		finalized := !task.IsLapsBacked || len(recordedLaps) > 0 || handoffEntry != nil || handoffState != 0 || (task.LapID == "" && result != nil && result.Completed)
 		hasUserFileChanges := len(preCommitFilesChanged) > 0
 		incomplete := task.IsLapsBacked && hasOwnUncommittedChanges && !finalized
+		dirtyHandoff := handoffEntry != nil && hasOwnUncommittedChanges
 		if headBefore != "" && headAfter != "" && headBefore != headAfter {
 			commitHistory = r.commitRange(headBefore, headAfter)
 			if len(commitHistory) == 0 {
 				commitHistory = []string{headAfter}
 			}
 			commitHash = commitHistory[len(commitHistory)-1]
-		} else if dirtyBeforeAutoCommit && hasUserFileChanges && !incomplete && finalized {
+		} else if dirtyBeforeAutoCommit && hasUserFileChanges && !incomplete && !dirtyHandoff && finalized {
 			hash, commitErr := r.autoCommit(runIndex, picked.Harness, attempt)
 			if commitErr != nil {
 				fmt.Fprintf(log, "relay %d run %d attempt %d auto-commit warning: %v\n", relay.ID, runIndex+1, attempt, commitErr)
@@ -1617,7 +1629,7 @@ attemptLoop:
 				hasChanges = dirty
 			}
 			noFileChanges := !hasChanges
-			if noFileChanges && runtime < 3*time.Minute {
+			if noFileChanges && runtime < 3*time.Minute && handoffEntry == nil {
 				failed = true
 				failReason = "no changes made"
 			}
@@ -1777,28 +1789,31 @@ attemptLoop:
 		}
 
 		tryRecord := store.TryRecord{
-			ID:            r.store.NextTryID(),
-			RunID:         runIndex + 1,
-			RelayID:       relay.ID,
-			AgentType:     picked.Harness,
-			Completed:     !failed,
-			Outcome:       attemptOutcome,
-			Summary:       "",
-			RemainingWork: "",
-			FilesChanged:  filesChangedList,
-			CommitHash:    commitHash,
-			CommitHistory: commitHistory,
-			StartedAt:     startedAt.Format(time.RFC3339),
-			EndedAt:       endedAt.Format(time.RFC3339),
-			AttemptNumber: attempt,
-			LogPath:       tryLogPath,
-			FailReason:    failReason,
-			Category:      string(failureCategory),
-			RuntimeMs:     runtime.Milliseconds(),
-			LapID:         task.LapID,
-			LapAssignee:   task.Assignee,
-			RecordedLaps:  recordedLaps,
-			LapsAttempted: lapsAttempted,
+			ID:                   r.store.NextTryID(),
+			RunID:                runIndex + 1,
+			RelayID:              relay.ID,
+			AgentType:            picked.Harness,
+			Completed:            !failed,
+			Outcome:              attemptOutcome,
+			ResolvedRoute:        task.ResolvedRoute,
+			DirtyHandoff:         dirtyHandoff,
+			Summary:              "",
+			RemainingWork:        "",
+			FilesChanged:         filesChangedList,
+			CommitHash:           commitHash,
+			CommitHistory:        commitHistory,
+			StartedAt:            startedAt.Format(time.RFC3339),
+			EndedAt:              endedAt.Format(time.RFC3339),
+			AttemptNumber:        attempt,
+			LogPath:              tryLogPath,
+			FailReason:           failReason,
+			Category:             string(failureCategory),
+			RuntimeMs:            runtime.Milliseconds(),
+			LapID:                task.LapID,
+			LapAssignee:          task.Assignee,
+			HandoffCreatedLapIDs: handoffCreatedLapIDs(handoffEntry),
+			RecordedLaps:         recordedLaps,
+			LapsAttempted:        lapsAttempted,
 		}
 		if result != nil {
 			tryRecord.Summary = result.Summary
@@ -1899,6 +1914,7 @@ attemptLoop:
 		trySpan.Finish()
 
 		resolvingOutcome = attemptOutcome
+		resolvingDirtyHandoff = dirtyHandoff
 		if err := r.store.AppendTry(tryRecord); err != nil {
 			return outcome(false, false, false), err
 		}
@@ -1993,15 +2009,16 @@ attemptLoop:
 	// to capture a clean handoff. This continuation, not the cancelled run_timeout
 	// implementation try, resolves the run.
 	if handoffResumePending && !r.stopFlag.Load() && ctx.Err() == nil {
-		contOutcome, contResult, contSucceeded, contErr := r.runBoundedHandoffOnly(
+		contOutcome, contResult, contSucceeded, contDirtyHandoff, contErr := r.runBoundedHandoffOnly(
 			ctx, relay, runIndex, picked, task, rc, roleInstructions,
 			handoffResumeSessionID, handoffResumeBaseAttempt+1, maxAttempts,
-			summaryEntryCountBeforeRun, runID, log,
+			summaryEntryCountBeforeRun, runID, runStartDirtySnapshot, log,
 		)
 		if contErr != nil {
 			return outcome(false, false, false), contErr
 		}
 		resolvingOutcome = contOutcome
+		resolvingDirtyHandoff = contDirtyHandoff
 		if contResult != nil {
 			lastResult = contResult
 		}
@@ -2111,8 +2128,9 @@ func (r *Runner) runBoundedHandoffOnly(
 	maxAttempts int,
 	summaryEntryCountBeforeRun int,
 	runID string,
+	runStartDirtySnapshot map[string]string,
 	log io.Writer,
-) (reliability.TryOutcome, *agent.TryResult, bool, error) {
+) (reliability.TryOutcome, *agent.TryResult, bool, bool, error) {
 	startedAt := time.Now().UTC()
 
 	// Persist the captured session id so the resume-capable harness re-attaches to
@@ -2202,6 +2220,9 @@ func (r *Runner) runBoundedHandoffOnly(
 	if rs, err := progress.LoadRunState(r.cfg.WorkspaceDir); err == nil && rs != nil {
 		handoffState = rs.HandoffState
 	}
+	dirtyAfter, _ := gitx.WorkspaceDirtyPaths(r.cfg.WorkspaceDir)
+	hasOwnUncommittedChanges := hasDirtyChangesSince(runStartDirtySnapshot, dirtyAfter)
+	dirtyHandoff := handoffEntry != nil && hasOwnUncommittedChanges
 
 	outcome := reliability.OutcomeHandoffTimeout
 	failReason := ""
@@ -2237,25 +2258,28 @@ func (r *Runner) runBoundedHandoffOnly(
 	})
 
 	tryRecord := store.TryRecord{
-		ID:            tryID,
-		RunID:         runIndex + 1,
-		RelayID:       relay.ID,
-		AgentType:     picked.Harness,
-		Completed:     succeeded,
-		Outcome:       outcome,
-		HandoffOnly:   true,
-		Summary:       result.Summary,
-		RemainingWork: result.RemainingWork,
-		FilesChanged:  []string{},
-		StartedAt:     startedAt.Format(time.RFC3339),
-		EndedAt:       endedAt.Format(time.RFC3339),
-		AttemptNumber: attemptNumber,
-		LogPath:       tryLogPath,
-		FailReason:    failReason,
-		RuntimeMs:     runtime.Milliseconds(),
-		LapID:         task.LapID,
-		LapAssignee:   task.Assignee,
-		ToolCalls:     result.ToolCalls,
+		ID:                   tryID,
+		RunID:                runIndex + 1,
+		RelayID:              relay.ID,
+		AgentType:            picked.Harness,
+		Completed:            succeeded,
+		Outcome:              outcome,
+		HandoffOnly:          true,
+		ResolvedRoute:        task.ResolvedRoute,
+		DirtyHandoff:         dirtyHandoff,
+		Summary:              result.Summary,
+		RemainingWork:        result.RemainingWork,
+		FilesChanged:         []string{},
+		StartedAt:            startedAt.Format(time.RFC3339),
+		EndedAt:              endedAt.Format(time.RFC3339),
+		AttemptNumber:        attemptNumber,
+		LogPath:              tryLogPath,
+		FailReason:           failReason,
+		RuntimeMs:            runtime.Milliseconds(),
+		LapID:                task.LapID,
+		LapAssignee:          task.Assignee,
+		HandoffCreatedLapIDs: handoffCreatedLapIDs(handoffEntry),
+		ToolCalls:            result.ToolCalls,
 	}
 
 	tryTags := telemetry.Tags(telemetry.EventInfo{
@@ -2297,10 +2321,10 @@ func (r *Runner) runBoundedHandoffOnly(
 		relay.ID, runIndex+1, attemptNumber, outcome, failReason, runtime, handoffState, handoffEntry != nil)
 
 	if err := r.store.AppendTry(tryRecord); err != nil {
-		return outcome, result, succeeded, err
+		return outcome, result, succeeded, dirtyHandoff, err
 	}
 
-	return outcome, result, succeeded, nil
+	return outcome, result, succeeded, dirtyHandoff, nil
 }
 
 func (r *Runner) newStallController(tryLogPath string, exec agent.Executor) reliability.StallController {
@@ -2559,6 +2583,23 @@ func mergeStrings(a, b []string) []string {
 		out = append(out, value)
 	}
 	return out
+}
+
+func hasDirtyChangesSince(before, after map[string]string) bool {
+	for path, afterXY := range after {
+		beforeXY, existed := before[path]
+		if !existed || beforeXY != afterXY {
+			return true
+		}
+	}
+	return false
+}
+
+func handoffCreatedLapIDs(handoff *progress.HandoffEntry) []string {
+	if handoff == nil || len(handoff.CreatedLapIDs) == 0 {
+		return nil
+	}
+	return append([]string(nil), handoff.CreatedLapIDs...)
 }
 
 func progressLapsCompletedForRun(workspaceDir, runID string) []string {
