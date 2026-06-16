@@ -72,11 +72,11 @@
       "title": "Verify timeout and bounded handoff behavior",
       "description": "Use the openspec-verify-change skill against add-recovery-role-timeouts, then focus on tasks 3.1-3.5 and 4.1-4.4.\n\nBefore diffing, identify the intended merge target and first lap/try in this batch. Treat older branch work as pre-existing. Do not rewrite git history.\n\nTrace the actual control flow in runner.go: one run deadline across retries, per-try cap scope, cancellation/drain behavior, stall precedence, no timer reset across retries, handoff-only resume preconditions, separate TryRecord ordering, durable handoff entry detection, no synthetic continuation when no resume/session exists, and freeze/Issue behavior for timeout outcomes.\n\nAcceptance: Run deterministic relay tests covering timer and handoff-only paths plus any relevant progress/store tests. Check off only tasks 3 and 4 boxes that are verified correct and sufficiently covered. Tiny one-liner fixes only inline; substantive gaps become head laps.",
       "assignee": "VERIFY",
-      "isDone": false,
+      "isDone": true,
       "order": 458752,
       "createdAt": "2026-06-16T00:17:48.179533745Z",
-      "updatedAt": "2026-06-16T00:17:48.179533745Z",
-      "completedAt": null
+      "updatedAt": "2026-06-16T04:55:50.852967835Z",
+      "completedAt": "2026-06-16T04:55:50.852967835Z"
     },
     {
       "id": "rall-9b9e",
