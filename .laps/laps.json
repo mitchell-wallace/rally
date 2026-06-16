@@ -83,11 +83,11 @@
       "title": "Persist recovery trigger metadata",
       "description": "Context: OpenSpec add-recovery-role-timeouts, tasks 5.1-5.5 and 6.1. This lap establishes the data recorded by a resolving run before routing consumes it.\n\nOutcome: runOne computes TryOutcome and DirtyHandoff using the current-run durable handoff entry plus hasOwnUncommittedChanges, surfaces outcome and lap ID on runOutcome, suppresses auto-commit on dirty handoff, and persists ResolvedRoute, DirtyHandoff, and HandoffCreatedLapIDs on TryRecord while preserving LapAssignee as the original queue assignee.\n\nFiles \u0026 scope: internal/store/records.go, internal/relay/runner.go, progress handoff entry use, and focused tests. Do not implement the store query or route substitution in this lap.\n\nDesign: Dirty handoff is not the incomplete outcome; any handoff makes incomplete unreachable through finalized. Ordinary failed outcomes are not recovery triggers. Clean handoff and incomplete-alone paths must remain compatible with existing follow-up and finalization retry behavior. Copy HandoffCreatedLapIDs from the durable handoff entry, not transient state.\n\nAcceptance: Tests cover dirty handoff vs clean handoff vs incomplete-alone vs ordinary failed; dirty handoff leaves the working tree dirty and skips auto-commit; clean handoff behavior is unchanged; TryRecord captures resolved route and handoff-created lap IDs. Run targeted relay/store/progress tests. Do not check off tasks.md boxes.",
       "assignee": "SENIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 524288,
       "createdAt": "2026-06-16T00:17:48.179535195Z",
-      "updatedAt": "2026-06-16T00:17:48.179535195Z",
-      "completedAt": null
+      "updatedAt": "2026-06-16T05:02:01.690718124Z",
+      "completedAt": "2026-06-16T05:02:01.690718124Z"
     },
     {
       "id": "rall-4468",
