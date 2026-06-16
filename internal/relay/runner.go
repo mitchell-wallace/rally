@@ -40,6 +40,13 @@ type Config struct {
 	StallThreshold         time.Duration
 	LivenessProbe          bool
 	RetryBudget            int
+	// RunTimeout/TryTimeout/HandoffTimeout carry the effective wall-clock
+	// budgets parsed from [reliability] (run_timeout_secs / try_timeout_secs /
+	// handoff_timeout_secs). Timer enforcement is added in a later change; these
+	// fields only pass the configured values through to the runner for now.
+	RunTimeout             time.Duration
+	TryTimeout             time.Duration
+	HandoffTimeout         time.Duration
 	RunHooksOnAutoCommit   bool
 	LapsEnabled            bool
 	Instructions           string

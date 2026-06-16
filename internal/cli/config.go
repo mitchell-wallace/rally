@@ -63,9 +63,7 @@ func runConfig(cmd *cobra.Command, _ []string) error {
 	freeRunPrompt := cfg.FreeRun.PromptFile
 	runHooksOnAutoCommit := cfg.RunHooksOnAutoCommit
 
-	stallStr := strconv.Itoa(cfg.Reliability.StallThresholdSecs)
-	retryStr := strconv.Itoa(cfg.Reliability.RetryBudget)
-	livenessProbe := cfg.Reliability.LivenessProbe
+	relForm := newReliabilityForm(cfg)
 
 	// Parallel slices so each huh field can bind directly to &routeValues[i]
 	// and we can read the user's edits back after the form runs.
@@ -122,12 +120,7 @@ func runConfig(cmd *cobra.Command, _ []string) error {
 	routeFields = append(routeFields, huh.NewConfirm().Title("Add a custom role afterwards?").Affirmative("Yes").Negative("No").Value(&editCustomRoles))
 	routesGroup := huh.NewGroup(routeFields...)
 
-	reliabilityGroup := huh.NewGroup(
-		huh.NewNote().Title("Reliability").Description("Freeze detection and retry behaviour."),
-		huh.NewInput().Title("stall_threshold_secs").Description("Log silence (seconds) before treating an agent as stalled.").Value(&stallStr).Validate(validateOptionalInt),
-		huh.NewInput().Title("retry_budget").Description("Per-run retry budget before a try is marked failed.").Value(&retryStr).Validate(validateOptionalInt),
-		huh.NewConfirm().Title("liveness_probe").Description("Send a periodic check to detect connection drops.").Affirmative("On").Negative("Off").Value(&livenessProbe),
-	)
+	reliabilityGroup := relForm.group()
 
 	harnessGroup := huh.NewGroup(
 		huh.NewConfirm().Title("Edit custom harness aliases?").Description("Add or edit [harness.<name>] entries — short labels, custom commands, model maps.").Affirmative("Yes").Negative("No").Value(&editHarnesses),
@@ -171,13 +164,7 @@ func runConfig(cmd *cobra.Command, _ []string) error {
 	cfg.FreeRun.PromptFile = strings.TrimSpace(freeRunPrompt)
 	cfg.RunHooksOnAutoCommit = runHooksOnAutoCommit
 
-	if n, ok := parseIntDefault(stallStr, cfg.Reliability.StallThresholdSecs); ok {
-		cfg.Reliability.StallThresholdSecs = n
-	}
-	if n, ok := parseIntDefault(retryStr, cfg.Reliability.RetryBudget); ok {
-		cfg.Reliability.RetryBudget = n
-	}
-	cfg.Reliability.LivenessProbe = livenessProbe
+	relForm.apply(&cfg)
 
 	for i, role := range roleNames {
 		v := strings.TrimSpace(routeValues[i])
@@ -347,6 +334,77 @@ func promptHarnesses(cmd *cobra.Command, cfg config.V2Config) error {
 		if !addAnotherHarness {
 			return nil
 		}
+	}
+}
+
+// reliabilityForm mirrors the editable [reliability] values bound to the
+// interactive config form. Extracting it keeps the field set and round-trip
+// logic testable without driving the TTY-bound form.
+type reliabilityForm struct {
+	stallThreshold     string
+	retryBudget        string
+	livenessProbe      bool
+	runTimeoutSecs     string
+	tryTimeoutSecs     string
+	handoffTimeoutSecs string
+}
+
+// reliabilityFieldTitles is the ordered set of [reliability] input/confirm
+// titles shown in the interactive config form (after the section note). It is
+// the source of truth for which keys the form exposes and is asserted in tests.
+var reliabilityFieldTitles = []string{
+	"stall_threshold_secs",
+	"retry_budget",
+	"liveness_probe",
+	"run_timeout_secs",
+	"try_timeout_secs",
+	"handoff_timeout_secs",
+}
+
+func newReliabilityForm(cfg config.V2Config) reliabilityForm {
+	return reliabilityForm{
+		stallThreshold:     strconv.Itoa(cfg.Reliability.StallThresholdSecs),
+		retryBudget:        strconv.Itoa(cfg.Reliability.RetryBudget),
+		livenessProbe:      cfg.Reliability.LivenessProbe,
+		runTimeoutSecs:     strconv.Itoa(cfg.Reliability.RunTimeoutSecs),
+		tryTimeoutSecs:     strconv.Itoa(cfg.Reliability.TryTimeoutSecs),
+		handoffTimeoutSecs: strconv.Itoa(cfg.Reliability.HandoffTimeoutSecs),
+	}
+}
+
+// group builds the interactive reliability form group, binding each editable
+// value. Pointer receiver so huh writes the user's edits back into the form.
+func (f *reliabilityForm) group() *huh.Group {
+	return huh.NewGroup(
+		huh.NewNote().Title("Reliability").Description("Freeze detection and retry behaviour."),
+		huh.NewInput().Title("stall_threshold_secs").Description("Log silence (seconds) before treating an agent as stalled.").Value(&f.stallThreshold).Validate(validateOptionalInt),
+		huh.NewInput().Title("retry_budget").Description("Per-run retry budget before a try is marked failed.").Value(&f.retryBudget).Validate(validateOptionalInt),
+		huh.NewConfirm().Title("liveness_probe").Description("Send a periodic check to detect connection drops.").Affirmative("On").Negative("Off").Value(&f.livenessProbe),
+		huh.NewInput().Title("run_timeout_secs").Description("Per-run wall-clock budget across retries (0 = default 4500).").Value(&f.runTimeoutSecs).Validate(validateOptionalInt),
+		huh.NewInput().Title("try_timeout_secs").Description("Per-attempt cap (0 = default 3600); subsumed by run budget if >= it.").Value(&f.tryTimeoutSecs).Validate(validateOptionalInt),
+		huh.NewInput().Title("handoff_timeout_secs").Description("Bounded handoff-only resume (0 = default 300); clamped below run/try bounds.").Value(&f.handoffTimeoutSecs).Validate(validateOptionalInt),
+	)
+}
+
+// apply writes the (possibly edited) form values back onto cfg. Empty/cleared
+// numeric fields keep their existing cfg value (parseIntDefault semantics), so
+// clearing a field preserves the loaded value rather than resetting it.
+func (f *reliabilityForm) apply(cfg *config.V2Config) {
+	if n, ok := parseIntDefault(f.stallThreshold, cfg.Reliability.StallThresholdSecs); ok {
+		cfg.Reliability.StallThresholdSecs = n
+	}
+	if n, ok := parseIntDefault(f.retryBudget, cfg.Reliability.RetryBudget); ok {
+		cfg.Reliability.RetryBudget = n
+	}
+	cfg.Reliability.LivenessProbe = f.livenessProbe
+	if n, ok := parseIntDefault(f.runTimeoutSecs, cfg.Reliability.RunTimeoutSecs); ok {
+		cfg.Reliability.RunTimeoutSecs = n
+	}
+	if n, ok := parseIntDefault(f.tryTimeoutSecs, cfg.Reliability.TryTimeoutSecs); ok {
+		cfg.Reliability.TryTimeoutSecs = n
+	}
+	if n, ok := parseIntDefault(f.handoffTimeoutSecs, cfg.Reliability.HandoffTimeoutSecs); ok {
+		cfg.Reliability.HandoffTimeoutSecs = n
 	}
 }
 

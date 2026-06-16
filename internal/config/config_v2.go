@@ -19,6 +19,16 @@ import (
 
 const ExpectedSchemaVersion = 2
 
+// Default wall-clock budgets for the recovery-role timeout lifecycle. They are
+// applied when the corresponding [reliability] key is unset/0, and also used by
+// the duration accessors so a zero-value ReliabilityConfig still yields a sane
+// effective value for the runner.
+const (
+	DefaultRunTimeoutSecs     = 4500 // 75m: per-run wall-clock budget across retries
+	DefaultTryTimeoutSecs     = 3600 // 60m: secondary per-attempt cap
+	DefaultHandoffTimeoutSecs = 300  // 5m: bounded handoff-only resume (not counted in run budget)
+)
+
 var harnessNamePattern = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_-]*$`)
 
 var modelNamePattern = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_-]*$`)
@@ -77,6 +87,9 @@ type ReliabilityConfig struct {
 	StallThresholdSecs     int  `toml:"stall_threshold_secs,omitempty"`
 	LivenessProbe          bool `toml:"liveness_probe,omitempty"`
 	RetryBudget            int  `toml:"retry_budget,omitempty"`
+	RunTimeoutSecs         int  `toml:"run_timeout_secs,omitempty"`
+	TryTimeoutSecs         int  `toml:"try_timeout_secs,omitempty"`
+	HandoffTimeoutSecs     int  `toml:"handoff_timeout_secs,omitempty"`
 	RecentTryCount         int  `toml:"recent_try_count,omitempty"`
 	RecentTryCharLimit     int  `toml:"recent_try_char_limit,omitempty"`
 	RecentContextCharLimit int  `toml:"recent_context_char_limit,omitempty"`
@@ -87,6 +100,58 @@ func (r ReliabilityConfig) StallThreshold() time.Duration {
 		return time.Duration(r.StallThresholdSecs) * time.Second
 	}
 	return 0
+}
+
+// RunTimeout returns the effective per-run wall-clock budget (across retries).
+// An unset/zero value yields DefaultRunTimeoutSecs.
+func (r ReliabilityConfig) RunTimeout() time.Duration {
+	return time.Duration(r.effectiveRunTimeoutSecs()) * time.Second
+}
+
+// TryTimeout returns the effective per-attempt cap. An unset/zero value yields
+// DefaultTryTimeoutSecs.
+func (r ReliabilityConfig) TryTimeout() time.Duration {
+	return time.Duration(r.effectiveTryTimeoutSecs()) * time.Second
+}
+
+// HandoffTimeout returns the effective bounded handoff-only resume limit. An
+// unset/zero value yields DefaultHandoffTimeoutSecs; after LoadV2 the value is
+// also clamped below the effective try/run bounds.
+func (r ReliabilityConfig) HandoffTimeout() time.Duration {
+	return time.Duration(r.effectiveHandoffTimeoutSecs()) * time.Second
+}
+
+// effectiveRunTimeoutSecs returns the resolved run budget in seconds.
+func (r ReliabilityConfig) effectiveRunTimeoutSecs() int {
+	if r.RunTimeoutSecs > 0 {
+		return r.RunTimeoutSecs
+	}
+	return DefaultRunTimeoutSecs
+}
+
+// effectiveTryTimeoutSecs returns the resolved per-try cap in seconds.
+func (r ReliabilityConfig) effectiveTryTimeoutSecs() int {
+	if r.TryTimeoutSecs > 0 {
+		return r.TryTimeoutSecs
+	}
+	return DefaultTryTimeoutSecs
+}
+
+// effectiveHandoffTimeoutSecs returns the resolved handoff window in seconds,
+// clamped below the effective try/run bounds so the handoff phase can never
+// reach or outlast them.
+func (r ReliabilityConfig) effectiveHandoffTimeoutSecs() int {
+	h := r.HandoffTimeoutSecs
+	if h <= 0 {
+		h = DefaultHandoffTimeoutSecs
+	}
+	if bound := min(r.effectiveRunTimeoutSecs(), r.effectiveTryTimeoutSecs()); h >= bound {
+		h = bound - 1
+	}
+	if h < 1 {
+		h = 1
+	}
+	return h
 }
 
 type HarnessConfig struct {
@@ -209,6 +274,20 @@ func LoadV2(workspaceDir string) (V2Config, error) {
 	}
 	if cfg.Reliability.RecentTryCount == 0 {
 		cfg.Reliability.RecentTryCount = 5
+	}
+
+	// Resolve the recovery-role timeout budgets: 0/unset yields the defaults
+	// (4500s run, 3600s try, 300s handoff). When try_timeout_secs >=
+	// run_timeout_secs the run budget subsumes the per-try cap, so the config
+	// is accepted rather than erroring. The handoff window is clamped below the
+	// effective try/run bounds so it can never reach or outlast them.
+	cfg.Reliability.RunTimeoutSecs = cfg.Reliability.effectiveRunTimeoutSecs()
+	cfg.Reliability.TryTimeoutSecs = cfg.Reliability.effectiveTryTimeoutSecs()
+	rawHandoff := cfg.Reliability.HandoffTimeoutSecs
+	cfg.Reliability.HandoffTimeoutSecs = cfg.Reliability.effectiveHandoffTimeoutSecs()
+	if rawHandoff != cfg.Reliability.HandoffTimeoutSecs && rawHandoff > 0 {
+		cfg.DeprecationNotes = append(cfg.DeprecationNotes,
+			fmt.Sprintf("config: [reliability].handoff_timeout_secs=%d was clamped to %d so it stays below the effective try/run timeout bounds", rawHandoff, cfg.Reliability.HandoffTimeoutSecs))
 	}
 	if cfg.Harnesses == nil {
 		cfg.Harnesses = make(map[string]*HarnessConfig)

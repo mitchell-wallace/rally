@@ -184,6 +184,236 @@ retry_budget = 10
 	}
 }
 
+func TestLoadV2_ReliabilityTimeoutDefaults(t *testing.T) {
+	dir := t.TempDir()
+	writeConfig(t, dir, `schema_version = 2
+`)
+
+	cfg, err := LoadV2(dir)
+	if err != nil {
+		t.Fatalf("LoadV2 failed: %v", err)
+	}
+
+	if got, want := cfg.Reliability.RunTimeoutSecs, DefaultRunTimeoutSecs; got != want {
+		t.Errorf("Default RunTimeoutSecs = %d, want %d", got, want)
+	}
+	if got, want := cfg.Reliability.TryTimeoutSecs, DefaultTryTimeoutSecs; got != want {
+		t.Errorf("Default TryTimeoutSecs = %d, want %d", got, want)
+	}
+	if got, want := cfg.Reliability.HandoffTimeoutSecs, DefaultHandoffTimeoutSecs; got != want {
+		t.Errorf("Default HandoffTimeoutSecs = %d, want %d", got, want)
+	}
+	if got, want := cfg.Reliability.RunTimeout(), DefaultRunTimeoutSecs*time.Second; got != want {
+		t.Errorf("RunTimeout() = %v, want %v", got, want)
+	}
+	if got, want := cfg.Reliability.TryTimeout(), DefaultTryTimeoutSecs*time.Second; got != want {
+		t.Errorf("TryTimeout() = %v, want %v", got, want)
+	}
+	if got, want := cfg.Reliability.HandoffTimeout(), DefaultHandoffTimeoutSecs*time.Second; got != want {
+		t.Errorf("HandoffTimeout() = %v, want %v", got, want)
+	}
+}
+
+func TestLoadV2_ReliabilityTimeoutExplicitZeroYieldsDefaults(t *testing.T) {
+	dir := t.TempDir()
+	writeConfig(t, dir, `schema_version = 2
+
+[reliability]
+run_timeout_secs = 0
+try_timeout_secs = 0
+handoff_timeout_secs = 0
+`)
+
+	cfg, err := LoadV2(dir)
+	if err != nil {
+		t.Fatalf("LoadV2 failed: %v", err)
+	}
+
+	if got, want := cfg.Reliability.RunTimeoutSecs, DefaultRunTimeoutSecs; got != want {
+		t.Errorf("RunTimeoutSecs = %d, want default %d", got, want)
+	}
+	if got, want := cfg.Reliability.TryTimeoutSecs, DefaultTryTimeoutSecs; got != want {
+		t.Errorf("TryTimeoutSecs = %d, want default %d", got, want)
+	}
+	if got, want := cfg.Reliability.HandoffTimeoutSecs, DefaultHandoffTimeoutSecs; got != want {
+		t.Errorf("HandoffTimeoutSecs = %d, want default %d", got, want)
+	}
+}
+
+func TestLoadV2_ReliabilityTimeoutConfigured(t *testing.T) {
+	dir := t.TempDir()
+	writeConfig(t, dir, `schema_version = 2
+
+[reliability]
+run_timeout_secs = 1800
+try_timeout_secs = 1500
+handoff_timeout_secs = 120
+`)
+
+	cfg, err := LoadV2(dir)
+	if err != nil {
+		t.Fatalf("LoadV2 failed: %v", err)
+	}
+
+	if got, want := cfg.Reliability.RunTimeoutSecs, 1800; got != want {
+		t.Errorf("RunTimeoutSecs = %d, want %d", got, want)
+	}
+	if got, want := cfg.Reliability.TryTimeoutSecs, 1500; got != want {
+		t.Errorf("TryTimeoutSecs = %d, want %d", got, want)
+	}
+	if got, want := cfg.Reliability.HandoffTimeoutSecs, 120; got != want {
+		t.Errorf("HandoffTimeoutSecs = %d, want %d", got, want)
+	}
+	if got, want := cfg.Reliability.RunTimeout(), 1800*time.Second; got != want {
+		t.Errorf("RunTimeout() = %v, want %v", got, want)
+	}
+	if got, want := cfg.Reliability.TryTimeout(), 1500*time.Second; got != want {
+		t.Errorf("TryTimeout() = %v, want %v", got, want)
+	}
+	if got, want := cfg.Reliability.HandoffTimeout(), 120*time.Second; got != want {
+		t.Errorf("HandoffTimeout() = %v, want %v", got, want)
+	}
+}
+
+func TestLoadV2_ReliabilityHandoffClampedToTry(t *testing.T) {
+	dir := t.TempDir()
+	writeConfig(t, dir, `schema_version = 2
+
+[reliability]
+run_timeout_secs = 5000
+try_timeout_secs = 600
+handoff_timeout_secs = 600
+`)
+
+	cfg, err := LoadV2(dir)
+	if err != nil {
+		t.Fatalf("LoadV2 failed: %v", err)
+	}
+
+	// handoff == try (the tighter bound) must be clamped strictly below it.
+	if got, want := cfg.Reliability.TryTimeoutSecs, 600; got != want {
+		t.Fatalf("TryTimeoutSecs = %d, want %d", got, want)
+	}
+	if got, want := cfg.Reliability.HandoffTimeoutSecs, 599; got != want {
+		t.Errorf("HandoffTimeoutSecs = %d, want %d (clamped below try bound)", got, want)
+	}
+	if cfg.Reliability.HandoffTimeout() >= cfg.Reliability.TryTimeout() {
+		t.Errorf("HandoffTimeout() %v >= TryTimeout() %v", cfg.Reliability.HandoffTimeout(), cfg.Reliability.TryTimeout())
+	}
+	assertReliabilityNote(t, cfg, "handoff_timeout_secs")
+}
+
+func TestLoadV2_ReliabilityHandoffClampedToRun(t *testing.T) {
+	dir := t.TempDir()
+	writeConfig(t, dir, `schema_version = 2
+
+[reliability]
+run_timeout_secs = 400
+try_timeout_secs = 5000
+handoff_timeout_secs = 450
+`)
+
+	cfg, err := LoadV2(dir)
+	if err != nil {
+		t.Fatalf("LoadV2 failed: %v", err)
+	}
+
+	// run is the tighter bound here; handoff must be clamped below it.
+	if got, want := cfg.Reliability.RunTimeoutSecs, 400; got != want {
+		t.Fatalf("RunTimeoutSecs = %d, want %d", got, want)
+	}
+	if got, want := cfg.Reliability.HandoffTimeoutSecs, 399; got != want {
+		t.Errorf("HandoffTimeoutSecs = %d, want %d (clamped below run bound)", got, want)
+	}
+	if cfg.Reliability.HandoffTimeout() >= cfg.Reliability.RunTimeout() {
+		t.Errorf("HandoffTimeout() %v >= RunTimeout() %v", cfg.Reliability.HandoffTimeout(), cfg.Reliability.RunTimeout())
+	}
+	assertReliabilityNote(t, cfg, "handoff_timeout_secs")
+}
+
+func TestLoadV2_ReliabilityTryAtOrAboveRunAccepted(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		toml string
+	}{
+		{
+			name: "try equals run",
+			toml: `schema_version = 2
+
+[reliability]
+run_timeout_secs = 1000
+try_timeout_secs = 1000
+handoff_timeout_secs = 100
+`,
+		},
+		{
+			name: "try greater than run",
+			toml: `schema_version = 2
+
+[reliability]
+run_timeout_secs = 1000
+try_timeout_secs = 2000
+handoff_timeout_secs = 100
+`,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			writeConfig(t, dir, tc.toml)
+
+			cfg, err := LoadV2(dir)
+			if err != nil {
+				t.Fatalf("LoadV2 failed (try >= run should be accepted): %v", err)
+			}
+
+			// Configured values are preserved as-is; the run budget subsumes the
+			// per-try cap rather than producing an error.
+			if got, want := cfg.Reliability.RunTimeoutSecs, 1000; got != want {
+				t.Errorf("RunTimeoutSecs = %d, want %d", got, want)
+			}
+			if got := cfg.Reliability.TryTimeoutSecs; got != 1000 && got != 2000 {
+				t.Errorf("TryTimeoutSecs = %d, want configured value", got)
+			}
+			if got, want := cfg.Reliability.HandoffTimeoutSecs, 100; got != want {
+				t.Errorf("HandoffTimeoutSecs = %d, want %d", got, want)
+			}
+		})
+	}
+}
+
+func TestReliabilityAccessorsOnZeroValue(t *testing.T) {
+	// A zero-value ReliabilityConfig (not run through LoadV2) must still report
+	// the effective defaults and clamp the handoff window below them.
+	r := ReliabilityConfig{}
+
+	if got, want := r.RunTimeout(), DefaultRunTimeoutSecs*time.Second; got != want {
+		t.Errorf("zero RunTimeout() = %v, want %v", got, want)
+	}
+	if got, want := r.TryTimeout(), DefaultTryTimeoutSecs*time.Second; got != want {
+		t.Errorf("zero TryTimeout() = %v, want %v", got, want)
+	}
+	if got, want := r.HandoffTimeout(), DefaultHandoffTimeoutSecs*time.Second; got != want {
+		t.Errorf("zero HandoffTimeout() = %v, want %v", got, want)
+	}
+	if r.HandoffTimeout() >= r.TryTimeout() || r.HandoffTimeout() >= r.RunTimeout() {
+		t.Errorf("HandoffTimeout() %v not strictly below try/run bounds", r.HandoffTimeout())
+	}
+}
+
+func assertReliabilityNote(t *testing.T, cfg V2Config, needle string) {
+	t.Helper()
+	found := false
+	for _, note := range cfg.DeprecationNotes {
+		if strings.Contains(note, needle) && strings.Contains(note, "clamped") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("expected a clamped note mentioning %q, got notes: %v", needle, cfg.DeprecationNotes)
+	}
+}
+
 func TestLoadV2_DefaultsOverridesRoot(t *testing.T) {
 	dir := t.TempDir()
 	writeConfig(t, dir, `claude_model = "root-value"
