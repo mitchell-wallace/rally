@@ -2,13 +2,14 @@
 
 ## Intent
 
-Ship 0.10.0 with five grouped behaviors:
+Ship 0.10.0 with six grouped behaviors:
 
 1. **Reasoning/variant support** (role-aware model aliasing)
 2. **Lap pin mismatch downgrade** from hard failure to warning with immediate handoff behavior
 3. **Run-number visibility and role + runner headers** aligned to `run`/state terminology
 4. **Operator cancellation semantics** for skip, graceful stop, and quit-now paths
 5. **Tail usability improvements**, including live run targeting and optional syntax highlighting
+6. **opencode usage-limit detection & reset parsing** so subscription-provider 5h/weekly/monthly limits bench the quota scope instead of burning the run budget
 
 The default in this batch is explicit warning/cancelled visibility without treating operator-driven exits or lap mismatches as hard terminal failures.
 
@@ -25,6 +26,30 @@ carry `event_kind` or `failure_category`; those tags are part of the intended
 fix. The `rally tail` spike also showed that default tail output can come from
 previous completed tries because active tries are not persisted until completion
 and `run-state.json` has no active try pointer today.
+
+Spike 2 (`spike-2-report.md`) further confirmed that opencode subscription
+providers hitting a usage limit are misclassified as `agent_error`, not
+`usage_limit`, so the quota scope is never benched:
+
+- `agent_error` terminal failures (no bench): `RALLY-Q`
+  (`opencode:zai-coding-plan/glm-5.2`), `RALLY-K`
+  (`opencode:opencode-go/kimi-k2.7-code`), `RALLY-D`
+  (`opencode:opencode-go/deepseek-v4-pro`) — all `level=error`, no `event_kind`.
+- Live provider signatures (opencode server log): opencode-go emits
+  `AI_APICallError: Monthly usage limit reached. Resets in 7 days. …` (and an
+  `AI_RetryError: Failed after 3 attempts. Last error: …` wrapper); zai emits
+  `AI_APICallError: Usage limit reached for 5 hour. Your limit will reset at
+  2026-06-16 18:29:51`.
+
+Three compounding causes: (A) opencode retries provider errors internally and
+emits nothing to the JSON stream meanwhile, so the 180s stall kill usually fires
+before any limit text appears; (B) the parser keys on opencode-native error
+names the real provider errors never use (they arrive as `AI_APICallError` /
+`AI_RetryError` under opencode's `UnknownError` catch-all); and (C) the
+"Resets in 7 days" / "reset at <timestamp>" phrasings do not parse, so even a
+correctly categorized limit benches for the wrong default-5h window. The
+`QuotaScope` benching machinery is already correct and provider-agnostic — only
+the upstream classification, reset parsing, and signal observability are wrong.
 
 ## Decisions to lock in for 0.10.0
 
@@ -64,6 +89,19 @@ and `run-state.json` has no active try pointer today.
    - Default remains plain output.
    - Add at least a low-cost syntax-aware heuristic mode.
    - Add optional richer mode behind a dependency where feasible.
+
+8. **opencode subscription-provider usage limits must bench the quota scope.**
+   - Broaden `ParseOpencodeError` to recognize the `AI_APICallError` /
+     `AI_RetryError` / `UnknownError`-wrapped usage-limit signatures for
+     `zai-coding-plan`, `opencode-go`, and generic providers.
+   - Parse opencode's reset phrasings ("Resets in N days/hours/minutes" and
+     absolute "reset at <timestamp>") into `ResetAfter`/`ResetAt` so the bench
+     lasts until the real reset instead of the default 5h.
+   - Make the limit observable despite opencode's internal retry: when a try
+     stalls or errors without a usable result, surface usage-limit evidence from
+     opencode's server-log tail for that session.
+   - No bench-side change: `QuotaScope` + `benchResetDeadline` already do the
+     right thing once the failure carries `usage_limit` with reset timing.
 
 ## Resolved review items before implementation
 

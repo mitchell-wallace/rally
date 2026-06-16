@@ -200,7 +200,114 @@ junior = 'g55-l'
   stale metadata produces a warning and falls back to newest completed try history.
 - Add tests around active-run tail selection when both active and completed streams exist.
 
-## 6) Rollout plan and review
+## 6) opencode usage-limit detection and reset parsing
+
+### Current behavior (spike-2)
+
+- `reliability.ParseOpencodeError` (`internal/reliability/opencode.go`) enters
+  the `usage_limit` branch only on opencode-native tokens (`usagelimit`,
+  `quotaexceeded`, `resourceexhausted` in the name; `usage limit`,
+  `quota exceeded`, `resource_exhausted` in the message).
+- Real subscription-provider limits arrive as Vercel-AI-SDK wrappers
+  (`AI_APICallError`, `AI_RetryError: Failed after 3 attempts. Last error: …`)
+  surfaced under opencode's catch-all `UnknownError`, whose `data.message` is
+  often the generic "Unexpected server error. Check server logs for details."
+  So the failure falls through to the `agent_error` default and the quota scope
+  is never benched. Verified in Sentry: `RALLY-Q` (`opencode:zai-coding-plan/
+  glm-5.2`), `RALLY-K`/`RALLY-D` (`opencode:opencode-go/*`) all `agent_error`.
+- opencode retries the provider error internally before emitting anything to the
+  `--format json` stream; live reproductions emitted **zero stdout** for 180s+
+  (a 320s run was still silent at 7 min). Rally's `DefaultStallThreshold` is 180s
+  (`internal/reliability/stall.go:16`) and opencode has no liveness probe, so the
+  try is usually stall-killed before the limit text is ever produced.
+- Reset timing does not parse: `parseResetsIn` reuses
+  `geminiResetsInRe = Resets\s+in\s+(\S+)`, so "Resets in 7 days" yields the
+  bare token "7" → `parseGoDuration("7")` fails → 0; "Your limit will reset at
+  2026-06-16 18:29:51" is an absolute timestamp with no "resets in" phrasing. So
+  `benchResetDeadline` (`internal/relay/runner.go:1187`) falls back to
+  `BenchDefaultDuration = 5h` even for a monthly/weekly limit.
+
+### Live signatures (opencode server log)
+
+Confirmed third-pass (`opencode.log`, 2026-06-16 20:58) the error is a **flat
+field** on a single line — `error.error="<Wrapper>: <message>"` — not a nested
+JSON object, and it appears only in `opencode.log` (not the per-run timestamped
+`*.log` files):
+
+```
+timestamp=…Z level=ERROR run=… message="stream error" providerID=zai-coding-plan \
+  modelID=glm-5.2 session.id=ses_… small=false agent=build mode=primary \
+  error.error="AI_APICallError: Usage limit reached for 5 hour. Your limit will reset at 2026-06-16 18:29:51"
+```
+
+```
+opencode-go : AI_APICallError: Monthly usage limit reached. Resets in 7 days. …
+              AI_RetryError: Failed after 3 attempts. Last error: Monthly usage limit reached. Resets in 7 days. …
+zai-coding-plan : AI_APICallError: Usage limit reached for 5 hour. Your limit will reset at 2026-06-16 18:29:51
+                  AI_RetryError: Failed after 3 attempts. Last error: Usage limit reached for 5 hour. Your limit will reset at 2026-06-16 18:29:51
+```
+
+Each session emits the limit twice — `small=false agent=build` and `small=true
+agent=title` (opencode's title-generation small model) — and opencode logs a
+`message=created … id=ses_… directory=<dir> …` line at session start that carries
+the workspace directory (the correlation handle for 6.1.3).
+
+### 6.1 target behavior
+
+1. **Broaden classification.** Match the usage-limit signatures across the
+   `AI_APICallError` / `AI_RetryError` / `UnknownError` wrappers and against
+   `name`, `data.message`, and the flat server-log `error.error="<Wrapper>:
+   <message>"` value (confirmed third-pass: this flat field, not a nested
+   `data.message`, is the authoritative carrier). Add substrings `"usage limit
+   reached"`, `"monthly usage limit"`, `"usage limit reached for"`. Keep
+   `usage_limit` winning over `short_rate_limit` when both could match.
+2. **opencode reset parsing.** Add reset parsing for space-separated spans
+   ("Resets in 7 days" / "… 5 hour" / "… 30 minutes") and absolute timestamps
+   ("reset at 2026-06-16 18:29:51", "will reset at …"), feeding `ResetAfter` /
+   `ResetAt`. Do not overload the gemini regex. The absolute timestamp has **no
+   timezone marker** (opencode's own `timestamp=` is UTC, but the message reset is
+   local); parse it in `time.Local` and treat as approximate.
+3. **Observability despite internal retry.** When an opencode try ends without a
+   usable result (stall kill or error event), have `OpenCodeExecutor` read the
+   tail of opencode's server log (`~/.local/share/opencode/log/opencode.log` —
+   only this file carries `message="stream error"` lines) and surface any provider
+   usage-limit signature as `FailureEvidence`. Correlate the session **without
+   stdout** (empty during the stall): match `message=created … directory=
+   <WorkspaceDir>` to recover the `session.id=`, then scan that session's
+   `level=ERROR message="stream error"` lines (either `agent=build` or
+   `agent=title`); fall back to `providerID=<provider>` within the try window, and
+   narrow by `--session` id when already known. This reliably carries the
+   structured provider error that the JSON stream withholds. (Alternatives
+   considered: treat a silent-backoff stall on a subscription provider as
+   usage-limit-suspected — rejected as too coarse; shorten opencode's interim
+   error exposure — out of Rally's control.)
+4. **No bench-side change.** `routing.QuotaScope` already keys
+   `opencode:zai-coding-plan` / `opencode:opencode-go`, and the runner benches on
+   `Category == CategoryUsageLimit` (`runner.go:794`). Fixing 1–3 is sufficient.
+
+### 6.2 generality
+
+Any harness whose CLI retries provider errors internally (codex/claude/gemini)
+can mask a usage limit behind a stall the same way; the observability fix (6.1.3)
+is the general mitigation. The codex/claude parsers already cover their own limit
+phrasings when the text reaches stderr within budget, so no new per-harness
+classification is required beyond opencode for this release.
+
+### 6.3 docs and tests
+
+- Add opencode fixtures for the exact zai and opencode-go signatures (both
+  `AI_APICallError` and `AI_RetryError` wrappers, plus the `UnknownError`
+  generic-message case) asserting `CategoryUsageLimit` and correct
+  `ResetAfter`/`ResetAt`.
+- Add a server-log-tail evidence test for the stall-then-limit path, including
+  session correlation by `directory=<WorkspaceDir>` (provider+window fallback).
+- Finding A resolved (third-pass live log re-inspection, 2026-06-16 20:58): the
+  structured error never reaches stdout; it is carried only as the flat
+  server-log `error.error="<Wrapper>: <message>"` field under `AI_APICallError` /
+  `AI_RetryError`. The matcher list is finalized and the server-log-tail path is
+  required, not optional. See `spike-2-report.md` §"Third-pass confirmation".
+
+## 7) Rollout plan and review
 
 This release is intentionally staged:
 
@@ -208,6 +315,7 @@ This release is intentionally staged:
 2. Cancelled state plumbing and muted output for operator-controlled exits.
 3. Reasoning alias/config path with compatibility checks and executor-specific injection.
 4. `tail` active-run detection and highlighting modes.
+5. opencode usage-limit detection, reset parsing, and server-log-tail evidence.
 
 ### Resolved review decisions
 

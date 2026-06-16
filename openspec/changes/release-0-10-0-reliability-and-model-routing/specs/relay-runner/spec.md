@@ -53,6 +53,10 @@ Only repeated infra-class failures SHALL drive the per-agent-type resilience cas
 - **WHEN** a try fails with a `usage_limit`, `invalid_model`, or `auth_or_proxy` category
 - **THEN** the system SHALL NOT classify it infra-class and SHALL NOT increment the pause/freeze counter
 
+#### Scenario: opencode subscription-provider limit benches the quota scope
+- **WHEN** an opencode runner on a subscription provider (e.g. `zai-coding-plan`, `opencode-go`) fails because that provider's 5h/weekly/monthly usage limit is reached
+- **THEN** the system SHALL classify the failure `usage_limit` (not `agent_error`) and SHALL bench the runner's quota scope until the parsed reset, even when the limit was surfaced from opencode's server log after an internal-retry stall rather than from the JSON error event
+
 #### Scenario: Operator cancellation overrides failure detection
 - **WHEN** a try exits after Ctrl+S skip, Ctrl+X graceful stop, or quit-now cancelled the attempt
 - **THEN** the system SHALL record the try as `cancelled` rather than successful or failed and SHALL NOT classify it into a `FailureCategory`

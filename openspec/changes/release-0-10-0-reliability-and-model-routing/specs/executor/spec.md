@@ -82,3 +82,18 @@ The system SHALL propagate resolved reasoning effort from routing/configuration 
 #### Scenario: Executor does not parse route specs
 - **WHEN** an executor builds subprocess arguments
 - **THEN** it SHALL read model and reasoning effort from typed options and SHALL NOT parse route specification strings directly
+
+### Requirement: opencode provider usage-limit evidence
+The system SHALL detect opencode subscription-provider usage limits and supply `FailureEvidence` with category `usage_limit` and parsed reset timing, so the runner benches the quota scope instead of classifying the failure `agent_error`. Detection SHALL recognize the limit text regardless of opencode's error wrapper: provider limits arrive as `AI_APICallError` or `AI_RetryError` (e.g. `Failed after N attempts. Last error: …`), not opencode's native `UsageLimitError`/`QuotaExceededError`, and the authoritative carrier is opencode's server log, where the error is a flat field `error.error="<Wrapper>: <message>"` on a `level=ERROR message="stream error"` line rather than a nested JSON `data.message`. Detection SHALL therefore match the limit text in the error name, the error message, and the flat server-log `error.error` value, including the substrings `usage limit reached`, `monthly usage limit`, and `usage limit reached for`. The system SHALL parse opencode's reset phrasings into `ResetAfter`/`ResetAt`: space-separated spans (`Resets in 7 days`, `… 5 hour`, `… 30 minutes`) and absolute timestamps (`reset at <YYYY-MM-DD HH:MM:SS>`, `will reset at …`), interpreting the absolute timestamp — which carries no timezone marker — in local time and treating it as approximate. Because opencode retries provider errors internally and may emit nothing to the `--format json` stream before Rally's stall threshold fires, the executor SHALL, when a try stalls or errors without a usable result, surface usage-limit evidence read from the tail of opencode's server log (`~/.local/share/opencode/log/opencode.log`), correlating the run's session without relying on stdout by matching opencode's session-creation line (`message=created … directory=<WorkspaceDir>`) to recover the session id, with a `providerID=<provider>` plus try-window fallback.
+
+#### Scenario: opencode subscription-provider monthly limit
+- **WHEN** an opencode run fails with a provider message such as `Monthly usage limit reached. Resets in 7 days.` (directly or wrapped as `AI_APICallError`/`AI_RetryError`/`UnknownError`)
+- **THEN** the system SHALL produce `FailureEvidence` with category `usage_limit` and a reset window of approximately 7 days
+
+#### Scenario: opencode subscription-provider rolling limit with absolute reset
+- **WHEN** an opencode run fails with a provider message such as `Usage limit reached for 5 hour. Your limit will reset at 2026-06-16 18:29:51`
+- **THEN** the system SHALL produce `FailureEvidence` with category `usage_limit` and a `ResetAt` parsed from the absolute reset timestamp
+
+#### Scenario: Limit observable despite stalled JSON stream
+- **WHEN** an opencode try is stall-killed or ends without a usable result while opencode is retrying a provider usage limit internally (emitting nothing to stdout), and opencode's server log records a usage-limit `error.error="<Wrapper>: <message>"` line for the session whose `message=created … directory=` matches the run's `WorkspaceDir`
+- **THEN** the executor SHALL surface that usage-limit signature as `FailureEvidence` rather than letting the failure default to `agent_error`, correlating the session from the server log without depending on stdout
