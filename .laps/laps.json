@@ -191,11 +191,11 @@
       "title": "Verify telemetry, docs, and release version",
       "description": "Use the openspec-verify-change skill against add-recovery-role-timeouts, then focus on tasks 9.1-9.4 and 10.1-10.2.\n\nBefore diffing, identify the intended merge target and first lap/try in this batch. Treat earlier branch work as pre-existing. Do not rewrite git history.\n\nTrace telemetry from TryOutcome/RecoveryClassification production through FailureStateTags, Sentry Issue decisions, structured logs/spans, and cap-hit needs_user behavior. Confirm docs and VERSION match the implemented behavior and AGENTS.md release guidance.\n\nAcceptance: Run targeted telemetry/relay/version/doc checks as appropriate. Check off only tasks 9 and 10 boxes that are verified correct and sufficiently covered. Tiny one-liner fixes only inline; larger gaps become focused head laps.",
       "assignee": "VERIFY",
-      "isDone": false,
+      "isDone": true,
       "order": 1048576,
       "createdAt": "2026-06-16T00:17:48.179552843Z",
-      "updatedAt": "2026-06-16T00:17:48.179552843Z",
-      "completedAt": null
+      "updatedAt": "2026-06-16T06:23:39.207309749Z",
+      "completedAt": "2026-06-16T06:23:39.207309749Z"
     },
     {
       "id": "rall-7316",
