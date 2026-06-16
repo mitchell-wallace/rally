@@ -94,11 +94,11 @@
       "title": "Route recovery from persisted try records",
       "description": "Context: OpenSpec add-recovery-role-timeouts, tasks 6.2-6.6. This is the durable recovery-pending query and route substitution layer.\n\nOutcome: For a claimed, not-done lap, Rally derives recovery-pending from tries.jsonl by reading the resolving try of the most-recent run: the handoff-only continuation try when one exists, otherwise the last try of the highest RunID for that original LapID. It triggers on OutcomeHandoffTimeout or DirtyHandoff, treats HandoffCreatedLapIDs head followups as recovery-continuation targets for the same dirty tree, resolves the recovery route by substituting Assignee: recovery, exposes effective assignee/prompt role recovery, preserves relay-wide --route precedence, and never mutates .laps/laps.json.\n\nFiles \u0026 scope: internal/store query code, internal/relay/route_runtime.go, route selection call sites, runner selection metadata, and tests. Do not change work-queue assignees.\n\nDesign: Count the anti-loop cap by distinct consecutive RunIDs whose resolving try has ResolvedRoute == recovery; do not count raw try rows and do not use LapAssignee. Allow at most 2. On cap hit, stop forcing recovery, raise a relay-synthesized needs_user operator Issue, and fall back to the normal route without writing RecoveryClassification. If no recovery route is configured, warn and fall back rather than deadlocking.\n\nAcceptance: Tests prove dirty handoff and handoff_timeout route to recovery; a dirty handoff head followup routes to recovery using the original trigger; ordinary failed does not; state survives a simulated relay restart; missing recovery route warns/falls back; recovery prompt/effective role is recovery while LapAssignee remains original; the third consecutive recovery trigger stops at cap and raises needs_user. Do not check off tasks.md boxes.",
       "assignee": "SENIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 589824,
       "createdAt": "2026-06-16T00:17:48.17953667Z",
-      "updatedAt": "2026-06-16T00:17:48.17953667Z",
-      "completedAt": null
+      "updatedAt": "2026-06-16T05:11:19.814350348Z",
+      "completedAt": "2026-06-16T05:11:19.814350348Z"
     },
     {
       "id": "rall-4d49",
