@@ -42,7 +42,7 @@ func (s *Store) RecoveryPendingForLap(lapID string) RecoveryPendingStatus {
 	}
 
 	sort.Slice(candidates, func(i, j int) bool {
-		return candidates[i].latestRunID() > candidates[j].latestRunID()
+		return candidates[i].latestTryID() > candidates[j].latestTryID()
 	})
 
 	candidate := candidates[0]
@@ -55,11 +55,14 @@ type recoveryCandidate struct {
 	continuationMatch bool
 }
 
-func (c recoveryCandidate) latestRunID() int {
+// latestTryID returns the global try ID of the most recent resolver. Try IDs
+// are monotonic across the whole store (including relay restarts), so they give
+// a stable recency ordering where relay-local RunIDs would collide or misorder.
+func (c recoveryCandidate) latestTryID() int {
 	if len(c.resolvers) == 0 {
 		return 0
 	}
-	return c.resolvers[len(c.resolvers)-1].RunID
+	return c.resolvers[len(c.resolvers)-1].ID
 }
 
 func (s *Store) recoveryCandidatesForLap(lapID string) []recoveryCandidate {
@@ -94,15 +97,24 @@ func (s *Store) recoveryCandidatesForLap(lapID string) []recoveryCandidate {
 	return out
 }
 
+// runIdentity uniquely identifies a run across relay restarts. RunID is
+// relay-local (each relay numbers its runs from 1), so two distinct runs in
+// different relays can share a RunID; pairing it with RelayID keeps them apart.
+type runIdentity struct {
+	relayID int
+	runID   int
+}
+
 func resolvingTriesByRun(tries []TryRecord) []TryRecord {
-	latestByRun := make(map[int]TryRecord)
+	latestByRun := make(map[runIdentity]TryRecord)
 	for _, tr := range tries {
 		if tr.RunID <= 0 {
 			continue
 		}
-		existing, ok := latestByRun[tr.RunID]
+		key := runIdentity{relayID: tr.RelayID, runID: tr.RunID}
+		existing, ok := latestByRun[key]
 		if !ok || tr.AttemptNumber > existing.AttemptNumber || (tr.AttemptNumber == existing.AttemptNumber && tr.ID > existing.ID) {
-			latestByRun[tr.RunID] = tr
+			latestByRun[key] = tr
 		}
 	}
 
@@ -110,11 +122,12 @@ func resolvingTriesByRun(tries []TryRecord) []TryRecord {
 	for _, tr := range latestByRun {
 		out = append(out, tr)
 	}
+	// Order by global try ID so runs are chronological across relay restarts.
+	// Relay-local RunID ordering would interleave or collapse runs from
+	// different relays, breaking most-recent selection and consecutive
+	// recovery-cap counting.
 	sort.Slice(out, func(i, j int) bool {
-		if out[i].RunID == out[j].RunID {
-			return out[i].ID < out[j].ID
-		}
-		return out[i].RunID < out[j].RunID
+		return out[i].ID < out[j].ID
 	})
 	return out
 }
