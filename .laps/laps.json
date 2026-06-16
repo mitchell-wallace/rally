@@ -61,11 +61,11 @@
       "title": "Implement bounded handoff-only continuation",
       "description": "Context: OpenSpec add-recovery-role-timeouts, tasks 4.1-4.3 plus the handoff-only execution side of agent-lifecycle. This depends on timeout budget state and TryOutcome records.\n\nOutcome: On run-budget exhaustion, a resumable harness with a captured session persists the cancelled implementation attempt as OutcomeRunTimeout, then runs one bounded handoff-only executeTry with ResumeSessionID, no stall detector, and a fresh attempt context limited by HandoffTimeout. The continuation is a separate TryRecord with the same RunID, next AttemptNumber even if maxAttempts+1, HandoffOnly=true, and the resolving outcome. No resume/no session records a single resolving OutcomeHandoffTimeout implementation try with a clear no-resume/no-session reason.\n\nFiles \u0026 scope: internal/relay/runner.go, executor plumbing only as needed to reuse existing resume support, store record construction, and agent prompt accessor calls if already available. Prompt content itself is owned by a later prompt lap unless needed for compilation.\n\nDesign: OutcomeHandoffRequested requires a durable current-run progress.HandoffEntry appended after summaryEntryCountBeforeRun, proving both laps handoff and laps wrapup completed. Use transient HandoffState only to detect partial/no-wrapup attempts. OutcomeRunTimeout is observability for the cancelled implementation attempt and must not be treated as the run resolver when a handoff-only try follows.\n\nAcceptance: Tests or focused harness fakes cover resumable continuation, no-resume/no-session, handoff+wrapup success, partial/no-wrapup failure, failed/timed-out continuation, next attempt numbering, and no freeze-counter increment. Run targeted relay/progress/store tests. Do not check off tasks.md boxes.",
       "assignee": "SENIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 393216,
       "createdAt": "2026-06-16T00:17:48.17953214Z",
-      "updatedAt": "2026-06-16T00:17:48.17953214Z",
-      "completedAt": null
+      "updatedAt": "2026-06-16T04:44:05.240445155Z",
+      "completedAt": "2026-06-16T04:44:05.240445155Z"
     },
     {
       "id": "rall-4ad7",
