@@ -28,11 +28,11 @@
       "title": "Verify lifecycle and timeout configuration",
       "description": "Use the openspec-verify-change skill against add-recovery-role-timeouts, then focus on tasks 1.1-1.6 and 2.1-2.4 only.\n\nBefore diffing, identify the intended merge target from the user, PR metadata, repo docs, branch config, or recent history, and use that target in diff commands. Identify the first lap/try in this batch and treat earlier branch work as pre-existing unless the user asks otherwise. Do not rewrite git history.\n\nReview with depth: confirm TryOutcome is a lifecycle dimension and FailureCategory remains a failure-cause taxonomy; inspect every decision site touched for success/freeze/Issue/retry behavior; confirm store JSON compatibility and RunnerConfig defaulting/clamping semantics; check the interactive config form names and persistence.\n\nAcceptance: Run targeted store/reliability/config/cli/relay tests relevant to this slice. Check off only tasks 1 and 2 boxes that are verified correct and sufficiently covered. Fix only tiny safe one-liners inline; larger gaps become focused head laps.",
       "assignee": "VERIFY",
-      "isDone": false,
+      "isDone": true,
       "order": 196608,
       "createdAt": "2026-06-16T00:17:48.179526842Z",
-      "updatedAt": "2026-06-16T00:17:48.179526842Z",
-      "completedAt": null
+      "updatedAt": "2026-06-16T01:30:06.401395977Z",
+      "completedAt": "2026-06-16T01:30:06.401395977Z"
     },
     {
       "id": "rall-2927",
