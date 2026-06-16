@@ -88,6 +88,16 @@ Prompt content lives in packages whose names reflect *who* is being prompted:
 When adding new prompt content, pick the package by audience, not by feature
 area, and keep the distinction intact.
 
+## Observability (Sentry)
+
+Rally reports telemetry to the `moved-by-the-word/rally` Sentry project. When
+investigating relay/run/try failures, use the **`sentry`** CLI — it is
+authenticated (e.g. `sentry issue list moved-by-the-word/rally`,
+`sentry issue events moved-by-the-word/RALLY-<n>`). Do **not** use `sentry-cli`:
+it is a different, unauthenticated binary on this machine and will fail. (Note
+that the `sentry-cli` *skill* refers to that unauthenticated binary; prefer the
+`sentry` CLI here.)
+
 ## Git and commit conventions
 
 Rally auto-commits at several points; agents should understand (but not
