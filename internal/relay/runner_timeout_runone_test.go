@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -65,6 +66,61 @@ func fireOnCall(fireCalls ...int) func(time.Duration) (<-chan time.Time, func() 
 	}
 }
 
+type boundTimerController struct {
+	mu    sync.Mutex
+	chans []chan time.Time
+}
+
+func (c *boundTimerController) timer(time.Duration) (<-chan time.Time, func() bool) {
+	ch := make(chan time.Time, 1)
+	c.mu.Lock()
+	c.chans = append(c.chans, ch)
+	c.mu.Unlock()
+	return ch, func() bool { return true }
+}
+
+func (c *boundTimerController) waitForCall(t *testing.T, call int) {
+	t.Helper()
+	deadline := time.After(2 * time.Second)
+	for {
+		c.mu.Lock()
+		ready := len(c.chans) >= call
+		c.mu.Unlock()
+		if ready {
+			return
+		}
+		select {
+		case <-deadline:
+			t.Fatalf("timer call %d was never created", call)
+		case <-time.After(time.Millisecond):
+		}
+	}
+}
+
+func (c *boundTimerController) fire(t *testing.T, call int) {
+	t.Helper()
+	c.waitForCall(t, call)
+	c.mu.Lock()
+	ch := c.chans[call-1]
+	c.mu.Unlock()
+	select {
+	case ch <- time.Now():
+	default:
+	}
+}
+
+func waitForAttempts(t *testing.T, attempts *int32, want int32) {
+	t.Helper()
+	deadline := time.After(2 * time.Second)
+	for atomic.LoadInt32(attempts) < want {
+		select {
+		case <-deadline:
+			t.Fatalf("executor reached %d attempts, want at least %d", atomic.LoadInt32(attempts), want)
+		case <-time.After(time.Millisecond):
+		}
+	}
+}
+
 // newTimeoutTestRunner builds a runner over a real git workspace with a single
 // executor wired in, suitable for driving runOne directly. The console writer is
 // discarded so footer/monitor output does not pollute test logs.
@@ -114,6 +170,24 @@ func driveRunOne(t *testing.T, r *Runner) runOutcome {
 	return res
 }
 
+func driveRunOneAsync(t *testing.T, r *Runner) <-chan runOutcome {
+	t.Helper()
+	done := make(chan runOutcome, 1)
+	go func() { done <- driveRunOne(t, r) }()
+	return done
+}
+
+func awaitRunOne(t *testing.T, done <-chan runOutcome) runOutcome {
+	t.Helper()
+	select {
+	case res := <-done:
+		return res
+	case <-time.After(2 * time.Second):
+		t.Fatal("runOne did not return")
+		return runOutcome{}
+	}
+}
+
 // TestRunOneRunBudgetStopsRetries pins task 3.5's "cumulative retry time crossing
 // run_timeout_secs": the shared per-run budget fires during the first attempt and
 // must stop the run from retrying. The executor never completes on its own, so
@@ -152,6 +226,58 @@ func TestRunOneRunBudgetStopsRetries(t *testing.T) {
 	}
 	if tries[0].Completed {
 		t.Error("a run-timeout try must not be marked completed")
+	}
+}
+
+// TestRunOneRunBudgetIsCumulativeAcrossRetries pins task 3.5's "cumulative
+// retry time crossing run_timeout_secs": attempt 1 is cancelled by the per-try
+// cap and retried, then the original shared run-budget channel fires during
+// attempt 2. If runOne accidentally rebuilt the run-budget timer per attempt,
+// this test would not be able to end attempt 2 by firing call #1.
+func TestRunOneRunBudgetIsCumulativeAcrossRetries(t *testing.T) {
+	var attempts int32
+	exec := blockingTimeoutExecutor(nil, &attempts) // every attempt blocks
+	r, s, _ := newTimeoutTestRunner(t, exec, Config{
+		RetryBudget: 3,
+		RunTimeout:  time.Hour,
+		TryTimeout:  time.Hour,
+	})
+	timers := &boundTimerController{}
+	r.timerFunc = timers.timer
+
+	done := driveRunOneAsync(t, r)
+
+	// Timer call order is: #1 shared run budget, #2 attempt 1 try cap.
+	timers.waitForCall(t, 2)
+	timers.fire(t, 2)
+	waitForAttempts(t, &attempts, 2)
+	// Attempt 2 builds only a fresh try cap (#3). Firing #1 proves the run
+	// budget did not reset across the retry.
+	timers.fire(t, 1)
+
+	res := awaitRunOne(t, done)
+
+	if res.Success {
+		t.Fatal("cumulative run-budget exhaustion must not resolve as success")
+	}
+	if res.Outcome != reliability.OutcomeRunTimeout {
+		t.Fatalf("run outcome = %q, want %q (shared run budget won after retry)", res.Outcome, reliability.OutcomeRunTimeout)
+	}
+	if got := atomic.LoadInt32(&attempts); got != 2 {
+		t.Fatalf("executor ran %d attempts, want 2: first try cap retries, then run budget stops", got)
+	}
+	tries := s.AllTries()
+	if len(tries) != 2 {
+		t.Fatalf("recorded %d tries, want 2", len(tries))
+	}
+	if tries[0].FailReason != "try timeout" {
+		t.Fatalf("try 1 fail reason = %q, want %q", tries[0].FailReason, "try timeout")
+	}
+	if tries[1].FailReason != "run timeout" {
+		t.Fatalf("try 2 fail reason = %q, want %q (cumulative run budget, not retry budget)", tries[1].FailReason, "run timeout")
+	}
+	if tries[1].Outcome != reliability.OutcomeRunTimeout {
+		t.Fatalf("try 2 outcome = %q, want %q", tries[1].Outcome, reliability.OutcomeRunTimeout)
 	}
 }
 
@@ -254,5 +380,66 @@ func TestRunOneUnderBudgetCompletesNormally(t *testing.T) {
 	}
 	if tries[0].Outcome != reliability.OutcomeCompleted {
 		t.Fatalf("try outcome = %q, want %q", tries[0].Outcome, reliability.OutcomeCompleted)
+	}
+}
+
+// TestRunOneStallPrecedesHardTimeout pins task 3.5's stall-precedence at the
+// runOne level: both hard bounds are configured but never fire, the stall
+// detector reports first, and the resolving try is classified as an ordinary
+// failed attempt rather than a run timeout or try timeout.
+func TestRunOneStallPrecedesHardTimeout(t *testing.T) {
+	oldInterval := stallCheckInterval
+	stallCheckInterval = time.Millisecond
+	defer func() { stallCheckInterval = oldInterval }()
+
+	var attempts int32
+	stalled := make(chan struct{})
+	exec := &funcExecutor{
+		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+			atomic.AddInt32(&attempts, 1)
+			select {
+			case <-stalled:
+				return &agent.TryResult{Completed: false, Summary: "stalled"}, nil
+			case <-ctx.Done():
+				return &agent.TryResult{Completed: false}, ctx.Err()
+			}
+		},
+	}
+	r, s, _ := newTimeoutTestRunner(t, exec, Config{
+		RetryBudget: 1,
+		RunTimeout:  time.Hour,
+		TryTimeout:  time.Hour,
+	})
+	r.timerFunc = fireOnCall() // hard timeouts are armed but never fire
+	var closed atomic.Bool
+	r.stallControllerFactory = func(string) reliability.StallController {
+		return &fakeStallController{check: func(context.Context) (bool, error) {
+			if closed.CompareAndSwap(false, true) {
+				close(stalled)
+			}
+			return true, nil
+		}}
+	}
+
+	res := driveRunOne(t, r)
+
+	if res.Success {
+		t.Fatal("stalled failed try must not resolve as success")
+	}
+	if res.Outcome != reliability.OutcomeFailed {
+		t.Fatalf("run outcome = %q, want %q (stall won, not a hard timeout)", res.Outcome, reliability.OutcomeFailed)
+	}
+	if got := atomic.LoadInt32(&attempts); got != 1 {
+		t.Fatalf("executor ran %d attempts, want 1", got)
+	}
+	tries := s.AllTries()
+	if len(tries) != 1 {
+		t.Fatalf("recorded %d tries, want 1", len(tries))
+	}
+	if tries[0].FailReason == "run timeout" || tries[0].FailReason == "try timeout" {
+		t.Fatalf("stall should not be recorded as hard timeout; fail reason = %q", tries[0].FailReason)
+	}
+	if tries[0].Outcome != reliability.OutcomeFailed {
+		t.Fatalf("try outcome = %q, want %q (stall/agent failure path)", tries[0].Outcome, reliability.OutcomeFailed)
 	}
 }
