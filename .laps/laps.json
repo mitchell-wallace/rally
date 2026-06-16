@@ -17,11 +17,11 @@
       "title": "Add reliability timeout configuration",
       "description": "Context: OpenSpec add-recovery-role-timeouts, tasks 2.1-2.4. This builds on the TryOutcome record lap but should stay focused on config parsing/defaulting and the interactive form.\n\nOutcome: [reliability] accepts RunTimeoutSecs, TryTimeoutSecs, and HandoffTimeoutSecs with defaults 4500, 3600, and 300 when unset or zero; RunnerConfig exposes the effective values; the config form includes all three fields in the reliability group.\n\nFiles \u0026 scope: internal/config/config_v2.go and tests, internal/cli/config.go and tests, runner config construction only where required to pass values through. Do not implement timer behavior in runner.go.\n\nDesign: Validate or clamp so handoff_timeout_secs never reaches or exceeds the effective try/run bounds. If try_timeout_secs \u003e= run_timeout_secs, accept the config and let the run budget subsume the per-try cap rather than returning an error. Preserve existing reliability behavior for stall_threshold_secs, retry_budget, and liveness_probe.\n\nAcceptance: Tests cover unset/zero defaults, configured values, handoff window at or above try/run bounds, and try cap at or above run budget. Run go test ./internal/config/... ./internal/cli/.... Do not check off tasks.md boxes.",
       "assignee": "JUNIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 131072,
       "createdAt": "2026-06-16T00:17:48.179524546Z",
-      "updatedAt": "2026-06-16T00:17:48.179524546Z",
-      "completedAt": null
+      "updatedAt": "2026-06-16T01:23:53.783975233Z",
+      "completedAt": "2026-06-16T01:23:53.783975233Z"
     },
     {
       "id": "rall-76ca",
