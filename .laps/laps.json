@@ -39,11 +39,11 @@
       "title": "Enforce run and try timeout budgets",
       "description": "Context: OpenSpec add-recovery-role-timeouts, tasks 3.1-3.4. The risky boundary is internal/relay/runner.go around runOne and runActionLoop.\n\nOutcome: runOne tracks a per-run wall-clock budget across all retry attempts, measured from run start and excluding later bounded handoff work; runActionLoop can cancel an active attempt when the shared run deadline or per-try cap fires; post-loop handling distinguishes timeout outcomes from stalls and ordinary agent errors.\n\nFiles \u0026 scope: internal/relay/runner.go and narrowly required helper/test files. Do not implement handoff-only resume in this lap except for clean interfaces/placeholders needed by the next lap. Do not change mid-run failover behavior.\n\nDesign: Construct the per-run deadline once before the attempt loop and pass the same deadline channel into every runActionLoop invocation. The per-try cap may be created per attempt. On run or try timeout, cancel attemptCtx, set explicit timeout state, drain tryCh, and let whichever of run budget, try cap, or stall fires first win. A per-try cap with run budget remaining may retry; run-budget exhaustion stops retries and proceeds to the handoff path in the next lap.\n\nAcceptance: Focused tests or test scaffolding prove cumulative run time can stop retries, a per-try cap can end one attempt while leaving budget for retry, ordinary successful runs are unaffected, and stall precedence remains intact. Run targeted relay tests. Do not check off tasks.md boxes.",
       "assignee": "SENIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 262144,
       "createdAt": "2026-06-16T00:17:48.179528685Z",
-      "updatedAt": "2026-06-16T00:17:48.179528685Z",
-      "completedAt": null
+      "updatedAt": "2026-06-16T01:40:20.919171503Z",
+      "completedAt": "2026-06-16T01:40:20.919171503Z"
     },
     {
       "id": "rall-31e6",
