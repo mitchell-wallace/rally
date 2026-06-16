@@ -147,11 +147,11 @@
       "title": "Persist recovery wrapup classification",
       "description": "Context: OpenSpec add-recovery-role-timeouts, tasks 8.1-8.3. This lap wires the classification capture channel through existing progress and wrapup plumbing.\n\nOutcome: progress.RunEntry has Classification; rally progress accepts --classification and persists it for both done and handoff wrapups; laps wrapup forwards the value; store.TryRecord has RecoveryClassification; runOne reads the current-run summary entry, validates {continue, discard, course_correct, repair_plan, needs_user}, stores it for recovery runs, and leaves it empty for non-recovery or omitted/unrecognised values without failing the run.\n\nFiles \u0026 scope: internal/progress/store.go, internal/progress/cli.go, laps hook/wrapup integration if it lives in this repo, internal/store/records.go, internal/relay/runner.go, and tests. Avoid changing the recovery prompt content except for naming mismatches.\n\nDesign: Reuse the wrapup channel rather than adding a side channel. Classification applies to recovery runs whether they finish with laps done or laps handoff. Validation is best-effort and must never make an otherwise valid run fail.\n\nAcceptance: Tests prove valid classification round-trips from laps wrapup --classification to TryRecord for recovery completion and recovery handoff, non-recovery runs leave it empty, and invalid/omitted classification leaves it empty without failure. Run progress/store/relay tests. Do not check off tasks.md boxes.",
       "assignee": "SENIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 786432,
       "createdAt": "2026-06-16T00:17:48.179543134Z",
-      "updatedAt": "2026-06-16T00:17:48.179543134Z",
-      "completedAt": null
+      "updatedAt": "2026-06-16T05:45:32.422031662Z",
+      "completedAt": "2026-06-16T05:45:32.422031662Z"
     },
     {
       "id": "rall-6778",
