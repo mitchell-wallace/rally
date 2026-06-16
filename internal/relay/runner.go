@@ -78,6 +78,14 @@ type Runner struct {
 	stallControllerFactory func(logPath string) reliability.StallController
 	sleepFunc              func(time.Duration)
 
+	// timerFunc constructs the one-shot wall-clock bound timers in runOne: the
+	// shared per-run budget (built once before the attempt loop) and the
+	// per-attempt try cap (built fresh each attempt). Defaults to a real
+	// time.NewTimer via newBoundTimer; tests inject a fake to fire bounds
+	// deterministically without real multi-second sleeps. The returned stop func
+	// releases the timer, mirroring time.Timer.Stop.
+	timerFunc func(d time.Duration) (<-chan time.Time, func() bool)
+
 	// forceKillFunc is the escalation hook for a second quit-now during the
 	// cancel drain. Defaults to reliability.ForceKillProcessGroup; tests inject
 	// a fake to assert the force-kill path is taken without signalling a real
@@ -90,6 +98,18 @@ type Runner struct {
 	out io.Writer
 
 	telemetry telemetry.Sink
+}
+
+// newBoundTimer builds a one-shot wall-clock bound timer for runOne. It routes
+// through timerFunc when a test has injected one, otherwise constructs a real
+// time.Timer. The returned channel fires once when the bound elapses; the stop
+// func releases the timer (no-op-safe to call after it has fired).
+func (r *Runner) newBoundTimer(d time.Duration) (<-chan time.Time, func() bool) {
+	if r.timerFunc != nil {
+		return r.timerFunc(d)
+	}
+	t := time.NewTimer(d)
+	return t.C, t.Stop
 }
 
 // outWriter returns the console writer for headers/footers, defaulting to
@@ -1285,9 +1305,9 @@ func (r *Runner) runOne(
 	// created per attempt inside the loop (mirroring stallTicker).
 	var runBudgetCh <-chan time.Time
 	if r.cfg.RunTimeout > 0 {
-		runBudgetTimer := time.NewTimer(r.cfg.RunTimeout)
-		defer runBudgetTimer.Stop()
-		runBudgetCh = runBudgetTimer.C
+		ch, stop := r.newBoundTimer(r.cfg.RunTimeout)
+		defer stop()
+		runBudgetCh = ch
 	}
 attemptLoop:
 	for attempt := 1; attempt <= maxAttempts; attempt++ {
@@ -1435,10 +1455,9 @@ attemptLoop:
 		// attempt without consuming the shared run budget (runBudgetCh). A
 		// non-positive cap leaves tryDeadline nil, disabling the per-try bound.
 		var tryDeadline <-chan time.Time
-		var tryTimer *time.Timer
+		var stopTryTimer func() bool
 		if r.cfg.TryTimeout > 0 {
-			tryTimer = time.NewTimer(r.cfg.TryTimeout)
-			tryDeadline = tryTimer.C
+			tryDeadline, stopTryTimer = r.newBoundTimer(r.cfg.TryTimeout)
 		}
 		loopOut := r.runActionLoop(actionLoopDeps{
 			tryCh:           tryCh,
@@ -1459,8 +1478,8 @@ attemptLoop:
 			harness:         picked.Harness,
 		})
 		stallTicker.Stop()
-		if tryTimer != nil {
-			tryTimer.Stop()
+		if stopTryTimer != nil {
+			stopTryTimer()
 		}
 
 		result := loopOut.result
