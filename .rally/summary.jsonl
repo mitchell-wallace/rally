@@ -111,3 +111,4 @@
 {"run_id":"relay-2-run-2","summary":"Added deterministic relay timeout regression coverage for cumulative run budget, try-cap retry, under-budget completion, and stall precedence.","updated_at":"2026-06-16T03:52:56Z","laps_completed":["rall-31e6"]}
 {"run_id":"relay-2-run-3","summary":"(agent exited without finalizing)","updated_at":"2026-06-16T04:00:04Z","laps_completed":"none"}
 {"run_id":"relay-2-run-5","summary":"(agent exited without finalizing)","updated_at":"2026-06-16T04:37:01Z","laps_completed":"none"}
+{"run_id":"relay-3-run-2","summary":"Implemented bounded handoff-only continuation on run-budget exhaustion with resolver try records and focused coverage.","updated_at":"2026-06-16T04:44:21Z","laps_completed":["rall-6799"]}
