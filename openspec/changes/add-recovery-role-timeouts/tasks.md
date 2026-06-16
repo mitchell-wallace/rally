@@ -63,12 +63,12 @@
 
 ## 9. Telemetry and Sentry grouping
 
-- [ ] 9.1 Add `Outcome` and `RecoveryClassification` fields to `FailureState` (`internal/telemetry/failure_state.go`) and surface them via `FailureStateTags`; emit an `outcome` scalar tag (`TryOutcome`) on every try event, keeping the existing `failure_category` tag (`tags.go:73`) only for a `failed` outcome (do NOT add a parallel `category` tag); ensure `run_timeout`/`handoff_timeout`/`handoff_requested` are spans/logs, not Issues
-- [ ] 9.2 Attach `recovery_classification` as a scalar tag (from the new `FailureState` field) on recovery-route try events; capture `needs_user` as an Issue while the other four remain spans/logs
+- [x] 9.1 Add `Outcome` and `RecoveryClassification` fields to `FailureState` (`internal/telemetry/failure_state.go`) and surface them via `FailureStateTags`; emit an `outcome` scalar tag (`TryOutcome`) on every try event, keeping the existing `failure_category` tag (`tags.go:73`) only for a `failed` outcome (do NOT add a parallel `category` tag); ensure `run_timeout`/`handoff_timeout`/`handoff_requested` are spans/logs, not Issues
+- [x] 9.2 Attach `recovery_classification` as a scalar tag (from the new `FailureState` field) on recovery-route try events; capture `needs_user` as an Issue while the other four remain spans/logs
 - [ ] 9.3 (Optional) emit a `recovery_started` common log event for UI/triage — not a try exit condition or an Issue
-- [ ] 9.4 Tests: a `run_timeout`/`handoff_timeout`/`handoff_requested` try is a span/log, not an Issue, and distinguished by `outcome`; handoff-only continuation try logs/spans are identifiable as handoff-only; a recovery try carries `recovery_classification`; a `needs_user` recovery may capture an Issue
+- [x] 9.4 Tests: a `run_timeout`/`handoff_timeout`/`handoff_requested` try is a span/log, not an Issue, and distinguished by `outcome`; handoff-only continuation try logs/spans are identifiable as handoff-only; a recovery try carries `recovery_classification`; a `needs_user` recovery may capture an Issue
 
 ## 10. Version and docs
 
-- [ ] 10.1 Bump `internal/buildinfo/VERSION` to `0.9.0`
-- [ ] 10.2 Update README/role documentation to describe the RECOVERY role, the per-run/per-try timeout + bounded handoff, the two recovery triggers, and the reliability config keys
+- [x] 10.1 Bump `internal/buildinfo/VERSION` to `0.9.0`
+- [x] 10.2 Update README/role documentation to describe the RECOVERY role, the per-run/per-try timeout + bounded handoff, the two recovery triggers, and the reliability config keys

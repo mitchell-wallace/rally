@@ -711,14 +711,16 @@ relay stalls, and lap-integrity violations). Each event carries:
 | `relay_id` | `3` | Local relay counter (per workspace) |
 | `run_id` | `7` | Local run counter |
 | `try_id` | `12` | Local try counter |
-| `role` | `junior` | Lap assignee |
+| `role` | `junior` | Effective prompt role for the run/try |
 | `runner` | `claude:claude-sonnet-4` | Harness and model |
 | `repo` | `rally-a1b2c3` | Hashed repo identifier |
 | `lap_id` | `abc123` | Lap identifier |
 | `relay_guid` | `a1b2c3d4e5f6-rally-a1b2c3-20260610-3` | Globally unique relay id |
 | `relay_started_at` | `2026-06-10T14:30:00Z` | Relay start (RFC 3339) |
 | `machine_id_prefix` | `a1b2c3d4e5f6` | First 12 chars of anonymous machine id |
+| `outcome` | `handoff_timeout` | Try lifecycle outcome (`completed`, `failed`, `run_timeout`, etc.) |
 | `failure_category` | `usage_limit` | Stable failure taxonomy |
+| `recovery_classification` | `repair_plan` | RECOVERY-only classification, when recorded |
 | `agent_state` | `active` | Runner resilience state |
 | `attempt` / `max_attempts` | `2` / `5` | Retry position and budget |
 | `quota_scope` / `reset_at` / `reset_after` | `claude:opus` / `2026-…Z` / `30s` | Limit reset info (limit categories only) |
@@ -731,8 +733,10 @@ relay stalls, and lap-integrity violations). Each event carries:
 | `failure_evidence` | `raw_signal`, `message` | Bounded provider text (limit categories only) |
 
 Spans trace the relay → run → try hierarchy and carry prompt-size metrics
-(total bytes plus a per-source breakdown). Breadcrumbs record per-try
-structured logs.
+(total bytes plus a per-source breakdown). Try spans and structured logs
+also record the lifecycle `outcome`, mark bounded handoff continuations with
+`handoff_only=true`, and attach `recovery_classification` on RECOVERY runs
+when one was recorded.
 
 ### Anonymous machine identity
 
