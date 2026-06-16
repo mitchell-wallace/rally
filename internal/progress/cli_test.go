@@ -126,6 +126,7 @@ func TestProgressComplete(t *testing.T) {
 	cmd.SetArgs([]string{
 		"--complete",
 		"--summary", "Did something",
+		"--classification", "continue",
 		"--followup", "Next thing",
 	})
 	if err := cmd.Execute(); err != nil {
@@ -155,6 +156,9 @@ func TestProgressComplete(t *testing.T) {
 	if entry.Summary != "Did something" {
 		t.Errorf("Summary = %q, want Did something", entry.Summary)
 	}
+	if entry.Classification != "continue" {
+		t.Errorf("Classification = %q, want continue", entry.Classification)
+	}
 	laps, ok := entry.LapsCompleted.([]interface{})
 	if !ok || len(laps) != 1 || laps[0] != "lap-1" {
 		t.Errorf("LapsCompleted = %v, want [lap-1]", entry.LapsCompleted)
@@ -180,6 +184,7 @@ func TestProgressHandoff(t *testing.T) {
 	cmd.SetArgs([]string{
 		"--handoff",
 		"--summary", "Blocked on auth",
+		"--classification", "repair_plan",
 		"--followup", "Investigate token rotation",
 	})
 	if err := cmd.Execute(); err != nil {
@@ -207,6 +212,9 @@ func TestProgressHandoff(t *testing.T) {
 	}
 	if entry.Handoff.Summary != "Blocked on auth" {
 		t.Errorf("Handoff.Summary = %q, want Blocked on auth", entry.Handoff.Summary)
+	}
+	if entry.Classification != "repair_plan" {
+		t.Errorf("Classification = %q, want repair_plan", entry.Classification)
 	}
 	if len(entry.Handoff.CreatedLapIDs) != 1 || entry.Handoff.CreatedLapIDs[0] != "lap-fake-id" {
 		t.Errorf("CreatedLapIDs = %v, want [lap-fake-id]", entry.Handoff.CreatedLapIDs)

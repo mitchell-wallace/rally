@@ -1558,7 +1558,9 @@ attemptLoop:
 		if task.IsLapsBacked {
 			recordedLaps = mergeStrings(recordedLaps, progressLapsCompletedForRun(r.cfg.WorkspaceDir, runID))
 		}
-		handoffEntry := recordedHandoffEntryForRun(r.cfg.WorkspaceDir, runID, summaryEntryCountBeforeRun)
+		runEntry := recordedRunEntryForRun(r.cfg.WorkspaceDir, runID, summaryEntryCountBeforeRun)
+		handoffEntry := handoffEntryFromRunEntry(runEntry)
+		recoveryClassification := recoveryClassificationForRun(task, runEntry)
 
 		runtime := endedAt.Sub(startedAt)
 		commitHash := ""
@@ -1799,31 +1801,32 @@ attemptLoop:
 		}
 
 		tryRecord := store.TryRecord{
-			ID:                   r.store.NextTryID(),
-			RunID:                runIndex + 1,
-			RelayID:              relay.ID,
-			AgentType:            picked.Harness,
-			Completed:            !failed,
-			Outcome:              attemptOutcome,
-			ResolvedRoute:        task.ResolvedRoute,
-			DirtyHandoff:         dirtyHandoff,
-			Summary:              "",
-			RemainingWork:        "",
-			FilesChanged:         filesChangedList,
-			CommitHash:           commitHash,
-			CommitHistory:        commitHistory,
-			StartedAt:            startedAt.Format(time.RFC3339),
-			EndedAt:              endedAt.Format(time.RFC3339),
-			AttemptNumber:        attempt,
-			LogPath:              tryLogPath,
-			FailReason:           failReason,
-			Category:             string(failureCategory),
-			RuntimeMs:            runtime.Milliseconds(),
-			LapID:                task.LapID,
-			LapAssignee:          task.Assignee,
-			HandoffCreatedLapIDs: handoffCreatedLapIDs(handoffEntry),
-			RecordedLaps:         recordedLaps,
-			LapsAttempted:        lapsAttempted,
+			ID:                     r.store.NextTryID(),
+			RunID:                  runIndex + 1,
+			RelayID:                relay.ID,
+			AgentType:              picked.Harness,
+			Completed:              !failed,
+			Outcome:                attemptOutcome,
+			ResolvedRoute:          task.ResolvedRoute,
+			DirtyHandoff:           dirtyHandoff,
+			RecoveryClassification: recoveryClassification,
+			Summary:                "",
+			RemainingWork:          "",
+			FilesChanged:           filesChangedList,
+			CommitHash:             commitHash,
+			CommitHistory:          commitHistory,
+			StartedAt:              startedAt.Format(time.RFC3339),
+			EndedAt:                endedAt.Format(time.RFC3339),
+			AttemptNumber:          attempt,
+			LogPath:                tryLogPath,
+			FailReason:             failReason,
+			Category:               string(failureCategory),
+			RuntimeMs:              runtime.Milliseconds(),
+			LapID:                  task.LapID,
+			LapAssignee:            task.Assignee,
+			HandoffCreatedLapIDs:   handoffCreatedLapIDs(handoffEntry),
+			RecordedLaps:           recordedLaps,
+			LapsAttempted:          lapsAttempted,
 		}
 		if result != nil {
 			tryRecord.Summary = result.Summary
@@ -2222,7 +2225,9 @@ func (r *Runner) runBoundedHandoffOnly(
 	// both laps handoff and laps wrapup completed. Transient HandoffState alone
 	// (a laps handoff with no wrapup) is NOT sufficient — it only distinguishes a
 	// partial/no-wrapup attempt for the failure reason.
-	handoffEntry := recordedHandoffEntryForRun(r.cfg.WorkspaceDir, runID, summaryEntryCountBeforeRun)
+	runEntry := recordedRunEntryForRun(r.cfg.WorkspaceDir, runID, summaryEntryCountBeforeRun)
+	handoffEntry := handoffEntryFromRunEntry(runEntry)
+	recoveryClassification := recoveryClassificationForRun(task, runEntry)
 	handoffState := 0
 	if rs, err := progress.LoadRunState(r.cfg.WorkspaceDir); err == nil && rs != nil {
 		handoffState = rs.HandoffState
@@ -2265,28 +2270,29 @@ func (r *Runner) runBoundedHandoffOnly(
 	})
 
 	tryRecord := store.TryRecord{
-		ID:                   tryID,
-		RunID:                runIndex + 1,
-		RelayID:              relay.ID,
-		AgentType:            picked.Harness,
-		Completed:            succeeded,
-		Outcome:              outcome,
-		HandoffOnly:          true,
-		ResolvedRoute:        task.ResolvedRoute,
-		DirtyHandoff:         dirtyHandoff,
-		Summary:              result.Summary,
-		RemainingWork:        result.RemainingWork,
-		FilesChanged:         []string{},
-		StartedAt:            startedAt.Format(time.RFC3339),
-		EndedAt:              endedAt.Format(time.RFC3339),
-		AttemptNumber:        attemptNumber,
-		LogPath:              tryLogPath,
-		FailReason:           failReason,
-		RuntimeMs:            runtime.Milliseconds(),
-		LapID:                task.LapID,
-		LapAssignee:          task.Assignee,
-		HandoffCreatedLapIDs: handoffCreatedLapIDs(handoffEntry),
-		ToolCalls:            result.ToolCalls,
+		ID:                     tryID,
+		RunID:                  runIndex + 1,
+		RelayID:                relay.ID,
+		AgentType:              picked.Harness,
+		Completed:              succeeded,
+		Outcome:                outcome,
+		HandoffOnly:            true,
+		ResolvedRoute:          task.ResolvedRoute,
+		DirtyHandoff:           dirtyHandoff,
+		RecoveryClassification: recoveryClassification,
+		Summary:                result.Summary,
+		RemainingWork:          result.RemainingWork,
+		FilesChanged:           []string{},
+		StartedAt:              startedAt.Format(time.RFC3339),
+		EndedAt:                endedAt.Format(time.RFC3339),
+		AttemptNumber:          attemptNumber,
+		LogPath:                tryLogPath,
+		FailReason:             failReason,
+		RuntimeMs:              runtime.Milliseconds(),
+		LapID:                  task.LapID,
+		LapAssignee:            task.Assignee,
+		HandoffCreatedLapIDs:   handoffCreatedLapIDs(handoffEntry),
+		ToolCalls:              result.ToolCalls,
 	}
 
 	tryTags := telemetry.Tags(telemetry.EventInfo{
@@ -2609,6 +2615,19 @@ func handoffCreatedLapIDs(handoff *progress.HandoffEntry) []string {
 	return append([]string(nil), handoff.CreatedLapIDs...)
 }
 
+func recoveryClassificationForRun(task runTask, entry *progress.RunEntry) string {
+	if entry == nil || !strings.EqualFold(strings.TrimSpace(task.promptAssignee()), store.RecoveryRouteName) {
+		return ""
+	}
+	value := strings.TrimSpace(entry.Classification)
+	switch value {
+	case "continue", "discard", "course_correct", "repair_plan", "needs_user":
+		return value
+	default:
+		return ""
+	}
+}
+
 func progressLapsCompletedForRun(workspaceDir, runID string) []string {
 	entries, err := progress.LoadSummaryEntries(workspaceDir)
 	if err != nil {
@@ -2638,6 +2657,17 @@ func progressLapsCompletedForRun(workspaceDir, runID string) []string {
 }
 
 func recordedHandoffEntryForRun(workspaceDir, runID string, firstNewEntry int) *progress.HandoffEntry {
+	return handoffEntryFromRunEntry(recordedRunEntryForRun(workspaceDir, runID, firstNewEntry))
+}
+
+func handoffEntryFromRunEntry(entry *progress.RunEntry) *progress.HandoffEntry {
+	if entry == nil {
+		return nil
+	}
+	return entry.Handoff
+}
+
+func recordedRunEntryForRun(workspaceDir, runID string, firstNewEntry int) *progress.RunEntry {
 	if runID == "" {
 		return nil
 	}
@@ -2650,8 +2680,8 @@ func recordedHandoffEntryForRun(workspaceDir, runID string, firstNewEntry int) *
 	}
 	for i := len(entries) - 1; i >= firstNewEntry; i-- {
 		entry := entries[i]
-		if entry.RunID == runID && entry.Handoff != nil {
-			return entry.Handoff
+		if entry.RunID == runID {
+			return &entry
 		}
 	}
 	return nil

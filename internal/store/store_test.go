@@ -71,16 +71,17 @@ func TestTryRecordPersistsOutcomeAndHandoffOnly(t *testing.T) {
 	rallyDir, s := setupTempStore(t)
 
 	if err := s.AppendTry(TryRecord{
-		ID:                   1,
-		RunID:                1,
-		AgentType:            "codex",
-		Completed:            true,
-		Outcome:              reliability.OutcomeHandoffRequested,
-		HandoffOnly:          true,
-		ResolvedRoute:        "senior",
-		DirtyHandoff:         true,
-		HandoffCreatedLapIDs: []string{"lap-followup"},
-		Category:             "",
+		ID:                     1,
+		RunID:                  1,
+		AgentType:              "codex",
+		Completed:              true,
+		Outcome:                reliability.OutcomeHandoffRequested,
+		HandoffOnly:            true,
+		ResolvedRoute:          "senior",
+		DirtyHandoff:           true,
+		RecoveryClassification: "repair_plan",
+		HandoffCreatedLapIDs:   []string{"lap-followup"},
+		Category:               "",
 	}); err != nil {
 		t.Fatalf("AppendTry: %v", err)
 	}
@@ -103,6 +104,9 @@ func TestTryRecordPersistsOutcomeAndHandoffOnly(t *testing.T) {
 	}
 	if !read[0].DirtyHandoff {
 		t.Fatal("DirtyHandoff = false, want true")
+	}
+	if read[0].RecoveryClassification != "repair_plan" {
+		t.Fatalf("RecoveryClassification = %q, want repair_plan", read[0].RecoveryClassification)
 	}
 	if len(read[0].HandoffCreatedLapIDs) != 1 || read[0].HandoffCreatedLapIDs[0] != "lap-followup" {
 		t.Fatalf("HandoffCreatedLapIDs = %v, want [lap-followup]", read[0].HandoffCreatedLapIDs)

@@ -365,6 +365,164 @@ func TestRunOneRecoveryEffectiveAssigneeUsesRecoveryPromptAndKeepsLapAssignee(t 
 	}
 }
 
+func TestRunOneRecoveryClassificationPersistence(t *testing.T) {
+	tests := []struct {
+		name         string
+		task         runTask
+		recordWrapup func(string) error
+		wantOutcome  reliability.TryOutcome
+		wantClass    string
+	}{
+		{
+			name: "recovery completion records valid classification",
+			task: runTask{Name: "task", Prompt: "do work", Assignee: "senior", EffectiveAssignee: "recovery", ResolvedRoute: "recovery", LapID: "lap-1", IsLapsBacked: true, LapsRemaining: 1},
+			recordWrapup: func(workspaceDir string) error {
+				if err := os.WriteFile(filepath.Join(workspaceDir, "done.txt"), []byte("done\n"), 0o644); err != nil {
+					return err
+				}
+				if err := progress.RecordLap(workspaceDir, "lap-1"); err != nil {
+					return err
+				}
+				return progress.AppendRunEntry(workspaceDir, progress.RunEntry{
+					RunID:          "relay-1-run-1",
+					Summary:        "done",
+					Classification: "course_correct",
+				})
+			},
+			wantOutcome: reliability.OutcomeCompleted,
+			wantClass:   "course_correct",
+		},
+		{
+			name: "recovery handoff records valid classification",
+			task: runTask{Name: "task", Prompt: "do work", Assignee: "senior", EffectiveAssignee: "recovery", ResolvedRoute: "recovery", LapID: "lap-1", IsLapsBacked: true, LapsRemaining: 1},
+			recordWrapup: func(workspaceDir string) error {
+				return progress.AppendRunEntry(workspaceDir, progress.RunEntry{
+					RunID:          "relay-1-run-1",
+					Summary:        "handoff",
+					Classification: "discard",
+					Handoff: &progress.HandoffEntry{
+						Summary:       "handoff",
+						Followups:     []string{},
+						CreatedLapIDs: []string{},
+					},
+				})
+			},
+			wantOutcome: reliability.OutcomeHandoffRequested,
+			wantClass:   "discard",
+		},
+		{
+			name: "non-recovery ignores valid classification",
+			task: runTask{Name: "task", Prompt: "do work", Assignee: "senior", ResolvedRoute: "senior", LapID: "lap-1", IsLapsBacked: true, LapsRemaining: 1},
+			recordWrapup: func(workspaceDir string) error {
+				if err := os.WriteFile(filepath.Join(workspaceDir, "done.txt"), []byte("done\n"), 0o644); err != nil {
+					return err
+				}
+				if err := progress.RecordLap(workspaceDir, "lap-1"); err != nil {
+					return err
+				}
+				return progress.AppendRunEntry(workspaceDir, progress.RunEntry{
+					RunID:          "relay-1-run-1",
+					Summary:        "done",
+					Classification: "continue",
+				})
+			},
+			wantOutcome: reliability.OutcomeCompleted,
+		},
+		{
+			name: "recovery invalid classification is ignored",
+			task: runTask{Name: "task", Prompt: "do work", Assignee: "senior", EffectiveAssignee: "recovery", ResolvedRoute: "recovery", LapID: "lap-1", IsLapsBacked: true, LapsRemaining: 1},
+			recordWrapup: func(workspaceDir string) error {
+				if err := os.WriteFile(filepath.Join(workspaceDir, "done.txt"), []byte("done\n"), 0o644); err != nil {
+					return err
+				}
+				if err := progress.RecordLap(workspaceDir, "lap-1"); err != nil {
+					return err
+				}
+				return progress.AppendRunEntry(workspaceDir, progress.RunEntry{
+					RunID:          "relay-1-run-1",
+					Summary:        "done",
+					Classification: "bogus",
+				})
+			},
+			wantOutcome: reliability.OutcomeCompleted,
+		},
+		{
+			name: "recovery omitted classification is ignored",
+			task: runTask{Name: "task", Prompt: "do work", Assignee: "senior", EffectiveAssignee: "recovery", ResolvedRoute: "recovery", LapID: "lap-1", IsLapsBacked: true, LapsRemaining: 1},
+			recordWrapup: func(workspaceDir string) error {
+				if err := os.WriteFile(filepath.Join(workspaceDir, "done.txt"), []byte("done\n"), 0o644); err != nil {
+					return err
+				}
+				return progress.RecordLap(workspaceDir, "lap-1")
+			},
+			wantOutcome: reliability.OutcomeCompleted,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			workspaceDir := t.TempDir()
+			rallyDir := store.RallyDir(workspaceDir)
+			if err := os.MkdirAll(rallyDir, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			initRepo(t, workspaceDir)
+			runGit(t, workspaceDir, "commit", "--allow-empty", "-m", "initial", "--no-verify")
+
+			s := newTestStore(t, rallyDir)
+			exec := &funcExecutor{
+				fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+					if err := tt.recordWrapup(workspaceDir); err != nil {
+						return nil, err
+					}
+					return &agent.TryResult{Completed: true, Summary: "executor summary"}, nil
+				},
+			}
+			r := NewRunner(s, Config{
+				WorkspaceDir:     workspaceDir,
+				DataDir:          t.TempDir(),
+				AgentMixSpecs:    []string{"op:dsf"},
+				TargetIterations: 1,
+				RetryBudget:      1,
+				LapsEnabled:      true,
+				Resolver:         cheapTestResolver,
+			}, map[string]agent.Executor{"opencode": exec})
+
+			res, err := r.runOne(
+				context.Background(),
+				&store.RelayRecord{ID: 1, TargetIterations: 1},
+				0,
+				agent.ResolvedAgent{Harness: "opencode", Model: cheapTestModel},
+				tt.task,
+				nil,
+				nil,
+				false,
+				false,
+				nil,
+				nil,
+				io.Discard,
+			)
+			if err != nil {
+				t.Fatalf("runOne error = %v", err)
+			}
+			if !res.Success {
+				t.Fatal("runOne success = false, want true")
+			}
+			if res.Outcome != tt.wantOutcome {
+				t.Fatalf("run outcome = %q, want %q", res.Outcome, tt.wantOutcome)
+			}
+
+			tries := s.AllTries()
+			if len(tries) != 1 {
+				t.Fatalf("tries = %d, want 1", len(tries))
+			}
+			if tries[0].RecoveryClassification != tt.wantClass {
+				t.Fatalf("RecoveryClassification = %q, want %q", tries[0].RecoveryClassification, tt.wantClass)
+			}
+		})
+	}
+}
+
 func TestRunOneIncompleteAndOrdinaryFailedDoNotSetDirtyHandoff(t *testing.T) {
 	tests := []struct {
 		name        string

@@ -15,11 +15,12 @@ import (
 
 // RunEntry represents a single finalized run in the append-only summary log.
 type RunEntry struct {
-	RunID         string        `json:"run_id"`
-	Summary       string        `json:"summary"`
-	UpdatedAt     string        `json:"updated_at"`
-	LapsCompleted interface{}   `json:"laps_completed,omitempty"`
-	Handoff       *HandoffEntry `json:"handoff,omitempty"`
+	RunID          string        `json:"run_id"`
+	Summary        string        `json:"summary"`
+	Classification string        `json:"classification,omitempty"`
+	UpdatedAt      string        `json:"updated_at"`
+	LapsCompleted  interface{}   `json:"laps_completed,omitempty"`
+	Handoff        *HandoffEntry `json:"handoff,omitempty"`
 }
 
 // HandoffEntry contains handoff-specific metadata.

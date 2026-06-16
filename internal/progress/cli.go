@@ -45,6 +45,7 @@ func NewProgressCmd() *cobra.Command {
 	var recordLaps []string
 	var complete, handoff, setHandoffFlag, wrapup bool
 	var summary string
+	var classification string
 	var followups []string
 
 	cmd := &cobra.Command{
@@ -97,7 +98,7 @@ func NewProgressCmd() *cobra.Command {
 				return fmt.Errorf("--summary is required for --%s", mode)
 			}
 
-			return runFinalize(workspaceDir, mode, summary, followups)
+			return runFinalize(workspaceDir, mode, summary, classification, followups)
 		},
 	}
 
@@ -107,12 +108,13 @@ func NewProgressCmd() *cobra.Command {
 	cmd.Flags().BoolVar(&setHandoffFlag, "set-handoff", false, "Set handoff state")
 	cmd.Flags().BoolVar(&wrapup, "wrapup", false, "Wrap up run based on handoff state")
 	cmd.Flags().StringVar(&summary, "summary", "", "Summary of the run")
+	cmd.Flags().StringVar(&classification, "classification", "", "Recovery classification for this run")
 	cmd.Flags().StringArrayVar(&followups, "followup", nil, "Follow-up items (repeatable)")
 
 	return cmd
 }
 
-func runFinalize(workspaceDir string, mode string, summary string, followups []string) error {
+func runFinalize(workspaceDir string, mode string, summary string, classification string, followups []string) error {
 	rs, err := LoadRunState(workspaceDir)
 	if err != nil {
 		return fmt.Errorf("load run state: %w", err)
@@ -134,9 +136,10 @@ func runFinalize(workspaceDir string, mode string, summary string, followups []s
 	}
 
 	entry := RunEntry{
-		RunID:         runID,
-		Summary:       summary,
-		LapsCompleted: lapsCompleted,
+		RunID:          runID,
+		Summary:        summary,
+		Classification: strings.TrimSpace(classification),
+		LapsCompleted:  lapsCompleted,
 	}
 
 	// Determine whether this is a handoff entry.

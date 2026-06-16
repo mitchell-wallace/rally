@@ -350,7 +350,7 @@ func TestWrapupHookScriptRoutesToComplete(t *testing.T) {
 	t.Setenv("MOCK_LOG", logFile)
 
 	scriptPath := filepath.Join(origWD, "laps-wrapup-hook.sh")
-	out, err := exec.Command("/bin/sh", scriptPath, "--summary", "test summary").CombinedOutput()
+	out, err := exec.Command("/bin/sh", scriptPath, "--summary", "test summary", "--classification", "continue").CombinedOutput()
 	if err != nil {
 		t.Fatalf("hook script failed: %v\n%s", err, out)
 	}
@@ -361,6 +361,9 @@ func TestWrapupHookScriptRoutesToComplete(t *testing.T) {
 	}
 	if !strings.Contains(string(logData), "--complete") {
 		t.Errorf("expected rally progress --complete in log, got %q", string(logData))
+	}
+	if !strings.Contains(string(logData), "--classification") || !strings.Contains(string(logData), "continue") {
+		t.Errorf("expected classification args to be forwarded, got %q", string(logData))
 	}
 	if strings.Contains(string(logData), "--handoff") {
 		t.Errorf("did not expect --handoff in log, got %q", string(logData))
