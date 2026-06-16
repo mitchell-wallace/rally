@@ -1,18 +1,18 @@
 ## 1. TryOutcome lifecycle type
 
-- [ ] 1.1 Add a `TryOutcome` type with values `completed`, `handoff_requested`, `incomplete`, `run_timeout`, `handoff_timeout`, `failed`, `interrupted` (new file in `internal/reliability/` or `internal/store/`), with helpers `IsSuccess()` (completed/handoff_requested) and `IsTerminalForRun()` (handoff_timeout and the existing terminal categories; `run_timeout` is terminal for the normal attempt loop but followed by the handoff-only try when available)
-- [ ] 1.2 Leave `FailureCategory` (`internal/reliability/category.go`) unchanged — do NOT add `run_timeout` or `handoff_*` to it; only a `failed` outcome carries a `FailureCategory`
-- [ ] 1.3 Add `Outcome TryOutcome` and `HandoffOnly bool` to `store.TryRecord` (`internal/store/records.go`), retaining `Completed bool`; surface the resolving try's `Outcome` on `runOutcome` (`runner.go:1104`) alongside `Category`
-- [ ] 1.4 Route success/freeze/Issue/retry decisions through `TryOutcome` so no site treats a failure-cause category as a success
-- [ ] 1.5 Add `handoff_timeout` to the `terminalCategory`/short-circuit set in `runOne` so the attempt loop ends on first detection
-- [ ] 1.6 Tests: `handoff_requested` is a success outcome and never increments the freeze counter; `run_timeout` is non-freezing, non-Issue, and not a recovery trigger by itself; `handoff_timeout` is non-freezing and terminal; a `failed` outcome still carries a `FailureCategory`; `FailureCategory` has no `handoff_*` or `run_timeout` values
+- [x] 1.1 Add a `TryOutcome` type with values `completed`, `handoff_requested`, `incomplete`, `run_timeout`, `handoff_timeout`, `failed`, `interrupted` (new file in `internal/reliability/` or `internal/store/`), with helpers `IsSuccess()` (completed/handoff_requested) and `IsTerminalForRun()` (handoff_timeout and the existing terminal categories; `run_timeout` is terminal for the normal attempt loop but followed by the handoff-only try when available)
+- [x] 1.2 Leave `FailureCategory` (`internal/reliability/category.go`) unchanged — do NOT add `run_timeout` or `handoff_*` to it; only a `failed` outcome carries a `FailureCategory`
+- [x] 1.3 Add `Outcome TryOutcome` and `HandoffOnly bool` to `store.TryRecord` (`internal/store/records.go`), retaining `Completed bool`; surface the resolving try's `Outcome` on `runOutcome` (`runner.go:1104`) alongside `Category`
+- [x] 1.4 Route success/freeze/Issue/retry decisions through `TryOutcome` so no site treats a failure-cause category as a success
+- [x] 1.5 Add `handoff_timeout` to the `terminalCategory`/short-circuit set in `runOne` so the attempt loop ends on first detection
+- [x] 1.6 Tests: `handoff_requested` is a success outcome and never increments the freeze counter; `run_timeout` is non-freezing, non-Issue, and not a recovery trigger by itself; `handoff_timeout` is non-freezing and terminal; a `failed` outcome still carries a `FailureCategory`; `FailureCategory` has no `handoff_*` or `run_timeout` values
 
 ## 2. Configurable run/try timeouts
 
-- [ ] 2.1 Add `RunTimeoutSecs`, `TryTimeoutSecs`, and `HandoffTimeoutSecs` to `[reliability]` (`internal/config/config_v2.go`), defaulting to 4500, 3600, and 300 when unset/0; surface them on `RunnerConfig` (`runner.go:40`)
-- [ ] 2.2 Validate/clamp so `handoff_timeout_secs` never reaches/exceeds the effective `try_timeout_secs` or `run_timeout_secs`; when `try_timeout_secs >= run_timeout_secs`, accept the config and apply only the run budget (per-try cap subsumed) rather than erroring
-- [ ] 2.3 Add all three fields to the interactive config form (`internal/cli/config.go`) reliability group
-- [ ] 2.4 Tests: defaults apply when unset; configured values are read; a handoff window ≥ try/run bound is clamped or rejected
+- [x] 2.1 Add `RunTimeoutSecs`, `TryTimeoutSecs`, and `HandoffTimeoutSecs` to `[reliability]` (`internal/config/config_v2.go`), defaulting to 4500, 3600, and 300 when unset/0; surface them on `RunnerConfig` (`runner.go:40`)
+- [x] 2.2 Validate/clamp so `handoff_timeout_secs` never reaches/exceeds the effective `try_timeout_secs` or `run_timeout_secs`; when `try_timeout_secs >= run_timeout_secs`, accept the config and apply only the run budget (per-try cap subsumed) rather than erroring
+- [x] 2.3 Add all three fields to the interactive config form (`internal/cli/config.go`) reliability group
+- [x] 2.4 Tests: defaults apply when unset; configured values are read; a handoff window ≥ try/run bound is clamped or rejected
 
 ## 3. Run/try timeout enforcement
 
