@@ -1,7 +1,7 @@
 ## ADDED Requirements
 
 ### Requirement: Cancelled outcome display
-The system SHALL render cancelled run and try outcomes in a muted/grey style. Cancelled outcomes SHALL NOT use the failure colour and SHALL NOT use the success colour.
+The system SHALL render cancelled run and try outcomes in a muted/grey style. Cancelled outcomes SHALL NOT use the failure colour and SHALL NOT use the success colour. Relay summaries SHALL present cancelled outcomes separately from failed outcomes.
 
 #### Scenario: Cancelled footer is muted
 - **WHEN** an attempt is recorded with outcome `cancelled`
@@ -11,6 +11,11 @@ The system SHALL render cancelled run and try outcomes in a muted/grey style. Ca
 #### Scenario: Cancelled output includes source
 - **WHEN** a cancelled attempt has a source such as `skip`, `graceful_stop`, or `quit_now`
 - **THEN** the displayed output SHALL include the cancellation source where outcome details are shown
+
+#### Scenario: Cancelled summary is not failed
+- **WHEN** a relay summary includes cancelled attempts or runs
+- **THEN** the summary SHALL NOT include those cancelled outcomes in the failed count
+- **AND** it SHALL expose them as cancelled where counts or outcome buckets are shown
 
 ### Requirement: Tail active target and highlighting
 The `rally tail` command SHALL preserve explicit historical try selection while making the default target active-run aware. `--try N` for positive N SHALL retain existing 1-based historical semantics. `--try 0` and the default invocation SHALL prefer active try metadata when present, then fall back to newest completed try history. Tail highlighting SHALL be opt-in with a plain default.
@@ -28,7 +33,7 @@ The `rally tail` command SHALL preserve explicit historical try selection while 
 - **THEN** the command SHALL select the first persisted historical try and SHALL NOT prefer active metadata
 
 #### Scenario: Missing active log falls back
-- **WHEN** active try metadata points at a missing log file and completed try history exists
+- **WHEN** active try metadata points at a missing log file, is stale, or belongs to no unfinished relay/run, and completed try history exists
 - **THEN** the command SHALL print a warning and fall back to the newest completed try
 
 #### Scenario: Plain tail remains default

@@ -65,9 +65,10 @@ and `run-state.json` has no active try pointer today.
    - Add at least a low-cost syntax-aware heuristic mode.
    - Add optional richer mode behind a dependency where feasible.
 
-## Review items before implementation
+## Resolved review items before implementation
 
-1. Do we want role-level alias entries to be separate from route entries (recommended) or inline in route tokens only?
-2. Should lap mismatch events remain always logged with `event_kind=lap_pin_mismatch`/`failure_category=lap_pin_mismatch`, or should they only be in log lines + warning footers?
-3. Should syntax highlighting default to `heuristic` and keep richer mode behind `--tail-highlight=chroma` only?
-4. For default non-laps behavior, do we want model text on the same line with role or as a separate `model:` dim line?
+1. Role-level alias entries live in `[reasoning]`, with harness-scoped aliases resolved after harness selection.
+2. Lap mismatch events are logged as telemetry `LevelWarning` diagnostics with `event_kind=lap_pin_mismatch` and `failure_category=lap_pin_mismatch`, but do not become Sentry Issues by default.
+3. Syntax highlighting remains opt-in; default tail output stays plain.
+4. Default non-laps headers put model text on the same line with role/harness.
+5. Ctrl+X graceful stop cancels/drains the active attempt, records `cancelled` with source `graceful_stop`, then stops the relay.

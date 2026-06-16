@@ -64,8 +64,10 @@ This release introduces warning-first mismatch handling, first-class cancelled o
    - These paths override normal executor exit/error handling and persist/display `cancelled` with source metadata (`skip`, `graceful_stop`, `quit_now`).
    - Cancelled attempts do not increment retry/freeze/failure counters and do not emit Sentry failure captures.
 
-## Open review points (please confirm)
+## Resolved review points
 
-1. Confirm this release should **not** attempt an in-place resume tidy pass for lap mismatches.
-2. Confirm whether role-level variant mapping belongs in `[reasoning]` (recommended) or a dedicated per-runner table.
-3. Confirm preferred highlighting default/mode set for `tail` and dependency budget.
+1. This release does **not** attempt an in-place resume tidy pass for lap mismatches.
+2. Role-level variant mapping belongs in `[reasoning]`.
+3. Tail highlighting remains opt-in with `off` as the default.
+4. Ctrl+X graceful stop changes semantics in this release: it cancels/drains the active attempt, records `cancelled` with source `graceful_stop`, then stops the relay.
+5. Lap mismatch diagnostics use telemetry `LevelWarning` without becoming Sentry Issues by default.

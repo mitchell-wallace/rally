@@ -70,30 +70,50 @@
   - source values: `skip`, `graceful_stop`, `quit_now`
   - display label: `cancelled`
   - styling: muted/grey via the existing style layer
+- Ctrl+X graceful stop changes semantics in this release: after the operator
+  requests graceful stop, Rally should cancel/drain the active attempt, persist
+  it as `cancelled` with source `graceful_stop`, and then halt without starting
+  another run. This supersedes the current "let the active try finish naturally"
+  behavior.
 - Cancellation source overrides normal executor exit handling after the attempt drains:
   - do not classify as `harness error`
   - do not run failure taxonomy or retry classification
   - do not increment retry, infra, pause, or freeze counters
   - do not emit Sentry failure captures
+  - do not synthesize an `incomplete_finalization` stub/failure capture for the
+    cancelled run after the attempt loop.
 - Persist cancellation status and source in try/run records so summaries, tail context, and future resume logic do not need to infer it from text.
 
 ### 3.2 implementation steps
 
-1. Track explicit operator action on the runner when Ctrl+S, Ctrl+X graceful-stop cancellation, or Ctrl+C quit-now cancels the active attempt.
-2. After draining `tryCh`, derive attempt outcome in this order:
-   - successful completion/finalization
+1. Add a typed cancellation source to the action loop result (for example
+   `CancellationSourceNone|Skip|GracefulStop|QuitNow`) instead of inferring from
+   `actionTaken`, `skipFlag`, and `stopFlag`.
+2. Track explicit operator action on the runner when Ctrl+S, Ctrl+X graceful stop, or Ctrl+C quit-now cancels the active attempt.
+3. After draining `tryCh`, derive attempt outcome in this order:
    - explicit operator cancellation
+   - successful completion/finalization
    - lap-pin mismatch warning
    - ordinary executor/failure classification
-3. Extend store/result structures with an outcome/status field if the existing `Completed` boolean is insufficient; keep compatibility by deriving `Completed=false` for cancelled records while exposing `status=cancelled`.
-4. Add muted footer/header rendering for cancelled outcomes and ensure summaries print `cancelled` rather than `failed`.
-5. Keep skip route semantics unchanged: Ctrl+S advances to the next scheduler candidate, but the skipped try is recorded as cancelled.
+4. Persist cancellation with concrete store fields:
+   - `TryRecord.Status string json:"status,omitempty"` (`success`, `failed`, `incomplete`, `cancelled`)
+   - `TryRecord.CancellationSource string json:"cancellation_source,omitempty"` (`skip`, `graceful_stop`, `quit_now`)
+   - derive legacy `Completed=false` for cancelled records for backward compatibility.
+5. Update downstream consumers so cancelled records do not become failed summaries:
+   - `tallyRuns` / final relay summary counts
+   - `style.RenderSummary` / footer output
+   - recent-try context strings
+   - telemetry log fields and failure-capture guards
+   - `maybeWriteStubAndClearState` / post-loop unfinalized-run handling
+6. Add muted footer/header rendering for cancelled outcomes and ensure summaries print `cancelled` rather than `failed`.
+7. Keep skip route semantics unchanged: Ctrl+S advances to the next scheduler candidate, but the skipped try is recorded as cancelled.
 
 ### 3.3 docs and tests
 
 - Add unit tests covering Ctrl+S, graceful stop cancellation, and quit-now cancellation overriding a context/process error.
 - Add telemetry/store tests verifying cancelled attempts do not produce failure captures, freeze increments, or retry attempts.
 - Add style tests verifying cancelled output uses muted/grey formatting and not success/failure colors.
+- Add summary/tally tests proving cancelled attempts are not counted as failed runs.
 
 ## 4) Reasoning/variant support with aliases
 
@@ -111,8 +131,12 @@ verify = 'g55-xh'
 junior = 'g55-l'
 ```
 
-- Values are role keys (case-insensitive).
-- Values are model alias tokens, resolved through the same model alias path as route `harness:alias` values. This covers antigravity, where effort is encoded in the model name.
+- Keys are role names (case-insensitive).
+- Values are harness-aware reasoning/model preferences. A value MAY be a
+  harness-scoped model alias such as `op:g55-xh` / `cc:opus-high`, or a
+  harness-supported effort token applied to the route-selected harness.
+- Bare model aliases are resolved only after the selected harness is known; the
+  resolver must not treat `verify = "g55-xh"` as a global alias.
 - Existing `[defaults.*_model]` and `[harness.<name>.models]` continue unchanged.
 - Where a role maps to an effort value for the same model, executor-specific injection is:
   - codex: `-c model_reasoning_effort=<value>`
@@ -120,15 +144,20 @@ junior = 'g55-l'
   - opencode: `--variant <value>`
   - gemini: unsupported; warn and skip
   - antigravity: unsupported as a flag; use model aliases such as high/low model names
-- Unknown reasoning values should warn, not hard-fail. The spike confirmed claude/opencode ignore many unsupported values and codex ultimately rejects invalid values at API time.
+- Unknown effort values should warn, not hard-fail. Missing harness-scoped model
+  aliases are validation errors in `rally routes check`, because they are likely
+  operator typos. The spike confirmed claude/opencode ignore many unsupported
+  effort values and codex ultimately rejects invalid values at API time.
 
 ### 4.2 runtime resolution
 
-1. On route entry resolution for a named lane, apply role-level variant fallback only when the entry has no explicit model token.
-2. Preserve explicit route models with higher precedence.
-3. Resolve role fallback to named model alias before accepting raw model strings.
-4. Allow the resolver to return both the selected model and optional reasoning/variant effort so each executor can inject it using its own mechanism.
-5. Add clear errors for unresolved role alias and include role name in diagnostics.
+1. Keep parsed route entries available until a concrete task/role is selected, or add a second role-aware resolution step after `ActiveRoute(task.Assignee)` chooses the route in `routeRuntime.next`.
+2. Apply role-level variant fallback only after the selected route entry's harness is known and only when the entry has no explicit model token.
+3. Preserve explicit route models with higher precedence.
+4. Resolve role fallback to a named model alias in the selected harness before accepting raw model strings.
+5. Allow the resolver to return both the selected model and optional reasoning/variant effort so each executor can inject it using its own mechanism.
+6. Propagate the optional effort through `agent.ResolvedAgent`, `agent.RunOptions`, `routeSelection`, `relay.Config.Resolver`, and each executor's argument builder.
+7. Add clear errors for unresolved harness-scoped model aliases and include role name in diagnostics.
 
 ### 4.3 compatibility
 
@@ -160,7 +189,15 @@ junior = 'g55-l'
 
 ### 5.3 persistence/integration
 
-- Extend progress/run-state with `active_try_id` and `active_log_path`, written at try start before the executor runs and cleared after the try is recorded.
+- Extend progress/run-state with `active_relay_id`, `active_run_id`, `active_try_id`,
+  `active_log_path`, and `active_started_at`, written at try start before the
+  executor runs and cleared after the try is recorded.
+- Clear active try metadata field-wise only through a helper that preserves
+  `RunID`, `PinnedLapID`, `RecordedLaps`, `LapsAttempted`, `HandoffState`, and
+  `SessionID`. Active-tail cleanup must not call `progress.ClearRunState`.
+- Treat active metadata as stale when it belongs to no unfinished relay/run, when
+  `active_started_at` is implausibly old, or when the active log path is missing;
+  stale metadata produces a warning and falls back to newest completed try history.
 - Add tests around active-run tail selection when both active and completed streams exist.
 
 ## 6) Rollout plan and review
@@ -172,8 +209,10 @@ This release is intentionally staged:
 3. Reasoning alias/config path with compatibility checks and executor-specific injection.
 4. `tail` active-run detection and highlighting modes.
 
-### Items that require operator confirmation
+### Resolved review decisions
 
-1. Whether role-variant resolution should be hard-fail when alias missing, or fall back to route default silently.
-2. Whether `run` header should include model on the same line or remain as a second `model:` line.
-3. Whether richer syntax highlighting should be opt-in only in a v1 release or behind a `--highlight=auto` default.
+1. Missing harness-scoped model aliases are errors in `rally routes check`; unsupported effort values warn and skip/fall back.
+2. Run headers include model on the same line as role/harness.
+3. Richer syntax highlighting stays opt-in for this release; plain output remains default.
+4. Ctrl+X graceful stop cancels/drains the current attempt and records source `graceful_stop`.
+5. Lap mismatch diagnostics use telemetry `LevelWarning` but do not capture Sentry Issues by default.

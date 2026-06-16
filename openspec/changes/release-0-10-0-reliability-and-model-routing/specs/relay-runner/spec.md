@@ -20,7 +20,7 @@ The system SHALL pin the assigned lap ID when a run starts and SHALL verify, whe
 - **THEN** the system SHALL record the lap ID and timestamp on the try record, not only the lap(s) accepted as done, so multi-lap consumption is traceable
 
 ### Requirement: Failure detection
-The system SHALL consider a try failed if the agent reports `Completed: false`, exits with an error, or produces no meaningful work (no file changes and runs less than 3 minutes), unless an explicit operator-cancelled outcome applies. The system SHALL assign each failure a stable `FailureCategory` (see "Failure taxonomy and evidence") and SHALL map that category onto one of three resilience classes:
+The system SHALL consider a try failed if the agent reports `Completed: false`, exits with an error, or produces no meaningful work (no file changes and runs less than 3 minutes), unless an explicit operator-cancelled outcome applies. Operator cancellation SHALL take precedence over normal executor success or error handling after a cancellation request has been issued. The system SHALL assign each failure a stable `FailureCategory` (see "Failure taxonomy and evidence") and SHALL map that category onto one of three resilience classes:
 - **infra-class**: short rate limit, provider overload, harness/launch error (e.g. `argument list too long`, `fork/exec`), transient infrastructure error (`transient_infra`: API timeout, network/connection/TLS failure, non-overload 5xx), or liveness stall detection.
 - **agent-class**: ordinary agent error or short no-op.
 - **incomplete**: file changes were produced but the agent did not finalize the lap (`laps done` or `laps handoff`).
@@ -54,13 +54,13 @@ Only repeated infra-class failures SHALL drive the per-agent-type resilience cas
 - **THEN** the system SHALL NOT classify it infra-class and SHALL NOT increment the pause/freeze counter
 
 #### Scenario: Operator cancellation overrides failure detection
-- **WHEN** a try exits with an error after Ctrl+S skip, quit-now, or a graceful-stop cancellation path explicitly cancelled the attempt
-- **THEN** the system SHALL record the try as `cancelled` rather than failed and SHALL NOT classify it into a `FailureCategory`
+- **WHEN** a try exits after Ctrl+S skip, Ctrl+X graceful stop, or quit-now cancelled the attempt
+- **THEN** the system SHALL record the try as `cancelled` rather than successful or failed and SHALL NOT classify it into a `FailureCategory`
 
 ## ADDED Requirements
 
 ### Requirement: Operator cancellation outcome
-The system SHALL represent operator-driven attempt termination as a first-class `cancelled` outcome with a stable source value. Supported sources SHALL include `skip`, `graceful_stop`, and `quit_now`. A cancelled try SHALL be persisted for audit, but SHALL NOT be classified as a failure, retried, counted toward pause/freeze resilience, or shown as a harness error.
+The system SHALL represent operator-driven attempt termination as a first-class `cancelled` outcome with a stable source value. Supported sources SHALL include `skip`, `graceful_stop`, and `quit_now`. A cancelled try SHALL be persisted for audit with `TryRecord.Status = "cancelled"` and `TryRecord.CancellationSource` set to the source. Legacy `TryRecord.Completed` SHALL be false for cancelled records, but downstream consumers SHALL use `Status` to distinguish cancellation from failure. A cancelled try SHALL NOT be classified as a failure, retried, counted toward pause/freeze resilience, counted as a failed run in summaries, shown as a harness error, or converted into a post-loop `incomplete_finalization` failure.
 
 #### Scenario: Skip records cancelled outcome
 - **WHEN** the operator presses Ctrl+S and the active attempt exits through the cancellation path
@@ -74,11 +74,19 @@ The system SHALL represent operator-driven attempt termination as a first-class 
 - **AND** the relay SHALL abort after recording the cancellation
 - **AND** the try SHALL NOT increment retry, pause, freeze, or failure counters
 
-#### Scenario: Graceful stop cancellation records cancelled outcome
-- **WHEN** a graceful-stop path explicitly cancels and drains an active attempt before normal completion
+#### Scenario: Graceful stop records cancelled outcome
+- **WHEN** the operator triggers Ctrl+X graceful stop while an attempt is running
 - **THEN** the system SHALL persist the try with outcome `cancelled` and source `graceful_stop`
 - **AND** the relay SHALL stop without starting a new run
 - **AND** the try SHALL NOT be rendered or recorded as a failed harness error
+
+#### Scenario: Cancelled run excluded from failure tally
+- **WHEN** a relay summary or run tally includes a cancelled try
+- **THEN** the system SHALL NOT count that cancelled try as a failed run
+
+#### Scenario: Cancelled laps-backed run suppresses unfinalized failure
+- **WHEN** a laps-backed attempt is cancelled before `laps done` or `laps handoff`
+- **THEN** the system SHALL NOT synthesize an `incomplete_finalization` failure capture for that cancelled attempt
 
 ### Requirement: Run-oriented relay header context
 The system SHALL label non-laps relay progress with run semantics and SHALL include role, harness, and model context in the live run header. Non-laps counters SHALL render as `run: X/Y`; lap-backed displays MAY retain lap-specific labels where they represent lap bookkeeping.
@@ -92,11 +100,11 @@ The system SHALL label non-laps relay progress with run semantics and SHALL incl
 - **THEN** the live header SHALL include the role label, harness, and model on the run header line
 
 ### Requirement: Active try metadata for live tailing
-The system SHALL make the active try targetable while it is still running by writing active try metadata before executor invocation and clearing it after the try is recorded. The metadata SHALL include enough information for `rally tail --try 0` to identify the active try log, including active try ID and active log path.
+The system SHALL make the active try targetable while it is still running by writing active try metadata before executor invocation and clearing it after the try is recorded. The metadata SHALL include enough information for `rally tail --try 0` to identify the active try log, including active relay ID, active run ID, active try ID, active log path, and active start time.
 
 #### Scenario: Active metadata written before executor
 - **WHEN** a try is about to invoke an executor
-- **THEN** the system SHALL persist active try metadata containing the active try ID and active log path before the executor starts
+- **THEN** the system SHALL persist active try metadata containing the active relay ID, active run ID, active try ID, active log path, and active start time before the executor starts
 
 #### Scenario: Active metadata cleared after persistence
 - **WHEN** the try has been appended to durable try history

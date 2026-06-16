@@ -18,9 +18,9 @@ The system SHALL provide a `ClaudeExecutor` that invokes `claude -p <prompt> --o
 ### Requirement: CodexExecutor
 The system SHALL provide a `CodexExecutor` that invokes `codex exec` as a subprocess with appropriate flags and returns a `TryResult`. When a resolved reasoning effort is specified for Codex, the executor SHALL inject it as a config override with `-c model_reasoning_effort=<value>`, not as a nonexistent CLI reasoning flag.
 
-#### Scenario: Codex run with full-auto mode
+#### Scenario: Codex run with approval bypass mode
 - **WHEN** a codex run is executed
-- **THEN** the executor SHALL pass `--full-auto` and `--dangerously-bypass-approvals-and-sandbox` flags
+- **THEN** the executor SHALL pass `--dangerously-bypass-approvals-and-sandbox`
 
 #### Scenario: Codex run with reasoning effort
 - **WHEN** a Codex reasoning effort is resolved for the run
@@ -71,3 +71,14 @@ The system SHALL avoid passing reasoning-effort flags to executors whose harness
 - **WHEN** a reasoning preference is configured for an Antigravity run
 - **THEN** the executor SHALL NOT pass a separate reasoning flag to `agy`
 - **AND** any reasoning-specific behavior SHALL come from the selected Antigravity model label
+
+### Requirement: Reasoning effort propagation
+The system SHALL propagate resolved reasoning effort from routing/configuration into executor invocation through typed runner options rather than ad hoc string parsing in executors. The resolved effort SHALL be available on `agent.ResolvedAgent` and `agent.RunOptions` or equivalent typed structures before an executor builds its subprocess arguments.
+
+#### Scenario: Resolved effort reaches executor options
+- **WHEN** route resolution selects a runner with a reasoning effort
+- **THEN** the runner SHALL pass that effort to the executor through typed run options
+
+#### Scenario: Executor does not parse route specs
+- **WHEN** an executor builds subprocess arguments
+- **THEN** it SHALL read model and reasoning effort from typed options and SHALL NOT parse route specification strings directly
