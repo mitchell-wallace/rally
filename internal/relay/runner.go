@@ -30,20 +30,19 @@ import (
 )
 
 type Config struct {
-	WorkspaceDir           string
-	DataDir                string
-	MachineID              string
-	AgentMixSpecs          []string
-	RouteSpecs             map[string][]string
-	UseOverrideRoute       bool
-	TargetIterations       int
-	StallThreshold         time.Duration
-	LivenessProbe          bool
-	RetryBudget            int
+	WorkspaceDir     string
+	DataDir          string
+	MachineID        string
+	AgentMixSpecs    []string
+	RouteSpecs       map[string][]string
+	UseOverrideRoute bool
+	TargetIterations int
+	StallThreshold   time.Duration
+	LivenessProbe    bool
+	RetryBudget      int
 	// RunTimeout/TryTimeout/HandoffTimeout carry the effective wall-clock
 	// budgets parsed from [reliability] (run_timeout_secs / try_timeout_secs /
-	// handoff_timeout_secs). Timer enforcement is added in a later change; these
-	// fields only pass the configured values through to the runner for now.
+	// handoff_timeout_secs).
 	RunTimeout             time.Duration
 	TryTimeout             time.Duration
 	HandoffTimeout         time.Duration
@@ -985,10 +984,10 @@ type actionMonitor interface {
 // selects over. Splitting them out lets [Runner.runActionLoop] be driven by a
 // fake executor/try channel and simulated keyboard.Action values in tests.
 type actionLoopDeps struct {
-	tryCh           <-chan tryResult
-	pidCh           <-chan int
-	actionCh        <-chan keyboard.Action
-	stallTick       <-chan time.Time
+	tryCh     <-chan tryResult
+	pidCh     <-chan int
+	actionCh  <-chan keyboard.Action
+	stallTick <-chan time.Time
 	// runBudgetCh fires when the per-run wall-clock budget is exhausted. It is
 	// constructed ONCE before the attempt loop and the same channel is passed
 	// into every runActionLoop invocation, so it measures cumulative time across
@@ -1994,11 +1993,14 @@ attemptLoop:
 	// to capture a clean handoff. This continuation, not the cancelled run_timeout
 	// implementation try, resolves the run.
 	if handoffResumePending && !r.stopFlag.Load() && ctx.Err() == nil {
-		contOutcome, contResult, contSucceeded := r.runBoundedHandoffOnly(
+		contOutcome, contResult, contSucceeded, contErr := r.runBoundedHandoffOnly(
 			ctx, relay, runIndex, picked, task, rc, roleInstructions,
 			handoffResumeSessionID, handoffResumeBaseAttempt+1, maxAttempts,
 			summaryEntryCountBeforeRun, runID, log,
 		)
+		if contErr != nil {
+			return outcome(false, false, false), contErr
+		}
 		resolvingOutcome = contOutcome
 		if contResult != nil {
 			lastResult = contResult
@@ -2061,6 +2063,31 @@ func noHandoffResumeReason(exec agent.Executor, sessionID string) string {
 	return "run timeout"
 }
 
+func buildHandoffOnlyPrompt(opts agent.RunOptions) string {
+	var b strings.Builder
+	if opts.Persona != "" {
+		fmt.Fprintf(&b, "Persona: %s\n\n", opts.Persona)
+	}
+	if opts.TaskName != "" {
+		fmt.Fprintf(&b, "Task: %s\n", opts.TaskName)
+	}
+	if opts.TaskRequirements != "" {
+		fmt.Fprintf(&b, "Requirements:\n%s\n\n", opts.TaskRequirements)
+	}
+	if opts.Instructions != "" {
+		fmt.Fprintf(&b, "## Project Instructions\n%s\n\n", opts.Instructions)
+	}
+	if opts.RoleInstructions != "" {
+		fmt.Fprintf(&b, "## Role Instructions\n%s\n\n", opts.RoleInstructions)
+	}
+	fmt.Fprintf(&b, "## Handoff-Only Continuation\n")
+	fmt.Fprintf(&b, "The run budget for the implementation attempt is exhausted. Do not continue implementation, edit files, run broad new debugging loops, or try to finish the task in this continuation.\n\n")
+	fmt.Fprintf(&b, "Your only job is to leave a durable handoff for the next run: summarize the blocker, include the most useful current state and next steps, then run `laps handoff` followed by the `laps wrapup ...` command printed by the hook.\n\n")
+	fmt.Fprintf(&b, "If laps reports that the wrong lap was claimed or handed off, use the undo command it prints before wrapping up.\n\n")
+	fmt.Fprintf(&b, "Do not exit without actually invoking the handoff and wrapup shell commands.\n")
+	return b.String()
+}
+
 // runBoundedHandoffOnly performs the single bounded, handoff-only continuation
 // after the run budget is exhausted on a resume-capable harness (task 4.1). It
 // resumes the captured session with a handoff-only prompt under a fresh context
@@ -2085,7 +2112,7 @@ func (r *Runner) runBoundedHandoffOnly(
 	summaryEntryCountBeforeRun int,
 	runID string,
 	log io.Writer,
-) (reliability.TryOutcome, *agent.TryResult, bool) {
+) (reliability.TryOutcome, *agent.TryResult, bool, error) {
 	startedAt := time.Now().UTC()
 
 	// Persist the captured session id so the resume-capable harness re-attaches to
@@ -2270,10 +2297,10 @@ func (r *Runner) runBoundedHandoffOnly(
 		relay.ID, runIndex+1, attemptNumber, outcome, failReason, runtime, handoffState, handoffEntry != nil)
 
 	if err := r.store.AppendTry(tryRecord); err != nil {
-		fmt.Fprintf(log, "relay %d run %d handoff-only append-try warning: %v\n", relay.ID, runIndex+1, err)
+		return outcome, result, succeeded, err
 	}
 
-	return outcome, result, succeeded
+	return outcome, result, succeeded, nil
 }
 
 func (r *Runner) newStallController(tryLogPath string, exec agent.Executor) reliability.StallController {

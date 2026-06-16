@@ -5,12 +5,14 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/mitchell-wallace/rally/internal/agent"
+	"github.com/mitchell-wallace/rally/internal/progress"
 	"github.com/mitchell-wallace/rally/internal/reliability"
 	"github.com/mitchell-wallace/rally/internal/store"
 )
@@ -153,14 +155,29 @@ func runTimeoutTask() runTask {
 	return runTask{Name: "task", Prompt: "do work", Assignee: "senior"}
 }
 
+func runTimeoutLapsTask() runTask {
+	return runTask{
+		Name:         "lap task",
+		Prompt:       "do work",
+		Assignee:     "senior",
+		LapID:        "lap-timeout",
+		IsLapsBacked: true,
+	}
+}
+
 func driveRunOne(t *testing.T, r *Runner) runOutcome {
+	t.Helper()
+	return driveRunOneTask(t, r, runTimeoutTask())
+}
+
+func driveRunOneTask(t *testing.T, r *Runner, task runTask) runOutcome {
 	t.Helper()
 	res, err := r.runOne(
 		context.Background(),
 		&store.RelayRecord{ID: 1, TargetIterations: 1},
 		0,
 		agent.ResolvedAgent{Harness: "opencode", Model: cheapTestModel},
-		runTimeoutTask(),
+		task,
 		nil, nil, false, false, nil, nil,
 		io.Discard,
 	)
@@ -174,6 +191,13 @@ func driveRunOneAsync(t *testing.T, r *Runner) <-chan runOutcome {
 	t.Helper()
 	done := make(chan runOutcome, 1)
 	go func() { done <- driveRunOne(t, r) }()
+	return done
+}
+
+func driveRunOneTaskAsync(t *testing.T, r *Runner, task runTask) <-chan runOutcome {
+	t.Helper()
+	done := make(chan runOutcome, 1)
+	go func() { done <- driveRunOneTask(t, r, task) }()
 	return done
 }
 
@@ -191,8 +215,9 @@ func awaitRunOne(t *testing.T, done <-chan runOutcome) runOutcome {
 // TestRunOneRunBudgetStopsRetries pins task 3.5's "cumulative retry time crossing
 // run_timeout_secs": the shared per-run budget fires during the first attempt and
 // must stop the run from retrying. The executor never completes on its own, so
-// only the run budget can end it; we assert a single recorded try labelled "run
-// timeout" rather than the full retry budget being burned.
+// only the run budget can end it. With no resumable session, task 4.3 resolves
+// that same implementation try as handoff_timeout rather than fabricating a
+// handoff-only continuation.
 func TestRunOneRunBudgetStopsRetries(t *testing.T) {
 	var attempts int32
 	exec := blockingTimeoutExecutor(nil, &attempts) // every attempt blocks
@@ -208,8 +233,11 @@ func TestRunOneRunBudgetStopsRetries(t *testing.T) {
 	if res.Success {
 		t.Fatal("run-budget exhaustion must not resolve as success")
 	}
-	if res.Outcome != reliability.OutcomeRunTimeout {
-		t.Fatalf("run outcome = %q, want %q (run budget won)", res.Outcome, reliability.OutcomeRunTimeout)
+	if res.Outcome != reliability.OutcomeHandoffTimeout {
+		t.Fatalf("run outcome = %q, want %q (no resumable handoff)", res.Outcome, reliability.OutcomeHandoffTimeout)
+	}
+	if res.InfraFailures != 0 {
+		t.Fatalf("infra failures = %d, want 0 for timeout lifecycle outcome", res.InfraFailures)
 	}
 	if got := atomic.LoadInt32(&attempts); got != 1 {
 		t.Fatalf("executor ran %d attempts, want 1: run-budget exhaustion must stop retries", got)
@@ -218,11 +246,11 @@ func TestRunOneRunBudgetStopsRetries(t *testing.T) {
 	if len(tries) != 1 {
 		t.Fatalf("recorded %d tries, want 1 (no retry after run budget)", len(tries))
 	}
-	if tries[0].Outcome != reliability.OutcomeRunTimeout {
-		t.Fatalf("try outcome = %q, want %q", tries[0].Outcome, reliability.OutcomeRunTimeout)
+	if tries[0].Outcome != reliability.OutcomeHandoffTimeout {
+		t.Fatalf("try outcome = %q, want %q", tries[0].Outcome, reliability.OutcomeHandoffTimeout)
 	}
-	if tries[0].FailReason != "run timeout" {
-		t.Fatalf("try fail reason = %q, want %q (run budget, not try cap)", tries[0].FailReason, "run timeout")
+	if tries[0].FailReason != "run timeout; harness cannot resume for handoff" {
+		t.Fatalf("try fail reason = %q, want no-resume reason", tries[0].FailReason)
 	}
 	if tries[0].Completed {
 		t.Error("a run-timeout try must not be marked completed")
@@ -260,8 +288,11 @@ func TestRunOneRunBudgetIsCumulativeAcrossRetries(t *testing.T) {
 	if res.Success {
 		t.Fatal("cumulative run-budget exhaustion must not resolve as success")
 	}
-	if res.Outcome != reliability.OutcomeRunTimeout {
-		t.Fatalf("run outcome = %q, want %q (shared run budget won after retry)", res.Outcome, reliability.OutcomeRunTimeout)
+	if res.Outcome != reliability.OutcomeHandoffTimeout {
+		t.Fatalf("run outcome = %q, want %q (shared run budget won after retry, no resume)", res.Outcome, reliability.OutcomeHandoffTimeout)
+	}
+	if res.InfraFailures != 0 {
+		t.Fatalf("infra failures = %d, want 0 for timeout lifecycle outcome", res.InfraFailures)
 	}
 	if got := atomic.LoadInt32(&attempts); got != 2 {
 		t.Fatalf("executor ran %d attempts, want 2: first try cap retries, then run budget stops", got)
@@ -273,11 +304,11 @@ func TestRunOneRunBudgetIsCumulativeAcrossRetries(t *testing.T) {
 	if tries[0].FailReason != "try timeout" {
 		t.Fatalf("try 1 fail reason = %q, want %q", tries[0].FailReason, "try timeout")
 	}
-	if tries[1].FailReason != "run timeout" {
-		t.Fatalf("try 2 fail reason = %q, want %q (cumulative run budget, not retry budget)", tries[1].FailReason, "run timeout")
+	if tries[1].FailReason != "run timeout; harness cannot resume for handoff" {
+		t.Fatalf("try 2 fail reason = %q, want no-resume reason", tries[1].FailReason)
 	}
-	if tries[1].Outcome != reliability.OutcomeRunTimeout {
-		t.Fatalf("try 2 outcome = %q, want %q", tries[1].Outcome, reliability.OutcomeRunTimeout)
+	if tries[1].Outcome != reliability.OutcomeHandoffTimeout {
+		t.Fatalf("try 2 outcome = %q, want %q", tries[1].Outcome, reliability.OutcomeHandoffTimeout)
 	}
 }
 
@@ -441,5 +472,294 @@ func TestRunOneStallPrecedesHardTimeout(t *testing.T) {
 	}
 	if tries[0].Outcome != reliability.OutcomeFailed {
 		t.Fatalf("try outcome = %q, want %q (stall/agent failure path)", tries[0].Outcome, reliability.OutcomeFailed)
+	}
+}
+
+func TestRunOneRunBudgetResumableContinuationRecordsSeparateHandoffTry(t *testing.T) {
+	var attempts int32
+	var workspaceDir string
+	var prompts []string
+	var resumeIDs []string
+	exec := &funcExecutor{
+		resumeSupported: true,
+		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+			n := int(atomic.AddInt32(&attempts, 1))
+			prompts = append(prompts, opts.Prompt)
+			resumeIDs = append(resumeIDs, opts.ResumeSessionID)
+			if n == 1 {
+				<-ctx.Done()
+				return &agent.TryResult{Completed: false, SessionID: "sess-run-budget"}, ctx.Err()
+			}
+			if opts.ResumeSessionID != "sess-run-budget" {
+				t.Errorf("handoff continuation ResumeSessionID = %q, want sess-run-budget", opts.ResumeSessionID)
+			}
+			if !strings.Contains(opts.Prompt, "Do not continue implementation") || !strings.Contains(opts.Prompt, "laps handoff") {
+				t.Errorf("handoff prompt did not contain handoff-only instructions:\n%s", opts.Prompt)
+			}
+			if err := progress.AppendRunEntry(workspaceDir, progress.RunEntry{
+				RunID:   "relay-1-run-1",
+				Summary: "blocked cleanly",
+				Handoff: &progress.HandoffEntry{
+					Summary:       "blocked cleanly",
+					Followups:     []string{"follow up"},
+					CreatedLapIDs: []string{"lap-followup"},
+				},
+			}); err != nil {
+				return nil, err
+			}
+			return &agent.TryResult{Completed: true, Summary: "handoff recorded"}, nil
+		},
+	}
+	r, s, ws := newTimeoutTestRunner(t, exec, Config{
+		RetryBudget:    1,
+		RunTimeout:     time.Hour,
+		HandoffTimeout: time.Hour,
+		LapsEnabled:    true,
+	})
+	workspaceDir = ws
+	r.timerFunc = fireOnCall(1)
+	var stallControllers int32
+	r.stallControllerFactory = func(string) reliability.StallController {
+		atomic.AddInt32(&stallControllers, 1)
+		return &fakeStallController{}
+	}
+
+	res := driveRunOneTask(t, r, runTimeoutLapsTask())
+
+	if !res.Success {
+		t.Fatalf("handoff continuation should resolve as success, got %+v", res)
+	}
+	if res.Outcome != reliability.OutcomeHandoffRequested {
+		t.Fatalf("run outcome = %q, want %q", res.Outcome, reliability.OutcomeHandoffRequested)
+	}
+	if res.InfraFailures != 0 {
+		t.Fatalf("infra failures = %d, want 0", res.InfraFailures)
+	}
+	if got := atomic.LoadInt32(&attempts); got != 2 {
+		t.Fatalf("executor ran %d attempts, want implementation + handoff continuation", got)
+	}
+	if got := atomic.LoadInt32(&stallControllers); got != 1 {
+		t.Fatalf("stall controllers created = %d, want 1 (none for handoff-only phase)", got)
+	}
+	tries := s.AllTries()
+	if len(tries) != 2 {
+		t.Fatalf("recorded %d tries, want 2", len(tries))
+	}
+	if tries[0].Outcome != reliability.OutcomeRunTimeout || tries[0].HandoffOnly {
+		t.Fatalf("try 1 = outcome %q handoff_only=%v, want run_timeout implementation try", tries[0].Outcome, tries[0].HandoffOnly)
+	}
+	if tries[1].Outcome != reliability.OutcomeHandoffRequested || !tries[1].HandoffOnly {
+		t.Fatalf("try 2 = outcome %q handoff_only=%v, want handoff_requested handoff-only try", tries[1].Outcome, tries[1].HandoffOnly)
+	}
+	if tries[1].RunID != tries[0].RunID {
+		t.Fatalf("handoff try RunID = %d, want same as implementation %d", tries[1].RunID, tries[0].RunID)
+	}
+	if tries[1].AttemptNumber != 2 {
+		t.Fatalf("handoff try attempt = %d, want maxAttempts+1 attempt 2", tries[1].AttemptNumber)
+	}
+	if len(resumeIDs) != 2 || resumeIDs[0] != "" || resumeIDs[1] != "sess-run-budget" {
+		t.Fatalf("ResumeSessionIDs = %v, want [\"\" \"sess-run-budget\"]", resumeIDs)
+	}
+	if len(prompts) != 2 || prompts[0] != "" || prompts[1] == "" {
+		t.Fatalf("prompt overrides = %v, want only handoff continuation prompt override", prompts)
+	}
+}
+
+func TestRunOneRunBudgetResumeSupportedWithoutSessionRecordsSingleHandoffTimeout(t *testing.T) {
+	var attempts int32
+	exec := &funcExecutor{
+		resumeSupported: true,
+		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+			atomic.AddInt32(&attempts, 1)
+			<-ctx.Done()
+			return &agent.TryResult{Completed: false}, ctx.Err()
+		},
+	}
+	r, s, _ := newTimeoutTestRunner(t, exec, Config{
+		RetryBudget: 1,
+		RunTimeout:  time.Hour,
+	})
+	r.timerFunc = fireOnCall(1)
+
+	res := driveRunOne(t, r)
+
+	if res.Outcome != reliability.OutcomeHandoffTimeout {
+		t.Fatalf("run outcome = %q, want %q", res.Outcome, reliability.OutcomeHandoffTimeout)
+	}
+	if got := atomic.LoadInt32(&attempts); got != 1 {
+		t.Fatalf("executor ran %d attempts, want no synthetic handoff continuation", got)
+	}
+	tries := s.AllTries()
+	if len(tries) != 1 {
+		t.Fatalf("recorded %d tries, want single implementation resolver", len(tries))
+	}
+	if tries[0].HandoffOnly {
+		t.Fatal("no-session path must not fabricate a handoff-only try")
+	}
+	if tries[0].Outcome != reliability.OutcomeHandoffTimeout {
+		t.Fatalf("try outcome = %q, want %q", tries[0].Outcome, reliability.OutcomeHandoffTimeout)
+	}
+	if tries[0].FailReason != "run timeout; no session captured for handoff" {
+		t.Fatalf("fail reason = %q, want no-session reason", tries[0].FailReason)
+	}
+	if res.InfraFailures != 0 {
+		t.Fatalf("infra failures = %d, want 0", res.InfraFailures)
+	}
+}
+
+func TestRunOneBoundedHandoffOnlyPartialHandoffRecordsHandoffTimeout(t *testing.T) {
+	var attempts int32
+	var workspaceDir string
+	exec := &funcExecutor{
+		resumeSupported: true,
+		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+			n := int(atomic.AddInt32(&attempts, 1))
+			if n == 1 {
+				<-ctx.Done()
+				return &agent.TryResult{Completed: false, SessionID: "sess-partial"}, ctx.Err()
+			}
+			rs, err := progress.LoadRunState(workspaceDir)
+			if err != nil {
+				return nil, err
+			}
+			rs.HandoffState = 1
+			if err := progress.SaveRunState(workspaceDir, rs); err != nil {
+				return nil, err
+			}
+			return &agent.TryResult{Completed: true, Summary: "handoff command ran but wrapup did not"}, nil
+		},
+	}
+	r, s, ws := newTimeoutTestRunner(t, exec, Config{
+		RetryBudget:    1,
+		RunTimeout:     time.Hour,
+		HandoffTimeout: time.Hour,
+		LapsEnabled:    true,
+	})
+	workspaceDir = ws
+	r.timerFunc = fireOnCall(1)
+
+	res := driveRunOneTask(t, r, runTimeoutLapsTask())
+
+	if res.Success {
+		t.Fatalf("partial handoff must not resolve as success: %+v", res)
+	}
+	if res.Outcome != reliability.OutcomeHandoffTimeout {
+		t.Fatalf("run outcome = %q, want %q", res.Outcome, reliability.OutcomeHandoffTimeout)
+	}
+	tries := s.AllTries()
+	if len(tries) != 2 {
+		t.Fatalf("recorded %d tries, want implementation + handoff continuation", len(tries))
+	}
+	if tries[0].Outcome != reliability.OutcomeRunTimeout {
+		t.Fatalf("try 1 outcome = %q, want %q", tries[0].Outcome, reliability.OutcomeRunTimeout)
+	}
+	if tries[1].Outcome != reliability.OutcomeHandoffTimeout || !tries[1].HandoffOnly {
+		t.Fatalf("try 2 = outcome %q handoff_only=%v, want handoff_timeout handoff-only", tries[1].Outcome, tries[1].HandoffOnly)
+	}
+	if tries[1].FailReason != "handoff without wrapup" {
+		t.Fatalf("handoff fail reason = %q, want partial/no-wrapup reason", tries[1].FailReason)
+	}
+	if res.InfraFailures != 0 {
+		t.Fatalf("infra failures = %d, want 0", res.InfraFailures)
+	}
+}
+
+func TestRunOneBoundedHandoffOnlyFailedContinuationRecordsHandoffTimeout(t *testing.T) {
+	var attempts int32
+	exec := &funcExecutor{
+		resumeSupported: true,
+		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+			n := int(atomic.AddInt32(&attempts, 1))
+			if n == 1 {
+				<-ctx.Done()
+				return &agent.TryResult{Completed: false, SessionID: "sess-failed"}, ctx.Err()
+			}
+			return &agent.TryResult{Completed: false, Summary: "handoff failed"}, nil
+		},
+	}
+	r, s, _ := newTimeoutTestRunner(t, exec, Config{
+		RetryBudget:    1,
+		RunTimeout:     time.Hour,
+		HandoffTimeout: time.Hour,
+		LapsEnabled:    true,
+	})
+	r.timerFunc = fireOnCall(1)
+
+	res := driveRunOneTask(t, r, runTimeoutLapsTask())
+
+	if res.Success {
+		t.Fatalf("failed handoff continuation must not resolve as success: %+v", res)
+	}
+	if res.Outcome != reliability.OutcomeHandoffTimeout {
+		t.Fatalf("run outcome = %q, want %q", res.Outcome, reliability.OutcomeHandoffTimeout)
+	}
+	tries := s.AllTries()
+	if len(tries) != 2 {
+		t.Fatalf("recorded %d tries, want implementation + handoff continuation", len(tries))
+	}
+	if tries[0].Outcome != reliability.OutcomeRunTimeout {
+		t.Fatalf("try 1 outcome = %q, want %q", tries[0].Outcome, reliability.OutcomeRunTimeout)
+	}
+	if tries[1].Outcome != reliability.OutcomeHandoffTimeout || !tries[1].HandoffOnly {
+		t.Fatalf("try 2 = outcome %q handoff_only=%v, want handoff_timeout handoff-only", tries[1].Outcome, tries[1].HandoffOnly)
+	}
+	if tries[1].FailReason != "handoff not completed" {
+		t.Fatalf("handoff fail reason = %q, want handoff not completed", tries[1].FailReason)
+	}
+	if res.InfraFailures != 0 {
+		t.Fatalf("infra failures = %d, want 0", res.InfraFailures)
+	}
+}
+
+func TestRunOneBoundedHandoffOnlyTimeoutRecordsHandoffTimeout(t *testing.T) {
+	var attempts int32
+	exec := &funcExecutor{
+		resumeSupported: true,
+		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+			n := int(atomic.AddInt32(&attempts, 1))
+			<-ctx.Done()
+			if n == 1 {
+				return &agent.TryResult{Completed: false, SessionID: "sess-timeout"}, ctx.Err()
+			}
+			return &agent.TryResult{Completed: false, Summary: "handoff timed out"}, ctx.Err()
+		},
+	}
+	r, s, _ := newTimeoutTestRunner(t, exec, Config{
+		RetryBudget:    1,
+		RunTimeout:     time.Hour,
+		HandoffTimeout: time.Hour,
+		LapsEnabled:    true,
+	})
+	timers := &boundTimerController{}
+	r.timerFunc = timers.timer
+
+	done := driveRunOneTaskAsync(t, r, runTimeoutLapsTask())
+	timers.fire(t, 1) // run budget cancels implementation attempt
+	waitForAttempts(t, &attempts, 2)
+	timers.fire(t, 2) // handoff-only bound cancels continuation
+
+	res := awaitRunOne(t, done)
+
+	if res.Success {
+		t.Fatalf("timed-out handoff continuation must fail: %+v", res)
+	}
+	if res.Outcome != reliability.OutcomeHandoffTimeout {
+		t.Fatalf("run outcome = %q, want %q", res.Outcome, reliability.OutcomeHandoffTimeout)
+	}
+	tries := s.AllTries()
+	if len(tries) != 2 {
+		t.Fatalf("recorded %d tries, want implementation + handoff continuation", len(tries))
+	}
+	if tries[0].Outcome != reliability.OutcomeRunTimeout {
+		t.Fatalf("try 1 outcome = %q, want %q", tries[0].Outcome, reliability.OutcomeRunTimeout)
+	}
+	if tries[1].Outcome != reliability.OutcomeHandoffTimeout || !tries[1].HandoffOnly {
+		t.Fatalf("try 2 = outcome %q handoff_only=%v, want handoff_timeout handoff-only", tries[1].Outcome, tries[1].HandoffOnly)
+	}
+	if tries[1].FailReason != "handoff timeout" {
+		t.Fatalf("handoff fail reason = %q, want handoff timeout", tries[1].FailReason)
+	}
+	if res.InfraFailures != 0 {
+		t.Fatalf("infra failures = %d, want 0", res.InfraFailures)
 	}
 }
