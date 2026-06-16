@@ -932,6 +932,20 @@ func (r *Runner) forceKillGroup(pgid int) error {
 	return reliability.ForceKillProcessGroup(pgid)
 }
 
+// drainTimedOut handles a wall-clock timeout arm in the action loop: it cancels
+// the running attempt, records the timeout (and whether the run budget was the
+// trigger), then blocks for the cancelled attempt's result so the goroutine that
+// owns tryCh does not leak. It mirrors the pause/skip drain of a single tryCh
+// receive after cancelAttempt.
+func (r *Runner) drainTimedOut(d actionLoopDeps, out *actionLoopResult, runBudget bool) {
+	d.cancelAttempt()
+	out.timedOut = true
+	out.runBudgetExhausted = runBudget
+	res := <-d.tryCh
+	out.result = res.result
+	out.execErr = res.err
+}
+
 // tryResult carries one attempt's executor outcome from the execute goroutine
 // back to the action loop.
 type tryResult struct {
@@ -955,6 +969,17 @@ type actionLoopDeps struct {
 	pidCh           <-chan int
 	actionCh        <-chan keyboard.Action
 	stallTick       <-chan time.Time
+	// runBudgetCh fires when the per-run wall-clock budget is exhausted. It is
+	// constructed ONCE before the attempt loop and the same channel is passed
+	// into every runActionLoop invocation, so it measures cumulative time across
+	// all retries rather than resetting per attempt. A nil channel disables the
+	// run budget (blocks forever in select).
+	runBudgetCh <-chan time.Time
+	// tryDeadline fires when the per-attempt cap is exhausted. Unlike runBudgetCh
+	// it MAY be created fresh each attempt (mirroring stallTick), so it bounds a
+	// single attempt without consuming the shared run budget. A nil channel
+	// disables the per-try cap.
+	tryDeadline     <-chan time.Time
 	attemptCtx      context.Context
 	cancelAttempt   context.CancelFunc
 	stallController reliability.StallController
@@ -976,6 +1001,14 @@ type actionLoopResult struct {
 	actionTaken    bool
 	stallTriggered bool
 	attemptPGID    int
+	// timedOut is set when a wall-clock bound (run budget or per-try cap)
+	// cancelled the attempt, distinguishing it from a stall, an operator action,
+	// or an ordinary agent error in post-loop handling.
+	timedOut bool
+	// runBudgetExhausted distinguishes a run-budget timeout (stop retrying,
+	// proceed to the bounded handoff) from a per-try cap firing with run budget
+	// still remaining (the attempt may retry). Only meaningful when timedOut.
+	runBudgetExhausted bool
 }
 
 // runActionLoop is the in-try select-based state machine. It blocks until the
@@ -992,6 +1025,12 @@ type actionLoopResult struct {
 // While quit-now drains, the monitor shows a "stopping…" indicator so the UI
 // does not look frozen. Stall detection (stallTick) and late pid reports
 // (pidCh) are handled alongside the action cases.
+//
+// Two wall-clock bounds join the select as their own arms, mirroring stallTick:
+// runBudgetCh (the shared per-run budget across retries) and tryDeadline (the
+// per-attempt cap). On fire either cancels the attempt, marks the result
+// timed-out, drains tryCh, and breaks — so whichever of run budget, per-try cap,
+// or stall fires first wins.
 func (r *Runner) runActionLoop(d actionLoopDeps) actionLoopResult {
 	var out actionLoopResult
 actionLoop:
@@ -1000,6 +1039,18 @@ actionLoop:
 		case res := <-d.tryCh:
 			out.result = res.result
 			out.execErr = res.err
+			break actionLoop
+		case <-d.runBudgetCh:
+			// Per-run budget exhausted: cancel the active attempt, mark it a
+			// run-budget timeout so the loop stops retrying and proceeds to the
+			// bounded handoff, then drain the cancelled attempt's result.
+			r.drainTimedOut(d, &out, true)
+			break actionLoop
+		case <-d.tryDeadline:
+			// Per-try cap exhausted with run budget possibly remaining: cancel
+			// the attempt and mark it a (non-run-budget) timeout; the loop may
+			// start a fresh retry if budget and retries remain.
+			r.drainTimedOut(d, &out, false)
 			break actionLoop
 		case pid := <-d.pidCh:
 			out.attemptPGID = pid
@@ -1225,6 +1276,19 @@ func (r *Runner) runOne(
 	if isProbation {
 		maxAttempts = HourlyRetryMaxAttempts
 	}
+
+	// Per-run wall-clock budget across all retry attempts. Constructed ONCE here
+	// (measured from run start), never inside the attempt loop, so a single timer
+	// channel — passed into every runActionLoop invocation — measures cumulative
+	// time across retries instead of resetting each attempt. A non-positive
+	// budget leaves runBudgetCh nil, disabling the bound. The per-try cap is
+	// created per attempt inside the loop (mirroring stallTicker).
+	var runBudgetCh <-chan time.Time
+	if r.cfg.RunTimeout > 0 {
+		runBudgetTimer := time.NewTimer(r.cfg.RunTimeout)
+		defer runBudgetTimer.Stop()
+		runBudgetCh = runBudgetTimer.C
+	}
 attemptLoop:
 	for attempt := 1; attempt <= maxAttempts; attempt++ {
 		lastAttempt = attempt
@@ -1367,11 +1431,22 @@ attemptLoop:
 		}()
 
 		stallTicker := time.NewTicker(stallCheckInterval)
+		// Per-attempt cap: a fresh timer each attempt so it bounds this single
+		// attempt without consuming the shared run budget (runBudgetCh). A
+		// non-positive cap leaves tryDeadline nil, disabling the per-try bound.
+		var tryDeadline <-chan time.Time
+		var tryTimer *time.Timer
+		if r.cfg.TryTimeout > 0 {
+			tryTimer = time.NewTimer(r.cfg.TryTimeout)
+			tryDeadline = tryTimer.C
+		}
 		loopOut := r.runActionLoop(actionLoopDeps{
 			tryCh:           tryCh,
 			pidCh:           pidCh,
 			actionCh:        actionCh,
 			stallTick:       stallTicker.C,
+			runBudgetCh:     runBudgetCh,
+			tryDeadline:     tryDeadline,
 			attemptCtx:      attemptCtx,
 			cancelAttempt:   cancelAttempt,
 			stallController: stallController,
@@ -1384,6 +1459,9 @@ attemptLoop:
 			harness:         picked.Harness,
 		})
 		stallTicker.Stop()
+		if tryTimer != nil {
+			tryTimer.Stop()
+		}
 
 		result := loopOut.result
 		execErr := loopOut.execErr
@@ -1391,6 +1469,12 @@ attemptLoop:
 		if loopOut.stallTriggered {
 			stallMarked = true
 		}
+		// A wall-clock timeout (run budget or per-try cap) cancelled the attempt.
+		// timedOut keeps this distinct from a stall (silence) or an ordinary
+		// agent error in the classification below; runBudgetExhausted decides
+		// whether the run stops retrying (and hands off, task 4) or may retry.
+		timedOut := loopOut.timedOut
+		runBudgetExhausted := loopOut.timedOut && loopOut.runBudgetExhausted
 
 		mon.Stop()
 		kbCancel()
@@ -1476,7 +1560,19 @@ attemptLoop:
 		failed := false
 		failReason = ""
 		attemptFailureClass := reliability.FailureAgent
-		if incomplete {
+		if timedOut {
+			// A timeout takes precedence over the execErr/agent-error branches: the
+			// cancelled attempt typically surfaces a context-cancelled execErr, but
+			// that is a consequence of the timeout, not a harness fault. Classify it
+			// as a non-freezing run_timeout attempt (see attemptOutcome override and
+			// the classifier-bypass below) rather than "harness error".
+			failed = true
+			if runBudgetExhausted {
+				failReason = "run timeout"
+			} else {
+				failReason = "try timeout"
+			}
+		} else if incomplete {
 			failed = true
 			failReason = reliability.CategoryDisplayLabel(reliability.CategoryIncompleteFinalization)
 			attemptFailureClass = reliability.FailureIncomplete
@@ -1540,6 +1636,15 @@ attemptLoop:
 
 		hasFailureEvidence := result != nil && result.Evidence != nil && result.Evidence.Category != ""
 		attemptOutcome := tryOutcomeForAttempt(failed, incomplete && !hasFailureEvidence, actionTaken && r.stopFlag.Load(), handoffEntry != nil)
+		// A timed-out attempt (run budget or per-try cap) records a non-freezing
+		// run_timeout outcome: it carries no FailureCategory (so the classifier
+		// below is skipped), is not an Issue, and is not terminal by the outcome
+		// itself. Whether the run stops (to hand off — task 4) or retries is
+		// decided by runBudgetExhausted at the loop bottom, not by this outcome.
+		// Guarded on `failed` so a stall-recovery success above is not relabelled.
+		if timedOut && failed {
+			attemptOutcome = reliability.OutcomeRunTimeout
+		}
 
 		// Error classification and strategy dispatch.
 		//
@@ -1605,7 +1710,8 @@ attemptLoop:
 		// out via skip/stop/lap-pin mismatch/terminal category). A single-attempt
 		// run is terminal on its first failure, so it colours immediately.
 		willRetry := failed && attempt < maxAttempts &&
-			!actionTaken && !r.skipFlag.Load() && !lapPinMismatch && !r.stopFlag.Load() && !terminalForRun
+			!actionTaken && !r.skipFlag.Load() && !lapPinMismatch && !r.stopFlag.Load() &&
+			!terminalForRun && !runBudgetExhausted
 		renderRunFooter(r.outWriter(), style.FooterOptions{
 			Passed:       !failed,
 			Duration:     runtime,
@@ -1798,6 +1904,18 @@ attemptLoop:
 		// rather than burning the retry budget on a quota/auth failure that a
 		// retry cannot clear.
 		if terminalForRun {
+			lastResult = result
+			break attemptLoop
+		}
+		// Run-budget exhaustion is terminal for the normal implementation loop,
+		// even though OutcomeRunTimeout is deliberately NOT terminal in
+		// IsTerminalForRun (a per-try cap with budget remaining must still be able
+		// to retry). Unlike that retryable per-try cap, an exhausted run budget
+		// stops retries here and the run proceeds to the bounded handoff-only
+		// continuation. That continuation is owned by the next lap (task 4); until
+		// it lands, breaking here resolves the run on the persisted run_timeout
+		// attempt rather than burning more of an already-exhausted budget.
+		if runBudgetExhausted {
 			lastResult = result
 			break attemptLoop
 		}
