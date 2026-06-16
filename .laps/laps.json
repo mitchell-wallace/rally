@@ -180,11 +180,11 @@
       "title": "Document recovery timeouts and bump version",
       "description": "Context: OpenSpec add-recovery-role-timeouts, tasks 10.1-10.2. The feature implementation should be in place before this lap.\n\nOutcome: internal/buildinfo/VERSION is bumped to 0.9.0, and user-facing docs describe the RECOVERY role, per-run/per-try timeout behavior, bounded handoff-only resume, the two recovery triggers, anti-loop cap behavior at a user-visible level, recovery classification, and the reliability config keys run_timeout_secs, try_timeout_secs, and handoff_timeout_secs.\n\nFiles \u0026 scope: internal/buildinfo/VERSION, README.md and existing role/reliability docs if present. Avoid changing code beyond doc example naming mismatches or version tests.\n\nDesign: Keep docs OpenSpec-agnostic. Explain that RECOVERY is Rally routing/prompt behavior and that laps remains the queue backend. Do not instruct users to create v-tags manually; follow AGENTS.md release guidance.\n\nAcceptance: Docs match implemented names and defaults. Version-related tests or checks pass. Do not check off tasks.md boxes.",
       "assignee": "JUNIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 983040,
       "createdAt": "2026-06-16T00:17:48.179549819Z",
-      "updatedAt": "2026-06-16T00:17:48.179549819Z",
-      "completedAt": null
+      "updatedAt": "2026-06-16T06:18:31.35283045Z",
+      "completedAt": "2026-06-16T06:18:31.35283045Z"
     },
     {
       "id": "rall-c8ba",
