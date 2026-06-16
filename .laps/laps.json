@@ -104,11 +104,11 @@
       "id": "work-5c00",
       "title": "Fix persisted recovery routing...",
       "description": "Fix persisted recovery routing to distinguish runs across relay restarts (use relay-aware run identity/order in internal/store/recovery.go) and add multi-relay regression coverage for resolver selection and recovery-cap counting.",
-      "isDone": false,
+      "isDone": true,
       "order": 524288,
       "createdAt": "2026-06-16T05:15:10.972483834Z",
-      "updatedAt": "2026-06-16T05:15:10.972483834Z",
-      "completedAt": null
+      "updatedAt": "2026-06-16T05:19:37.630447217Z",
+      "completedAt": "2026-06-16T05:19:37.630447217Z"
     },
     {
       "id": "work-54ef",
