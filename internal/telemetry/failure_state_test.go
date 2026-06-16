@@ -12,6 +12,7 @@ func TestFailureStateTags_ScalarFields(t *testing.T) {
 	fs := FailureState{
 		Attempt:     2,
 		MaxAttempts: 5,
+		Outcome:     "failed",
 		Category:    categoryUsageLimit,
 		AgentState:  "benched",
 		QuotaScope:  "anthropic",
@@ -23,6 +24,7 @@ func TestFailureStateTags_ScalarFields(t *testing.T) {
 	want := map[string]string{
 		"attempt":          "2",
 		"max_attempts":     "5",
+		"outcome":          "failed",
 		"failure_category": "usage_limit",
 		"agent_state":      "benched",
 		"quota_scope":      "anthropic",
@@ -37,7 +39,7 @@ func TestFailureStateTags_ScalarFields(t *testing.T) {
 }
 
 func TestFailureStateTags_OmitsZeroValues(t *testing.T) {
-	tags := FailureStateTags(FailureState{Category: "agent_error"})
+	tags := FailureStateTags(FailureState{Outcome: "failed", Category: "agent_error"})
 
 	for _, k := range []string{"attempt", "max_attempts", "agent_state"} {
 		if _, found := tags[k]; found {
@@ -49,11 +51,45 @@ func TestFailureStateTags_OmitsZeroValues(t *testing.T) {
 	}
 }
 
+func TestFailureStateTags_OutcomeControlsFailureCategory(t *testing.T) {
+	for _, outcome := range []string{"run_timeout", "handoff_timeout", "handoff_requested", "completed", ""} {
+		tags := FailureStateTags(FailureState{Outcome: outcome, Category: "usage_limit"})
+		if outcome != "" && tags["outcome"] != outcome {
+			t.Errorf("outcome tag = %q, want %q", tags["outcome"], outcome)
+		}
+		if _, found := tags["failure_category"]; found {
+			t.Errorf("outcome %q must not emit failure_category, got %q", outcome, tags["failure_category"])
+		}
+	}
+
+	tags := FailureStateTags(FailureState{Outcome: "failed", Category: "usage_limit"})
+	if tags["failure_category"] != "usage_limit" {
+		t.Fatalf("failed outcome failure_category = %q, want usage_limit", tags["failure_category"])
+	}
+}
+
+func TestFailureStateTags_RecoveryClassification(t *testing.T) {
+	tags := FailureStateTags(FailureState{
+		Outcome:                "completed",
+		RecoveryClassification: "repair_plan",
+	})
+	if tags["outcome"] != "completed" {
+		t.Errorf("outcome = %q, want completed", tags["outcome"])
+	}
+	if tags["recovery_classification"] != "repair_plan" {
+		t.Errorf("recovery_classification = %q, want repair_plan", tags["recovery_classification"])
+	}
+	if _, found := tags["failure_category"]; found {
+		t.Errorf("failure_category must be omitted for recovery classification-only state")
+	}
+}
+
 func TestFailureStateTags_ResetAndQuotaOnlyForLimitCategories(t *testing.T) {
 	reset := time.Date(2026, 6, 11, 12, 0, 0, 0, time.UTC)
 	// A non-limit category that nonetheless carries reset/quota data must not
 	// surface those as tags — they are meaningful only for limit categories.
 	fs := FailureState{
+		Outcome:    "failed",
 		Category:   "agent_error",
 		QuotaScope: "anthropic",
 		ResetAt:    &reset,
@@ -70,7 +106,7 @@ func TestFailureStateTags_ResetAndQuotaOnlyForLimitCategories(t *testing.T) {
 
 func TestFailureStateTags_LimitCategoryOmitsAbsentResetFields(t *testing.T) {
 	// A limit category with no reset evidence attaches no reset tags.
-	tags := FailureStateTags(FailureState{Category: categoryShortRateLimit})
+	tags := FailureStateTags(FailureState{Outcome: "failed", Category: categoryShortRateLimit})
 	for _, k := range []string{"quota_scope", "reset_at", "reset_after"} {
 		if _, found := tags[k]; found {
 			t.Errorf("tag %q must be omitted when not present", k)
@@ -83,6 +119,7 @@ func TestFailureStateTags_LimitCategoryOmitsAbsentResetFields(t *testing.T) {
 
 func TestFailureStateTags_NeverIncludesRawSignalOrMessage(t *testing.T) {
 	tags := FailureStateTags(FailureState{
+		Outcome:   "failed",
 		Category:  categoryUsageLimit,
 		RawSignal: "hit your usage limit",
 		Message:   "quota exhausted",
@@ -223,6 +260,7 @@ func TestFailureStateTags_AllLimitCategoriesGetQuotaFields(t *testing.T) {
 			fs := FailureState{
 				Attempt:     1,
 				MaxAttempts: 3,
+				Outcome:     "failed",
 				Category:    cat,
 				AgentState:  "active",
 				QuotaScope:  "provider-a",
@@ -250,6 +288,7 @@ func TestFailureStateTags_NonLimitCategoriesNeverGetQuotaFields(t *testing.T) {
 			fs := FailureState{
 				Attempt:     1,
 				MaxAttempts: 3,
+				Outcome:     "failed",
 				Category:    cat,
 				AgentState:  "active",
 				QuotaScope:  "provider-a",

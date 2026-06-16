@@ -46,8 +46,17 @@ type FailureState struct {
 	// MaxAttempts is the retry budget for the run. Zero omits the tag.
 	MaxAttempts int
 
-	// Category is the stable FailureCategory value (e.g. "usage_limit").
+	// Outcome is the upstream TryOutcome lifecycle value. Empty omits the tag.
+	Outcome string
+
+	// Category is the stable FailureCategory value (e.g. "usage_limit"). It is
+	// emitted only for Outcome == "failed"; lifecycle outcomes are not failure
+	// taxonomy values.
 	Category string
+
+	// RecoveryClassification is the RECOVERY role classification recorded
+	// upstream. Empty omits the tag.
+	RecoveryClassification string
 
 	// AgentState is the resilience vocabulary value for the failing runner:
 	// active / probation / frozen / benched.
@@ -75,26 +84,33 @@ type FailureState struct {
 }
 
 // FailureStateTags builds the scalar tags for a failure-state snapshot:
-// attempt, max_attempts, failure_category, and agent_state always (where set),
-// plus quota_scope, reset_at, and reset_after for limit categories where the
-// upstream evidence supplies them. Empty/zero values are omitted so filters are
-// not polluted with blanks. This never includes raw signal or message text —
-// those are free text and go into the failure_evidence context, not tags.
+// attempt, max_attempts, outcome, failure_category for failed outcomes,
+// recovery_classification, and agent_state where set, plus quota_scope, reset_at,
+// and reset_after for failed limit categories where the upstream evidence
+// supplies them. Empty/zero values are omitted so filters are not polluted with
+// blanks. This never includes raw signal or message text — those are free text
+// and go into the failure_evidence context, not tags.
 func FailureStateTags(fs FailureState) map[string]string {
-	tags := make(map[string]string, 7)
+	tags := make(map[string]string, 9)
 	if fs.Attempt != 0 {
 		tags["attempt"] = strconv.Itoa(fs.Attempt)
 	}
 	if fs.MaxAttempts != 0 {
 		tags["max_attempts"] = strconv.Itoa(fs.MaxAttempts)
 	}
-	if fs.Category != "" {
+	if fs.Outcome != "" {
+		tags["outcome"] = fs.Outcome
+	}
+	if fs.Outcome == "failed" && fs.Category != "" {
 		tags["failure_category"] = fs.Category
+	}
+	if fs.RecoveryClassification != "" {
+		tags["recovery_classification"] = fs.RecoveryClassification
 	}
 	if fs.AgentState != "" {
 		tags["agent_state"] = fs.AgentState
 	}
-	if isLimitCategory(fs.Category) {
+	if fs.Outcome == "failed" && isLimitCategory(fs.Category) {
 		if fs.QuotaScope != "" {
 			tags["quota_scope"] = fs.QuotaScope
 		}

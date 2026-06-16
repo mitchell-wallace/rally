@@ -5,11 +5,14 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/mitchell-wallace/rally/internal/agent"
+	"github.com/mitchell-wallace/rally/internal/laps"
+	"github.com/mitchell-wallace/rally/internal/progress"
 	"github.com/mitchell-wallace/rally/internal/reliability"
 	"github.com/mitchell-wallace/rally/internal/store"
 	"github.com/mitchell-wallace/rally/internal/telemetry"
@@ -27,13 +30,54 @@ type capturedEvent struct {
 	evt telemetry.Event
 }
 
-// capturingSink is a telemetry sink that records CaptureFailure calls. Span and
-// log methods inherit the no-op behavior so only the failure-capture path is
-// observed.
+type capturedSpan struct {
+	operation   string
+	description string
+	tags        map[string]string
+	data        map[string]interface{}
+}
+
+// capturingSink records telemetry calls so tests can assert Issue, event, span,
+// and structured-log fields together.
 type capturingSink struct {
 	telemetry.NoopSink
 	failures []capturedFailure
 	events   []capturedEvent
+	logs     []map[string]interface{}
+	spans    []*capturedSpan
+}
+
+type capturingSpan struct {
+	span *capturedSpan
+}
+
+func (c *capturingSink) StartSpan(ctx context.Context, operation, description string) (context.Context, telemetry.Span) {
+	span := &capturedSpan{
+		operation:   operation,
+		description: description,
+		tags:        map[string]string{},
+		data:        map[string]interface{}{},
+	}
+	c.spans = append(c.spans, span)
+	return ctx, &capturingSpan{span: span}
+}
+
+func (s *capturingSpan) SetTag(key, value string) {
+	s.span.tags[key] = value
+}
+
+func (s *capturingSpan) SetData(key string, value interface{}) {
+	s.span.data[key] = value
+}
+
+func (s *capturingSpan) Finish() {}
+
+func (c *capturingSink) EmitTryLog(_ context.Context, fields map[string]interface{}) {
+	copied := make(map[string]interface{}, len(fields))
+	for k, v := range fields {
+		copied[k] = v
+	}
+	c.logs = append(c.logs, copied)
 }
 
 func (c *capturingSink) CaptureFailure(_ context.Context, msg string, evt telemetry.FailureEvent) {
@@ -401,6 +445,267 @@ func wantContextNotContains(t *testing.T, evt telemetry.FailureEvent, block, key
 	if strings.Contains(got, substr) {
 		t.Errorf("context[%q][%q] = %q must not contain %q", block, key, got, substr)
 	}
+}
+
+func findTryLogByOutcome(t *testing.T, sink *capturingSink, outcome string) map[string]interface{} {
+	t.Helper()
+	for _, fields := range sink.logs {
+		if fields["event"] == "try" && fields["outcome"] == outcome {
+			return fields
+		}
+	}
+	t.Fatalf("no try log with outcome %q found in %#v", outcome, sink.logs)
+	return nil
+}
+
+func findTrySpanByOutcome(t *testing.T, sink *capturingSink, outcome string) *capturedSpan {
+	t.Helper()
+	for _, span := range sink.spans {
+		if span.operation == "try" && span.tags["outcome"] == outcome {
+			return span
+		}
+	}
+	t.Fatalf("no try span with outcome %q found in %#v", outcome, sink.spans)
+	return nil
+}
+
+func TestRunOneTimeoutHandoffOutcomesStaySpanLogOnly(t *testing.T) {
+	var workspaceDir string
+	attempt := 0
+	exec := &funcExecutor{
+		resumeSupported: true,
+		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+			attempt++
+			if attempt == 1 {
+				<-ctx.Done()
+				return &agent.TryResult{Completed: false, SessionID: "sess-timeout"}, ctx.Err()
+			}
+			if err := progress.AppendRunEntry(workspaceDir, progress.RunEntry{
+				RunID:   "relay-1-run-1",
+				Summary: "handoff",
+				Handoff: &progress.HandoffEntry{
+					Summary: "handoff",
+				},
+			}); err != nil {
+				return nil, err
+			}
+			return &agent.TryResult{Completed: true, Summary: "handoff recorded"}, nil
+		},
+	}
+	r, _, ws := newTimeoutTestRunner(t, exec, Config{
+		RetryBudget:    1,
+		RunTimeout:     time.Hour,
+		HandoffTimeout: time.Hour,
+		LapsEnabled:    true,
+	})
+	workspaceDir = ws
+	sink := &capturingSink{}
+	r.SetTelemetry(sink)
+	r.timerFunc = fireOnCall(1)
+
+	res := driveRunOneTask(t, r, runTimeoutLapsTask())
+	if !res.Success || res.Outcome != reliability.OutcomeHandoffRequested {
+		t.Fatalf("run outcome = success %v outcome %q, want handoff_requested success", res.Success, res.Outcome)
+	}
+	if len(sink.failures) != 0 {
+		t.Fatalf("timeout/handoff outcomes must not capture Issues, got %d", len(sink.failures))
+	}
+
+	runTimeoutLog := findTryLogByOutcome(t, sink, string(reliability.OutcomeRunTimeout))
+	if _, found := runTimeoutLog["failure_category"]; found {
+		t.Fatalf("run_timeout log must not carry failure_category: %#v", runTimeoutLog)
+	}
+	handoffLog := findTryLogByOutcome(t, sink, string(reliability.OutcomeHandoffRequested))
+	if handoffLog["handoff_only"] != true {
+		t.Fatalf("handoff continuation log handoff_only = %#v, want true", handoffLog["handoff_only"])
+	}
+	handoffSpan := findTrySpanByOutcome(t, sink, string(reliability.OutcomeHandoffRequested))
+	if handoffSpan.tags["handoff_only"] != "true" || handoffSpan.data["handoff_only"] != true {
+		t.Fatalf("handoff continuation span not identifiable as handoff-only: tags=%#v data=%#v", handoffSpan.tags, handoffSpan.data)
+	}
+}
+
+func TestRunOneHandoffTimeoutOutcomeStaysSpanLogOnly(t *testing.T) {
+	exec := &funcExecutor{
+		resumeSupported: true,
+		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+			<-ctx.Done()
+			return &agent.TryResult{Completed: false}, ctx.Err()
+		},
+	}
+	r, _, _ := newTimeoutTestRunner(t, exec, Config{
+		RetryBudget: 1,
+		RunTimeout:  time.Hour,
+		LapsEnabled: true,
+	})
+	sink := &capturingSink{}
+	r.SetTelemetry(sink)
+	r.timerFunc = fireOnCall(1)
+
+	res := driveRunOneTask(t, r, runTimeoutLapsTask())
+	if res.Outcome != reliability.OutcomeHandoffTimeout {
+		t.Fatalf("run outcome = %q, want handoff_timeout", res.Outcome)
+	}
+	if len(sink.failures) != 0 {
+		t.Fatalf("handoff_timeout must not capture an Issue, got %d", len(sink.failures))
+	}
+	log := findTryLogByOutcome(t, sink, string(reliability.OutcomeHandoffTimeout))
+	if _, found := log["failure_category"]; found {
+		t.Fatalf("handoff_timeout log must not carry failure_category: %#v", log)
+	}
+	findTrySpanByOutcome(t, sink, string(reliability.OutcomeHandoffTimeout))
+}
+
+func TestRunOneRecoveryClassificationTelemetryAndNeedsUserIssue(t *testing.T) {
+	tests := []struct {
+		name         string
+		class        string
+		wantFailures int
+	}{
+		{name: "ordinary recovery classification is span log only", class: "repair_plan"},
+		{name: "needs_user captures operator issue", class: "needs_user", wantFailures: 1},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			workspaceDir := t.TempDir()
+			rallyDir := store.RallyDir(workspaceDir)
+			os.MkdirAll(rallyDir, 0o755)
+			initRepo(t, workspaceDir)
+			runGit(t, workspaceDir, "commit", "--allow-empty", "-m", "initial", "--no-verify")
+
+			s := newTestStore(t, rallyDir)
+			exec := &funcExecutor{
+				fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+					if err := os.WriteFile(filepath.Join(workspaceDir, "done.txt"), []byte("done\n"), 0o644); err != nil {
+						return nil, err
+					}
+					if err := progress.RecordLap(workspaceDir, "lap-1"); err != nil {
+						return nil, err
+					}
+					if err := progress.AppendRunEntry(workspaceDir, progress.RunEntry{
+						RunID:          "relay-1-run-1",
+						Summary:        "done",
+						Classification: tt.class,
+					}); err != nil {
+						return nil, err
+					}
+					return &agent.TryResult{Completed: true, Summary: "done"}, nil
+				},
+			}
+			sink := &capturingSink{}
+			r := NewRunner(s, Config{
+				WorkspaceDir:     workspaceDir,
+				DataDir:          t.TempDir(),
+				AgentMixSpecs:    []string{"op:dsf"},
+				TargetIterations: 1,
+				RetryBudget:      1,
+				LapsEnabled:      true,
+				Resolver:         cheapTestResolver,
+			}, map[string]agent.Executor{"opencode": exec})
+			r.SetTelemetry(sink)
+
+			res, err := r.runOne(
+				context.Background(),
+				&store.RelayRecord{ID: 1, TargetIterations: 1},
+				0,
+				agent.ResolvedAgent{Harness: "opencode", Model: cheapTestModel},
+				runTask{Name: "task", Prompt: "do work", Assignee: "senior", EffectiveAssignee: "recovery", ResolvedRoute: "recovery", LapID: "lap-1", IsLapsBacked: true, LapsRemaining: 1},
+				nil, nil, false, false, nil, nil, io.Discard,
+			)
+			if err != nil {
+				t.Fatalf("runOne error = %v", err)
+			}
+			if !res.Success || res.Outcome != reliability.OutcomeCompleted {
+				t.Fatalf("run outcome = success %v outcome %q, want completed success", res.Success, res.Outcome)
+			}
+
+			log := findTryLogByOutcome(t, sink, string(reliability.OutcomeCompleted))
+			if log["recovery_classification"] != tt.class {
+				t.Fatalf("log recovery_classification = %#v, want %q", log["recovery_classification"], tt.class)
+			}
+			span := findTrySpanByOutcome(t, sink, string(reliability.OutcomeCompleted))
+			if span.tags["recovery_classification"] != tt.class {
+				t.Fatalf("span recovery_classification = %q, want %q", span.tags["recovery_classification"], tt.class)
+			}
+			if len(sink.failures) != tt.wantFailures {
+				t.Fatalf("captured failures = %d, want %d", len(sink.failures), tt.wantFailures)
+			}
+			if tt.wantFailures == 1 {
+				evt := sink.failures[0].evt
+				wantTag(t, evt.Tags, "recovery_classification", "needs_user")
+				wantTag(t, evt.Tags, "outcome", "completed")
+				wantNoTag(t, evt.Tags, "failure_category")
+				wantFingerprintCategory(t, evt, "needs_user")
+			}
+		})
+	}
+}
+
+func TestRunRecoveryCapHitCapturesNeedsUserIssue(t *testing.T) {
+	workspaceDir := t.TempDir()
+	rallyDir := store.RallyDir(workspaceDir)
+	os.MkdirAll(rallyDir, 0o755)
+	initRepo(t, workspaceDir)
+	runGit(t, workspaceDir, "commit", "--allow-empty", "-m", "initial", "--no-verify")
+
+	s := newTestStore(t, rallyDir)
+	if err := s.AppendTry(store.TryRecord{ID: 1, RunID: 1, RelayID: 1, LapID: "lap-cap", AttemptNumber: 1, Outcome: reliability.OutcomeHandoffTimeout, ResolvedRoute: "recovery"}); err != nil {
+		t.Fatalf("append try 1: %v", err)
+	}
+	if err := s.AppendTry(store.TryRecord{ID: 2, RunID: 2, RelayID: 1, LapID: "lap-cap", AttemptNumber: 1, Outcome: reliability.OutcomeHandoffTimeout, ResolvedRoute: "recovery"}); err != nil {
+		t.Fatalf("append try 2: %v", err)
+	}
+
+	oldHeadPull := headPullLap
+	headPullLap = func(context.Context, string) (laps.Lap, error) {
+		return laps.Lap{ID: "lap-cap", Title: "cap task", Description: "finish", Assignee: "senior"}, nil
+	}
+	oldQueueSize := queueSize
+	queueSize = func(context.Context, string) (int, error) { return 1, nil }
+	defer func() {
+		headPullLap = oldHeadPull
+		queueSize = oldQueueSize
+	}()
+
+	exec := &funcExecutor{
+		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+			if err := os.WriteFile(filepath.Join(workspaceDir, "done.txt"), []byte("done\n"), 0o644); err != nil {
+				return nil, err
+			}
+			if err := progress.RecordLap(workspaceDir, "lap-cap"); err != nil {
+				return nil, err
+			}
+			if err := progress.AppendRunEntry(workspaceDir, progress.RunEntry{
+				RunID:   "relay-1-run-1",
+				Summary: "done",
+			}); err != nil {
+				return nil, err
+			}
+			return &agent.TryResult{Completed: true, Summary: "done"}, nil
+		},
+	}
+	sink := &capturingSink{}
+	r := NewRunner(s, Config{
+		WorkspaceDir:     workspaceDir,
+		DataDir:          t.TempDir(),
+		AgentMixSpecs:    []string{"op:dsf"},
+		TargetIterations: 1,
+		RetryBudget:      1,
+		LapsEnabled:      true,
+		Resolver:         cheapTestResolver,
+	}, map[string]agent.Executor{"opencode": exec})
+	r.SetTelemetry(sink)
+
+	if err := r.Run(context.Background()); err != nil {
+		t.Fatalf("Run error = %v", err)
+	}
+
+	evt := findFailure(t, sink, "recovery cap reached")
+	wantTag(t, evt.Tags, "recovery_classification", "needs_user")
+	wantTag(t, evt.Tags, "lap_id", "lap-cap")
+	wantNoTag(t, evt.Tags, "failure_category")
+	wantNoTag(t, evt.Tags, "outcome")
+	wantFingerprintCategory(t, evt, "needs_user")
 }
 
 func setupRunnerForFailureTest(t *testing.T) (*store.Store, string, *capturingSink) {

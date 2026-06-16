@@ -698,7 +698,7 @@ func (r *Runner) Run(ctx context.Context) error {
 				failureStateEvent(
 					telemetry.Tags(telemetry.EventInfo{RelayID: relay.ID, RunID: runID, Role: task.promptAssignee(), Repo: rc.Repo, RepoName: rc.RepoName, LapID: task.LapID}),
 					rc,
-					telemetry.FailureState{Category: "needs_user"},
+					telemetry.FailureState{RecoveryClassification: "needs_user"},
 				))
 		}
 		var consumedMsg *store.MessageRecord
@@ -1855,10 +1855,18 @@ attemptLoop:
 			LapID:    task.LapID,
 		})
 		applyTags(trySpan, tryTags)
+		trySpan.SetTag("outcome", string(attemptOutcome))
 		trySpan.SetData("completed", !failed)
 		trySpan.SetData("outcome", string(attemptOutcome))
+		if dirtyHandoff {
+			trySpan.SetData("dirty_handoff", true)
+		}
+		if task.ResolvedRoute == "recovery" && recoveryClassification != "" {
+			trySpan.SetTag("recovery_classification", recoveryClassification)
+			trySpan.SetData("recovery_classification", recoveryClassification)
+		}
 		trySpan.SetData("fail_reason", failReason)
-		r.tel().EmitTryLog(tryCtx, map[string]interface{}{
+		tryLogFields := map[string]interface{}{
 			"event":                          "try",
 			"relay_id":                       relay.ID,
 			"run_id":                         runIndex + 1,
@@ -1884,17 +1892,26 @@ attemptLoop:
 			"prompt_task_bytes":              len(opts.TaskPrompt),
 			"prompt_inbox_bytes":             len(opts.InboxMessage),
 			"prompt_relay_message_bytes":     len(opts.RelayMessage),
-		})
+		}
+		if dirtyHandoff {
+			tryLogFields["dirty_handoff"] = true
+		}
+		if task.ResolvedRoute == "recovery" && recoveryClassification != "" {
+			tryLogFields["recovery_classification"] = recoveryClassification
+		}
+		r.tel().EmitTryLog(tryCtx, tryLogFields)
 
 		// Capture provider-limit evidence as low-severity diagnostic telemetry
 		// regardless of whether the failure is operator-worthy enough to become an
 		// Issue. This builds the parser-validation corpus without broadening alerts.
 		if failed && attemptOutcome.ShouldCaptureIssue() {
 			fs := telemetry.FailureState{
-				Attempt:     attempt,
-				MaxAttempts: maxAttempts,
-				Category:    string(failureCategory),
-				AgentState:  r.agentStateName(picked),
+				Attempt:                attempt,
+				MaxAttempts:            maxAttempts,
+				Outcome:                string(attemptOutcome),
+				Category:               string(failureCategory),
+				RecoveryClassification: recoveryClassification,
+				AgentState:             r.agentStateName(picked),
 			}
 			if resetEvidence != nil {
 				fs.QuotaScope = resetEvidence.QuotaScope
@@ -1923,6 +1940,16 @@ attemptLoop:
 				// and bounded raw provider signal from TryResult.Evidence.
 				r.tel().CaptureFailure(tryCtx, fmt.Sprintf("relay %d run %d try %d failed: %s", relay.ID, runIndex+1, tryRecord.ID, failReason), failureStateEvent(tryTags, rc, fs))
 			}
+		}
+		if task.ResolvedRoute == "recovery" && recoveryClassification == "needs_user" {
+			fs := telemetry.FailureState{
+				Attempt:                attempt,
+				MaxAttempts:            maxAttempts,
+				Outcome:                string(attemptOutcome),
+				RecoveryClassification: recoveryClassification,
+				AgentState:             r.agentStateName(picked),
+			}
+			r.tel().CaptureFailure(tryCtx, fmt.Sprintf("relay %d run %d try %d recovery needs_user", relay.ID, runIndex+1, tryRecord.ID), failureStateEvent(tryTags, rc, fs))
 		}
 		trySpan.Finish()
 
@@ -2046,13 +2073,17 @@ attemptLoop:
 		stubSummary = lastResult.Summary
 	}
 	wroteUnfinalized, _ := r.maybeWriteStubAndClearState(stubSummary)
-	if wroteUnfinalized && !success {
+	designedHandoffOutcome := resolvingOutcome == reliability.OutcomeRunTimeout ||
+		resolvingOutcome == reliability.OutcomeHandoffTimeout ||
+		resolvingOutcome == reliability.OutcomeHandoffRequested
+	if wroteUnfinalized && !success && !designedHandoffOutcome {
 		// "agent exited without finalizing" is an operator-worthy recognized
 		// failure — the agent process ended without `laps done`/`laps handoff`.
 		// Categorize it as incomplete_finalization and carry run/runner/budget and
 		// the last known attempt; this is not a provider-limit failure, so no
 		// quota/reset/raw-signal fields attach.
 		fs := telemetry.FailureState{
+			Outcome:     string(reliability.OutcomeFailed),
 			Category:    string(reliability.CategoryIncompleteFinalization),
 			Attempt:     lastAttempt,
 			MaxAttempts: maxAttempts,
@@ -2307,11 +2338,17 @@ func (r *Runner) runBoundedHandoffOnly(
 		LapID:    task.LapID,
 	})
 	applyTags(trySpan, tryTags)
+	trySpan.SetTag("outcome", string(outcome))
+	trySpan.SetTag("handoff_only", "true")
 	trySpan.SetData("completed", succeeded)
 	trySpan.SetData("outcome", string(outcome))
 	trySpan.SetData("handoff_only", true)
+	if task.ResolvedRoute == "recovery" && recoveryClassification != "" {
+		trySpan.SetTag("recovery_classification", recoveryClassification)
+		trySpan.SetData("recovery_classification", recoveryClassification)
+	}
 	trySpan.SetData("fail_reason", failReason)
-	r.tel().EmitTryLog(tryCtx, map[string]interface{}{
+	tryLogFields := map[string]interface{}{
 		"event":        "try",
 		"relay_id":     relay.ID,
 		"run_id":       runIndex + 1,
@@ -2327,7 +2364,21 @@ func (r *Runner) runBoundedHandoffOnly(
 		"handoff_only": true,
 		"fail_reason":  failReason,
 		"runtime_ms":   runtime.Milliseconds(),
-	})
+	}
+	if task.ResolvedRoute == "recovery" && recoveryClassification != "" {
+		tryLogFields["recovery_classification"] = recoveryClassification
+	}
+	r.tel().EmitTryLog(tryCtx, tryLogFields)
+	if task.ResolvedRoute == "recovery" && recoveryClassification == "needs_user" {
+		fs := telemetry.FailureState{
+			Attempt:                attemptNumber,
+			MaxAttempts:            maxAttempts,
+			Outcome:                string(outcome),
+			RecoveryClassification: recoveryClassification,
+			AgentState:             r.agentStateName(picked),
+		}
+		r.tel().CaptureFailure(tryCtx, fmt.Sprintf("relay %d run %d try %d recovery needs_user", relay.ID, runIndex+1, tryID), failureStateEvent(tryTags, rc, fs))
+	}
 	trySpan.Finish()
 
 	fmt.Fprintf(log, "relay %d run %d handoff-only continuation: attempt=%d outcome=%q fail_reason=%q runtime=%s handoff_state=%d durable_handoff=%v\n",

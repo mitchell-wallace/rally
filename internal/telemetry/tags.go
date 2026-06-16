@@ -72,6 +72,12 @@ func Tags(info EventInfo) map[string]string {
 func FailureFingerprint(tags map[string]string) []string {
 	category := tags["failure_category"]
 	if category == "" {
+		category = tags["recovery_classification"]
+	}
+	if category == "" {
+		category = tags["outcome"]
+	}
+	if category == "" {
 		category = "unknown"
 	}
 	runner := tags["runner"]
