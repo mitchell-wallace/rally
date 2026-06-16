@@ -169,11 +169,11 @@
       "title": "Emit outcome and recovery telemetry tags",
       "description": "Context: OpenSpec add-recovery-role-timeouts, tasks 9.1-9.4. This lap extends telemetry with TryOutcome and RecoveryClassification without changing the failure taxonomy.\n\nOutcome: FailureState has Outcome and RecoveryClassification; FailureStateTags emits an outcome scalar tag on every try event and the existing failure_category tag only for OutcomeFailed; recovery-route try events attach recovery_classification when recorded; run_timeout, handoff_timeout, and handoff_requested are spans/logs rather than Issues; needs_user from a recovery classification or recovery cap may capture an operator Issue; optional recovery_started common log may be added if it fits existing telemetry patterns.\n\nFiles \u0026 scope: internal/telemetry/failure_state.go, tags.go, sinks/tests, internal/relay telemetry call sites, and cap-hit Issue integration. Do not introduce a parallel category tag.\n\nDesign: Read outcome/classification from upstream try/run records or FailureState inputs; telemetry must not re-classify. Handoff-only continuation tries should be identifiable in structured try logs/spans. The other four recovery classifications remain spans/logs. Preserve existing Sentry grouping behavior for real infra and agent failures.\n\nAcceptance: Tests cover outcome tags for run_timeout/handoff_timeout/handoff_requested, no Issue capture for those outcomes, failure_category only on failed outcome, handoff-only try identification, recovery_classification tag on recovery tries, and needs_user Issue behavior. Run go test ./internal/telemetry/... ./internal/relay/.... Do not check off tasks.md boxes.",
       "assignee": "SENIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 917504,
       "createdAt": "2026-06-16T00:17:48.179546038Z",
-      "updatedAt": "2026-06-16T00:17:48.179546038Z",
-      "completedAt": null
+      "updatedAt": "2026-06-16T05:57:06.210551057Z",
+      "completedAt": "2026-06-16T05:57:06.210551057Z"
     },
     {
       "id": "rall-15cf",
