@@ -158,11 +158,11 @@
       "title": "Verify prompt and classification plumbing",
       "description": "Use the openspec-verify-change skill against add-recovery-role-timeouts, then focus on tasks 7.1-7.5 and 8.1-8.3.\n\nBefore diffing, identify the intended merge target and first lap/try in this batch. Treat prior branch work as pre-existing. Do not rewrite git history.\n\nInspect composed prompts, not just source snippets: verify RECOVERY role is distinct from SENIOR/VERIFY, classification text is role-scoped to recovery, the handoff-only snippet cannot invite implementation, the five-iteration rule is only in junior/senior/ui, config route lists/defaults include recovery correctly, and the wrapup classification path works for both done and handoff.\n\nAcceptance: Run targeted agent_prompt/progress/store/relay/config tests. Check off only tasks 7 and 8 boxes that are verified correct and sufficiently covered. Tiny one-liner fixes only inline; larger gaps become head laps.",
       "assignee": "VERIFY",
-      "isDone": false,
+      "isDone": true,
       "order": 851968,
       "createdAt": "2026-06-16T00:17:48.179544615Z",
-      "updatedAt": "2026-06-16T00:17:48.179544615Z",
-      "completedAt": null
+      "updatedAt": "2026-06-16T05:49:28.564159745Z",
+      "completedAt": "2026-06-16T05:49:28.564159745Z"
     },
     {
       "id": "rall-3299",
