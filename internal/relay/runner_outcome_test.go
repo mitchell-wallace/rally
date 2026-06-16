@@ -193,6 +193,82 @@ func TestRunOneCleanHandoffDoesNotSetDirtyRecoveryMetadata(t *testing.T) {
 	}
 }
 
+func TestRunOneRecoveryEffectiveAssigneeUsesRecoveryPromptAndKeepsLapAssignee(t *testing.T) {
+	workspaceDir := t.TempDir()
+	rallyDir := store.RallyDir(workspaceDir)
+	if err := os.MkdirAll(filepath.Join(rallyDir, "agents"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(rallyDir, "agents", "senior.md"), []byte("SENIOR ROLE\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(rallyDir, "agents", "recovery.md"), []byte("RECOVERY ROLE\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	initRepo(t, workspaceDir)
+	runGit(t, workspaceDir, "commit", "--allow-empty", "-m", "initial", "--no-verify")
+
+	s := newTestStore(t, rallyDir)
+	var gotRoleInstructions string
+	exec := &funcExecutor{
+		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+			gotRoleInstructions = opts.RoleInstructions
+			if err := os.WriteFile(filepath.Join(workspaceDir, "done.txt"), []byte("done\n"), 0o644); err != nil {
+				return nil, err
+			}
+			if err := progress.RecordLap(workspaceDir, "lap-1"); err != nil {
+				return nil, err
+			}
+			return &agent.TryResult{Completed: true, Summary: "done"}, nil
+		},
+	}
+
+	r := NewRunner(s, Config{
+		WorkspaceDir:     workspaceDir,
+		DataDir:          t.TempDir(),
+		AgentMixSpecs:    []string{"op:dsf"},
+		TargetIterations: 1,
+		RetryBudget:      1,
+		LapsEnabled:      true,
+		Resolver:         cheapTestResolver,
+	}, map[string]agent.Executor{"opencode": exec})
+
+	res, err := r.runOne(
+		context.Background(),
+		&store.RelayRecord{ID: 1, TargetIterations: 1},
+		0,
+		agent.ResolvedAgent{Harness: "opencode", Model: cheapTestModel},
+		runTask{Name: "task", Prompt: "do work", Assignee: "senior", EffectiveAssignee: "recovery", ResolvedRoute: "recovery", LapID: "lap-1", IsLapsBacked: true, LapsRemaining: 1},
+		nil,
+		nil,
+		false,
+		false,
+		nil,
+		nil,
+		io.Discard,
+	)
+	if err != nil {
+		t.Fatalf("runOne error = %v", err)
+	}
+	if !res.Success {
+		t.Fatal("runOne success = false, want true")
+	}
+	if gotRoleInstructions != "RECOVERY ROLE\n" {
+		t.Fatalf("role instructions = %q, want recovery override", gotRoleInstructions)
+	}
+
+	tries := s.AllTries()
+	if len(tries) != 1 {
+		t.Fatalf("tries = %d, want 1", len(tries))
+	}
+	if tries[0].ResolvedRoute != "recovery" {
+		t.Fatalf("resolved route = %q, want recovery", tries[0].ResolvedRoute)
+	}
+	if tries[0].LapAssignee != "senior" {
+		t.Fatalf("lap assignee = %q, want original senior", tries[0].LapAssignee)
+	}
+}
+
 func TestRunOneIncompleteAndOrdinaryFailedDoNotSetDirtyHandoff(t *testing.T) {
 	tests := []struct {
 		name        string

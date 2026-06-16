@@ -436,14 +436,22 @@ func formatRemaining(d time.Duration) string {
 }
 
 type runTask struct {
-	Name          string
-	Requirements  string
-	Prompt        string
-	Assignee      string
-	ResolvedRoute string
-	LapID         string
-	IsLapsBacked  bool
-	LapsRemaining int
+	Name              string
+	Requirements      string
+	Prompt            string
+	Assignee          string
+	EffectiveAssignee string
+	ResolvedRoute     string
+	LapID             string
+	IsLapsBacked      bool
+	LapsRemaining     int
+}
+
+func (t runTask) promptAssignee() string {
+	if strings.TrimSpace(t.EffectiveAssignee) != "" {
+		return t.EffectiveAssignee
+	}
+	return t.Assignee
 }
 
 func (r *Runner) resolveInstructions() string {
@@ -528,6 +536,7 @@ func (r *Runner) Run(ctx context.Context) error {
 			return err
 		}
 	}
+	routeRuntime.store = r.store
 
 	for _, w := range routeRuntime.Warnings() {
 		fmt.Fprintln(os.Stderr, w)
@@ -643,6 +652,7 @@ func (r *Runner) Run(ctx context.Context) error {
 			fmt.Fprintln(log, selection.Route.Warning)
 		}
 		task.ResolvedRoute = selection.Route.Name
+		task.EffectiveAssignee = selection.EffectiveAssignee
 		r.prepareExecutorForSelection(relay.ID, runIndex, selection, log)
 
 		// Consume run-scoped message at start of each run
@@ -652,7 +662,7 @@ func (r *Runner) Run(ctx context.Context) error {
 		runTags := telemetry.Tags(telemetry.EventInfo{
 			RelayID:  relay.ID,
 			RunID:    runID,
-			Role:     task.Assignee,
+			Role:     task.promptAssignee(),
 			Harness:  selection.Agent.Harness,
 			Model:    selection.Agent.Model,
 			Repo:     rc.Repo,
@@ -677,11 +687,19 @@ func (r *Runner) Run(ctx context.Context) error {
 				"runner":      to,
 				"from_runner": from,
 				"to_runner":   to,
-				"role":        task.Assignee,
+				"role":        task.promptAssignee(),
 				"repo":        rc.Repo,
 				"repo_name":   rc.RepoName,
 				"lap_id":      task.LapID,
 			})
+		}
+		if selection.RecoveryCapHit {
+			r.tel().CaptureFailure(ctx, fmt.Sprintf("relay %d lap %s recovery cap reached: needs_user", relay.ID, task.LapID),
+				failureStateEvent(
+					telemetry.Tags(telemetry.EventInfo{RelayID: relay.ID, RunID: runID, Role: task.promptAssignee(), Repo: rc.Repo, RepoName: rc.RepoName, LapID: task.LapID}),
+					rc,
+					telemetry.FailureState{Category: "needs_user"},
+				))
 		}
 		var consumedMsg *store.MessageRecord
 		if existingMsg := r.store.ConsumedRunScopedMessageForRun(runID); existingMsg != nil {
@@ -1294,7 +1312,7 @@ func (r *Runner) runOne(
 	handoffResumePending := false
 	handoffResumeSessionID := ""
 	handoffResumeBaseAttempt := 0
-	roleInstructions, err := r.resolveRoleInstructions(task.Assignee)
+	roleInstructions, err := r.resolveRoleInstructions(task.promptAssignee())
 	if err != nil {
 		return outcome(false, false, false), err
 	}
@@ -1834,7 +1852,7 @@ attemptLoop:
 			RelayID:  relay.ID,
 			RunID:    runIndex + 1,
 			TryID:    tryRecord.ID,
-			Role:     task.Assignee,
+			Role:     task.promptAssignee(),
 			Harness:  picked.Harness,
 			Model:    picked.Model,
 			Repo:     rc.Repo,
@@ -1851,7 +1869,7 @@ attemptLoop:
 			"run_id":                         runIndex + 1,
 			"try_id":                         tryRecord.ID,
 			"attempt":                        attempt,
-			"role":                           task.Assignee,
+			"role":                           task.promptAssignee(),
 			"runner":                         telemetry.RunnerLabel(picked.Harness, picked.Model),
 			"repo":                           rc.Repo,
 			"repo_name":                      rc.RepoName,
@@ -2049,7 +2067,7 @@ attemptLoop:
 			failureStateEvent(telemetry.Tags(telemetry.EventInfo{
 				RelayID:  relay.ID,
 				RunID:    runIndex + 1,
-				Role:     task.Assignee,
+				Role:     task.promptAssignee(),
 				Harness:  picked.Harness,
 				Model:    picked.Model,
 				Repo:     rc.Repo,
@@ -2286,7 +2304,7 @@ func (r *Runner) runBoundedHandoffOnly(
 		RelayID:  relay.ID,
 		RunID:    runIndex + 1,
 		TryID:    tryID,
-		Role:     task.Assignee,
+		Role:     task.promptAssignee(),
 		Harness:  picked.Harness,
 		Model:    picked.Model,
 		Repo:     rc.Repo,
@@ -2304,7 +2322,7 @@ func (r *Runner) runBoundedHandoffOnly(
 		"run_id":       runIndex + 1,
 		"try_id":       tryID,
 		"attempt":      attemptNumber,
-		"role":         task.Assignee,
+		"role":         task.promptAssignee(),
 		"runner":       telemetry.RunnerLabel(picked.Harness, picked.Model),
 		"repo":         rc.Repo,
 		"repo_name":    rc.RepoName,

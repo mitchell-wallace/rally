@@ -7,6 +7,7 @@ import (
 
 	"github.com/mitchell-wallace/rally/internal/agent"
 	"github.com/mitchell-wallace/rally/internal/routing"
+	"github.com/mitchell-wallace/rally/internal/store"
 )
 
 const (
@@ -40,6 +41,7 @@ type routeRuntime struct {
 	override   *routing.OverrideRoute
 	schedulers map[string]*routing.Scheduler
 	resolver   Resolver
+	store      *store.Store
 	lastAgent  map[string]agent.ResolvedAgent
 	warnings   []string
 }
@@ -54,13 +56,17 @@ func (r *routeRuntime) Warnings() []string {
 }
 
 type routeSelection struct {
-	Agent         agent.ResolvedAgent
-	PreviousAgent *agent.ResolvedAgent
-	Route         routing.Route
-	Entry         *routing.EntryState
-	Scheduler     *routing.Scheduler
-	HourlyRetry   bool
-	Probation     bool
+	Agent             agent.ResolvedAgent
+	PreviousAgent     *agent.ResolvedAgent
+	Route             routing.Route
+	Entry             *routing.EntryState
+	Scheduler         *routing.Scheduler
+	HourlyRetry       bool
+	Probation         bool
+	EffectiveAssignee string
+	RecoveryForced    bool
+	RecoveryCapHit    bool
+	RecoveryStatus    store.RecoveryPendingStatus
 }
 
 type routeSelectionError struct {
@@ -174,9 +180,45 @@ func newResolvedRouteRuntime(routeSpecs map[string][]string, resolver Resolver, 
 }
 
 func (r *routeRuntime) next(task runTask, resilience *Resilience) (routeSelection, error) {
+	effectiveAssignee := task.Assignee
+	recoveryStatus := store.RecoveryPendingStatus{}
+	recoveryForced := false
+	recoveryCapHit := false
+
 	route, err := r.selector.ActiveRoute(routing.Lap{Assignee: task.Assignee}, r.overrideRoute())
 	if err != nil {
 		return routeSelection{}, err
+	}
+
+	if r.store != nil && task.LapID != "" {
+		recoveryStatus = r.store.RecoveryPendingForLap(task.LapID)
+		switch {
+		case recoveryStatus.CapHit:
+			recoveryCapHit = true
+			route.Warning = joinRouteWarnings(route.Warning, fmt.Sprintf(
+				"routing: recovery cap reached for lap %q after %d consecutive recovery run(s); falling back to normal route and raising needs_user",
+				task.LapID, recoveryStatus.ConsecutiveRecoveryRuns,
+			))
+		case recoveryStatus.Pending:
+			recoveryRoute, recoveryErr := r.selector.ActiveRoute(routing.Lap{Assignee: store.RecoveryRouteName}, r.overrideRoute())
+			if recoveryErr != nil {
+				route.Warning = joinRouteWarnings(route.Warning, fmt.Sprintf(
+					"routing: recovery pending for lap %q but recovery route could not be resolved (%v); falling back to normal route",
+					task.LapID, recoveryErr,
+				))
+				break
+			}
+			if r.override == nil && recoveryRoute.Source != routing.RouteSourceAssignee {
+				route.Warning = joinRouteWarnings(route.Warning, fmt.Sprintf(
+					"routing: recovery pending for lap %q but no recovery route is configured; falling back to normal route",
+					task.LapID,
+				))
+				break
+			}
+			route = recoveryRoute
+			effectiveAssignee = store.RecoveryRouteName
+			recoveryForced = true
+		}
 	}
 
 	scheduler := r.schedulers[strings.ToLower(route.Name)]
@@ -223,14 +265,31 @@ func (r *routeRuntime) next(task runTask, resilience *Resilience) (routeSelectio
 	r.lastAgent[routeKey] = picked
 
 	return routeSelection{
-		Agent:         picked,
-		PreviousAgent: previousAgent,
-		Route:         route,
-		Entry:         entry,
-		Scheduler:     scheduler,
-		HourlyRetry:   hourlyRetry,
-		Probation:     probation,
+		Agent:             picked,
+		PreviousAgent:     previousAgent,
+		Route:             route,
+		Entry:             entry,
+		Scheduler:         scheduler,
+		HourlyRetry:       hourlyRetry,
+		Probation:         probation,
+		EffectiveAssignee: effectiveAssignee,
+		RecoveryForced:    recoveryForced,
+		RecoveryCapHit:    recoveryCapHit,
+		RecoveryStatus:    recoveryStatus,
 	}, nil
+}
+
+func joinRouteWarnings(existing, next string) string {
+	existing = strings.TrimSpace(existing)
+	next = strings.TrimSpace(next)
+	switch {
+	case existing == "":
+		return next
+	case next == "":
+		return existing
+	default:
+		return existing + "\n" + next
+	}
 }
 
 func (r *routeRuntime) overrideRoute() *routing.Route {

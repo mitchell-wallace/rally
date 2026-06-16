@@ -2,6 +2,7 @@ package relay
 
 import (
 	"errors"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -42,10 +43,14 @@ func newOverrideRouteRuntimeOrDie(t *testing.T, specs []string, routeSpecs map[s
 	return rt, newRouteRuntimeHarness(t)
 }
 
-func mustNextRouteSelection(t *testing.T, rt *routeRuntime, resilience *Resilience, assignee string) routeSelection {
+func mustNextRouteSelection(t *testing.T, rt *routeRuntime, resilience *Resilience, assignee string, lapID ...string) routeSelection {
 	t.Helper()
 
-	selection, err := rt.next(runTask{Assignee: assignee}, resilience)
+	task := runTask{Assignee: assignee}
+	if len(lapID) > 0 {
+		task.LapID = lapID[0]
+	}
+	selection, err := rt.next(task, resilience)
 	if err != nil {
 		t.Fatalf("next(%q) error = %v", assignee, err)
 	}
@@ -929,5 +934,201 @@ func TestForceUnpauseAll_ClearsBenchOnSkip(t *testing.T) {
 	}
 	if st, _ := resilience.GetState(pausedKey); st != StateActive {
 		t.Errorf("paused key state = %s, want active after skip", st)
+	}
+}
+
+func TestRouteRuntime_RecoveryPendingRoutesToRecovery(t *testing.T) {
+	tests := []struct {
+		name string
+		rec  store.TryRecord
+	}{
+		{
+			name: "dirty handoff",
+			rec:  store.TryRecord{ID: 1, RunID: 1, LapID: "lap-1", AttemptNumber: 1, Outcome: reliability.OutcomeHandoffRequested, DirtyHandoff: true},
+		},
+		{
+			name: "handoff timeout",
+			rec:  store.TryRecord{ID: 1, RunID: 1, LapID: "lap-1", AttemptNumber: 1, Outcome: reliability.OutcomeHandoffTimeout},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rt, resilience := newResolvedRouteRuntimeOrDie(t, map[string][]string{
+				"default":  {"claude:opus-4.7"},
+				"senior":   {"claude:sonnet-4.5"},
+				"recovery": {"codex:gpt-5.5"},
+			}, false)
+			rt.store = newRouteRuntimeStore(t, tt.rec)
+
+			sel := mustNextRouteSelection(t, rt, resilience, "senior", "lap-1")
+			if sel.Route.Name != "recovery" || !sel.RecoveryForced {
+				t.Fatalf("selection route=%q forced=%v, want forced recovery", sel.Route.Name, sel.RecoveryForced)
+			}
+			if sel.EffectiveAssignee != "recovery" {
+				t.Fatalf("EffectiveAssignee = %q, want recovery", sel.EffectiveAssignee)
+			}
+			if got := agentRouteSpec(sel.Agent); got != "codex:gpt-5.5" {
+				t.Fatalf("agent = %q, want codex:gpt-5.5", got)
+			}
+		})
+	}
+}
+
+func TestRouteRuntime_RecoveryPendingFollowupUsesOriginalTrigger(t *testing.T) {
+	rt, resilience := newResolvedRouteRuntimeOrDie(t, map[string][]string{
+		"default":  {"claude:opus-4.7"},
+		"junior":   {"claude:sonnet-4.5"},
+		"recovery": {"codex:gpt-5.5"},
+	}, false)
+	rt.store = newRouteRuntimeStore(t, store.TryRecord{
+		ID:                   1,
+		RunID:                1,
+		LapID:                "original",
+		AttemptNumber:        1,
+		Outcome:              reliability.OutcomeHandoffRequested,
+		DirtyHandoff:         true,
+		HandoffCreatedLapIDs: []string{"followup"},
+	})
+
+	sel := mustNextRouteSelection(t, rt, resilience, "junior", "followup")
+	if sel.Route.Name != "recovery" || !sel.RecoveryForced {
+		t.Fatalf("selection route=%q forced=%v, want forced recovery", sel.Route.Name, sel.RecoveryForced)
+	}
+	if sel.RecoveryStatus.TriggerLapID != "original" || !sel.RecoveryStatus.HandoffContinuationMatch {
+		t.Fatalf("recovery status = %+v, want original continuation match", sel.RecoveryStatus)
+	}
+}
+
+func TestRouteRuntime_OrdinaryFailedDoesNotForceRecovery(t *testing.T) {
+	rt, resilience := newResolvedRouteRuntimeOrDie(t, map[string][]string{
+		"default":  {"claude:opus-4.7"},
+		"senior":   {"claude:sonnet-4.5"},
+		"recovery": {"codex:gpt-5.5"},
+	}, false)
+	rt.store = newRouteRuntimeStore(t, store.TryRecord{
+		ID:            1,
+		RunID:         1,
+		LapID:         "lap-1",
+		AttemptNumber: 1,
+		Outcome:       reliability.OutcomeFailed,
+	})
+
+	sel := mustNextRouteSelection(t, rt, resilience, "senior", "lap-1")
+	if sel.Route.Name != "senior" || sel.RecoveryForced {
+		t.Fatalf("selection route=%q forced=%v, want normal senior", sel.Route.Name, sel.RecoveryForced)
+	}
+	if sel.EffectiveAssignee != "senior" {
+		t.Fatalf("EffectiveAssignee = %q, want senior", sel.EffectiveAssignee)
+	}
+}
+
+func TestRouteRuntime_RecoveryStateSurvivesStoreReload(t *testing.T) {
+	rallyDir, s := setupRouteRuntimeStore(t)
+	mustAppendRouteTry(t, s, store.TryRecord{ID: 1, RunID: 1, LapID: "lap-1", AttemptNumber: 1, Outcome: reliability.OutcomeHandoffTimeout})
+	reloaded, err := store.NewStore(rallyDir)
+	if err != nil {
+		t.Fatalf("NewStore reload: %v", err)
+	}
+
+	rt, resilience := newResolvedRouteRuntimeOrDie(t, map[string][]string{
+		"default":  {"claude:opus-4.7"},
+		"senior":   {"claude:sonnet-4.5"},
+		"recovery": {"codex:gpt-5.5"},
+	}, false)
+	rt.store = reloaded
+
+	sel := mustNextRouteSelection(t, rt, resilience, "senior", "lap-1")
+	if sel.Route.Name != "recovery" || !sel.RecoveryForced {
+		t.Fatalf("selection route=%q forced=%v, want forced recovery after reload", sel.Route.Name, sel.RecoveryForced)
+	}
+}
+
+func TestRouteRuntime_MissingRecoveryRouteWarnsAndFallsBack(t *testing.T) {
+	rt, resilience := newResolvedRouteRuntimeOrDie(t, map[string][]string{
+		"default": {"claude:opus-4.7"},
+		"senior":  {"claude:sonnet-4.5"},
+	}, false)
+	rt.store = newRouteRuntimeStore(t, store.TryRecord{ID: 1, RunID: 1, LapID: "lap-1", AttemptNumber: 1, Outcome: reliability.OutcomeHandoffTimeout})
+
+	sel := mustNextRouteSelection(t, rt, resilience, "senior", "lap-1")
+	if sel.Route.Name != "senior" || sel.RecoveryForced {
+		t.Fatalf("selection route=%q forced=%v, want normal senior fallback", sel.Route.Name, sel.RecoveryForced)
+	}
+	if !strings.Contains(sel.Route.Warning, "no recovery route is configured") {
+		t.Fatalf("warning = %q, want missing recovery route warning", sel.Route.Warning)
+	}
+}
+
+func TestRouteRuntime_OverridePrecedenceOverRecoveryRoute(t *testing.T) {
+	rt, resilience := newOverrideRouteRuntimeOrDie(t, []string{"op:opencode-go/fancy-new-model"}, map[string][]string{
+		"default":  {"claude:opus-4.7"},
+		"senior":   {"claude:sonnet-4.5"},
+		"recovery": {"codex:gpt-5.5"},
+	}, false)
+	rt.store = newRouteRuntimeStore(t, store.TryRecord{ID: 1, RunID: 1, LapID: "lap-1", AttemptNumber: 1, Outcome: reliability.OutcomeHandoffTimeout})
+
+	sel := mustNextRouteSelection(t, rt, resilience, "senior", "lap-1")
+	if sel.Route.Source != "override" || !sel.RecoveryForced {
+		t.Fatalf("selection source=%q forced=%v, want forced recovery with override route precedence", sel.Route.Source, sel.RecoveryForced)
+	}
+	if sel.EffectiveAssignee != "recovery" {
+		t.Fatalf("EffectiveAssignee = %q, want recovery", sel.EffectiveAssignee)
+	}
+	if got := agentRouteSpec(sel.Agent); got != "opencode:opencode-go/fancy-new-model" {
+		t.Fatalf("agent = %q, want override agent", got)
+	}
+}
+
+func TestRouteRuntime_RecoveryCapFallsBackAndRaisesFlag(t *testing.T) {
+	rt, resilience := newResolvedRouteRuntimeOrDie(t, map[string][]string{
+		"default":  {"claude:opus-4.7"},
+		"senior":   {"claude:sonnet-4.5"},
+		"recovery": {"codex:gpt-5.5"},
+	}, false)
+	rt.store = newRouteRuntimeStore(t,
+		store.TryRecord{ID: 1, RunID: 1, LapID: "lap-1", AttemptNumber: 1, Outcome: reliability.OutcomeHandoffTimeout, ResolvedRoute: "recovery"},
+		store.TryRecord{ID: 2, RunID: 2, LapID: "lap-1", AttemptNumber: 1, Outcome: reliability.OutcomeHandoffTimeout, ResolvedRoute: "recovery"},
+	)
+
+	sel := mustNextRouteSelection(t, rt, resilience, "senior", "lap-1")
+	if sel.Route.Name != "senior" || sel.RecoveryForced {
+		t.Fatalf("selection route=%q forced=%v, want normal senior after cap", sel.Route.Name, sel.RecoveryForced)
+	}
+	if !sel.RecoveryCapHit {
+		t.Fatal("RecoveryCapHit = false, want true")
+	}
+	if !strings.Contains(sel.Route.Warning, "needs_user") {
+		t.Fatalf("warning = %q, want needs_user cap warning", sel.Route.Warning)
+	}
+}
+
+func setupRouteRuntimeStore(t *testing.T) (string, *store.Store) {
+	t.Helper()
+	dir := t.TempDir()
+	rallyDir := store.RallyDir(dir)
+	if err := os.MkdirAll(rallyDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	s, err := store.NewStore(rallyDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return rallyDir, s
+}
+
+func newRouteRuntimeStore(t *testing.T, records ...store.TryRecord) *store.Store {
+	t.Helper()
+	_, s := setupRouteRuntimeStore(t)
+	for _, rec := range records {
+		mustAppendRouteTry(t, s, rec)
+	}
+	return s
+}
+
+func mustAppendRouteTry(t *testing.T, s *store.Store, rec store.TryRecord) {
+	t.Helper()
+	if err := s.AppendTry(rec); err != nil {
+		t.Fatalf("AppendTry(%+v): %v", rec, err)
 	}
 }
