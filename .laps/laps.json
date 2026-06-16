@@ -114,11 +114,11 @@
       "id": "work-54ef",
       "title": "Fix dirty-handoff derivation a...",
       "description": "Fix dirty-handoff derivation across retries: base recovery trigger and auto-commit suppression on run-scoped own-dirty detection, and add retry-then-handoff regression coverage in internal/relay/runner_outcome_test.go.",
-      "isDone": false,
+      "isDone": true,
       "order": 589824,
       "createdAt": "2026-06-16T05:15:10.950837206Z",
-      "updatedAt": "2026-06-16T05:15:10.950837206Z",
-      "completedAt": null
+      "updatedAt": "2026-06-16T05:22:06.447325305Z",
+      "completedAt": "2026-06-16T05:22:06.447325305Z"
     },
     {
       "id": "rall-4d49",
