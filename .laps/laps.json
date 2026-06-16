@@ -6,11 +6,11 @@
       "title": "Add try outcome lifecycle records",
       "description": "Context: OpenSpec change add-recovery-role-timeouts, tasks 1.1-1.6. This is the lifecycle foundation for the rest of the change. Read proposal.md, design.md, specs/relay-runner/spec.md, and tasks.md before editing.\n\nOutcome: Rally has a first-class TryOutcome type with completed, handoff_requested, incomplete, run_timeout, handoff_timeout, failed, and interrupted values; helpers cover success and terminal-for-run behavior; store.TryRecord retains Completed and gains Outcome and HandoffOnly; runOutcome can surface the resolving try's Outcome alongside FailureCategory.\n\nFiles \u0026 scope: internal/reliability/ or internal/store/ for the TryOutcome type, internal/store/records.go, internal/relay/runner.go, internal/reliability/category.go only to prove it stays unchanged, and focused tests. Do not implement timeout timers or recovery routing in this lap.\n\nDesign: Keep TryOutcome orthogonal to FailureCategory. Do not add run_timeout or handoff_* to FailureCategory. Only OutcomeFailed carries a FailureCategory. Start moving success/freeze/Issue/retry decisions toward TryOutcome where needed for this slice, but avoid broad runner rewrites beyond the lifecycle plumbing needed to compile and test.\n\nAcceptance: Tests prove handoff_requested is success-side and non-freezing, run_timeout is non-freezing/non-Issue/not a recovery trigger by itself at the model level, handoff_timeout is non-freezing and terminal for a run, failed outcomes still carry a FailureCategory, and FailureCategory has no handoff_* or run_timeout values. Run targeted reliability/store/relay tests. Do not check off tasks.md boxes.",
       "assignee": "SENIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 65536,
       "createdAt": "2026-06-16T00:17:48.179518156Z",
-      "updatedAt": "2026-06-16T00:17:48.179518156Z",
-      "completedAt": null
+      "updatedAt": "2026-06-16T00:56:08.419637981Z",
+      "completedAt": "2026-06-16T00:56:08.419637981Z"
     },
     {
       "id": "rall-abd8",
