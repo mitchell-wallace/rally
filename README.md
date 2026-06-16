@@ -220,7 +220,7 @@ project never write to the same file.
 Rally reads `.rally/config.toml` from the workspace. `rally init` writes a
 starter config with sensible defaults; you can edit it any time.
 `rally init roles` extends that starter setup with role routes for
-`junior`, `senior`, `ui`, and `verify`, plus matching markdown files under
+`junior`, `senior`, `ui`, `verify`, and `recovery`, plus matching markdown files under
 `.rally/agents/`.
 
 ```toml
@@ -259,6 +259,7 @@ flash = "Gemini 3.5 Flash (High)"
 default = ["ag:flash:1", "cc:opus:1", "cx:1", "op:gk:2-4"]
 SENIOR  = ["cx:1", "cc:opus:1"]
 JUNIOR  = ["op:z:4", "op:gk:2", "ge:1"]
+recovery = ["claude"]
 
 [reliability]
 freeze_threshold_secs = 180
@@ -436,13 +437,24 @@ config loader rejects it with an explicit error directing you to
 
 ### `[reliability]`
 
-Tunes retry, freeze detection, and the liveness probe.
+Tunes retry, freeze detection, the liveness probe, and per-run time budgets.
 
 | Field                    | Type | Default | Purpose                                                            |
 |--------------------------|------|---------|--------------------------------------------------------------------|
 | `freeze_threshold_secs`  | int  | `180`   | Seconds of log inactivity before a try is considered frozen        |
 | `liveness_probe`         | bool | `false` | Experimental side-channel probe for ambiguous freeze signals       |
 | `retry_budget`           | int  | `5`     | Maximum retries per try before advancing to the next route entry   |
+| `run_timeout_secs`       | int  | `4500`  | Per-run wall-clock budget (75 m) measured **across all retries**   |
+| `try_timeout_secs`       | int  | `3600`  | Secondary per-attempt cap (60 m) guarding a single runaway try     |
+| `handoff_timeout_secs`   | int  | `300`   | Bounded handoff-only resume window (5 m), not counted in the run budget |
+
+`0`/unset yields the default. `handoff_timeout_secs` is clamped so it can
+never reach or outlast the effective `try_timeout_secs`/`run_timeout_secs`;
+when `try_timeout_secs >= run_timeout_secs` the run budget subsumes the
+per-try cap and the config is accepted rather than rejected. The two
+timeouts are orthogonal to the silence-based freeze detector — whichever
+fires first wins. See [Recovery and per-run timeouts](#recovery-and-per-run-timeouts)
+for how they combine with the `recovery` route.
 
 `[reliability.chars_per_token]` is an optional per-harness map of divisors
 used by the token estimator. Defaults are baked into each harness adapter.
@@ -452,6 +464,9 @@ used by the token estimator. Defaults are baked into each harness adapter.
 freeze_threshold_secs = 180
 liveness_probe        = false
 retry_budget          = 5
+run_timeout_secs      = 4500
+try_timeout_secs      = 3600
+handoff_timeout_secs  = 300
 
 [reliability.chars_per_token]
 claude = 3.5
@@ -471,6 +486,72 @@ The liveness probe is opt-in and skipped for harnesses whose adapter does
 not support it. It sends a lightweight "respond with OK" prompt when the
 freeze signal is ambiguous (mtime advancing but IO idle for 60 s). A
 successful probe clears the freeze flag.
+
+### Recovery and per-run timeouts
+
+Rally bounds how long a struggling run can grind, and routes genuinely
+stuck, half-finished work to a dedicated recovery session instead of
+letting one attempt loop for hours. This is pure Rally routing and prompt
+behavior — laps remains the queue backend, the lap's `assignee` is never
+rewritten, and recovery state is derived from the try records Rally already
+persists (so it survives relay restarts).
+
+**Per-run and per-try time budgets.** Each run has a hard wall-clock budget
+measured *across all of its retry attempts* (`run_timeout_secs`, default
+75 m). A secondary per-attempt cap (`try_timeout_secs`, default 60 m) guards
+a single runaway try; the run budget sits slightly above it so a quick
+non-blocking retry after a transient blip still has buffer. Whichever of the
+run budget, the per-try cap, or the silence freeze detector fires first
+wins. A per-try cap firing with run budget left just ends that attempt and
+may retry within the remaining budget; when the **run budget** is exhausted,
+the run stops retrying and proceeds to a bounded handoff.
+
+**Bounded handoff-only resume.** On run-budget exhaustion, if the harness
+supports session resume and a session was captured, Rally resumes that
+session *once* under a separate hard limit (`handoff_timeout_secs`, default
+5 m, not counted in the run budget) with a handoff-only prompt that forbids
+further implementation and instructs the agent to summarize the blocker and
+call `laps handoff` + `laps wrapup`. A successful handoff there is a normal
+(success-side) handoff, not a failure. If the harness cannot resume or no
+session exists, no synthetic handoff is fabricated and the run resolves
+without one. Worst-case wall clock per run is roughly `run_timeout_secs +
+handoff_timeout_secs`.
+
+**The `recovery` role and route.** RECOVERY is a reasoning-heavy role like
+VERIFY but with the authority and coding ability to modify code and
+reconcile dirty state, like SENIOR. It defaults to a stronger runner
+(`rally init roles` seeds a `recovery` route) and does not reuse SENIOR's
+prompt. Its prompt requires it to classify the leftover state into exactly
+one of `continue`, `discard`, `course_correct`, `repair_plan`, or
+`needs_user`, then *act* on that classification (never stopping at diagnosis
+unless `needs_user`). The classification is recorded on the run via
+`laps wrapup --classification <value>` and surfaces as telemetry, so
+recovery outcomes stay filterable.
+
+**Two recovery triggers.** The next run for a lap is forced onto the
+`recovery` route only for the two states that leave a suspect, half-finished
+tree needing reconciliation:
+
+1. **Dirty handoff** — a handoff completed yet meaningful own-uncommitted
+   changes remain (auto-commit is suppressed so RECOVERY inherits the real
+   dirty tree to reconcile).
+2. **Handoff timeout** — the bounded handoff-only resume above failed to
+   finalize.
+
+An ordinary `failed` try (usage limit, provider instability, agent error)
+is **not** a recovery trigger — it routes, benches, and rotates through the
+existing resilience paths. A plain `incomplete` outcome (changes, no
+handoff) keeps its existing resume-with-finalization retry, and a clean
+handoff (no leftover dirt) keeps its existing follow-up flow.
+
+**Anti-loop cap.** A recovery run can itself time out or leave another dirty
+handoff, which would re-arm recovery forever. Rally therefore allows at most
+**two** consecutive recovery runs per lap; once the cap is reached it stops
+routing to recovery, raises a `needs_user` operator-attention issue, and
+falls back to the lap's normal route rather than looping. (This cap-hit
+decision happens at routing time with no recovery agent running; a missing
+`recovery` route likewise falls back to the lap's normal route with a
+warning, never deadlocking the relay.)
 
 ### Error classification
 
@@ -587,7 +668,7 @@ rally version            # print version (vX.Y.Z, vX.Y.Z-dev for source builds)
 | Command | What it does |
 |---|---|
 | `rally init` | Creates `.rally/config.toml`, scaffolds `.rally/state/`, and writes `.rally/instructions.md` + `.gitignore` entries. Idempotent — safe to re-run. |
-| `rally init roles` | Adds `[routes]` entries for `junior`, `senior`, `ui`, `verify` to the existing config and writes `.rally/agents/*.md` role instruction files. Does **not** touch workspace scaffold files (README, .gitignore, etc.). Idempotent. |
+| `rally init roles` | Adds `[routes]` entries for `junior`, `senior`, `ui`, `verify`, and `recovery` to the existing config and writes `.rally/agents/*.md` role instruction files. Does **not** touch workspace scaffold files (README, .gitignore, etc.). Idempotent. |
 | `rally init all` | Runs `rally init` followed by `rally init roles` — full workspace + role setup in one step. The hidden alias `rally init-roles` also maps here for backward compatibility. Idempotent. |
 
 For a fresh repo, `rally init all` is the quickest path to a fully configured workspace.
@@ -775,6 +856,19 @@ These hooks automatically delegate to `just` if it is installed, falling back to
 
 
 Recent highlights — see GitHub Releases for the full history.
+
+### v0.9.0 — recovery role and per-run timeouts
+
+Adds a hard per-run wall-clock budget (`run_timeout_secs`, default 75 m
+across all retries) plus a secondary per-try cap (`try_timeout_secs`,
+default 60 m), a bounded handoff-only resume on budget exhaustion
+(`handoff_timeout_secs`, default 5 m), and a `recovery` role/route that
+reconciles dirty handed-off state. RECOVERY engages on the two states that
+leave a suspect half-finished tree — a dirty handoff or a handoff timeout
+— is capped at two consecutive recovery runs per lap before escalating to a
+`needs_user` issue, and records a structured classification
+(`continue`/`discard`/`course_correct`/`repair_plan`/`needs_user`). Ordinary
+failures keep routing through the existing resilience paths.
 
 ### v0.8.0 — Antigravity CLI harness
 
