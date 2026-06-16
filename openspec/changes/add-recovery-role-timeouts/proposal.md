@@ -31,9 +31,11 @@ and continue.
   counted in the run budget) whose only job is to summarize the blocker and call
   `laps handoff` + `laps wrapup`.
 - **A first-class `TryOutcome` lifecycle type** (`completed`, `handoff_requested`,
-  `incomplete`, `handoff_timeout`, `failed`, `interrupted`), orthogonal to the
-  `FailureCategory` failure-cause taxonomy. `handoff_requested` is a *successful*
-  outcome (handoff and wrapup both completed; not a harness/usage/infra failure);
+  `incomplete`, `run_timeout`, `handoff_timeout`, `failed`, `interrupted`),
+  orthogonal to the `FailureCategory` failure-cause taxonomy. `handoff_requested`
+  is a *successful* outcome (handoff and wrapup both completed; not a
+  harness/usage/infra failure); `run_timeout` records the budget-cancelled
+  implementation attempt when Rally can still run a handoff-only continuation;
   `handoff_timeout` is a non-freezing failure outcome (the agent did work but
   Rally's bounded handoff recovery could not finalize it). `FailureCategory` is no
   longer overloaded with lifecycle labels — only a `failed` outcome carries one.
@@ -73,10 +75,11 @@ This is a small, self-contained feature upgrade and ships as Rally `0.9.0`.
 
 ### Modified Capabilities
 - `relay-runner`: a first-class `TryOutcome` lifecycle type is introduced
-  (`handoff_requested`/`handoff_timeout` live here, not in `FailureCategory`); the
-  run gains a per-run wall-clock budget across retries (plus a secondary per-try
-  cap) and the bounded handoff-only resume; RECOVERY routing (two triggers, derived
-  from persisted records) is added to the run-to-run dispatch.
+  (`run_timeout`/`handoff_requested`/`handoff_timeout` live here, not in
+  `FailureCategory`); the run gains a per-run wall-clock budget across retries
+  (plus a secondary per-try cap) and the bounded handoff-only resume; RECOVERY
+  routing (two triggers, derived from persisted records) is added to the run-to-run
+  dispatch.
 - `agent-lifecycle`: the honest-resume mechanism is reused for a new bounded,
   handoff-only resume mode; a RECOVERY role default boundary is added alongside
   the VERIFY boundary.
@@ -105,8 +108,8 @@ route, not a new terminal lifecycle state.
   and the implementation role snippets (voluntary handoff rule),
   `internal/cli/config.go` (reliability timeout fields, `recovery` in the route
   list), `internal/config/config_v2.go` (config parsing/defaults),
-  `internal/store/records.go` (`Outcome`, `RecoveryClassification`, `ResolvedRoute`,
-  `DirtyHandoff`, `HandoffCreatedLapIDs` on `TryRecord`)
+  `internal/store/records.go` (`Outcome`, `HandoffOnly`, `RecoveryClassification`,
+  `ResolvedRoute`, `DirtyHandoff`, `HandoffCreatedLapIDs` on `TryRecord`)
   + `internal/progress/store.go` (`Classification` on `RunEntry`),
   `internal/telemetry/` (new `outcome`/`recovery_classification` tags + `Outcome`/
   `RecoveryClassification` fields on `FailureState`, reusing the existing

@@ -1,11 +1,11 @@
 ## 1. TryOutcome lifecycle type
 
-- [ ] 1.1 Add a `TryOutcome` type with values `completed`, `handoff_requested`, `incomplete`, `handoff_timeout`, `failed`, `interrupted` (new file in `internal/reliability/` or `internal/store/`), with helpers `IsSuccess()` (completed/handoff_requested) and `IsTerminalForRun()` (handoff_timeout and the existing terminal categories)
-- [ ] 1.2 Leave `FailureCategory` (`internal/reliability/category.go`) unchanged — do NOT add `handoff_*` to it; only a `failed` outcome carries a `FailureCategory`
-- [ ] 1.3 Add `Outcome TryOutcome` to `store.TryRecord` (`internal/store/records.go`), retaining `Completed bool`; surface `Outcome` on `runOutcome` (`runner.go:1104`) alongside `Category`
+- [ ] 1.1 Add a `TryOutcome` type with values `completed`, `handoff_requested`, `incomplete`, `run_timeout`, `handoff_timeout`, `failed`, `interrupted` (new file in `internal/reliability/` or `internal/store/`), with helpers `IsSuccess()` (completed/handoff_requested) and `IsTerminalForRun()` (handoff_timeout and the existing terminal categories; `run_timeout` is terminal for the normal attempt loop but followed by the handoff-only try when available)
+- [ ] 1.2 Leave `FailureCategory` (`internal/reliability/category.go`) unchanged — do NOT add `run_timeout` or `handoff_*` to it; only a `failed` outcome carries a `FailureCategory`
+- [ ] 1.3 Add `Outcome TryOutcome` and `HandoffOnly bool` to `store.TryRecord` (`internal/store/records.go`), retaining `Completed bool`; surface the resolving try's `Outcome` on `runOutcome` (`runner.go:1104`) alongside `Category`
 - [ ] 1.4 Route success/freeze/Issue/retry decisions through `TryOutcome` so no site treats a failure-cause category as a success
 - [ ] 1.5 Add `handoff_timeout` to the `terminalCategory`/short-circuit set in `runOne` so the attempt loop ends on first detection
-- [ ] 1.6 Tests: `handoff_requested` is a success outcome and never increments the freeze counter; `handoff_timeout` is non-freezing and terminal; a `failed` outcome still carries a `FailureCategory`; `FailureCategory` has no `handoff_*` values
+- [ ] 1.6 Tests: `handoff_requested` is a success outcome and never increments the freeze counter; `run_timeout` is non-freezing, non-Issue, and not a recovery trigger by itself; `handoff_timeout` is non-freezing and terminal; a `failed` outcome still carries a `FailureCategory`; `FailureCategory` has no `handoff_*` or `run_timeout` values
 
 ## 2. Configurable run/try timeouts
 
@@ -24,10 +24,10 @@
 
 ## 4. Bounded handoff-only resume
 
-- [ ] 4.1 On run-budget exhaustion, if `exec.ResumeSupported()` and a session ID was captured, run one `executeTry` with `ResumeSessionID` set, a fresh `attemptCtx` bounded by `HandoffTimeout` (not counted against the run budget), and the handoff-only prompt; do not apply the stall detector to this phase
+- [ ] 4.1 On run-budget exhaustion, if `exec.ResumeSupported()` and a session ID was captured, first persist the budget-cancelled implementation attempt as `OutcomeRunTimeout` (same `RunID`, current `AttemptNumber`, non-freezing, not a recovery trigger), then run one handoff-only `executeTry` with `ResumeSessionID` set, a fresh `attemptCtx` bounded by `HandoffTimeout` (not counted against the run budget), and the handoff-only prompt; persist that continuation as a separate `TryRecord` with the same `RunID`, next `AttemptNumber` (allowed to be `maxAttempts+1`), `HandoffOnly=true`, and the resolving outcome; do not apply the stall detector to this phase
 - [ ] 4.2 Set `OutcomeHandoffRequested` ONLY when a durable current-run `progress.HandoffEntry` exists (an entry appended after `summaryEntryCountBeforeRun`, proving both `laps handoff` and `laps wrapup` completed); use transient `HandoffState != 0` only to detect partial/no-wrapup handoff attempts; otherwise `OutcomeHandoffTimeout`
-- [ ] 4.3 When the harness cannot resume or no session ID exists, skip the resume and set `OutcomeHandoffTimeout`
-- [ ] 4.4 Tests: resumable harness → bounded continuation; handoff+wrapup → `handoff_requested`; handoff without wrapup / failed / timed-out / no-resume → `handoff_timeout`; neither increments the freeze counter
+- [ ] 4.3 When the harness cannot resume or no session ID exists, skip the resume, do not fabricate a handoff-only try record, and set the budget-cancelled implementation attempt's final outcome to `OutcomeHandoffTimeout` with a no-resume/no-session reason so recovery routing still has a persisted resolving try
+- [ ] 4.4 Tests: resumable harness → implementation try record with `run_timeout` plus a separate handoff-only try record with same `RunID`, next `AttemptNumber`, and `HandoffOnly=true`; handoff+wrapup → resolving continuation records `handoff_requested`; handoff without wrapup / failed / timed-out → resolving continuation records `handoff_timeout`; no-resume/no-session → single implementation try record with `handoff_timeout` and no synthetic continuation; none increment the freeze counter
 
 ## 5. Outcome computation and recovery triggers in the run
 
@@ -40,7 +40,7 @@
 ## 6. Recovery routing (persisted-record-derived)
 
 - [ ] 6.1 Persist `ResolvedRoute string` (set from `selection.Route.Name`, ~`runner.go:614`), `DirtyHandoff bool`, and `HandoffCreatedLapIDs []string` (copied from the durable handoff entry) on `store.TryRecord`; keep `LapAssignee` (`runner.go:1625`) as the unsubstituted queue assignee and do not use it to identify recovery runs
-- [ ] 6.2 Add a store query that, for a claimed lap that is not done, evaluates recovery triggers from `tries.jsonl` using `TryRecord.LapID` + `Outcome` + `DirtyHandoff` + `HandoffCreatedLapIDs`: read the **resolving try of the most-recent run** (the last try of the highest `RunID` for that original `LapID`, not merely the last try row, since a run has multiple retry tries) and test for `handoff_timeout` or `DirtyHandoff`; treat the original dirty lap and any `HandoffCreatedLapIDs` followup at the queue head as recovery-continuation targets for that same dirty tree
+- [ ] 6.2 Add a store query that, for a claimed lap that is not done, evaluates recovery triggers from `tries.jsonl` using `TryRecord.LapID` + `Outcome` + `DirtyHandoff` + `HandoffCreatedLapIDs`: read the **resolving try of the most-recent run** (the handoff-only continuation try when one exists, otherwise the last try of the highest `RunID` for that original `LapID`; do not mistake a preceding `run_timeout` record for the resolver) and test for `handoff_timeout` or `DirtyHandoff`; treat the original dirty lap and any `HandoffCreatedLapIDs` followup at the queue head as recovery-continuation targets for that same dirty tree
 - [ ] 6.3 In `routeRuntime.next` (`route_runtime.go:176`), when the resolved lap is recovery-pending per 6.2, resolve the `recovery` route by **substituting the assignee** — call `ActiveRoute(routing.Lap{Assignee: "recovery"}, r.overrideRoute())`, NOT by passing `recovery` as the `override` arg (which `select.go:71-81` returns verbatim without consulting `routes["recovery"]`); preserve precedence of any relay-wide `--route` override. Return an effective assignee/prompt role of `recovery` for role prompt resolution, run/try telemetry role tags, and recovery-classification gating, while preserving the original lap assignee on `TryRecord.LapAssignee`. Do NOT mutate `.laps/laps.json`
 - [ ] 6.4 Ensure the dispatch loop does not advance the queue past a recovery-pending dirty tree before a recovery run executes: if `laps add head` created followups from a dirty handoff, the first claimed followup from `HandoffCreatedLapIDs` must route to RECOVERY rather than bypassing the original dirty handoff; recovery-pending clears naturally once a recovery run resolves
 - [ ] 6.5 Anti-loop cap: in the 6.2 query, also count distinct consecutive `RunID`s for the lap whose resolving try has `ResolvedRoute == "recovery"` (per 6.1; do NOT count raw try rows and do NOT use `LapAssignee`); allow at most 2. On reaching the cap, the lap is no longer recovery-pending — stop routing to recovery, raise a relay-synthesized `needs_user` operator Issue (task 9.2), and fall back to the lap's normal route (never loop). The cap-hit decision happens at selection time with no recovery agent, so it does NOT write a `RecoveryClassification`
@@ -63,10 +63,10 @@
 
 ## 9. Telemetry and Sentry grouping
 
-- [ ] 9.1 Add `Outcome` and `RecoveryClassification` fields to `FailureState` (`internal/telemetry/failure_state.go`) and surface them via `FailureStateTags`; emit an `outcome` scalar tag (`TryOutcome`) on every try event, keeping the existing `failure_category` tag (`tags.go:73`) only for a `failed` outcome (do NOT add a parallel `category` tag); ensure `handoff_timeout`/`handoff_requested` are spans/logs, not Issues
+- [ ] 9.1 Add `Outcome` and `RecoveryClassification` fields to `FailureState` (`internal/telemetry/failure_state.go`) and surface them via `FailureStateTags`; emit an `outcome` scalar tag (`TryOutcome`) on every try event, keeping the existing `failure_category` tag (`tags.go:73`) only for a `failed` outcome (do NOT add a parallel `category` tag); ensure `run_timeout`/`handoff_timeout`/`handoff_requested` are spans/logs, not Issues
 - [ ] 9.2 Attach `recovery_classification` as a scalar tag (from the new `FailureState` field) on recovery-route try events; capture `needs_user` as an Issue while the other four remain spans/logs
 - [ ] 9.3 (Optional) emit a `recovery_started` common log event for UI/triage — not a try exit condition or an Issue
-- [ ] 9.4 Tests: a `handoff_timeout`/`handoff_requested` try is a span/log, not an Issue, and distinguished by `outcome`; a recovery try carries `recovery_classification`; a `needs_user` recovery may capture an Issue
+- [ ] 9.4 Tests: a `run_timeout`/`handoff_timeout`/`handoff_requested` try is a span/log, not an Issue, and distinguished by `outcome`; handoff-only continuation try logs/spans are identifiable as handoff-only; a recovery try carries `recovery_classification`; a `needs_user` recovery may capture an Issue
 
 ## 10. Version and docs
 

@@ -6,7 +6,7 @@ The system SHALL consider a try failed if the agent reports `Completed: false`, 
 - **agent-class**: ordinary agent error or short no-op.
 - **incomplete**: file changes were produced but the agent did not finalize the lap (`laps done` or `laps handoff`).
 
-Long usage/quota exhaustion (`usage_limit`), invalid-model/config (`invalid_model`), and authentication/proxy (`auth_or_proxy`) failures SHALL NOT be classified infra-class; they are handled by benching/routing and SHALL NOT increment the pause/freeze counter. A try whose outcome is `handoff_timeout` (see "Try outcome lifecycle") SHALL likewise NOT be classified infra-class and SHALL NOT increment the pause/freeze counter.
+Long usage/quota exhaustion (`usage_limit`), invalid-model/config (`invalid_model`), and authentication/proxy (`auth_or_proxy`) failures SHALL NOT be classified infra-class; they are handled by benching/routing and SHALL NOT increment the pause/freeze counter. A try whose outcome is `run_timeout` or `handoff_timeout` (see "Try outcome lifecycle") SHALL likewise NOT be classified infra-class and SHALL NOT increment the pause/freeze counter.
 
 Only repeated infra-class failures SHALL drive the per-agent-type resilience cascade; a single infra-class failure retries without escalation. Agent-class and incomplete failures SHALL fail the try and be retry-eligible but SHALL NOT increment the pause/freeze counter. Rate-limit flags SHALL be tracked per harness-model pair (`harness:model`) using a `ResilienceKey` type, not per harness alone, so that an opencode runner using multiple providers does not freeze wholesale when only one provider hits its rate limit. All resilience methods (`getState`, `PauseAgent`, `RecordHourlyFailure`, `FreezeAgent`, `UnpauseAgent`, `SelectActiveAgent`) and their callers in `runner.go` and `route_runtime.go` SHALL use the `ResilienceKey`.
 
@@ -34,8 +34,8 @@ Only repeated infra-class failures SHALL drive the per-agent-type resilience cas
 - **WHEN** a try fails with a `usage_limit`, `invalid_model`, or `auth_or_proxy` category
 - **THEN** the system SHALL NOT classify it infra-class and SHALL NOT increment the pause/freeze counter
 
-#### Scenario: Handoff-timeout outcome is not infra-class
-- **WHEN** a try resolves with a `handoff_timeout` outcome
+#### Scenario: Timeout lifecycle outcomes are not infra-class
+- **WHEN** a try resolves with a `run_timeout` or `handoff_timeout` outcome
 - **THEN** the system SHALL NOT classify it infra-class, SHALL NOT increment the pause/freeze counter, and SHALL NOT treat it as a usage-limit or harness failure
 
 ### Requirement: Terminal failure categories short-circuit the attempt loop
@@ -56,9 +56,9 @@ The system SHALL terminate a run's per-try attempt loop on the first detection o
 ## ADDED Requirements
 
 ### Requirement: Try outcome lifecycle
-The system SHALL classify every try with a stable `TryOutcome` lifecycle value, orthogonal to the `FailureCategory` failure-cause taxonomy: `completed` (lap finalized via `laps done`), `handoff_requested` (a successful handoff — both `laps handoff` and `laps wrapup` completed — with the lap not yet done), `incomplete` (the try produced own file changes but did not finalize), `handoff_timeout` (the bounded handoff recovery did not finalize), `failed` (a hard failure whose cause is carried by `FailureCategory`), or `interrupted` (operator stop). `FailureCategory` SHALL retain only its failure-cause values and SHALL NOT be extended with lifecycle labels. Success, freeze, retry, and Issue decisions SHALL be driven by `TryOutcome` (and, for a `failed` outcome, the category's resilience class), so no consumer treats a failure-cause category as a success.
+The system SHALL classify every try with a stable `TryOutcome` lifecycle value, orthogonal to the `FailureCategory` failure-cause taxonomy: `completed` (lap finalized via `laps done`), `handoff_requested` (a successful handoff — both `laps handoff` and `laps wrapup` completed — with the lap not yet done), `incomplete` (the try produced own file changes but did not finalize), `run_timeout` (the implementation attempt was cancelled because the run budget was exhausted and a handoff-only continuation will resolve the run), `handoff_timeout` (the bounded handoff recovery did not finalize, or no handoff-only continuation could be invoked), `failed` (a hard failure whose cause is carried by `FailureCategory`), or `interrupted` (operator stop). `FailureCategory` SHALL retain only its failure-cause values and SHALL NOT be extended with lifecycle labels. Success, freeze, retry, and Issue decisions SHALL be driven by `TryOutcome` (and, for a `failed` outcome, the category's resilience class), so no consumer treats a failure-cause category as a success.
 
-`handoff_requested` SHALL be a successful outcome: it SHALL NOT increment the pause/freeze counter, SHALL NOT be treated as a harness/usage/rate/agent/infra failure, and SHALL NOT be captured as an Issue. `handoff_timeout` SHALL be a non-freezing failure outcome that does not feed the freeze counter. The persisted try record SHALL store the `TryOutcome` while retaining the existing `Completed` boolean for compatibility.
+`handoff_requested` SHALL be a successful outcome: it SHALL NOT increment the pause/freeze counter, SHALL NOT be treated as a harness/usage/rate/agent/infra failure, and SHALL NOT be captured as an Issue. `run_timeout` SHALL be a non-freezing, non-Issue implementation-attempt outcome and SHALL NOT trigger recovery by itself. `handoff_timeout` SHALL be a non-freezing failure outcome that does not feed the freeze counter. The persisted try record SHALL store the `TryOutcome` and whether a try is `HandoffOnly` while retaining the existing `Completed` boolean for compatibility.
 
 #### Scenario: Completed lap records completed outcome
 - **WHEN** a try finalizes its lap via `laps done`
@@ -69,7 +69,7 @@ The system SHALL classify every try with a stable `TryOutcome` lifecycle value, 
 - **THEN** the try outcome SHALL be `handoff_requested`, which SHALL NOT count toward pause/freeze and SHALL NOT be captured as an Issue
 
 #### Scenario: Outcome does not collide with failure category
-- **WHEN** a try resolves with a lifecycle outcome (`handoff_requested`, `handoff_timeout`, `incomplete`, `completed`, `interrupted`)
+- **WHEN** a try resolves with a lifecycle outcome (`handoff_requested`, `run_timeout`, `handoff_timeout`, `incomplete`, `completed`, `interrupted`)
 - **THEN** the system SHALL NOT add that value to `FailureCategory`, and a `failed` outcome SHALL be the only one that carries a `FailureCategory` cause
 
 ### Requirement: Run/try timeout and bounded handoff recovery
@@ -78,6 +78,8 @@ The system SHALL enforce a hard wall-clock budget on a run measured **across all
 When the run budget is exhausted, the system SHALL attempt exactly one bounded handoff-only recovery **iff** the harness reports `ResumeSupported()` and a session ID was captured: it SHALL resume that same session with a handoff-only prompt under a separate hard bound (`handoff_timeout_secs` under `[reliability]`, default 300 seconds / 5 minutes). The handoff-only phase SHALL NOT continue implementation; its only goal is for the agent to summarize the blocker and call `laps handoff` followed by `laps wrapup`. The handoff window SHALL never exceed the per-try cap.
 
 A bounded handoff recovery SHALL record the try outcome as `handoff_requested` **only when both** `laps handoff` and `laps wrapup` completed. If the harness cannot resume, no session was captured, or the handoff-only phase fails, times out, or completes `laps handoff` without a completed `laps wrapup`, the system SHALL record the try outcome as `handoff_timeout`.
+
+When the handoff-only continuation is invoked, it SHALL be persisted as a separate try record under the same `RunID` as the budget-cancelled implementation attempt, with the next `AttemptNumber` (even if that exceeds the normal retry budget), `HandoffOnly=true`, the same resolved route, and `handoff_requested` or `handoff_timeout` as the resolving outcome. The budget-cancelled implementation attempt SHALL also be persisted first with outcome `run_timeout`; that record is non-freezing, not an Issue, and not a recovery trigger by itself. When no resume-capable session exists, the system SHALL NOT fabricate a handoff-only try record; the implementation attempt SHALL instead be the persisted resolving try with outcome `handoff_timeout`.
 
 #### Scenario: Run budget across retries stops grinding
 - **WHEN** a run's cumulative wall-clock across its retry attempts reaches `run_timeout_secs`
@@ -89,7 +91,7 @@ A bounded handoff recovery SHALL record the try outcome as `handoff_requested` *
 
 #### Scenario: Resumable harness gets a bounded handoff-only continuation
 - **WHEN** the run budget is exhausted, the harness reports `ResumeSupported()`, and a session ID was captured
-- **THEN** the system SHALL resume that session once with a handoff-only prompt bounded by `handoff_timeout_secs` and SHALL NOT permit continued implementation in that phase
+- **THEN** the system SHALL persist the cancelled implementation attempt as `run_timeout`, then resume that session once with a handoff-only prompt bounded by `handoff_timeout_secs`, persist the continuation as a separate `HandoffOnly` try with the same `RunID` and next `AttemptNumber`, and SHALL NOT permit continued implementation in that phase
 
 #### Scenario: Successful bounded handoff records handoff_requested
 - **WHEN** the bounded handoff-only phase completes both `laps handoff` and `laps wrapup`
@@ -97,14 +99,14 @@ A bounded handoff recovery SHALL record the try outcome as `handoff_requested` *
 
 #### Scenario: No resume support records handoff_timeout
 - **WHEN** the run budget is exhausted and the harness does not support resume or no session ID was captured
-- **THEN** the system SHALL record the try outcome as `handoff_timeout` and SHALL route the next run for the lap to RECOVERY
+- **THEN** the system SHALL record the implementation try outcome as `handoff_timeout`, SHALL NOT append a synthetic handoff-only try, and SHALL route the next run for the lap to RECOVERY
 
 #### Scenario: Failed or partial handoff records handoff_timeout
 - **WHEN** the bounded handoff-only phase fails, times out, or completes `laps handoff` without a completed `laps wrapup`
 - **THEN** the system SHALL record the try outcome as `handoff_timeout`
 
 #### Scenario: Timeout outcomes do not feed the freeze counter
-- **WHEN** a try resolves as `handoff_requested` or `handoff_timeout`
+- **WHEN** a try resolves as `handoff_requested`, `run_timeout`, or `handoff_timeout`
 - **THEN** the system SHALL NOT increment the infra freeze counter and SHALL NOT treat the outcome as a usage-limit, rate-limit, or harness failure
 
 ### Requirement: Recovery routing triggers

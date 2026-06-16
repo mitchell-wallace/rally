@@ -109,6 +109,19 @@ Reuses the existing resume machinery — no new `Executor` method. A harness wit
 `ResumeSupported() == false`, or no captured session, skips straight to
 `OutcomeHandoffTimeout`.
 
+**Try-record model.** When the handoff-only continuation is actually invoked, it is
+persisted as its own `TryRecord` under the same `RunID`, with the next
+`AttemptNumber` (even if that is `maxAttempts+1`) and `HandoffOnly: true`. The
+budget-cancelled implementation attempt is also persisted before that continuation
+with `OutcomeRunTimeout`: it is non-freezing, not an Issue, and not a recovery
+trigger by itself. The handoff-only record is the run's **resolving try** and
+carries `OutcomeHandoffRequested` or `OutcomeHandoffTimeout` for routing and
+telemetry. If no resume is possible or no session ID exists, Rally does **not**
+fabricate a synthetic handoff-only try; the budget-cancelled implementation attempt
+itself resolves as `OutcomeHandoffTimeout` with a no-resume/no-session reason, so
+the persisted final try still drives recovery routing without violating the
+"try = runner invocation" model.
+
 ### 3. `TryOutcome` — a first-class lifecycle type, orthogonal to `FailureCategory`
 
 Today the outcome is a derived `(Completed, failed, FailureCategory)` tuple, and
@@ -122,26 +135,33 @@ const (
     OutcomeCompleted        TryOutcome = "completed"         // lap finalized (laps done)
     OutcomeHandoffRequested TryOutcome = "handoff_requested" // clean handoff+wrapup; success-side, lap not done
     OutcomeIncomplete       TryOutcome = "incomplete"        // own changes, not finalized
+    OutcomeRunTimeout       TryOutcome = "run_timeout"       // implementation attempt hit run budget; handoff try follows
     OutcomeHandoffTimeout   TryOutcome = "handoff_timeout"   // bounded handoff recovery failed
     OutcomeFailed           TryOutcome = "failed"            // hard failure — cause is in FailureCategory
     OutcomeInterrupted      TryOutcome = "interrupted"       // operator stop
 )
 ```
 
-- `FailureCategory` keeps **only** its nine failure-cause values; `handoff_*` are
-  *not* added to it. `categoryToClass`/freeze accounting are unchanged.
+- `FailureCategory` keeps **only** its nine failure-cause values; `run_timeout` and
+  `handoff_*` are *not* added to it. `categoryToClass`/freeze accounting are
+  unchanged.
 - Success / freeze / Issue / retry decisions read `TryOutcome` (and, for
   `OutcomeFailed`, the `FailureCategory→FailureClass` class).
 - `OutcomeHandoffRequested` is success-side: not a failure, no freeze, never an
   Issue. Set only when **both** `laps handoff` and `laps wrapup` completed
   (Decision 5).
+- `OutcomeRunTimeout` is a non-freezing implementation-attempt outcome used only
+  when the separate handoff-only continuation is about to run. It records the
+  budget cancellation for observability but is not a recovery trigger by itself;
+  the following handoff-only try resolves the run.
 - `OutcomeHandoffTimeout` is failure-side but **non-freezing**: it does not feed
   the freeze counter and joins the terminal short-circuit set so the run makes no
   further same-runner attempts and control returns to routing.
 
 `store.TryRecord` retains `Completed bool` (back-compat) and gains `Outcome
-TryOutcome`; `runOutcome` carries `Outcome`. Telemetry emits the new `outcome` tag
-alongside the existing `failure_category` tag (Decision 10); `FailureState`
+TryOutcome` plus `HandoffOnly bool`; `runOutcome` carries the resolving try's
+`Outcome`. Telemetry emits the new `outcome` tag alongside the existing
+`failure_category` tag (Decision 10); `FailureState`
 (`telemetry/failure_state.go`) gains `Outcome` and `RecoveryClassification` fields,
 surfaced through `FailureStateTags`.
 
@@ -349,7 +369,8 @@ duplicates:
   instead of collapsing into rate-limit/harness Issues (the exact mislabelling seen
   in `RALLY-2`, where a lap's whole failure history collapsed into one
   "rate limit, waiting 1m" Issue).
-- `handoff_timeout` and `handoff_requested` are **not** Issues — spans/logs.
+- `run_timeout`, `handoff_timeout`, and `handoff_requested` are **not** Issues —
+  spans/logs.
 - A RECOVERY try attaches `recovery_classification`. A `needs_user` classification
   MAY be captured as an Issue; the other four are spans/logs.
 
