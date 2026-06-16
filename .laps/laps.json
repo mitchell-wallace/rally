@@ -202,11 +202,11 @@
       "title": "Final full-change verification for recovery role timeouts",
       "description": "Run the complete openspec-verify-change skill for add-recovery-role-timeouts and inspect the whole diff.\n\nBefore diffing, identify the intended merge target from the user, PR metadata, repo docs, branch config, or recent history, and use that target in diff commands. Identify the first lap/try in this batch and treat earlier branch work as pre-existing unless the user asks otherwise. Do not rewrite git history.\n\nReview the whole outcome with depth: TryOutcome and FailureCategory separation; run/try timeout deadlines across retries; bounded handoff-only continuation as a separate TryRecord; durable handoff detection; dirty-handoff auto-commit suppression; persisted recovery-pending routing and anti-loop cap; effective RECOVERY prompt role; classification through wrapup; telemetry outcome/classification tags; docs; version bump.\n\nAcceptance: Run targeted suites plus full go test ./... and go build ./... if feasible. Check off any remaining tasks.md boxes only for verified-correct work. For substantive gaps, add focused head laps using additive/revert commits only; do not turn final verification into a hidden implementation phase.",
       "assignee": "VERIFY",
-      "isDone": false,
+      "isDone": true,
       "order": 1114112,
       "createdAt": "2026-06-16T00:17:48.179554501Z",
-      "updatedAt": "2026-06-16T00:17:48.179554501Z",
-      "completedAt": null
+      "updatedAt": "2026-06-16T06:28:32.021136276Z",
+      "completedAt": "2026-06-16T06:28:32.021136276Z"
     }
   ]
 }

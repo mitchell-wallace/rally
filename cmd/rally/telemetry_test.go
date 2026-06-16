@@ -53,6 +53,18 @@ func (c *customExecutor) Execute(ctx context.Context, opts agent.RunOptions) (*a
 	}
 	completed := c.attempts >= c.succeedOn
 	summary := fmt.Sprintf("try %d summary", c.attempts)
+	if completed && opts.LapsEnabled && opts.WorkspaceDir != "" {
+		done := exec.CommandContext(ctx, "laps", "done")
+		done.Dir = opts.WorkspaceDir
+		if out, err := done.CombinedOutput(); err != nil {
+			return nil, fmt.Errorf("laps done: %w\n%s", err, out)
+		}
+		wrapup := exec.CommandContext(ctx, "laps", "wrapup", "--summary", summary)
+		wrapup.Dir = opts.WorkspaceDir
+		if out, err := wrapup.CombinedOutput(); err != nil {
+			return nil, fmt.Errorf("laps wrapup: %w\n%s", err, out)
+		}
+	}
 	return &agent.TryResult{
 		Completed: completed,
 		Summary:   summary,
