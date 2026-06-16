@@ -1275,6 +1275,16 @@ func (r *Runner) runOne(
 	// unfinalized-agent capture below (which runs after the loop) can report the
 	// last known attempt as context.
 	lastAttempt := 0
+	// Bounded handoff-only continuation state (task 4). When the run budget is
+	// exhausted on a resume-capable harness with a captured session, the attempt
+	// loop persists the cancelled implementation try as run_timeout and breaks,
+	// then the post-loop phase resumes that session once under HandoffTimeout to
+	// capture a clean handoff. These carry the decision and session out of the
+	// loop; handoffResumeBaseAttempt is the run_timeout attempt number, so the
+	// continuation records the next attempt (allowed to exceed maxAttempts).
+	handoffResumePending := false
+	handoffResumeSessionID := ""
+	handoffResumeBaseAttempt := 0
 	roleInstructions, err := r.resolveRoleInstructions(task.Assignee)
 	if err != nil {
 		return outcome(false, false, false), err
@@ -1653,6 +1663,18 @@ attemptLoop:
 			}
 		}
 
+		// A run-budget exhaustion only yields a separate handoff-only continuation
+		// when the harness can resume into the captured session. Capture this
+		// attempt's session id (the cancelled attempt may still carry it) before
+		// deciding. When no resumable session exists, the budget-cancelled
+		// implementation try is itself the resolving try and is labelled
+		// handoff_timeout (task 4.3) rather than run_timeout, so recovery routing
+		// has a persisted resolving record even without a continuation.
+		if runBudgetExhausted && result != nil && result.SessionID != "" {
+			sessionID = result.SessionID
+		}
+		canHandoffResume := runBudgetExhausted && exec != nil && exec.ResumeSupported() && sessionID != ""
+
 		hasFailureEvidence := result != nil && result.Evidence != nil && result.Evidence.Category != ""
 		attemptOutcome := tryOutcomeForAttempt(failed, incomplete && !hasFailureEvidence, actionTaken && r.stopFlag.Load(), handoffEntry != nil)
 		// A timed-out attempt (run budget or per-try cap) records a non-freezing
@@ -1663,6 +1685,10 @@ attemptLoop:
 		// Guarded on `failed` so a stall-recovery success above is not relabelled.
 		if timedOut && failed {
 			attemptOutcome = reliability.OutcomeRunTimeout
+			if runBudgetExhausted && !canHandoffResume {
+				attemptOutcome = reliability.OutcomeHandoffTimeout
+				failReason = noHandoffResumeReason(exec, sessionID)
+			}
 		}
 
 		// Error classification and strategy dispatch.
@@ -1936,6 +1962,17 @@ attemptLoop:
 		// attempt rather than burning more of an already-exhausted budget.
 		if runBudgetExhausted {
 			lastResult = result
+			// When the harness can resume the captured session, defer to the
+			// bounded handoff-only continuation below: the run_timeout try just
+			// recorded is observability only, and the continuation (a separate
+			// HandoffOnly try) becomes the run resolver. Without a resumable
+			// session the run_timeout try was already relabelled handoff_timeout
+			// above and is itself the resolving try.
+			if canHandoffResume {
+				handoffResumePending = true
+				handoffResumeSessionID = sessionID
+				handoffResumeBaseAttempt = attempt
+			}
 			break attemptLoop
 		}
 
@@ -1948,6 +1985,26 @@ attemptLoop:
 		} else {
 			previousSummary = ""
 			lastResult = &agent.TryResult{Completed: false}
+		}
+	}
+
+	// Bounded handoff-only continuation (task 4). The run budget was exhausted on
+	// a resume-capable harness with a captured session: resume that session once
+	// under HandoffTimeout (no stall detector, not counted against the run budget)
+	// to capture a clean handoff. This continuation, not the cancelled run_timeout
+	// implementation try, resolves the run.
+	if handoffResumePending && !r.stopFlag.Load() && ctx.Err() == nil {
+		contOutcome, contResult, contSucceeded := r.runBoundedHandoffOnly(
+			ctx, relay, runIndex, picked, task, rc, roleInstructions,
+			handoffResumeSessionID, handoffResumeBaseAttempt+1, maxAttempts,
+			summaryEntryCountBeforeRun, runID, log,
+		)
+		resolvingOutcome = contOutcome
+		if contResult != nil {
+			lastResult = contResult
+		}
+		if contSucceeded {
+			success = true
 		}
 	}
 
@@ -1987,6 +2044,236 @@ attemptLoop:
 		addressed = *lastResult.MessageAddressed
 	}
 	return outcome(success, addressed, false), nil
+}
+
+// noHandoffResumeReason explains, for a budget-cancelled implementation try that
+// could not start a bounded handoff-only continuation, which resume precondition
+// was missing. The reason is persisted on the resolving handoff_timeout try so
+// recovery routing and operator triage can tell a no-resume harness from a
+// no-session attempt (task 4.3).
+func noHandoffResumeReason(exec agent.Executor, sessionID string) string {
+	if exec == nil || !exec.ResumeSupported() {
+		return "run timeout; harness cannot resume for handoff"
+	}
+	if sessionID == "" {
+		return "run timeout; no session captured for handoff"
+	}
+	return "run timeout"
+}
+
+// runBoundedHandoffOnly performs the single bounded, handoff-only continuation
+// after the run budget is exhausted on a resume-capable harness (task 4.1). It
+// resumes the captured session with a handoff-only prompt under a fresh context
+// bounded by HandoffTimeout — no stall detector, not counted against the run
+// budget — then persists the continuation as a separate HandoffOnly try under
+// the same RunID with attemptNumber (allowed to exceed maxAttempts). The outcome
+// is handoff_requested ONLY when a durable current-run handoff entry exists
+// (proving both laps handoff and laps wrapup completed); otherwise
+// handoff_timeout (task 4.2). It returns the resolving outcome, the continuation
+// result, and whether the continuation succeeded.
+func (r *Runner) runBoundedHandoffOnly(
+	ctx context.Context,
+	relay *store.RelayRecord,
+	runIndex int,
+	picked agent.ResolvedAgent,
+	task runTask,
+	rc telemetry.RallyContext,
+	roleInstructions string,
+	sessionID string,
+	attemptNumber int,
+	maxAttempts int,
+	summaryEntryCountBeforeRun int,
+	runID string,
+	log io.Writer,
+) (reliability.TryOutcome, *agent.TryResult, bool) {
+	startedAt := time.Now().UTC()
+
+	// Persist the captured session id so the resume-capable harness re-attaches to
+	// the same conversation (mirrors the in-loop retry resume wiring).
+	if rs, err := progress.LoadRunState(r.cfg.WorkspaceDir); err == nil && rs != nil {
+		rs.SessionID = sessionID
+		_ = progress.SaveRunState(r.cfg.WorkspaceDir, rs)
+	}
+
+	opts := agent.RunOptions{
+		Persona:          picked.Harness,
+		Model:            picked.Model,
+		TaskName:         task.Name,
+		TaskRequirements: task.Requirements,
+		Instructions:     r.resolveInstructions(),
+		RoleInstructions: roleInstructions,
+		LapsEnabled:      r.cfg.LapsEnabled,
+		ResumeSessionID:  sessionID,
+		WorkspaceDir:     r.cfg.WorkspaceDir,
+	}
+	// The handoff-only prompt forbids implementation and directs a blocker
+	// summary + laps handoff + laps wrapup. Built as an explicit override so the
+	// normal task template (which invites continued implementation) is bypassed.
+	opts.Prompt = buildHandoffOnlyPrompt(opts)
+
+	tryID := r.store.NextTryID()
+	tryLogPath := filepath.Join(r.cfg.DataDir, "tries", repoKey(r.cfg.WorkspaceDir), fmt.Sprintf("try-%d.log", tryID))
+	_ = os.MkdirAll(filepath.Dir(tryLogPath), 0o755)
+	opts.LogPath = tryLogPath
+
+	tryCtx, trySpan := r.tel().StartSpan(ctx, "try", fmt.Sprintf("relay-%d-run-%d-try-%d", relay.ID, runIndex+1, tryID))
+
+	handoffCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	// Bound the phase by HandoffTimeout. No stall detector and no per-run budget
+	// arm join this select — only the handoff limit and parent-context
+	// cancellation can end it besides the agent finishing.
+	var handoffBound <-chan time.Time
+	if r.cfg.HandoffTimeout > 0 {
+		ch, stop := r.newBoundTimer(r.cfg.HandoffTimeout)
+		defer stop()
+		handoffBound = ch
+	}
+
+	tryCh := make(chan tryResult, 1)
+	go func() {
+		res, err := r.executeTry(handoffCtx, picked, opts)
+		tryCh <- tryResult{res, err}
+	}()
+
+	var (
+		result   *agent.TryResult
+		execErr  error
+		timedOut bool
+	)
+	select {
+	case res := <-tryCh:
+		result = res.result
+		execErr = res.err
+	case <-handoffBound:
+		cancel()
+		timedOut = true
+		res := <-tryCh
+		result = res.result
+		execErr = res.err
+	case <-ctx.Done():
+		cancel()
+		res := <-tryCh
+		result = res.result
+		execErr = res.err
+	}
+	endedAt := time.Now().UTC()
+
+	summary := r.normalizeFinalSnippet(runID, tryLogPath, summaryEntryCountBeforeRun, result, execErr)
+	if result == nil {
+		result = &agent.TryResult{}
+	}
+	result.Summary = summary
+
+	// A durable current-run handoff entry (appended after the run started) proves
+	// both laps handoff and laps wrapup completed. Transient HandoffState alone
+	// (a laps handoff with no wrapup) is NOT sufficient — it only distinguishes a
+	// partial/no-wrapup attempt for the failure reason.
+	handoffEntry := recordedHandoffEntryForRun(r.cfg.WorkspaceDir, runID, summaryEntryCountBeforeRun)
+	handoffState := 0
+	if rs, err := progress.LoadRunState(r.cfg.WorkspaceDir); err == nil && rs != nil {
+		handoffState = rs.HandoffState
+	}
+
+	outcome := reliability.OutcomeHandoffTimeout
+	failReason := ""
+	succeeded := false
+	switch {
+	case handoffEntry != nil:
+		outcome = reliability.OutcomeHandoffRequested
+		succeeded = true
+	case timedOut:
+		failReason = "handoff timeout"
+	case execErr != nil:
+		failReason = "handoff failed"
+	case handoffState != 0:
+		failReason = "handoff without wrapup"
+	default:
+		failReason = "handoff not completed"
+	}
+
+	// Fold handoff bookkeeping (summary.jsonl, any head followups) into history so
+	// the durable handoff entry is committed. Dirty-handoff auto-commit
+	// suppression for leftover code changes is owned by a later lap.
+	if err := gitx.FoldRallyState(r.cfg.WorkspaceDir); err != nil {
+		fmt.Fprintf(log, "relay %d run %d handoff-only rally state fold warning: %v\n", relay.ID, runIndex+1, err)
+	}
+
+	runtime := endedAt.Sub(startedAt)
+	renderRunFooter(r.outWriter(), style.FooterOptions{
+		Passed:      succeeded,
+		Duration:    runtime,
+		FailReason:  failReason,
+		Attempt:     attemptNumber,
+		MaxAttempts: maxAttempts,
+	})
+
+	tryRecord := store.TryRecord{
+		ID:            tryID,
+		RunID:         runIndex + 1,
+		RelayID:       relay.ID,
+		AgentType:     picked.Harness,
+		Completed:     succeeded,
+		Outcome:       outcome,
+		HandoffOnly:   true,
+		Summary:       result.Summary,
+		RemainingWork: result.RemainingWork,
+		FilesChanged:  []string{},
+		StartedAt:     startedAt.Format(time.RFC3339),
+		EndedAt:       endedAt.Format(time.RFC3339),
+		AttemptNumber: attemptNumber,
+		LogPath:       tryLogPath,
+		FailReason:    failReason,
+		RuntimeMs:     runtime.Milliseconds(),
+		LapID:         task.LapID,
+		LapAssignee:   task.Assignee,
+		ToolCalls:     result.ToolCalls,
+	}
+
+	tryTags := telemetry.Tags(telemetry.EventInfo{
+		RelayID:  relay.ID,
+		RunID:    runIndex + 1,
+		TryID:    tryID,
+		Role:     task.Assignee,
+		Harness:  picked.Harness,
+		Model:    picked.Model,
+		Repo:     rc.Repo,
+		RepoName: rc.RepoName,
+		LapID:    task.LapID,
+	})
+	applyTags(trySpan, tryTags)
+	trySpan.SetData("completed", succeeded)
+	trySpan.SetData("outcome", string(outcome))
+	trySpan.SetData("handoff_only", true)
+	trySpan.SetData("fail_reason", failReason)
+	r.tel().EmitTryLog(tryCtx, map[string]interface{}{
+		"event":        "try",
+		"relay_id":     relay.ID,
+		"run_id":       runIndex + 1,
+		"try_id":       tryID,
+		"attempt":      attemptNumber,
+		"role":         task.Assignee,
+		"runner":       telemetry.RunnerLabel(picked.Harness, picked.Model),
+		"repo":         rc.Repo,
+		"repo_name":    rc.RepoName,
+		"lap_id":       task.LapID,
+		"completed":    succeeded,
+		"outcome":      string(outcome),
+		"handoff_only": true,
+		"fail_reason":  failReason,
+		"runtime_ms":   runtime.Milliseconds(),
+	})
+	trySpan.Finish()
+
+	fmt.Fprintf(log, "relay %d run %d handoff-only continuation: attempt=%d outcome=%q fail_reason=%q runtime=%s handoff_state=%d durable_handoff=%v\n",
+		relay.ID, runIndex+1, attemptNumber, outcome, failReason, runtime, handoffState, handoffEntry != nil)
+
+	if err := r.store.AppendTry(tryRecord); err != nil {
+		fmt.Fprintf(log, "relay %d run %d handoff-only append-try warning: %v\n", relay.ID, runIndex+1, err)
+	}
+
+	return outcome, result, succeeded
 }
 
 func (r *Runner) newStallController(tryLogPath string, exec agent.Executor) reliability.StallController {
