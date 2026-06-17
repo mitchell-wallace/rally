@@ -334,11 +334,11 @@
       "title": "Verify activation cut-over and relay telemetry changes",
       "description": "OpenSpec change: migrate-telemetry-to-new-relic. Slice-boundary verification covering laps 6-8 (tasks 1.1, 1.3 code, 4.1-4.7, 2.5 relay, 1.6) — all runtime/behavior changes before release wiring and docs. High-risk activation path and production relay data path.\n\nUse the openspec-verify-change skill against the change, focused on activation + cut-over + relay. Identify the intended merge target before diffing (ask the user, or read PR metadata / repo docs / branch config / recent history; do NOT assume main) and use git diff \u003ctarget\u003e...HEAD. Identify the batch's first lap/try and treat earlier branch work as pre-existing.\n\nTrace the real lines: resolveSink precedence ordering matches the spec exactly; no Sentry import/DSN/ldflag remains in the active path; machine-id is not created for help/version/update or any disabled branch; EmitTryLog now follows AppendTry at BOTH call sites; lap mismatch emits a warning RallyDiagnostic, not a failure. Run go test ./cmd/rally ./internal/config ./internal/telemetry ./internal/relay.\n\nDo not rewrite git history; add focused head laps for substantive gaps using additive/revert commits, fixing only tiny safe one-liners here. Report findings first. Then check off the tasks.md boxes for 1.1, 1.3 (code parts), 4.1-4.7, 2.5, and 1.6 verified correct and thorough.",
       "assignee": "VERIFY",
-      "isDone": false,
+      "isDone": true,
       "order": 655360,
       "createdAt": "2026-06-17T05:39:12.313462324Z",
-      "updatedAt": "2026-06-17T05:39:12.313462324Z",
-      "completedAt": null
+      "updatedAt": "2026-06-17T11:57:27.007740872Z",
+      "completedAt": "2026-06-17T11:57:27.007740872Z"
     },
     {
       "id": "rall-45d2",
