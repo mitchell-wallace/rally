@@ -148,6 +148,27 @@ func TestBuildPrompt_SharedGuidanceIncludedWhenLapsEnabled(t *testing.T) {
 	}
 }
 
+func TestBuildPrompt_VerifyExitGuidanceOmitsHandoff(t *testing.T) {
+	p := BuildPrompt(RunOptions{
+		Role:             "verify",
+		RoleInstructions: "Do not call `laps handoff`.",
+		LapsEnabled:      true,
+	})
+
+	if strings.Contains(p, agent_prompt.Finalize()) {
+		t.Fatalf("verify prompt should not include generic finalize handoff guidance:\n%s", p)
+	}
+	if strings.Contains(p, "If you are blocked and cannot proceed, run this shell command:\n  laps handoff") {
+		t.Fatalf("verify prompt should not instruct blocked verify agents to hand off:\n%s", p)
+	}
+	if !strings.Contains(p, "For VERIFY work, do not use `laps handoff`") {
+		t.Fatalf("verify prompt missing role-aware no-handoff guidance:\n%s", p)
+	}
+	if !strings.Contains(p, "laps done") {
+		t.Fatalf("verify prompt still needs completion guidance:\n%s", p)
+	}
+}
+
 func TestBuildPrompt_SharedGuidanceOmittedInNoBackendMode(t *testing.T) {
 	opts := RunOptions{
 		TaskName:    "Do the thing",

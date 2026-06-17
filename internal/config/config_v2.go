@@ -27,6 +27,7 @@ const (
 	DefaultRunTimeoutSecs     = 4500 // 75m: per-run wall-clock budget across retries
 	DefaultTryTimeoutSecs     = 3600 // 60m: secondary per-attempt cap
 	DefaultHandoffTimeoutSecs = 300  // 5m: bounded handoff-only resume (not counted in run budget)
+	MinReliabilityTimeoutSecs = 300  // 5m: minimum accepted wall-clock budget
 )
 
 var harnessNamePattern = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_-]*$`)
@@ -124,6 +125,9 @@ func (r ReliabilityConfig) HandoffTimeout() time.Duration {
 // effectiveRunTimeoutSecs returns the resolved run budget in seconds.
 func (r ReliabilityConfig) effectiveRunTimeoutSecs() int {
 	if r.RunTimeoutSecs > 0 {
+		if r.RunTimeoutSecs < MinReliabilityTimeoutSecs {
+			return MinReliabilityTimeoutSecs
+		}
 		return r.RunTimeoutSecs
 	}
 	return DefaultRunTimeoutSecs
@@ -132,6 +136,9 @@ func (r ReliabilityConfig) effectiveRunTimeoutSecs() int {
 // effectiveTryTimeoutSecs returns the resolved per-try cap in seconds.
 func (r ReliabilityConfig) effectiveTryTimeoutSecs() int {
 	if r.TryTimeoutSecs > 0 {
+		if r.TryTimeoutSecs < MinReliabilityTimeoutSecs {
+			return MinReliabilityTimeoutSecs
+		}
 		return r.TryTimeoutSecs
 	}
 	return DefaultTryTimeoutSecs
@@ -145,11 +152,15 @@ func (r ReliabilityConfig) effectiveHandoffTimeoutSecs() int {
 	if h <= 0 {
 		h = DefaultHandoffTimeoutSecs
 	}
-	if bound := min(r.effectiveRunTimeoutSecs(), r.effectiveTryTimeoutSecs()); h >= bound {
-		h = bound - 1
+	if h < MinReliabilityTimeoutSecs {
+		h = MinReliabilityTimeoutSecs
 	}
-	if h < 1 {
-		h = 1
+	if bound := min(r.effectiveRunTimeoutSecs(), r.effectiveTryTimeoutSecs()); h >= bound {
+		if bound > MinReliabilityTimeoutSecs {
+			h = bound - 1
+		} else {
+			h = bound
+		}
 	}
 	return h
 }
@@ -281,13 +292,29 @@ func LoadV2(workspaceDir string) (V2Config, error) {
 	// run_timeout_secs the run budget subsumes the per-try cap, so the config
 	// is accepted rather than erroring. The handoff window is clamped below the
 	// effective try/run bounds so it can never reach or outlast them.
+	rawRun := cfg.Reliability.RunTimeoutSecs
+	rawTry := cfg.Reliability.TryTimeoutSecs
+	rawHandoff := cfg.Reliability.HandoffTimeoutSecs
 	cfg.Reliability.RunTimeoutSecs = cfg.Reliability.effectiveRunTimeoutSecs()
 	cfg.Reliability.TryTimeoutSecs = cfg.Reliability.effectiveTryTimeoutSecs()
-	rawHandoff := cfg.Reliability.HandoffTimeoutSecs
 	cfg.Reliability.HandoffTimeoutSecs = cfg.Reliability.effectiveHandoffTimeoutSecs()
-	if rawHandoff != cfg.Reliability.HandoffTimeoutSecs && rawHandoff > 0 {
+	for _, rounded := range []struct {
+		key string
+		raw int
+		got int
+	}{
+		{"run_timeout_secs", rawRun, cfg.Reliability.RunTimeoutSecs},
+		{"try_timeout_secs", rawTry, cfg.Reliability.TryTimeoutSecs},
+		{"handoff_timeout_secs", rawHandoff, cfg.Reliability.HandoffTimeoutSecs},
+	} {
+		if rounded.raw > 0 && rounded.raw < MinReliabilityTimeoutSecs {
+			cfg.DeprecationNotes = append(cfg.DeprecationNotes,
+				fmt.Sprintf("config: [reliability].%s=%d was rounded up to %d because timeout budgets below 5 minutes are not accepted", rounded.key, rounded.raw, rounded.got))
+		}
+	}
+	if rawHandoff != cfg.Reliability.HandoffTimeoutSecs && rawHandoff >= MinReliabilityTimeoutSecs {
 		cfg.DeprecationNotes = append(cfg.DeprecationNotes,
-			fmt.Sprintf("config: [reliability].handoff_timeout_secs=%d was clamped to %d so it stays below the effective try/run timeout bounds", rawHandoff, cfg.Reliability.HandoffTimeoutSecs))
+			fmt.Sprintf("config: [reliability].handoff_timeout_secs=%d was clamped to %d to fit within the effective try/run timeout bounds while preserving the 5-minute minimum", rawHandoff, cfg.Reliability.HandoffTimeoutSecs))
 	}
 	if cfg.Harnesses == nil {
 		cfg.Harnesses = make(map[string]*HarnessConfig)
@@ -615,6 +642,19 @@ func min(vals ...int) int {
 
 func SaveV2(workspaceDir string, cfg V2Config) error {
 	path := V2Path(workspaceDir)
+
+	if cfg.Harnesses == nil {
+		cfg.Harnesses = make(map[string]*HarnessConfig)
+	}
+	if err := validateHarnesses(cfg.Harnesses); err != nil {
+		return err
+	}
+	if cfg.Routes == nil {
+		cfg.Routes = make(map[string][]string)
+	}
+	if err := validateRoutes(cfg.Routes); err != nil {
+		return err
+	}
 
 	raw := rawConfig{
 		SchemaVersion:        ExpectedSchemaVersion,

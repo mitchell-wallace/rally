@@ -268,12 +268,7 @@ func promptHarnesses(cmd *cobra.Command, cfg config.V2Config) error {
 				huh.NewNote().Title(name).Description("Leave blank to skip; only set when you need a fully custom harness CLI."),
 				huh.NewInput().Title("command").Description(`Space-separated; "$PROMPT" expands to the task. e.g. opencode run "$PROMPT" --format json`).Value(&commandStr),
 				huh.NewInput().Title("model_flag").Description("Flag passed before the resolved model, e.g. --model.").Value(&modelFlag),
-				huh.NewSelect[string]().Title("output_strategy").Description("How rally summarises agent output.").Options(
-					huh.NewOption("(keep)", outputStrategy),
-					huh.NewOption("tail", "tail"),
-					huh.NewOption("stream", "stream"),
-					huh.NewOption("none", "none"),
-				).Value(&outputStrategy),
+				huh.NewSelect[string]().Title("output_strategy").Description("Only tail is supported in this version; blank uses the default tail parser.").Options(customHarnessOutputStrategyOptions()...).Value(&outputStrategy),
 				huh.NewInput().Title("output_lines").Description("Lines to keep when output_strategy=tail.").Value(&outputLines).Validate(validateOptionalInt),
 				huh.NewSelect[string]().Title("tail_stream").Description("Which stream to tail.").Options(
 					huh.NewOption("(keep)", tailStream),
@@ -379,15 +374,26 @@ func newReliabilityForm(cfg config.V2Config) reliabilityForm {
 // group builds the interactive reliability form group, binding each editable
 // value. Pointer receiver so huh writes the user's edits back into the form.
 func (f *reliabilityForm) group() *huh.Group {
-	return huh.NewGroup(
+	fields := []huh.Field{
 		huh.NewNote().Title("Reliability").Description("Freeze detection and retry behaviour."),
-		huh.NewInput().Title("stall_threshold_secs").Description("Log silence (seconds) before treating an agent as stalled.").Value(&f.stallThreshold).Validate(validateOptionalInt),
-		huh.NewInput().Title("retry_budget").Description("Per-run retry budget before a try is marked failed.").Value(&f.retryBudget).Validate(validateOptionalInt),
-		huh.NewConfirm().Title("liveness_probe").Description("Send a periodic check to detect connection drops.").Affirmative("On").Negative("Off").Value(&f.livenessProbe),
-		huh.NewInput().Title("run_timeout_secs").Description("Per-run wall-clock budget across retries (0 = default 4500).").Value(&f.runTimeoutSecs).Validate(validateOptionalInt),
-		huh.NewInput().Title("try_timeout_secs").Description("Per-attempt cap (0 = default 3600); subsumed by run budget if >= it.").Value(&f.tryTimeoutSecs).Validate(validateOptionalInt),
-		huh.NewInput().Title("handoff_timeout_secs").Description("Bounded handoff-only resume (0 = default 300); clamped below run/try bounds.").Value(&f.handoffTimeoutSecs).Validate(validateOptionalInt),
-	)
+	}
+	for _, title := range reliabilityFieldTitles {
+		switch title {
+		case "stall_threshold_secs":
+			fields = append(fields, huh.NewInput().Title(title).Description("Log silence (seconds) before treating an agent as stalled.").Value(&f.stallThreshold).Validate(validateOptionalInt))
+		case "retry_budget":
+			fields = append(fields, huh.NewInput().Title(title).Description("Per-run retry budget before a try is marked failed.").Value(&f.retryBudget).Validate(validateOptionalInt))
+		case "liveness_probe":
+			fields = append(fields, huh.NewConfirm().Title(title).Description("Send a periodic check to detect connection drops.").Affirmative("On").Negative("Off").Value(&f.livenessProbe))
+		case "run_timeout_secs":
+			fields = append(fields, huh.NewInput().Title(title).Description("Per-run wall-clock budget across retries (0 = default 4500; values below 300 round up).").Value(&f.runTimeoutSecs).Validate(validateOptionalInt))
+		case "try_timeout_secs":
+			fields = append(fields, huh.NewInput().Title(title).Description("Per-attempt cap (0 = default 3600; values below 300 round up); subsumed by run budget if >= it.").Value(&f.tryTimeoutSecs).Validate(validateOptionalInt))
+		case "handoff_timeout_secs":
+			fields = append(fields, huh.NewInput().Title(title).Description("Bounded handoff-only resume (0 = default 300; values below 300 round up); clamped below run/try bounds when possible.").Value(&f.handoffTimeoutSecs).Validate(validateOptionalInt))
+		}
+	}
+	return huh.NewGroup(fields...)
 }
 
 // apply writes the (possibly edited) form values back onto cfg. Empty/cleared
@@ -422,6 +428,15 @@ func splitCSV(s string) []string {
 		}
 	}
 	return out
+}
+
+var supportedCustomHarnessOutputStrategies = []string{"", "tail"}
+
+func customHarnessOutputStrategyOptions() []huh.Option[string] {
+	return []huh.Option[string]{
+		huh.NewOption("(default)", supportedCustomHarnessOutputStrategies[0]),
+		huh.NewOption("tail", supportedCustomHarnessOutputStrategies[1]),
+	}
 }
 
 func parseIntDefault(s string, def int) (int, bool) {

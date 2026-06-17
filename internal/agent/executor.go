@@ -24,6 +24,7 @@ type ResolvedAgent struct {
 type RunOptions struct {
 	Persona          string
 	Model            string
+	Role             string
 	TaskName         string
 	TaskRequirements string
 	Instructions     string

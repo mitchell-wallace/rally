@@ -221,7 +221,8 @@ Rally reads `.rally/config.toml` from the workspace. `rally init` writes a
 starter config with sensible defaults; you can edit it any time.
 `rally init roles` extends that starter setup with role routes for
 `junior`, `senior`, `ui`, `verify`, and `recovery`, plus matching markdown files under
-`.rally/agents/`.
+`.rally/agents/`. The example below is illustrative; generated defaults may be
+more compact when unset values can fall back to harness defaults.
 
 ```toml
 schema_version = 2
@@ -233,7 +234,7 @@ data_dir = ""
 iterations = 1
 mix = "cc cx"
 claude_model = "claude-opus-4.7"
-codex_model = "gpt-5.4"
+codex_model = "gpt-5.5"
 gemini_model = "gemini-3.1-pro-preview"
 opencode_model = "zai-coding-plan/glm-5.1"
 antigravity_model = "Gemini 3.5 Flash (High)"
@@ -262,9 +263,12 @@ JUNIOR  = ["op:z:4", "op:gk:2", "ge:1"]
 recovery = ["claude"]
 
 [reliability]
-freeze_threshold_secs = 180
+stall_threshold_secs  = 900
 liveness_probe        = false
 retry_budget          = 5
+run_timeout_secs      = 4500
+try_timeout_secs      = 3600
+handoff_timeout_secs  = 300
 ```
 
 ### `[defaults]`
@@ -437,55 +441,50 @@ config loader rejects it with an explicit error directing you to
 
 ### `[reliability]`
 
-Tunes retry, freeze detection, the liveness probe, and per-run time budgets.
+Tunes retry, stall detection, the liveness probe, and per-run time budgets.
 
 | Field                    | Type | Default | Purpose                                                            |
 |--------------------------|------|---------|--------------------------------------------------------------------|
-| `freeze_threshold_secs`  | int  | `180`   | Seconds of log inactivity before a try is considered frozen        |
-| `liveness_probe`         | bool | `false` | Experimental side-channel probe for ambiguous freeze signals       |
+| `stall_threshold_secs`   | int  | `900`   | Seconds of log inactivity before a try is considered stalled       |
+| `liveness_probe`         | bool | `false` | Experimental side-channel probe for ambiguous stall signals        |
 | `retry_budget`           | int  | `5`     | Maximum retries per try before advancing to the next route entry   |
 | `run_timeout_secs`       | int  | `4500`  | Per-run wall-clock budget (75 m) measured **across all retries**   |
 | `try_timeout_secs`       | int  | `3600`  | Secondary per-attempt cap (60 m) guarding a single runaway try     |
 | `handoff_timeout_secs`   | int  | `300`   | Bounded handoff-only resume window (5 m), not counted in the run budget |
 
-`0`/unset yields the default. `handoff_timeout_secs` is clamped so it can
-never reach or outlast the effective `try_timeout_secs`/`run_timeout_secs`;
-when `try_timeout_secs >= run_timeout_secs` the run budget subsumes the
-per-try cap and the config is accepted rather than rejected. The two
-timeouts are orthogonal to the silence-based freeze detector — whichever
-fires first wins. See [Recovery and per-run timeouts](#recovery-and-per-run-timeouts)
-for how they combine with the `recovery` route.
-
-`[reliability.chars_per_token]` is an optional per-harness map of divisors
-used by the token estimator. Defaults are baked into each harness adapter.
+`0`/unset yields the default. Positive timeout values below 300 seconds are
+rounded up to 300 seconds with a warning. `handoff_timeout_secs` is clamped
+below the effective `try_timeout_secs`/`run_timeout_secs` when possible while
+preserving that 5-minute minimum. When `try_timeout_secs >= run_timeout_secs`
+the run budget subsumes the per-try cap and the config is accepted rather
+than rejected. The two timeouts are orthogonal to the silence-based stall
+detector — whichever fires first wins. See
+[Recovery and per-run timeouts](#recovery-and-per-run-timeouts) for how they
+combine with the `recovery` route.
 
 ```toml
 [reliability]
-freeze_threshold_secs = 180
+stall_threshold_secs  = 900
 liveness_probe        = false
 retry_budget          = 5
 run_timeout_secs      = 4500
 try_timeout_secs      = 3600
 handoff_timeout_secs  = 300
-
-[reliability.chars_per_token]
-claude = 3.5
-codex  = 4.0
 ```
 
-Freeze detection is conservative. A try is flagged frozen only when the
-log file has not been modified for `freeze_threshold_secs` **and** the
+Stall detection is conservative. A try is flagged stalled only when the
+log file has not been modified for `stall_threshold_secs` **and** the
 agent has zero active TCP connections **and** its IO byte counters have
 not advanced. On Linux all three conditions must hold; on macOS the
 connection clause is treated as satisfied (no procfs equivalent); on
-Windows freeze detection is disabled. Confirmed freezes are graceful-killed
+Windows stall detection is disabled. Confirmed stalls are graceful-killed
 (SIGTERM → 5-second drain → SIGKILL) and retried through the resume-aware
 retry path.
 
 The liveness probe is opt-in and skipped for harnesses whose adapter does
 not support it. It sends a lightweight "respond with OK" prompt when the
-freeze signal is ambiguous (mtime advancing but IO idle for 60 s). A
-successful probe clears the freeze flag.
+stall signal is ambiguous (mtime advancing but IO idle for 60 s). A
+successful probe clears the stall flag.
 
 ### Recovery and per-run timeouts
 
@@ -501,7 +500,7 @@ measured *across all of its retry attempts* (`run_timeout_secs`, default
 75 m). A secondary per-attempt cap (`try_timeout_secs`, default 60 m) guards
 a single runaway try; the run budget sits slightly above it so a quick
 non-blocking retry after a transient blip still has buffer. Whichever of the
-run budget, the per-try cap, or the silence freeze detector fires first
+run budget, the per-try cap, or the silence stall detector fires first
 wins. A per-try cap firing with run budget left just ends that attempt and
 may retry within the remaining budget; when the **run budget** is exhausted,
 the run stops retrying and proceeds to a bounded handoff.

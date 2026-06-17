@@ -223,6 +223,69 @@ func TestRecoveryPendingForLapFollowupClearsAfterNewerCleanRun(t *testing.T) {
 	}
 }
 
+func TestRecoveryPendingForLapFollowupClearsAfterNewerOriginalRun(t *testing.T) {
+	_, s := setupTempStore(t)
+	mustAppendTry(t, s, TryRecord{
+		ID:                   1,
+		RunID:                1,
+		LapID:                "original",
+		AttemptNumber:        1,
+		Outcome:              reliability.OutcomeHandoffRequested,
+		DirtyHandoff:         true,
+		HandoffCreatedLapIDs: []string{"followup"},
+	})
+	mustAppendTry(t, s, TryRecord{
+		ID:            2,
+		RunID:         2,
+		LapID:         "original",
+		AttemptNumber: 1,
+		Outcome:       reliability.OutcomeCompleted,
+		ResolvedRoute: "recovery",
+	})
+
+	status := s.RecoveryPendingForLap("followup")
+	if status.Pending || status.CapHit {
+		t.Fatalf("status = %+v, want recovery cleared by newer original-lap recovery run", status)
+	}
+}
+
+func TestRecoveryPendingForLapCapCountsOriginalAndFollowupGroup(t *testing.T) {
+	_, s := setupTempStore(t)
+	mustAppendTry(t, s, TryRecord{
+		ID:                   1,
+		RunID:                1,
+		LapID:                "original",
+		AttemptNumber:        1,
+		Outcome:              reliability.OutcomeHandoffRequested,
+		DirtyHandoff:         true,
+		HandoffCreatedLapIDs: []string{"followup"},
+	})
+	mustAppendTry(t, s, TryRecord{
+		ID:            2,
+		RunID:         2,
+		LapID:         "original",
+		AttemptNumber: 1,
+		Outcome:       reliability.OutcomeHandoffTimeout,
+		ResolvedRoute: "recovery",
+	})
+	mustAppendTry(t, s, TryRecord{
+		ID:            3,
+		RunID:         3,
+		LapID:         "followup",
+		AttemptNumber: 1,
+		Outcome:       reliability.OutcomeHandoffTimeout,
+		ResolvedRoute: "recovery",
+	})
+
+	status := s.RecoveryPendingForLap("original")
+	if !status.CapHit {
+		t.Fatalf("CapHit = false, want grouped recovery cap hit: %+v", status)
+	}
+	if status.ConsecutiveRecoveryRuns != RecoveryRouteConsecutiveCap {
+		t.Fatalf("ConsecutiveRecoveryRuns = %d, want %d", status.ConsecutiveRecoveryRuns, RecoveryRouteConsecutiveCap)
+	}
+}
+
 func TestRecoveryPendingForLapConsecutiveRecoveryCap(t *testing.T) {
 	_, s := setupTempStore(t)
 	mustAppendTry(t, s, TryRecord{ID: 1, RunID: 1, LapID: "lap-1", AttemptNumber: 1, Outcome: reliability.OutcomeHandoffTimeout, ResolvedRoute: "recovery"})

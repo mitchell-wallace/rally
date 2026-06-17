@@ -2,6 +2,7 @@ package relay
 
 import (
 	"context"
+	"errors"
 	"io"
 	"os"
 	"path/filepath"
@@ -45,6 +46,18 @@ func blockingTimeoutExecutor(perAttempt []func(int) (*agent.TryResult, error), a
 				return &agent.TryResult{Completed: false}, ctx.Err()
 			}
 			return behavior(n)
+		},
+	}
+}
+
+func rateLimitErrorExecutor(attempts *int32) *funcExecutor {
+	return &funcExecutor{
+		fn: func(_ context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+			atomic.AddInt32(attempts, 1)
+			if opts.LogPath != "" {
+				_ = os.WriteFile(opts.LogPath, []byte("rate limit\n"), 0o644)
+			}
+			return &agent.TryResult{Completed: false}, errors.New("rate limit")
 		},
 	}
 }
@@ -109,6 +122,12 @@ func (c *boundTimerController) fire(t *testing.T, call int) {
 	case ch <- time.Now():
 	default:
 	}
+}
+
+func (c *boundTimerController) callCount() int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return len(c.chans)
 }
 
 func waitForAttempts(t *testing.T, attempts *int32, want int32) {
@@ -213,6 +232,88 @@ func awaitRunOne(t *testing.T, done <-chan runOutcome) runOutcome {
 	}
 }
 
+func TestRunOneTryTimeoutAtOrAboveRunBudgetIsSubsumed(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		tryTimeout time.Duration
+	}{
+		{name: "try equals run", tryTimeout: time.Hour},
+		{name: "try greater than run", tryTimeout: 2 * time.Hour},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var attempts int32
+			exec := blockingTimeoutExecutor(nil, &attempts)
+			r, s, _ := newTimeoutTestRunner(t, exec, Config{
+				RetryBudget: 3,
+				RunTimeout:  time.Hour,
+				TryTimeout:  tc.tryTimeout,
+			})
+			timers := &boundTimerController{}
+			r.timerFunc = timers.timer
+
+			done := driveRunOneAsync(t, r)
+			waitForAttempts(t, &attempts, 1)
+			timers.fire(t, 1)
+
+			res := awaitRunOne(t, done)
+
+			if res.Success {
+				t.Fatal("run-budget exhaustion must not resolve as success")
+			}
+			if res.Outcome != reliability.OutcomeHandoffTimeout {
+				t.Fatalf("run outcome = %q, want %q", res.Outcome, reliability.OutcomeHandoffTimeout)
+			}
+			if got := timers.callCount(); got != 1 {
+				t.Fatalf("timer calls = %d, want 1 shared run-budget timer only; try cap must be subsumed", got)
+			}
+			if got := atomic.LoadInt32(&attempts); got != 1 {
+				t.Fatalf("executor ran %d attempts, want 1", got)
+			}
+			tries := s.AllTries()
+			if len(tries) != 1 {
+				t.Fatalf("recorded %d tries, want 1", len(tries))
+			}
+			if tries[0].FailReason != "run timeout; harness cannot resume for handoff" {
+				t.Fatalf("try fail reason = %q, want no-resume run timeout", tries[0].FailReason)
+			}
+		})
+	}
+}
+
+func TestRunOneRunBudgetExpiredBeforeCooldownStopsRetries(t *testing.T) {
+	var attempts int32
+	exec := rateLimitErrorExecutor(&attempts)
+	r, s, _ := newTimeoutTestRunner(t, exec, Config{
+		RetryBudget: 3,
+		RunTimeout:  time.Nanosecond,
+	})
+	r.timerFunc = func(time.Duration) (<-chan time.Time, func() bool) {
+		return neverTick(), func() bool { return true }
+	}
+	r.sleepFunc = func(time.Duration) {
+		t.Fatal("run budget expiry must not sleep for cooldown")
+	}
+
+	res := driveRunOne(t, r)
+
+	if res.Success {
+		t.Fatal("expired run budget must not resolve as success")
+	}
+	if res.Outcome != reliability.OutcomeHandoffTimeout {
+		t.Fatalf("run outcome = %q, want %q", res.Outcome, reliability.OutcomeHandoffTimeout)
+	}
+	if got := atomic.LoadInt32(&attempts); got != 1 {
+		t.Fatalf("executor ran %d attempts, want 1: expired run budget must stop before retry", got)
+	}
+	tries := s.AllTries()
+	if len(tries) != 1 {
+		t.Fatalf("recorded %d tries, want 1", len(tries))
+	}
+	if tries[0].Outcome != reliability.OutcomeHandoffTimeout {
+		t.Fatalf("try outcome = %q, want %q", tries[0].Outcome, reliability.OutcomeHandoffTimeout)
+	}
+}
+
 // TestRunOneRunBudgetStopsRetries pins task 3.5's "cumulative retry time crossing
 // run_timeout_secs": the shared per-run budget fires during the first attempt and
 // must stop the run from retrying. The executor never completes on its own, so
@@ -268,7 +369,7 @@ func TestRunOneRunBudgetIsCumulativeAcrossRetries(t *testing.T) {
 	exec := blockingTimeoutExecutor(nil, &attempts) // every attempt blocks
 	r, s, _ := newTimeoutTestRunner(t, exec, Config{
 		RetryBudget: 3,
-		RunTimeout:  time.Hour,
+		RunTimeout:  2 * time.Hour,
 		TryTimeout:  time.Hour,
 	})
 	timers := &boundTimerController{}

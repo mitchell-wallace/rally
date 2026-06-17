@@ -36,65 +36,73 @@ func (s *Store) RecoveryPendingForLap(lapID string) RecoveryPendingStatus {
 		return RecoveryPendingStatus{}
 	}
 
-	candidates := s.recoveryCandidatesForLap(lapID)
-	if len(candidates) == 0 {
+	group := s.recoveryLapGroup(lapID)
+	tries := s.recoveryTriesForLapGroup(group)
+	resolvers := resolvingTriesByRun(tries)
+	if len(resolvers) == 0 {
 		return RecoveryPendingStatus{}
 	}
 
-	sort.Slice(candidates, func(i, j int) bool {
-		return candidates[i].latestTryID() > candidates[j].latestTryID()
-	})
-
-	candidate := candidates[0]
-	return recoveryStatusFromRunResolvers(candidate.lapID, candidate.resolvers, candidate.continuationMatch)
+	return recoveryStatusFromRunResolvers(lapID, resolvers, s.lapHasDirtyHandoffParent(lapID, group))
 }
 
-type recoveryCandidate struct {
-	lapID             string
-	resolvers         []TryRecord
-	continuationMatch bool
-}
-
-// latestTryID returns the global try ID of the most recent resolver. Try IDs
-// are monotonic across the whole store (including relay restarts), so they give
-// a stable recency ordering where relay-local RunIDs would collide or misorder.
-func (c recoveryCandidate) latestTryID() int {
-	if len(c.resolvers) == 0 {
-		return 0
+func (s *Store) recoveryLapGroup(lapID string) map[string]bool {
+	group := map[string]bool{lapID: true}
+	changed := true
+	for changed {
+		changed = false
+		for _, tr := range s.cache.Tries {
+			if !tr.DirtyHandoff || strings.TrimSpace(tr.LapID) == "" {
+				continue
+			}
+			connected := group[tr.LapID]
+			for _, created := range tr.HandoffCreatedLapIDs {
+				if group[created] {
+					connected = true
+					break
+				}
+			}
+			if !connected {
+				continue
+			}
+			if !group[tr.LapID] {
+				group[tr.LapID] = true
+				changed = true
+			}
+			for _, created := range tr.HandoffCreatedLapIDs {
+				created = strings.TrimSpace(created)
+				if created == "" || group[created] {
+					continue
+				}
+				group[created] = true
+				changed = true
+			}
+		}
 	}
-	return c.resolvers[len(c.resolvers)-1].ID
+	return group
 }
 
-func (s *Store) recoveryCandidatesForLap(lapID string) []recoveryCandidate {
-	byLap := make(map[string][]TryRecord)
-	continuation := make(map[string]bool)
+func (s *Store) recoveryTriesForLapGroup(group map[string]bool) []TryRecord {
+	var out []TryRecord
 	for _, tr := range s.cache.Tries {
-		if strings.TrimSpace(tr.LapID) == "" {
+		if strings.TrimSpace(tr.LapID) == "" || !group[tr.LapID] {
 			continue
 		}
-		if tr.LapID == lapID {
-			byLap[tr.LapID] = append(byLap[tr.LapID], tr)
-			continue
-		}
-		if tr.DirtyHandoff && containsString(tr.HandoffCreatedLapIDs, lapID) {
-			byLap[tr.LapID] = append(byLap[tr.LapID], tr)
-			continuation[tr.LapID] = true
-		}
-	}
-
-	out := make([]recoveryCandidate, 0, len(byLap))
-	for candidateLapID, tries := range byLap {
-		resolvers := resolvingTriesByRun(tries)
-		if len(resolvers) == 0 {
-			continue
-		}
-		out = append(out, recoveryCandidate{
-			lapID:             candidateLapID,
-			resolvers:         resolvers,
-			continuationMatch: continuation[candidateLapID],
-		})
+		out = append(out, tr)
 	}
 	return out
+}
+
+func (s *Store) lapHasDirtyHandoffParent(lapID string, group map[string]bool) bool {
+	for _, tr := range s.cache.Tries {
+		if !tr.DirtyHandoff || !group[tr.LapID] {
+			continue
+		}
+		if tr.LapID != lapID && containsString(tr.HandoffCreatedLapIDs, lapID) {
+			return true
+		}
+	}
+	return false
 }
 
 // runIdentity uniquely identifies a run across relay restarts. RunID is
@@ -132,7 +140,7 @@ func resolvingTriesByRun(tries []TryRecord) []TryRecord {
 	return out
 }
 
-func recoveryStatusFromRunResolvers(lapID string, resolvers []TryRecord, continuationMatch bool) RecoveryPendingStatus {
+func recoveryStatusFromRunResolvers(requestedLapID string, resolvers []TryRecord, continuationMatch bool) RecoveryPendingStatus {
 	if len(resolvers) == 0 {
 		return RecoveryPendingStatus{}
 	}
@@ -151,8 +159,12 @@ func recoveryStatusFromRunResolvers(lapID string, resolvers []TryRecord, continu
 		consecutiveRecoveryRuns++
 	}
 
+	triggerLapID := latest.LapID
+	if strings.TrimSpace(triggerLapID) == "" {
+		triggerLapID = requestedLapID
+	}
 	status := RecoveryPendingStatus{
-		TriggerLapID:             lapID,
+		TriggerLapID:             triggerLapID,
 		ResolvingRunID:           latest.RunID,
 		ResolvingTryID:           latest.ID,
 		ResolvingOutcome:         latest.Outcome,

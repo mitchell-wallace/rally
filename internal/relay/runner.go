@@ -1342,10 +1342,20 @@ func (r *Runner) runOne(
 	// budget leaves runBudgetCh nil, disabling the bound. The per-try cap is
 	// created per attempt inside the loop (mirroring stallTicker).
 	var runBudgetCh <-chan time.Time
+	var runDeadline time.Time
 	if r.cfg.RunTimeout > 0 {
 		ch, stop := r.newBoundTimer(r.cfg.RunTimeout)
 		defer stop()
 		runBudgetCh = ch
+		runDeadline = time.Now().Add(r.cfg.RunTimeout)
+	}
+	tryTimeout := r.cfg.TryTimeout
+	if r.cfg.RunTimeout > 0 && tryTimeout >= r.cfg.RunTimeout {
+		// When the per-try cap is equal to or longer than the per-run budget, the
+		// run budget subsumes it. Leaving both timers armed creates a select race
+		// at the same deadline, which can incorrectly persist a retryable "try
+		// timeout" instead of the run-budget handoff path.
+		tryTimeout = 0
 	}
 attemptLoop:
 	for attempt := 1; attempt <= maxAttempts; attempt++ {
@@ -1378,6 +1388,7 @@ attemptLoop:
 		opts := agent.RunOptions{
 			Persona:          picked.Harness,
 			Model:            picked.Model,
+			Role:             task.promptAssignee(),
 			TaskName:         task.Name,
 			TaskRequirements: task.Requirements,
 			TaskPrompt:       task.Prompt,
@@ -1493,8 +1504,8 @@ attemptLoop:
 		// non-positive cap leaves tryDeadline nil, disabling the per-try bound.
 		var tryDeadline <-chan time.Time
 		var stopTryTimer func() bool
-		if r.cfg.TryTimeout > 0 {
-			tryDeadline, stopTryTimer = r.newBoundTimer(r.cfg.TryTimeout)
+		if tryTimeout > 0 {
+			tryDeadline, stopTryTimer = r.newBoundTimer(tryTimeout)
 		}
 		loopOut := r.runActionLoop(actionLoopDeps{
 			tryCh:           tryCh,
@@ -1693,7 +1704,7 @@ attemptLoop:
 		// implementation try is itself the resolving try and is labelled
 		// handoff_timeout (task 4.3) rather than run_timeout, so recovery routing
 		// has a persisted resolving record even without a continuation.
-		if runBudgetExhausted && result != nil && result.SessionID != "" {
+		if result != nil && result.SessionID != "" {
 			sessionID = result.SessionID
 		}
 		canHandoffResume := runBudgetExhausted && exec != nil && exec.ResumeSupported() && sessionID != ""
@@ -1750,11 +1761,24 @@ attemptLoop:
 				// A terminal category never resumes within budget, so don't burn
 				// the cooldown only to break the loop immediately afterward.
 				if !terminalForRun && attempt < maxAttempts && decision.Cooldown > 0 {
-					fmt.Println(style.DimStyle.Render(fmt.Sprintf("waiting %v for rate limit...", decision.Cooldown)))
-					if r.sleepFunc != nil {
-						r.sleepFunc(decision.Cooldown)
-					} else {
-						time.Sleep(decision.Cooldown)
+					cooldown := decision.Cooldown
+					if !runDeadline.IsZero() {
+						remaining := time.Until(runDeadline)
+						if remaining <= 0 {
+							cooldown = 0
+							runBudgetExhausted = true
+						} else if cooldown >= remaining {
+							cooldown = remaining
+							runBudgetExhausted = true
+						}
+					}
+					if cooldown > 0 {
+						fmt.Println(style.DimStyle.Render(fmt.Sprintf("waiting %v for rate limit...", cooldown)))
+						if r.sleepFunc != nil {
+							r.sleepFunc(cooldown)
+						} else {
+							time.Sleep(cooldown)
+						}
 					}
 				}
 			case reliability.StrategyFreshRestart:
@@ -1767,6 +1791,19 @@ attemptLoop:
 			failureClass = attemptFailureClass
 			if !attemptOutcome.CarriesFailureCategory() {
 				failureCategory = ""
+			}
+		}
+		if failed && runBudgetExhausted {
+			canHandoffResume = exec != nil && exec.ResumeSupported() && sessionID != ""
+			attemptOutcome = reliability.OutcomeRunTimeout
+			failReason = "run timeout"
+			failureCategory = ""
+			attemptFailureClass = reliability.FailureAgent
+			failureClass = attemptFailureClass
+			terminalForRun = false
+			if !canHandoffResume {
+				attemptOutcome = reliability.OutcomeHandoffTimeout
+				failReason = noHandoffResumeReason(exec, sessionID)
 			}
 		}
 		lastAttemptIncomplete = failed && attemptFailureClass == reliability.FailureIncomplete

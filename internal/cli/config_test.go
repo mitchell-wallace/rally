@@ -46,6 +46,18 @@ func TestReliabilityFieldTitlesIncludeTimeouts(t *testing.T) {
 	}
 }
 
+func TestCustomHarnessOutputStrategyOptionsMatchLoaderSupport(t *testing.T) {
+	want := []string{"", "tail"}
+	if len(supportedCustomHarnessOutputStrategies) != len(want) {
+		t.Fatalf("supportedCustomHarnessOutputStrategies = %v, want %v", supportedCustomHarnessOutputStrategies, want)
+	}
+	for i := range want {
+		if supportedCustomHarnessOutputStrategies[i] != want[i] {
+			t.Fatalf("supportedCustomHarnessOutputStrategies = %v, want %v", supportedCustomHarnessOutputStrategies, want)
+		}
+	}
+}
+
 func TestFixedConfigRoleNamesIncludeRecoveryBeforeCustomSort(t *testing.T) {
 	got := fixedConfigRoleNames()
 	want := []string{"default", "junior", "senior", "ui", "verify", "recovery"}
@@ -100,7 +112,7 @@ func TestReliabilityFormApplyRoundTrip(t *testing.T) {
 [reliability]
 run_timeout_secs = 1800
 try_timeout_secs = 1500
-handoff_timeout_secs = 120
+handoff_timeout_secs = 300
 `)
 	cfg, err := config.LoadV2(workspaceDir)
 	if err != nil {
@@ -124,7 +136,7 @@ handoff_timeout_secs = 120
 	if got, want := roundTrip.Reliability.TryTimeoutSecs, 1500; got != want {
 		t.Errorf("TryTimeoutSecs round-trip = %d, want %d", got, want)
 	}
-	if got, want := roundTrip.Reliability.HandoffTimeoutSecs, 120; got != want {
+	if got, want := roundTrip.Reliability.HandoffTimeoutSecs, 300; got != want {
 		t.Errorf("HandoffTimeoutSecs round-trip = %d, want %d", got, want)
 	}
 }
