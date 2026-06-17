@@ -224,11 +224,11 @@
       "title": "Add deterministic New Relic attribute builder with budget and priority",
       "description": "OpenSpec change: migrate-telemetry-to-new-relic (tasks 3.1, 3.2, 3.3, 3.4, 1.5). The New Relic sink (next lap) needs a deterministic way to turn Rally tags + nested contexts into bounded scalar attributes. Builds on the backend-neutral scrubbing helpers from the previous lap.\n\nOutcome: a new attribute builder (e.g. internal/telemetry/attributes.go) merges FailureEvent/Event Tags and Contexts into a flat map of scalar values (string/number/bool), applies scrubbing, and enforces Rally's local budget: at most 64 attributes, keys \u003c 255 bytes, bounded string values, no nested-map JSON blobs. When over budget it keeps correlation + failure/outcome fields first (relay_id, run_id, try_id, repo, lap_id, runner, role, outcome, failure_category, recovery_classification, agent_state), then deterministic lower-priority context fields, dropping the remainder.\n\nFiles \u0026 scope: new internal/telemetry/attributes.go + attributes_test.go; may reuse scrubber.go helpers. Do not implement the sink yet.\n\nDesign: flatten nested contexts into prefixed keys (e.g. failure_evidence.message, rally.version) but only bounded scalars; never JSON-encode a whole nested map. The priority list must be an explicit stable ordering so dropping is deterministic. Drop (not placeholder) sensitive keys via the neutral scrubber; truncate long strings to the bound.\n\nAcceptance: tests prove scalar-only output; \u003c=64 attributes with keys \u003c 255 bytes; oversized context payloads dropped deterministically rather than JSON-encoded (3.4); correlation/failure fields survive when over budget (3.3); home paths collapsed, and prompt/transcript/log/current_task plus host/user identity keys dropped with NO [scrubbed] placeholder, long strings truncated (1.5). go test ./internal/telemetry green. Do not check tasks.md boxes.",
       "assignee": "SENIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 131072,
       "createdAt": "2026-06-17T05:39:12.313446482Z",
-      "updatedAt": "2026-06-17T05:39:12.313446482Z",
-      "completedAt": null
+      "updatedAt": "2026-06-17T06:53:58.226427226Z",
+      "completedAt": "2026-06-17T06:53:58.226427226Z"
     },
     {
       "id": "rall-1300",
