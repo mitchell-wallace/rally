@@ -2,7 +2,15 @@ package telemetry
 
 import (
 	"context"
+	"go/ast"
+	"go/parser"
+	"go/token"
+	"io/fs"
+	"path/filepath"
 	"reflect"
+	"runtime"
+	"strconv"
+	"strings"
 	"testing"
 
 	nr "github.com/newrelic/go-agent/v3/newrelic"
@@ -30,13 +38,13 @@ func expectNewRelicCustomEvents(t *testing.T, app interface{}, want []newRelicEv
 	wantValue := reflect.MakeSlice(reflect.SliceOf(wantType), len(want), len(want))
 	for i, expected := range want {
 		item := wantValue.Index(i)
-		
+
 		intrinsics := map[string]interface{}{
 			"type": expected.Type,
 		}
 		// Match any timestamp by reflecting on whatever is expected
 		item.FieldByName("Intrinsics").Set(reflect.ValueOf(intrinsics))
-		
+
 		if expected.UserAttributes != nil {
 			item.FieldByName("UserAttributes").Set(reflect.ValueOf(expected.UserAttributes))
 		}
@@ -76,7 +84,7 @@ func expectNewRelicTxnEvents(t *testing.T, app interface{}, expectedUserAttribut
 		"timestamp": "*",
 	}
 	item.FieldByName("Intrinsics").Set(reflect.ValueOf(intrinsics))
-	
+
 	if expectedUserAttributes != nil {
 		item.FieldByName("UserAttributes").Set(reflect.ValueOf(expectedUserAttributes))
 	}
@@ -108,23 +116,126 @@ func TestNewRelicConfigOptions_ApplicationLoggingRegressions(t *testing.T) {
 }
 
 func TestNewRelicSink_VolumeBounds(t *testing.T) {
-	// 3.8: Confirm event volume stays bounded. We verify statically that the 
-	// sink does not emit custom events for high-volume text.
-	// 3.7: Prove Rally adds no Application.RecordLog calls.
-	
-	// If these checks fail, a developer has added high-volume or raw logging
-	// without updating the volume boundary design.
-	
-	// We do a simple static check of the sink implementation.
-	// (A complete check would use AST parsing, but this provides a simple tripwire).
-	
-	// For actual app behavior, integration tests or manual review ensures that 
-	// CaptureEvent is not called for every line of agent output.
+	files, fset := parseInternalGoFiles(t)
+	var customEventCalls []string
+	for path, file := range files {
+		if strings.HasSuffix(path, "_test.go") {
+			continue
+		}
+		ast.Inspect(file, func(n ast.Node) bool {
+			call, ok := n.(*ast.CallExpr)
+			if !ok || !isSelectorCall(call.Fun, "RecordCustomEvent") {
+				return true
+			}
+			pos := filesetPosition(fset, path, call.Pos())
+			customEventCalls = append(customEventCalls, pos)
+			if filepath.ToSlash(path) != "internal/telemetry/newrelic.go" {
+				t.Errorf("RecordCustomEvent call outside New Relic sink at %s", pos)
+				return true
+			}
+			if len(call.Args) == 0 {
+				t.Errorf("RecordCustomEvent call at %s has no event-name argument", pos)
+				return true
+			}
+			name, ok := call.Args[0].(*ast.Ident)
+			if !ok {
+				t.Errorf("RecordCustomEvent event name at %s is not a fixed identifier", pos)
+				return true
+			}
+			switch name.Name {
+			case "newRelicEventRallyTry", "newRelicEventRallyDiagnostic", "newRelicEventRallyFailure":
+			default:
+				t.Errorf("RecordCustomEvent event name at %s = %s, want fixed Rally event constant", pos, name.Name)
+			}
+			return true
+		})
+	}
+
+	if len(customEventCalls) != 3 {
+		t.Fatalf("RecordCustomEvent call sites = %v, want exactly RallyTry, RallyDiagnostic, and RallyFailure", customEventCalls)
+	}
 }
 
 func TestNewRelicSink_StaticNoRecordLog(t *testing.T) {
-	// A basic tripwire: we agreed not to use Application.RecordLog in 0.9.1.
-	// We've verified this during implementation, and regressions are checked via review.
+	files, fset := parseInternalGoFiles(t)
+	for path, file := range files {
+		if strings.HasSuffix(path, "_test.go") {
+			continue
+		}
+		for _, imp := range file.Imports {
+			importPath := strings.Trim(imp.Path.Value, `"`)
+			if strings.HasPrefix(importPath, "github.com/newrelic/go-agent/v3/integrations/") {
+				t.Errorf("New Relic logger integration import %q in %s", importPath, path)
+			}
+		}
+		ast.Inspect(file, func(n ast.Node) bool {
+			call, ok := n.(*ast.CallExpr)
+			if ok && isSelectorCall(call.Fun, "RecordLog") {
+				t.Errorf("Application.RecordLog call found at %s", filesetPosition(fset, path, call.Pos()))
+			}
+			return true
+		})
+	}
+}
+
+func parseInternalGoFiles(t *testing.T) (map[string]*ast.File, *token.FileSet) {
+	t.Helper()
+
+	_, filename, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("runtime.Caller failed")
+	}
+	repoRoot := filepath.Clean(filepath.Join(filepath.Dir(filename), "..", ".."))
+	fset := token.NewFileSet()
+	files := map[string]*ast.File{}
+	err := filepath.WalkDir(filepath.Join(repoRoot, "internal"), func(path string, entry fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if entry.IsDir() {
+			return nil
+		}
+		if !strings.HasSuffix(path, ".go") {
+			return nil
+		}
+		parsed, err := parser.ParseFile(fset, path, nil, parser.ImportsOnly)
+		if err != nil {
+			return err
+		}
+		if needsBodyInspection(path) {
+			parsed, err = parser.ParseFile(fset, path, nil, 0)
+			if err != nil {
+				return err
+			}
+		}
+		rel, err := filepath.Rel(repoRoot, path)
+		if err != nil {
+			return err
+		}
+		files[filepath.ToSlash(rel)] = parsed
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("parse internal Go files: %v", err)
+	}
+	return files, fset
+}
+
+func needsBodyInspection(path string) bool {
+	return !strings.HasSuffix(path, "_test.go")
+}
+
+func isSelectorCall(expr ast.Expr, selectorName string) bool {
+	selector, ok := expr.(*ast.SelectorExpr)
+	return ok && selector.Sel.Name == selectorName
+}
+
+func filesetPosition(fset *token.FileSet, path string, pos token.Pos) string {
+	position := fset.Position(pos)
+	if position.Filename == "" {
+		return path
+	}
+	return filepath.ToSlash(position.Filename) + ":" + strconv.Itoa(position.Line)
 }
 
 func TestNewRelicSink_StartSpan_Segment(t *testing.T) {
@@ -137,7 +248,7 @@ func TestNewRelicSink_StartSpan_Segment(t *testing.T) {
 	_, childSpan := sink.StartSpan(txnCtx, "child", "child-smoke")
 	childSpan.SetTag("child_id", "43")
 	childSpan.Finish()
-	
+
 	parentSpan.Finish()
 
 	expectNewRelicTxnEvents(t, testApp, map[string]interface{}{
@@ -147,8 +258,8 @@ func TestNewRelicSink_StartSpan_Segment(t *testing.T) {
 		"duration_ms":   "*",
 		"relay_id":      "42",
 	})
-	
-	// Since segments attributes are tricky to inspect without internal package, we rely on 
+
+	// Since segments attributes are tricky to inspect without internal package, we rely on
 	// ExpectTxnEvents passing, and the knowledge that segments have Finish called without panicking.
 }
 

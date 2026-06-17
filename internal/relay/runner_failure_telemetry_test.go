@@ -136,6 +136,86 @@ func wantFingerprintCategory(t *testing.T, evt telemetry.FailureEvent, want stri
 	}
 }
 
+func TestRunOne_LapPinMismatchTelemetryIsWarningDiagnostic(t *testing.T) {
+	tests := []struct {
+		name         string
+		recordedLaps []string
+		wantReason   string
+	}{
+		{name: "wrong lap", recordedLaps: []string{"other-lap"}, wantReason: "wrong_lap_consumed"},
+		{name: "multiple laps", recordedLaps: []string{"lap-1", "lap-2"}, wantReason: "multi_lap_consumed"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			workspaceDir := t.TempDir()
+			rallyDir := store.RallyDir(workspaceDir)
+			os.MkdirAll(rallyDir, 0o755)
+			initRepo(t, workspaceDir)
+			runGit(t, workspaceDir, "commit", "--allow-empty", "-m", "initial", "--no-verify")
+
+			s := newTestStore(t, rallyDir)
+			exec := &funcExecutor{
+				fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+					rs, _ := progress.LoadRunState(workspaceDir)
+					rs.RecordedLaps = tt.recordedLaps
+					progress.SaveRunState(workspaceDir, rs)
+					return &agent.TryResult{Completed: true, Summary: "completed wrong lap"}, nil
+				},
+			}
+
+			sink := &capturingSink{}
+			r := NewRunner(s, Config{
+				WorkspaceDir:     workspaceDir,
+				DataDir:          t.TempDir(),
+				AgentMixSpecs:    []string{"op:dsf"},
+				TargetIterations: 1,
+				RetryBudget:      1,
+				LapsEnabled:      true,
+				Resolver:         cheapTestResolver,
+			}, map[string]agent.Executor{"opencode": exec})
+			r.SetTelemetry(sink)
+
+			res, err := r.runOne(
+				context.Background(),
+				&store.RelayRecord{ID: 1, TargetIterations: 1},
+				0,
+				agent.ResolvedAgent{Harness: "opencode", Model: cheapTestModel},
+				runTask{Name: "pinned task", Prompt: "do work", Assignee: "senior", LapID: "lap-1", IsLapsBacked: true, LapsRemaining: 1},
+				nil, nil, false, false, nil, nil, io.Discard,
+			)
+			if err != nil {
+				t.Fatalf("runOne error = %v", err)
+			}
+			if res.Success {
+				t.Fatal("expected lap mismatch to fail the try")
+			}
+			if len(sink.failures) != 0 {
+				t.Fatalf("lap mismatch captured %d RallyFailure event(s), want none", len(sink.failures))
+			}
+			if len(sink.events) != 1 {
+				t.Fatalf("captured diagnostic events = %d, want 1", len(sink.events))
+			}
+
+			evt := sink.events[0].evt
+			if evt.Level != telemetry.LevelWarning {
+				t.Fatalf("diagnostic level = %q, want %q", evt.Level, telemetry.LevelWarning)
+			}
+			wantTag(t, evt.Tags, "event_kind", "lap_pin_mismatch")
+			wantTag(t, evt.Tags, "mismatch_reason", tt.wantReason)
+			wantTag(t, evt.Tags, "lap_id", "lap-1")
+
+			tries := s.AllTries()
+			if len(tries) != 1 {
+				t.Fatalf("persisted tries = %d, want 1", len(tries))
+			}
+			if tries[0].FailReason != tt.wantReason {
+				t.Fatalf("FailReason = %q, want %q", tries[0].FailReason, tt.wantReason)
+			}
+		})
+	}
+}
+
 // TestRunOne_TerminalTryFailure_EnrichesUsageLimitState drives a terminal try
 // failure whose evidence is a usage limit and asserts the capture carries the
 // attempt/budget, resolved category, the runner's resilience state, the parsed

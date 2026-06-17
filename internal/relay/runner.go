@@ -1302,6 +1302,7 @@ func (r *Runner) runOne(
 	// unfinalized-agent capture below (which runs after the loop) can report the
 	// last known attempt as context.
 	lastAttempt := 0
+	runLapPinMismatch := false
 	// Bounded handoff-only continuation state (task 4). When the run budget is
 	// exhausted on a resume-capable harness with a captured session, the attempt
 	// loop persists the cancelled implementation try as run_timeout and breaks,
@@ -1678,6 +1679,7 @@ attemptLoop:
 				failed = true
 				failReason = reason
 				lapPinMismatch = true
+				runLapPinMismatch = true
 				failureClass = reliability.FailureAgent
 				fmt.Fprintf(log, "relay %d run %d attempt %d lap pin mismatch: pinned_lap=%q consumed_laps=%v reason=%s\n", relay.ID, runIndex+1, attempt, task.LapID, recordedLaps, reason)
 			}
@@ -1938,7 +1940,8 @@ attemptLoop:
 		}
 		// Capture provider-limit evidence as low-severity diagnostic telemetry
 		// regardless of whether the failure is operator-worthy enough to become an
-		// Issue. This builds the parser-validation corpus without broadening alerts.
+		// operator failure. This builds the parser-validation corpus without
+		// broadening alerts.
 		if failed && attemptOutcome.ShouldCaptureIssue() {
 			fs := telemetry.FailureState{
 				Attempt:                attempt,
@@ -1958,14 +1961,23 @@ attemptLoop:
 			if evt, ok := limitSignalEvent(tryTags, rc, fs); ok {
 				r.tel().CaptureEvent(tryCtx, fmt.Sprintf("relay %d run %d try %d provider limit signal: %s", relay.ID, runIndex+1, tryRecord.ID, failReason), evt)
 			}
+			if lapPinMismatch {
+				mismatchEvt := failureStateEvent(tryTags, rc, fs)
+				mismatchEvt.Tags["event_kind"] = "lap_pin_mismatch"
+				mismatchEvt.Tags["mismatch_reason"] = failReason
+				r.tel().CaptureEvent(tryCtx, fmt.Sprintf("relay %d run %d try %d lap pin mismatch: %s", relay.ID, runIndex+1, tryRecord.ID, failReason), telemetry.Event{
+					Level:    telemetry.LevelWarning,
+					Tags:     mismatchEvt.Tags,
+					Contexts: mismatchEvt.Contexts,
+				})
+			}
 
-			// Capture operator-worthy failures as Sentry Issues. Ordinary
+			// Capture operator-worthy failures. Ordinary
 			// agent-class retries (recoverable agent errors, short no-ops) stay
 			// spans/logs only to avoid alert noise.
 			issueWorthy := failureClass == reliability.FailureInfra ||
 				execErr != nil ||
 				markerAsText != "" ||
-				lapPinMismatch ||
 				strings.Contains(strings.ToLower(failReason), "panic")
 			if issueWorthy {
 				// Enrich the terminal-try capture with the structured failure
@@ -2112,7 +2124,7 @@ attemptLoop:
 	designedHandoffOutcome := resolvingOutcome == reliability.OutcomeRunTimeout ||
 		resolvingOutcome == reliability.OutcomeHandoffTimeout ||
 		resolvingOutcome == reliability.OutcomeHandoffRequested
-	if wroteUnfinalized && !success && !designedHandoffOutcome {
+	if wroteUnfinalized && !success && !designedHandoffOutcome && !runLapPinMismatch {
 		// "agent exited without finalizing" is an operator-worthy recognized
 		// failure — the agent process ended without `laps done`/`laps handoff`.
 		// Categorize it as incomplete_finalization and carry run/runner/budget and

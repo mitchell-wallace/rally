@@ -5,7 +5,7 @@
 - [ ] 1.3 Remove `DefaultSentryDSN`, `SENTRY_DSN`, `[telemetry] sentry_dsn`, Sentry fallback/deprecation branches, Sentry release ldflags, and docs that describe current Sentry telemetry.
 - [x] 1.4 Extract or retain backend-neutral scrubbing helpers that sanitize Rally-supplied scalar attributes and context maps before New Relic receives them.
 - [ ] 1.5 Add tests proving Rally-supplied New Relic attributes drop prompt/transcript/log/current_task and host/user identity keys, collapse home paths, truncate long strings, and do not emit `[scrubbed]` placeholder attributes for removed sensitive keys.
-- [ ] 1.6 Add tests proving lap mismatch telemetry uses `RallyDiagnostic` with `level=warning`, `event_kind=lap_pin_mismatch`, and `mismatch_reason`, not `RallyFailure`.
+- [x] 1.6 Add tests proving lap mismatch telemetry uses `RallyDiagnostic` with `level=warning`, `event_kind=lap_pin_mismatch`, and `mismatch_reason`, not `RallyFailure`.
 - [x] 1.7 Add `telemetry.LevelWarning`; map it to New Relic diagnostic attributes without any Sentry severity mapping.
 
 ## 2. New Relic Go APM sink
@@ -29,7 +29,7 @@
 - [x] 3.4 Add regression tests that oversized context payloads are dropped deterministically rather than JSON-encoded into a large attribute.
 - [x] 3.5 Configure the New Relic agent to keep application logging enabled after any `ConfigFromEnvironment` application, using `ConfigAppLogEnabled(true)`, `ConfigAppLogForwardingEnabled(true)`, `ConfigAppLogMetricsEnabled(true)`, bounded `ConfigAppLogForwardingMaxSamplesStored(...)`, and `ConfigAppLogDecoratingEnabled(false)` or direct equivalent fields.
 - [x] 3.6 Set a generic New Relic host display name where supported, and avoid adding Rally custom attributes for raw hostname, username, IP, or home-directory username.
-- [ ] 3.7 Add regression tests proving Rally's post-environment New Relic config leaves application logging and forwarding enabled, keeps local decorating off, applies the sample limit, and does not add `Application.RecordLog` calls or logger integrations in 0.9.1.
+- [x] 3.7 Add regression tests proving Rally's post-environment New Relic config leaves application logging and forwarding enabled, keeps local decorating off, applies the sample limit, and does not add `Application.RecordLog` calls or logger integrations in 0.9.1.
 - [x] 3.8 Confirm event volume stays bounded: one `RallyTry` per persisted try, bounded relay/run/try transactions/segments, bounded application-log forwarding samples, and no prompt-line/agent-output custom events.
 
 ## 4. Activation and config opt-out
