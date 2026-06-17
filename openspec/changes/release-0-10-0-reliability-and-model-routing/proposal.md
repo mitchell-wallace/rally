@@ -76,7 +76,7 @@ This release introduces warning-first mismatch handling, first-class cancelled o
    - `cancelled` extends the existing 0.9.x `TryOutcome` lifecycle model and is
      stored in `TryRecord.Outcome`; do not add a parallel `TryRecord.Status`
      taxonomy for tries.
-   - Cancelled attempts do not increment retry/freeze/failure counters and do not emit Sentry failure captures.
+   - Cancelled attempts do not increment retry/freeze/failure counters and do not emit operator-worthy failure telemetry.
 
 6. **opencode usage-limit detection (spike-2)**
    - opencode subscription-provider limits arrive as `AI_APICallError` /
@@ -106,7 +106,7 @@ This release introduces warning-first mismatch handling, first-class cancelled o
 2. Role-level variant mapping belongs in `[reasoning]`.
 3. Tail highlighting remains opt-in with `off` as the default.
 4. Ctrl+X graceful stop changes semantics in this release: it cancels/drains the active attempt, records `cancelled` with source `graceful_stop`, then stops the relay.
-5. Lap mismatch diagnostics use telemetry `LevelWarning` without becoming Sentry Issues by default.
+5. Lap mismatch diagnostics use telemetry `LevelWarning` without becoming operator-worthy failures by default; after 0.9.1 this is `RallyDiagnostic level=warning` in New Relic, with warning severity only for the legacy Sentry fallback.
 6. opencode usage-limit observability uses opencode's **server-log tail** for the session as the evidence source when the JSON stream stalls (preferred over guessing usage-limit from a silent stall). Finding A is **resolved** (third-pass live log re-inspection, 2026-06-16 20:58): stdout stays empty through the internal-retry stall and the structured error reaches only the server log as the flat `error.error="<Wrapper>: <message>"` field under `AI_APICallError`/`AI_RetryError`; the matcher list is finalized and the server-log-tail path is required, not optional.
 7. The release implementation bumps `internal/buildinfo/VERSION` from `0.9.0` to
    `0.10.0`; `main.Version` remains `"dev"` and CI creates the tag from the

@@ -5,14 +5,14 @@
 ### Current behavior
 
 - `validatePinnedLap` sets `lapPinMismatch=true` and marks the attempt as failed.
-- this feeds `issueWorthy` and can emit Sentry/failure pathways.
+- this feeds `issueWorthy` and can emit operator-worthy failure telemetry.
 - `runOne` currently exits with a terminal failure path and telemetry tags indicate an error-class outcome.
 
 ### 1.1 target behavior
 
 - Keep mismatch reason capture (`wrong_lap_consumed`, `multi_lap_consumed`) for diagnostics.
 - Route outcome should be warning only:
-  - remove lap mismatch from issue-worthy capture for now
+  - remove lap mismatch from operator-worthy capture for now
   - keep as non-terminal mismatch signal for scheduler handoff and operator visibility
   - preserve retry budget behavior (no extra in-run retries)
 
@@ -82,7 +82,7 @@
   - do not classify as `harness error`
   - do not run failure taxonomy or retry classification
   - do not increment retry, infra, pause, or freeze counters
-  - do not emit Sentry failure captures
+  - do not emit operator-worthy failure captures
   - do not synthesize an `incomplete_finalization` stub/failure capture for the
     cancelled run after the attempt loop.
 - Persist cancellation status and source in try/run records so summaries, tail context, and future resume logic do not need to infer it from text.
@@ -327,6 +327,6 @@ This release is intentionally staged:
 2. Run headers include model on the same line as role/harness.
 3. Richer syntax highlighting stays opt-in for this release; plain output remains default.
 4. Ctrl+X graceful stop cancels/drains the current attempt and records source `graceful_stop`.
-5. Lap mismatch diagnostics use telemetry `LevelWarning` but do not capture Sentry Issues by default.
+5. Lap mismatch diagnostics use telemetry `LevelWarning` but do not capture operator-worthy failures by default; after the 0.9.1 New Relic migration this means a `RallyDiagnostic` event with `level=warning`.
 6. Cancelled attempts extend the existing `TryOutcome` lifecycle model rather
    than introducing a parallel try status field.

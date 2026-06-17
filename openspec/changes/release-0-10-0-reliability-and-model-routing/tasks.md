@@ -5,10 +5,10 @@
   - stop treating mismatches as issue-worthy operator failures,
   - still record `fail_reason`/mismatch metadata in run/try records without adding a `FailureCategory`.
 - [ ] 1.2 Keep mismatch as non-retry terminal run result (advance to next scheduler entry) and document warning path in inline logs and telemetry.
-- [ ] 1.3 Add/adjust run-level test(s) verifying no Sentry issue capture for mismatch-only runs, while run/try records remain complete.
+- [ ] 1.3 Add/adjust run-level test(s) verifying no operator-worthy failure capture for mismatch-only runs, while run/try records remain complete.
 - [ ] 1.4 Add run-state preflight guard for already-complete pinned lap before/just after mismatch detection.
 - [ ] 1.5 Add telemetry assertions that mismatch events gain `event_kind=lap_pin_mismatch` and `mismatch_reason=wrong_lap_consumed|multi_lap_consumed` tags without `failure_category` or error-level issue capture.
-- [ ] 1.6 Add `telemetry.LevelWarning` support and map it through the Sentry sink so mismatch diagnostics are warning-level events without becoming Sentry Issues.
+- [ ] 1.6 Add `telemetry.LevelWarning` support and map it through the active telemetry sink so mismatch diagnostics are warning-level events without becoming operator-worthy failures (`RallyDiagnostic level=warning` for New Relic; warning severity for legacy Sentry fallback).
 
 ## 2. Cancelled state for operator-controlled exits
 
@@ -27,7 +27,7 @@
   - no failure taxonomy classification,
   - no retry scheduling,
   - no infra/freeze/pause counter increments,
-  - no Sentry failure capture.
+  - no operator-worthy failure capture.
 - [ ] 2.4 Preserve existing route semantics:
   - Ctrl+S still advances to the next scheduler candidate,
   - graceful stop still halts after the current cancellation/drain point,
@@ -112,7 +112,7 @@
 ## 7. Research and telemetry closure
 
 - [ ] 7.1 Ensure short rate-limit remains non-error (`info`) and retains existing tags (`event_kind=limit_signal`, `failure_category=short_rate_limit`) without reclassifying as crash/failure event.
-- [ ] 7.2 Add/adjust release notes with exact Sentry IDs from the current incident set (`RALLY-2`, `RALLY-3`, `RALLY-4`, `RALLY-6`, `RALLY-8`, `RALLY-9`, `RALLY-B`, `RALLY-C`).
+- [ ] 7.2 Add/adjust release notes with exact historical telemetry incident IDs from the Sentry-era incident set (`RALLY-2`, `RALLY-3`, `RALLY-4`, `RALLY-6`, `RALLY-8`, `RALLY-9`, `RALLY-B`, `RALLY-C`) while describing 0.10.0 behavior in backend-neutral/New Relic terms.
 - [ ] 7.3 Add release checklist verification: no alert regression for routine rate-limit categories, corrected run header text in default relay output, cancelled output is muted, and `rally tail` defaults to active output rather than old completed relays.
 
 ## 8. opencode usage-limit detection and reset parsing
@@ -136,7 +136,7 @@
   - server-log-tail session correlation by `directory=<WorkspaceDir>` (and provider+window fallback) picks the right session's limit line,
   - a quota-scope bench is triggered for `opencode:zai-coding-plan` / `opencode:opencode-go` on these failures (not `agent_error`).
 - [x] 8.5 Confirm the precise emitted error shape for these limits before finalizing the 8.1 matcher, per spike-2 finding A. **Resolved (third-pass live log re-inspection, 2026-06-16 20:58):** stdout stays empty through opencode's internal-retry stall; the structured provider error reaches only the server log as the flat `error.error="<Wrapper>: <message>"` field under `AI_APICallError` / `AI_RetryError` (no native `UsageLimitError`/`QuotaExceededError`). The 8.1 matcher list is finalized and the 8.3 server-log-tail path is required, not optional. See `spike-2-report.md` §"Third-pass confirmation".
-- [ ] 8.6 Update release notes / Sentry incident list with the opencode usage-limit issues (`RALLY-Q`, `RALLY-K`, `RALLY-D`).
+- [ ] 8.6 Update release notes / historical incident list with the opencode usage-limit issues (`RALLY-Q`, `RALLY-K`, `RALLY-D`) while using backend-neutral/New Relic telemetry terminology for the implemented behavior.
 
 ## 9. Release versioning
 
