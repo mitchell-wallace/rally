@@ -1654,3 +1654,24 @@ func TestLoadV2_FreeRunAbsent(t *testing.T) {
 		t.Errorf("FreeRun.PromptFile = %q, want empty when absent", cfg.FreeRun.PromptFile)
 	}
 }
+
+func TestLoadV2_RejectsNewRelicLicenseKey(t *testing.T) {
+	content := `schema_version = 2
+[telemetry]
+new_relic_license_key = "secret-key"
+new_relic_app_name = "test-app"
+`
+	dir := t.TempDir()
+	writeConfig(t, dir, content)
+
+	cfg, err := LoadV2(dir)
+	if err != nil {
+		t.Fatalf("LoadV2 failed: %v", err)
+	}
+
+	if cfg.Telemetry.NewRelicAppName != "test-app" {
+		t.Errorf("expected new_relic_app_name = test-app, got %q", cfg.Telemetry.NewRelicAppName)
+	}
+
+	// TOML parser successfully ignored 'new_relic_license_key' as it is not present in TelemetryConfig.
+}

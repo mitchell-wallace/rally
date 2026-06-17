@@ -4,6 +4,7 @@ import (
 	"encoding/hex"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -299,6 +300,57 @@ func TestInitWithIdentity_ActiveTelemetryCreatesMachineID(t *testing.T) {
 	}
 	if string(data) != result.MachineID+"\n" {
 		t.Errorf("file content = %q, want %q", string(data), result.MachineID+"\n")
+	}
+}
+
+func TestInitWithIdentity_ConfigOptOutNoFile(t *testing.T) {
+	dir := t.TempDir()
+
+	t.Setenv(envKillSwitch, "")
+	t.Setenv(envNewRelicLicenseKey, testNewRelicLicense)
+
+	enabled := false
+	result := InitWithIdentity(Config{
+		Enabled: &enabled,
+		DataDir: dir,
+	})
+	defer result.Cleanup()
+
+	if _, ok := result.Sink.(NoopSink); !ok {
+		t.Fatalf("expected NoopSink, got %T", result.Sink)
+	}
+	if result.MachineID != "" {
+		t.Errorf("disabled telemetry should have empty MachineID, got %q", result.MachineID)
+	}
+
+	idPath := filepath.Join(dir, machineIDFile)
+	if _, err := os.Stat(idPath); !os.IsNotExist(err) {
+		t.Errorf("machine-id file should not exist when config opt-out, stat err: %v", err)
+	}
+}
+
+func TestInitWithIdentity_EnvOverridesBaked(t *testing.T) {
+	dir := t.TempDir()
+
+	t.Setenv(envKillSwitch, "")
+	overrideLicense := strings.Repeat("2", 40)
+	t.Setenv(envNewRelicLicenseKey, overrideLicense)
+
+	bakedLicense := strings.Repeat("1", 40)
+	result := InitWithIdentity(Config{DefaultNewRelicLicenseKey: bakedLicense, DataDir: dir})
+	defer result.Cleanup()
+
+	if _, ok := result.Sink.(*NewRelicSink); !ok {
+		t.Fatalf("expected *NewRelicSink, got %T", result.Sink)
+	}
+
+	if result.MachineID == "" {
+		t.Fatal("active telemetry should produce a non-empty MachineID")
+	}
+
+	idPath := filepath.Join(dir, machineIDFile)
+	if _, err := os.Stat(idPath); os.IsNotExist(err) {
+		t.Fatalf("machine-id file should exist when env overrides baked, stat err: %v", err)
 	}
 }
 

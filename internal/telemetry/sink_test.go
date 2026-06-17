@@ -70,6 +70,18 @@ func TestInit_BakedNewRelicLicenseActivates(t *testing.T) {
 	}
 }
 
+func TestInit_EnvOverridesBakedNewRelicLicense(t *testing.T) {
+	t.Setenv(envKillSwitch, "")
+	t.Setenv(envNewRelicLicenseKey, strings.Repeat("2", 40))
+
+	sink, cleanup := Init(Config{DefaultNewRelicLicenseKey: strings.Repeat("1", 40)})
+	defer cleanup()
+
+	if _, ok := sink.(*NewRelicSink); !ok {
+		t.Fatalf("expected *NewRelicSink when env license overrides baked, got %T", sink)
+	}
+}
+
 func TestInit_EnvCleanup(t *testing.T) {
 	original := os.Getenv(envNewRelicLicenseKey)
 	t.Setenv(envNewRelicLicenseKey, "test-value-that-should-be-cleaned-up")
