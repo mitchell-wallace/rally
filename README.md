@@ -761,10 +761,11 @@ Rally **never** transmits:
   with a generic host display name (`rally-cli`) where supported.
 - Task descriptions, codebase context, file contents, or agent
   transcripts. Fields named `prompt`, `output`, `transcript`,
-  `current_task`, `log`, etc. are replaced with `[scrubbed]`.
+  `current_task`, `log`, etc. are dropped entirely before any attributes
+  are sent — no `[scrubbed]` placeholder attribute is emitted in their place.
 - Your username in paths. Home-directory prefixes are collapsed to `~` in
-  all telemetry values (contexts, breadcrumbs, spans, and free-text fields
-  like raw provider signals).
+  all telemetry values (contexts, structured logs, spans, and free-text
+  fields like raw provider signals).
 - String values longer than 4 KB are truncated.
 
 ### Failure categories and raw provider signals

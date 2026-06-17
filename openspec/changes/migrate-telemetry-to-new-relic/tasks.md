@@ -4,7 +4,7 @@
 - [x] 1.2 Update `internal/telemetry/sink.go` comments so the public sink contract is backend-neutral (`operator-worthy failure`, `custom event`, `flush`) rather than Sentry-specific.
 - [x] 1.3 Remove `DefaultSentryDSN`, `SENTRY_DSN`, `[telemetry] sentry_dsn`, Sentry fallback/deprecation branches, Sentry release ldflags, and docs that describe current Sentry telemetry. (Code/runtime parts verified removed; the `.goreleaser.yaml` ldflag swap is handled by task 5.1 release wiring.)
 - [x] 1.4 Extract or retain backend-neutral scrubbing helpers that sanitize Rally-supplied scalar attributes and context maps before New Relic receives them.
-- [ ] 1.5 Add tests proving Rally-supplied New Relic attributes drop prompt/transcript/log/current_task and host/user identity keys, collapse home paths, truncate long strings, and do not emit `[scrubbed]` placeholder attributes for removed sensitive keys.
+- [x] 1.5 Add tests proving Rally-supplied New Relic attributes drop prompt/transcript/log/current_task and host/user identity keys, collapse home paths, truncate long strings, and do not emit `[scrubbed]` placeholder attributes for removed sensitive keys.
 - [x] 1.6 Add tests proving lap mismatch telemetry uses `RallyDiagnostic` with `level=warning`, `event_kind=lap_pin_mismatch`, and `mismatch_reason`, not `RallyFailure`.
 - [x] 1.7 Add `telemetry.LevelWarning`; map it to New Relic diagnostic attributes without any Sentry severity mapping.
 
@@ -44,19 +44,19 @@
 
 ## 5. Release wiring and documentation
 
-- [ ] 5.1 Update `.goreleaser.yaml` ldflags from `main.DefaultSentryDSN={{ .Env.RALLY_SENTRY_DSN }}` to `main.DefaultNewRelicLicenseKey={{ .Env.RALLY_NEW_RELIC_LICENSE_KEY }}`.
-- [ ] 5.2 Update `.github/workflows/release.yml` to pass the New Relic license secret and fail before GoReleaser when a not-yet-existing release would build with `RALLY_NEW_RELIC_LICENSE_KEY` empty.
-- [ ] 5.3 Update README telemetry docs for Go APM agent behavior, env/baked credential precedence, `[telemetry] enabled = false`, `RALLY_TELEMETRY=0`, data sent, data intentionally not sent, and the hard Sentry cutover.
-- [ ] 5.4 Update `AGENTS.md` observability guidance from Sentry CLI investigation to New Relic guidance, while noting Sentry issue IDs only as historical pre-0.9.1 references.
-- [ ] 5.5 Bump `internal/buildinfo/VERSION` to `0.9.1` only after the release secret gate is implemented; confirm `main.Version` remains `"dev"`.
-- [ ] 5.6 Add release checklist note: `RALLY_NEW_RELIC_LICENSE_KEY` and `RALLY_NEW_RELIC_APP_NAME` are already configured in GitHub; verify they are still present before cutting 0.9.1, keep the license key secret, and do not push tags manually.
-- [ ] 5.7 Update active `release-0-10-0-reliability-and-model-routing` OpenSpec artifacts so telemetry language builds on New Relic Go APM/backend-neutral terminology instead of reintroducing Sentry-specific Issues or fallback behavior.
-- [ ] 5.8 Retire or rewrite obsolete planning references that would steer future work back to Sentry, including `openspec/changes/enrich-sentry-coverage/draft.md` and `openspec/next-up.md`; preserve only backend-neutral/New Relic concepts such as native panic/error capture.
+- [x] 5.1 Update `.goreleaser.yaml` ldflags from `main.DefaultSentryDSN={{ .Env.RALLY_SENTRY_DSN }}` to `main.DefaultNewRelicLicenseKey={{ .Env.RALLY_NEW_RELIC_LICENSE_KEY }}`.
+- [x] 5.2 Update `.github/workflows/release.yml` to pass the New Relic license secret and fail before GoReleaser when a not-yet-existing release would build with `RALLY_NEW_RELIC_LICENSE_KEY` empty.
+- [x] 5.3 Update README telemetry docs for Go APM agent behavior, env/baked credential precedence, `[telemetry] enabled = false`, `RALLY_TELEMETRY=0`, data sent, data intentionally not sent, and the hard Sentry cutover.
+- [x] 5.4 Update `AGENTS.md` observability guidance from Sentry CLI investigation to New Relic guidance, while noting Sentry issue IDs only as historical pre-0.9.1 references.
+- [x] 5.5 Bump `internal/buildinfo/VERSION` to `0.9.1` only after the release secret gate is implemented; confirm `main.Version` remains `"dev"`.
+- [x] 5.6 Add release checklist note: `RALLY_NEW_RELIC_LICENSE_KEY` and `RALLY_NEW_RELIC_APP_NAME` are already configured in GitHub; verify they are still present before cutting 0.9.1, keep the license key secret, and do not push tags manually.
+- [x] 5.7 Update active `release-0-10-0-reliability-and-model-routing` OpenSpec artifacts so telemetry language builds on New Relic Go APM/backend-neutral terminology instead of reintroducing Sentry-specific Issues or fallback behavior.
+- [x] 5.8 Retire or rewrite obsolete planning references that would steer future work back to Sentry, including `openspec/changes/enrich-sentry-coverage/draft.md` and `openspec/next-up.md`; preserve only backend-neutral/New Relic concepts such as native panic/error capture.
 
 ## 6. Verification
 
-- [ ] 6.1 Run targeted telemetry/config tests: `go test ./internal/telemetry ./internal/config ./cmd/rally`.
-- [ ] 6.2 Run broader relay telemetry tests that exercise `SetTelemetry`, failure capture, limit diagnostics, recovery `needs_user`, lap mismatch diagnostics, and prompt-size fields.
-- [ ] 6.3 Run `go test ./...` before finalizing the implementation.
-- [ ] 6.4 Run `openspec validate migrate-telemetry-to-new-relic --strict`.
-- [ ] 6.5 Manually inspect `go.mod`, `go.sum`, `.goreleaser.yaml`, `.github/workflows/release.yml`, README, and `AGENTS.md` diffs for leaked credentials, accidental Sentry release wiring, or log-forwarding exposure.
+- [x] 6.1 Run targeted telemetry/config tests: `go test ./internal/telemetry ./internal/config ./cmd/rally`.
+- [x] 6.2 Run broader relay telemetry tests that exercise `SetTelemetry`, failure capture, limit diagnostics, recovery `needs_user`, lap mismatch diagnostics, and prompt-size fields.
+- [x] 6.3 Run `go test ./...` before finalizing the implementation.
+- [x] 6.4 Run `openspec validate migrate-telemetry-to-new-relic --strict`.
+- [x] 6.5 Manually inspect `go.mod`, `go.sum`, `.goreleaser.yaml`, `.github/workflows/release.yml`, README, and `AGENTS.md` diffs for leaked credentials, accidental Sentry release wiring, or log-forwarding exposure.

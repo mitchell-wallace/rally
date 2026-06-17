@@ -389,11 +389,11 @@
       "title": "Final full-change verification for the New Relic migration",
       "description": "OpenSpec change: migrate-telemetry-to-new-relic. Final verification across all phases (tasks 6.1-6.5 and the whole change).\n\nUse the openspec-verify-change skill against migrate-telemetry-to-new-relic and inspect the whole diff. Identify the intended merge target before diffing (ask the user, or read PR metadata / repo docs / branch config / recent history; do NOT assume main) and use git diff \u003ctarget\u003e...HEAD. Identify the batch's first lap/try and treat earlier branch work as pre-existing unless the user asks to include it.\n\nRun the change's verification commands: go test ./internal/telemetry ./internal/config ./cmd/rally (6.1); the broader relay telemetry tests exercising SetTelemetry, failure capture, limit diagnostics, recovery needs_user, lap-mismatch diagnostics, and prompt-size fields (6.2); go test ./... (6.3); openspec validate migrate-telemetry-to-new-relic --strict (6.4). Manually inspect go.mod, go.sum, .goreleaser.yaml, .github/workflows/release.yml, README, and AGENTS.md diffs for leaked credentials, accidental Sentry release wiring, or log-forwarding exposure (6.5). Confirm internal/buildinfo/VERSION is 0.9.1 and main.Version is \"dev\".\n\nDo not rewrite git history; add focused head laps for any substantive gap (fix only tiny safe one-liners here). Report findings first. Then check off the remaining tasks.md boxes (5.x, 6.x, and any earlier box not yet ticked) only for work verified correct and thorough.",
       "assignee": "VERIFY",
-      "isDone": false,
+      "isDone": true,
       "order": 983040,
       "createdAt": "2026-06-17T05:39:12.313477027Z",
-      "updatedAt": "2026-06-17T05:39:12.313477027Z",
-      "completedAt": null
+      "updatedAt": "2026-06-17T13:16:30.622589927Z",
+      "completedAt": "2026-06-17T13:16:30.622589927Z"
     }
   ]
 }
