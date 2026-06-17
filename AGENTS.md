@@ -133,6 +133,11 @@ Tags are created automatically by `.github/workflows/auto-tag.yml` when
 `internal/buildinfo/VERSION` changes on `main`. **Do not create or push
 `vX.Y.Z` tags by hand** — push a VERSION bump and let CI tag for you.
 
+Before bumping the version, verify that the release secret gate is in place:
+- Check that `RALLY_NEW_RELIC_LICENSE_KEY` (secret) and `RALLY_NEW_RELIC_APP_NAME` (variable) are still configured in GitHub before cutting 0.9.1.
+- Keep the license key secret.
+- Do not push tags manually.
+
 1. Update the version in `internal/buildinfo/VERSION` (e.g. `0.2.0`). The
    file is committed under `internal/buildinfo/` so Go's `embed` can read it;
    dev builds (`go build`) report `vX.Y.Z-dev` using this value.

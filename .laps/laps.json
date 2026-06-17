@@ -378,11 +378,11 @@
       "title": "Bump VERSION to 0.9.1",
       "description": "OpenSpec change: migrate-telemetry-to-new-relic (tasks 5.5, 5.6). Must come only AFTER the release secret gate (the release-wiring lap) is in place.\n\nOutcome: internal/buildinfo/VERSION set to 0.9.1; main.Version remains \"dev\" in source (5.5). Add the release-checklist note that RALLY_NEW_RELIC_LICENSE_KEY (secret) and RALLY_NEW_RELIC_APP_NAME (variable) are already configured in GitHub — verify they are still present before cutting 0.9.1, keep the license key secret, and do not push tags manually (5.6).\n\nFiles \u0026 scope: internal/buildinfo/VERSION; the release checklist (README releasing section or AGENTS.md releasing section).\n\nDesign: do NOT create or push a vX.Y.Z tag — the auto-tag workflow handles tagging from the VERSION file. Confirm the main.Version source value is unchanged.\n\nAcceptance: VERSION reads 0.9.1; main.Version still \"dev\"; the checklist note is present. Do not check tasks.md boxes.",
       "assignee": "JUNIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 917504,
       "createdAt": "2026-06-17T05:39:12.313474481Z",
-      "updatedAt": "2026-06-17T05:39:12.313474481Z",
-      "completedAt": null
+      "updatedAt": "2026-06-17T13:11:21.279621902Z",
+      "completedAt": "2026-06-17T13:11:21.279621902Z"
     },
     {
       "id": "rall-1f5c",
