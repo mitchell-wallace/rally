@@ -39,11 +39,11 @@ When enabled, the system SHALL emit a structured custom event per try, model rel
 - **THEN** telemetry SHALL NOT capture an `incomplete_finalization` operator-worthy failure for that cancelled try
 
 ### Requirement: Warning-level telemetry
-The system SHALL support a warning telemetry level for diagnostic events that should be more visible than info events but should not automatically create operator-worthy failures. The New Relic Event API sink SHALL emit `level=warning` on the resulting `RallyDiagnostic` custom event, and the legacy Sentry fallback SHALL map this level to Sentry warning severity when emitting non-Issue diagnostic events.
+The system SHALL support a warning telemetry level for diagnostic events that should be more visible than info events but should not automatically create operator-worthy failures. After the 0.9.1 telemetry migration, the New Relic Go APM sink SHALL emit `level=warning` on the resulting `RallyDiagnostic` custom event.
 
-#### Scenario: Warning event maps to warning severity
+#### Scenario: Warning event maps to warning diagnostic telemetry
 - **WHEN** telemetry emits a diagnostic event with `LevelWarning`
-- **THEN** the active sink SHALL send it with warning severity rather than info or error severity
+- **THEN** the active sink SHALL send it as warning telemetry rather than info or error telemetry
 
 #### Scenario: Runner fallback recorded as common event
 - **WHEN** the routing scheduler rotates a lane to the next runner entry after the current entry becomes unavailable

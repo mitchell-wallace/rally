@@ -1,42 +1,49 @@
 ## ADDED Requirements
 
 ### Requirement: New Relic telemetry configuration
-The system SHALL support non-secret New Relic telemetry configuration under `[telemetry]` using `new_relic_app_name`, `new_relic_region`, and optionally `new_relic_event_endpoint` for tests or advanced local overrides. New Relic ingest credentials SHALL NOT be read from `.rally/config.toml` because that file is tracked and may be committed. `NEW_RELIC_LICENSE_KEY` and `NEW_RELIC_ACCOUNT_ID` SHALL be the supported user-provided credential environment variables, and baked release credentials SHALL be injected only by release tooling. `new_relic_app_name` SHALL default to a non-identifying Rally app name when unset.
+The system SHALL support New Relic telemetry configuration under `[telemetry]` using an explicit `enabled` opt-out and non-secret metadata such as `new_relic_app_name` and optional `new_relic_host_display_name`. New Relic ingest credentials SHALL NOT be read from `.rally/config.toml` because that file is tracked and may be committed. `NEW_RELIC_LICENSE_KEY` SHALL be the supported user-provided credential environment variable, and the baked release license key SHALL be injected only by release tooling. `new_relic_app_name` SHALL default to a non-identifying Rally app name when unset.
 
-#### Scenario: Environment New Relic credentials enable telemetry
-- **WHEN** `NEW_RELIC_LICENSE_KEY` and `NEW_RELIC_ACCOUNT_ID` are set
+#### Scenario: Environment New Relic license enables telemetry
+- **WHEN** `NEW_RELIC_LICENSE_KEY` is set
 - **AND** `RALLY_TELEMETRY` is not `0`
-- **THEN** relay commands SHALL initialize New Relic telemetry with those credentials
+- **AND** `[telemetry] enabled` is not `false`
+- **THEN** relay commands SHALL initialize New Relic telemetry with that license
+
+#### Scenario: Config can disable telemetry
+- **WHEN** `[telemetry] enabled = false` is configured
+- **THEN** relay commands SHALL NOT initialize New Relic telemetry
+- **AND** no machine-local identifier file SHALL be created
 
 #### Scenario: Tracked config cannot hold New Relic secret
 - **WHEN** `.rally/config.toml` contains `[telemetry]`
-- **THEN** the system SHALL NOT read a New Relic license key or account id from that tracked config file
+- **THEN** the system SHALL NOT read a New Relic license key from that tracked config file
 
 #### Scenario: App name can be configured
 - **WHEN** `NEW_RELIC_APP_NAME` or `[telemetry] new_relic_app_name` is set
-- **THEN** the New Relic event attributes SHALL use that app name after scrubbing/validation
+- **THEN** the New Relic agent SHALL use that app name after scrubbing/validation
 
-#### Scenario: Generated config does not include a secret field
+#### Scenario: Host display name can be generic
+- **WHEN** `NEW_RELIC_HOST_DISPLAY_NAME` or `[telemetry] new_relic_host_display_name` is set
+- **THEN** the New Relic agent SHALL use that display name after scrubbing/validation
+
+#### Scenario: Generated config exposes opt-out but no secret field
 - **WHEN** rally initializes a workspace config
-- **THEN** the generated `[telemetry]` section SHALL NOT include a `new_relic_license_key` or `new_relic_account_id` field
+- **THEN** the generated `[telemetry]` section SHALL make the `enabled = false` opt-out discoverable
+- **AND** it SHALL NOT include a `new_relic_license_key` field
 
-#### Scenario: Region or endpoint can be configured without secrets
-- **WHEN** `NEW_RELIC_REGION`, `NEW_RELIC_EVENT_ENDPOINT`, `[telemetry] new_relic_region`, or `[telemetry] new_relic_event_endpoint` is set
-- **THEN** the Event API sink SHALL use the configured non-secret routing metadata while still requiring credentials from environment or baked release defaults
+### Requirement: Sentry telemetry removal
+The system SHALL remove Sentry from the active telemetry configuration path. Complete New Relic credentials and baked New Relic release credentials SHALL NOT be affected by `SENTRY_DSN` or `[telemetry] sentry_dsn`. Legacy Sentry-only configuration SHALL NOT initialize telemetry in 0.9.1.
 
-### Requirement: Legacy Sentry telemetry deprecation
-The system SHALL continue to parse `[telemetry] sentry_dsn` and `SENTRY_DSN` as a legacy fallback for one compatibility window, but complete New Relic credentials and baked New Relic release credentials SHALL take precedence. When legacy Sentry configuration is used because no complete New Relic credential pair exists, the system SHALL emit a deprecation warning that 0.9.1 moved release telemetry to New Relic.
-
-#### Scenario: New Relic beats legacy Sentry
-- **WHEN** complete New Relic credentials and a legacy Sentry DSN are configured
+#### Scenario: New Relic ignores legacy Sentry config
+- **WHEN** a New Relic license and a legacy Sentry DSN are configured
 - **THEN** the system SHALL initialize New Relic telemetry
 
-#### Scenario: Legacy Sentry fallback warns
+#### Scenario: Legacy Sentry config alone is inert
 - **WHEN** only `SENTRY_DSN` or `[telemetry] sentry_dsn` is configured
-- **THEN** the system SHALL initialize Sentry telemetry for the compatibility window
-- **AND** it SHALL warn that Sentry telemetry is deprecated in favor of New Relic
+- **THEN** the system SHALL NOT initialize Sentry
+- **AND** telemetry SHALL remain disabled
 
-#### Scenario: Kill switch disables both providers
+#### Scenario: Kill switch disables New Relic
 - **WHEN** `RALLY_TELEMETRY=0` is set
-- **AND** New Relic and legacy Sentry telemetry credentials are configured
-- **THEN** neither provider SHALL initialize
+- **AND** New Relic telemetry credentials are configured
+- **THEN** New Relic SHALL NOT initialize

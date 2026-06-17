@@ -1,14 +1,14 @@
 ## Why
 
-Rally's baked Sentry telemetry has exhausted the available free-tier budget, reducing the usefulness of release telemetry just as 0.9.x reliability work needs more field data. New Relic currently offers a larger free monthly ingest allowance, so 0.9.1 should move product telemetry there before the broader 0.10.0 feature release.
+Rally's baked Sentry telemetry has exhausted the useful free-tier budget, reducing the value of release telemetry just as 0.9.x reliability work needs more field data. New Relic's free ingest allowance is a better fit for the current single-operator product stage, and the 0.9.1 patch release should move telemetry there before the broader 0.10.0 feature release.
 
 ## What Changes
 
-- Replace Rally's baked Sentry release telemetry path with New Relic-backed telemetry for release binaries.
-- Preserve Rally's current no-surprise telemetry contract: disabled by default for source builds, active only for relay-running commands, force-disabled by `RALLY_TELEMETRY=0`, and no machine-id side effects while disabled.
-- Add New Relic activation using environment or baked release ingest credentials, while keeping tracked `.rally/config.toml` limited to non-secret metadata such as app name/region.
-- Keep the existing `internal/telemetry.Sink` boundary and runner call sites; implement a New Relic sink behind that boundary rather than reworking relay telemetry emission.
-- Retire Sentry-specific release wiring and docs for 0.9.1 while leaving a one-release compatibility/deprecation fallback for user-provided Sentry config when no New Relic credentials exist.
+- Hard-cut Rally release telemetry from Sentry to New Relic for 0.9.1; remove Sentry release wiring, fallback behavior, docs, and SDK usage.
+- Use the New Relic Go APM agent (`github.com/newrelic/go-agent/v3/newrelic`) behind Rally's existing `internal/telemetry.Sink` boundary.
+- Preserve the activation contract: source builds remain silent unless configured, release binaries activate only for relay-running commands, `RALLY_TELEMETRY=0` force-disables telemetry, and `[telemetry] enabled = false` provides a config-level opt-out without rebuilding.
+- Keep Rally's current best-effort PII protections for Rally-supplied telemetry: no prompts/transcripts, home paths collapsed, no custom username/hostname attributes, and no obvious sensitive values in tags or contexts.
+- Allow New Relic agent-native runtime/APM metadata where needed for useful product telemetry, while disabling application log forwarding so transcripts and command output are not shipped as logs.
 - Update docs and release configuration so 0.9.1 is the telemetry-provider migration release.
 
 ## Capabilities
@@ -19,13 +19,13 @@ None.
 
 ### Modified Capabilities
 
-- `telemetry`: activation, provider, event taxonomy wording, flush behavior, privacy guarantees, and backend mapping move from Sentry-specific DSN/Issues to New Relic Event API custom events.
-- `cli-config`: `[telemetry]` config keys and release defaults change from Sentry DSN to non-secret New Relic metadata plus env/baked credential activation while preserving the global kill switch.
+- `telemetry`: activation, provider, event taxonomy wording, flush behavior, privacy guarantees, and backend mapping move from Sentry-specific DSN/Issues to New Relic Go APM transactions, segments, custom events, and noticed errors.
+- `cli-config`: `[telemetry]` gains an explicit `enabled` opt-out and New Relic app metadata while credentials stay in environment variables or baked release ldflags.
 - `tooling-distribution`: GoReleaser and release workflow secrets change from `RALLY_SENTRY_DSN`/`DefaultSentryDSN` to New Relic release telemetry injection for 0.9.1.
 
 ## Impact
 
 - Code: `internal/telemetry`, `internal/config`, `cmd/rally`, `.goreleaser.yaml`, `.github/workflows/release.yml`, README telemetry docs, `AGENTS.md` observability guidance, and telemetry-focused tests.
-- Dependencies: no New Relic APM agent dependency for 0.9.1; implement the Event API sink with bounded standard-library HTTPS requests and retain Sentry SDK only for the one-release fallback if kept.
-- Operations: configure New Relic account id and ingest license key as GitHub Actions secrets before cutting 0.9.1; keep `RALLY_TELEMETRY=0` as the user opt-out.
-- Privacy/cost: preserve existing scrubbing and no-transcript guarantees, and add event/attribute limits so larger ingest allowance does not become unbounded telemetry volume.
+- Dependencies: remove `github.com/getsentry/sentry-go`; add `github.com/newrelic/go-agent/v3`.
+- Operations: configure a New Relic ingest license key as a GitHub Actions secret before cutting 0.9.1; keep `RALLY_TELEMETRY=0` and add `[telemetry] enabled = false` as user opt-outs.
+- Privacy/cost: preserve Rally-supplied payload scrubbing and no-transcript guarantees, disable agent log forwarding, and add custom-event/attribute limits so larger ingest allowance does not become unbounded telemetry volume.

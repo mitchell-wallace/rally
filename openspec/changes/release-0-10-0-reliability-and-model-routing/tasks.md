@@ -8,7 +8,7 @@
 - [ ] 1.3 Add/adjust run-level test(s) verifying no operator-worthy failure capture for mismatch-only runs, while run/try records remain complete.
 - [ ] 1.4 Add run-state preflight guard for already-complete pinned lap before/just after mismatch detection.
 - [ ] 1.5 Add telemetry assertions that mismatch events gain `event_kind=lap_pin_mismatch` and `mismatch_reason=wrong_lap_consumed|multi_lap_consumed` tags without `failure_category` or error-level issue capture.
-- [ ] 1.6 Add `telemetry.LevelWarning` support and map it through the active telemetry sink so mismatch diagnostics are warning-level events without becoming operator-worthy failures (`RallyDiagnostic level=warning` for New Relic; warning severity for legacy Sentry fallback).
+- [ ] 1.6 Add `telemetry.LevelWarning` support and map it through the active telemetry sink so mismatch diagnostics are warning-level events without becoming operator-worthy failures (`RallyDiagnostic level=warning` through New Relic after 0.9.1).
 
 ## 2. Cancelled state for operator-controlled exits
 
