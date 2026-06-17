@@ -323,11 +323,11 @@
       "title": "Relay: move try-log emission after persistence; lap mismatch becomes warning",
       "description": "OpenSpec change: migrate-telemetry-to-new-relic (tasks 2.5 relay call sites, 1.6; design Decision 6). Touches the production relay data path in internal/relay/runner.go. The sink already emits RallyTry/RallyDiagnostic.\n\nOutcome: the normal and handoff-only EmitTryLog calls move to AFTER successful store.AppendTry so a failed persistence cannot emit a RallyTry (2.5). Today the normal EmitTryLog at runner.go:~1939 precedes AppendTry at ~1995, and the handoff-only EmitTryLog at ~2408 precedes AppendTry at ~2424 — reorder both (line numbers will drift; locate by call site). Lap-pin mismatches (wrong_lap_consumed / multi_lap_consumed) are reclassified from operator-worthy failures to warning diagnostics: remove lapPinMismatch from the issueWorthy condition (runner.go:~1970) and instead emit a RallyDiagnostic via CaptureEvent with level=warning (telemetry.LevelWarning), event_kind=lap_pin_mismatch, and mismatch_reason=wrong_lap_consumed|multi_lap_consumed (1.6, Decision 6).\n\nFiles \u0026 scope: internal/relay/runner.go; internal/relay/runner_failure_telemetry_test.go and/or runner_test.go for the new assertions. Do not change retry/outcome logic — only telemetry emission ordering and the mismatch classification.\n\nDesign: moving EmitTryLog must not drop fields gathered before AppendTry — capture tryLogFields, then emit after AppendTry succeeds. Ensure the warning diagnostic still fires on the mismatch path now that it is no longer a CaptureFailure. Keep needs_user and infra-class failures as operator-worthy (unchanged).\n\nAcceptance: new/updated tests prove (a) no RallyTry emission when AppendTry fails, and (b) a lap mismatch produces a RallyDiagnostic with level=warning, event_kind=lap_pin_mismatch, mismatch_reason, and NOT a CaptureFailure/RallyFailure. go test ./internal/relay green. Do not check tasks.md boxes.",
       "assignee": "SENIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 589824,
       "createdAt": "2026-06-17T05:39:12.313460891Z",
-      "updatedAt": "2026-06-17T05:39:12.313460891Z",
-      "completedAt": null
+      "updatedAt": "2026-06-17T10:34:50.574633493Z",
+      "completedAt": "2026-06-17T10:34:50.574633493Z"
     },
     {
       "id": "rall-3554",
