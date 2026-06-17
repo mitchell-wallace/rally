@@ -1,5 +1,18 @@
 ## Draft: Enrich Sentry Coverage — Metrics, Structured Logs, and Panic Recovery
 
+## Status
+
+Superseded by `migrate-telemetry-to-new-relic`. Do not implement the
+Sentry-specific candidate work below. Transferable intent has moved into the
+New Relic migration where it still matters:
+
+- Native panic/error capture via New Relic error reporting and stack traces.
+- Application logs enabled through the New Relic Go APM agent, with Rally kept
+  from deliberately writing prompts, transcripts, or raw command output as log
+  records.
+- Explicit custom metrics remain deferred unless a later New Relic-specific
+  change needs them.
+
 ## Why
 
 Rally's telemetry stack (`internal/telemetry/`) already provides tracing (relay→run→try spans), failure capture via `CaptureMessage`, and per-try breadcrumbs. Three Sentry features are wired into the SDK but not yet used:

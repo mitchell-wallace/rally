@@ -1,7 +1,7 @@
 # Next up — proposed change order
 
 Living planning note for the queued OpenSpec changes. Order reflects dependency
-and risk-of-drift, not final scope. Last reviewed 2026-06-09.
+and risk-of-drift, not final scope. Last reviewed 2026-06-17.
 
 ## Done (archived)
 
@@ -9,7 +9,7 @@ and risk-of-drift, not final scope. Last reviewed 2026-06-09.
   reliability. Owns the **stall** (liveness) / **frozen** (circuit breaker) /
   **benched** (scheduler route-entry out of rotation) vocabulary split.
 - **tidy-rally-runtime-data-storage** (`2026-06-03`) — `.rally/state/`, `summary.jsonl`,
-  opt-in Sentry sink, laps bundling.
+  Sentry-era opt-in telemetry sink, laps bundling.
 - **rally-083-polish** (`2026-06-04`) — first CLI-polish pass: stall/slowing thresholds,
   inline `retry N/M`, final-snippet semantics.
 - **git-hygiene** (`2026-06-08`) — auto-commit on init/hook-install, agent commit at lap
@@ -18,31 +18,29 @@ and risk-of-drift, not final scope. Last reviewed 2026-06-09.
   retry display, terminal-only colouring, leftover-aware "incomplete".
 - **agent-lifecycle** (`2026-06-08`) — graceful subprocess shutdown, pause/resume,
   shortcut renames, route/runner fallback docs, VERIFY-role boundary.
+- **improve-error-categorisation** (`2026-06-11`) — typed failure taxonomy,
+  evidence, and reset-driven usage-limit benching.
+- **enrich-failure-telemetry** (`2026-06-11`) — Sentry-era telemetry enrichment
+  work. Do not schedule follow-up Sentry enrichment; New Relic migration owns
+  provider-forward observability.
 
 ## Order
 
-1. **improve-error-categorisation** _(draft; decisions captured 2026-06-09)_
-   Make failure handling cleaner, more consistent, and more understandable.
-   Replace the overloaded `rate limit` bucket with a real taxonomy
-   (`usage_limit` / `short_rate_limit` / `provider_overloaded` / `invalid_model` /
-   `auth_or_proxy` / `harness_launch` / `incomplete_finalization` / `agent_error`),
-   reorder classification so provider/config/quota evidence beats `incomplete`,
-   make patterns harness-scoped (no more Codex labelled as a Claude rate limit),
-   and carry a typed `FailureEvidence` on `TryResult`. Usage limits **bench** the
-   affected quota scope until reset instead of looping one-minute waits. See
-   `improve-error-categorisation/draft.md`.
+1. **migrate-telemetry-to-new-relic** _(full artifacts; 0.9.1 release gate)_
+   Hard-cut release telemetry from Sentry to New Relic before 0.10.0. Carries
+   forward useful observability concepts from the obsolete Sentry enrichment
+   draft only where they fit New Relic: native panic/error capture, application
+   logs, bounded custom events, and backend-neutral privacy scrubbing.
 
-2. **enrich-failure-telemetry** _(full artifacts; realigned 2026-06-09 onto #1's baseline)_
-   Enriches the existing Sentry sink (not a new integration): run-environment context,
-   an anonymous machine-local hash, a globally-unique relay identity
-   (`<machine-hash>-<date>-<relay_id>`), username-stripped cwd, and a failure-time
-   agent-state snapshot. Consumes #1's typed `FailureCategory` + quota-scope + reset
-   evidence and the **benched** state rather than re-deriving its own failure class.
+2. **release-0-10-0-reliability-and-model-routing** _(full artifacts)_
+   Build the reliability/model-routing release on the New Relic/backend-neutral
+   telemetry vocabulary established by 0.9.1, especially warning diagnostics for
+   lap mismatches rather than Sentry issue semantics.
 
 3. **improve-harness-consistency** _(draft)_
    Normalize harness adapters into one `Executor` contract: uniform final-text/summary
    extraction, tool-count, session ID, clean-completion-vs-process-exit detection, and a
-   per-adapter conformance suite. Inherits #1's typed evidence: this change moves
+   per-adapter conformance suite. Inherits the typed evidence model: this change moves
    `FailureEvidence` *population* from runner-side log parsing into the adapters.
    Motivated by opencode's headless `run --format json` issues. See
    `improve-harness-consistency/draft.md`.
@@ -66,4 +64,6 @@ and risk-of-drift, not final scope. Last reviewed 2026-06-09.
   VERIFY-role item and #4's role docs.)
 - **Resilience vocabulary** (from harden-relay-run-lifecycle): **stall** = liveness,
   **frozen** = circuit breaker (per harness+model), **benched** = scheduler entry out of
-  rotation. Reuse these words downstream; #1 adds reset-driven benching, #2 tags them.
+  rotation. Reuse these words downstream; `improve-error-categorisation` added
+  reset-driven benching, and `release-0-10-0-reliability-and-model-routing` keeps
+  tagging these states in backend-neutral/New Relic telemetry.

@@ -14,7 +14,7 @@ The product posture is intentionally pragmatic. Rally should avoid shipping obvi
 - Keep relay code and telemetry call sites stable by implementing a New Relic-backed `telemetry.Sink`.
 - Use the New Relic Go APM agent as the backend implementation.
 - Preserve the activation contract: source builds remain silent unless configured, release binaries activate only for relay-running commands, `RALLY_TELEMETRY=0` prevents telemetry and machine-id writes, and `[telemetry] enabled = false` disables telemetry without rebuilding.
-- Keep best-effort Rally-supplied PII protections: no prompts, transcripts, raw command logs, usernames in home paths, or Rally-added hostname/username tags.
+- Keep best-effort Rally-supplied PII protections: no prompts, transcripts, raw command output, usernames in home paths, or Rally-added hostname/username tags in Rally-controlled telemetry payloads or New Relic log records.
 - Move release secret wiring from `RALLY_SENTRY_DSN` to a New Relic ingest license key.
 - Update 0.10.0 plans so they build on New Relic telemetry and do not reintroduce Sentry semantics.
 
@@ -39,9 +39,10 @@ Rationale:
 Mapping:
 - `StartSpan` creates or attaches to a New Relic transaction for root relay spans and creates `newrelic.Segment` values for child run/try spans.
 - `Span.Finish` ends the associated transaction or segment and attaches bounded, scrubbed Rally attributes such as relay/run/try ids, role, runner, outcome, duration, and lifecycle classification.
-- `EmitTryLog` records one `RallyTry` custom event per persisted try via `Application.RecordCustomEvent`.
+- `EmitTryLog` records one `RallyTry` custom event per persisted try via `Application.RecordCustomEvent`; existing relay call sites that emit before `store.AppendTry` must move emission after successful persistence.
 - `CaptureEvent` records a `RallyDiagnostic` custom event with a scalar `level`; warning diagnostics use first-class `telemetry.LevelWarning`.
-- `CaptureFailure` calls `Transaction.NoticeError` or the active transaction equivalent with bounded attributes, and MAY also record a `RallyFailure` custom event for queryability and continuity with existing reporting.
+- `CaptureFailure` calls `Transaction.NoticeError(newrelic.Error{...})` on the active transaction with bounded attributes, including an error `Class` derived from stable failure categories, and MAY also record a `RallyFailure` custom event for queryability and continuity with existing reporting.
+- Panic visibility from the obsolete `enrich-sentry-coverage` draft moves into New Relic: configure `cfg.ErrorCollector.RecordPanics = true`, but do not rely on that setting alone. Because Rally hides transaction ending behind the `Span.Finish` abstraction, implement a panic-aware New Relic transaction finish/recovery path that calls `recover()`, records `newrelic.Error` with `newrelic.NewStackTrace()` and bounded attributes, ends the transaction, and re-panics so existing process semantics are preserved. The existing string-based panic classification remains only a fallback for agent-output text.
 - `Flush` calls bounded New Relic shutdown/wait APIs so exit is not held hostage by network failure.
 
 Alternatives considered:
@@ -75,7 +76,7 @@ Tracked config SHALL NOT contain New Relic license keys. `.rally/config.toml` ma
 
 Environment/config metadata:
 - app name: `NEW_RELIC_APP_NAME`, `[telemetry] new_relic_app_name`, or default `"Rally CLI"`
-- optional host display name: `NEW_RELIC_HOST_DISPLAY_NAME`, `[telemetry] new_relic_host_display_name`, or default `"rally-cli"`
+- optional host display name: New Relic's standard `NEW_RELIC_PROCESS_HOST_DISPLAY_NAME`, `[telemetry] new_relic_host_display_name`, or default `"rally-cli"`; do not introduce a Rally-specific host-display env alias unless a later product decision asks for one.
 - optional New Relic host/collector override for tests/advanced use: standard New Relic agent environment/config where supported, not generated into config by default
 
 ### 4. Agent configuration and volume guardrails
@@ -91,7 +92,7 @@ Rules:
 - Drop sensitive Rally-supplied keys entirely rather than shipping placeholder values such as `[scrubbed]`; do not emit custom attributes named `prompt`, `transcript`, `log`, `hostname`, or equivalent even with redacted values.
 - Drop or hash attributes that cannot be represented as string/number after scrubbing; do not JSON-encode large nested maps into a single custom attribute.
 - Enforce a Rally-local custom attribute/event budget in code: event type is fixed, attributes are strings/numbers/bools only, attribute counts are capped, keys are bounded, and custom event payloads are size bounded.
-- Disable New Relic application log forwarding/decorating so Rally does not ship agent transcripts, prompts, command output, or local logs as logs.
+- Keep New Relic application logging enabled intentionally. Apply Rally's explicit logging choices after `ConfigFromEnvironment`: `ConfigAppLogEnabled(true)`, `ConfigAppLogForwardingEnabled(true)`, `ConfigAppLogMetricsEnabled(true)`, and a bounded `ConfigAppLogForwardingMaxSamplesStored(...)`; keep local decorating off unless it proves useful. For 0.9.1, enable the agent app-log capability but do not add new `Application.RecordLog` calls or logger integrations; `RallyTry` custom events remain the per-try observability stream. If a later change adds a sanitized lifecycle log stream, it must define a schema and tests before emitting logs.
 - Keep agent runtime sampling, distributed tracing, custom insights events, and error collection enabled unless tests show they create unacceptable overhead.
 
 ### 5. Privacy and identity semantics
@@ -102,7 +103,7 @@ Best-effort agent configuration:
 - set a generic `HostDisplayName` such as `"rally-cli"` where the New Relic agent supports it;
 - avoid adding custom host/user/network attributes;
 - collapse home paths in Rally-supplied working-directory fields and free-text provider signals before attaching them to transactions, events, or errors;
-- disable app log forwarding;
+- enable New Relic application log forwarding intentionally, but avoid adding Rally log records for prompts, transcripts, raw agent output, or raw command output;
 - accept that New Relic's Go agent may still send native runtime/APM/connect metadata as part of normal operation.
 
 ### 6. Cross-change alignment with 0.10.0
@@ -125,19 +126,21 @@ Versioning:
 
 ## Risks / Trade-offs
 
-- **Risk: New Relic agent sends more native metadata than the old hand-curated Sentry payloads** -> document this as an intentional product tradeoff, disable log forwarding, set a generic host display name where possible, and keep Rally-supplied attributes scrubbed.
-- **Risk: app log forwarding captures sensitive local output** -> explicitly disable application log forwarding/decorating and add tests/config assertions for that option.
+- **Risk: New Relic agent sends more native metadata than the old hand-curated Sentry payloads** -> document this as an intentional product tradeoff, enable application logging knowingly, set a generic host display name where possible, and keep Rally-supplied attributes scrubbed.
+- **Risk: app log forwarding captures sensitive local output** -> keep application logging enabled by product decision, but in 0.9.1 do not add New Relic `RecordLog` calls or logger integrations; custom events carry Rally's structured lifecycle data until a later sanitized log schema is specified.
+- **Risk: environment configuration changes New Relic application logging shape** -> apply Rally's explicit logging options after `ConfigFromEnvironment` so release telemetry has predictable forwarding, metrics, decorating, and sample-limit behavior.
+- **Risk: Go panics remain string-only telemetry after the Sentry enrichment draft is abandoned** -> carry the draft's native exception-capture intent into New Relic using `newrelic.Error`, `newrelic.NewStackTrace()`, transaction-scoped `NoticeError`, and a panic-aware finish/recover path rather than relying only on `ErrorCollector.RecordPanics`.
 - **Risk: version bump ships before secrets exist** -> add a release workflow check for `RALLY_NEW_RELIC_LICENSE_KEY`, and keep version bump as the final implementation step.
 - **Risk: New Relic attribute limits drop important context** -> define deterministic flattening/attribute budget order, prioritizing correlation tags, outcome/category, recovery classification, and bounded failure evidence.
 - **Risk: stale Sentry config silently keeps spending Sentry quota** -> remove Sentry fallback and ignore/remove Sentry config paths for 0.9.1.
-- **Risk: ingest volume still grows too quickly** -> keep one try event per try, bounded logical spans/segments, no transcript/log forwarding, and tests that no prompt/output/log fields appear in Rally-supplied attributes.
+- **Risk: ingest volume still grows too quickly** -> keep one try event per persisted try, bounded logical spans/segments, bounded app-log samples, and tests that no prompt/transcript/raw-output fields appear in Rally-supplied attributes or log records.
 
 ## Migration Plan
 
 1. Remove Sentry implementation, dependency, config, release wiring, and docs.
 2. Add the New Relic Go APM agent dependency and implement `NewRelicSink` behind the existing `Sink` interface.
 3. Update config/env/ldflag resolution for `RALLY_TELEMETRY=0`, `[telemetry] enabled = false`, env license key, baked license key, and no-op fallback.
-4. Configure the agent with app name, generic host display name, disabled application log forwarding, bounded shutdown, custom events, errors, and runtime/APM defaults.
+4. Configure the agent with app name, generic host display name, explicit application logging choices after environment config, bounded shutdown, custom events, native panic/error capture, and runtime/APM defaults.
 5. Update tests for activation precedence, config opt-out, no-side-effect mechanical commands, privacy scrubbing, flush, failure/event mapping, and release secret gating.
 6. Update README and `AGENTS.md`.
 7. Add release workflow secret gate.
@@ -152,5 +155,5 @@ Rollback:
 ## Research Notes
 
 - New Relic pricing page currently states the free tier includes 100 GB/month of data ingest and $0.40/GB beyond the free 100 GB.
-- New Relic Go APM agent docs and code show the APIs Rally needs: `ConfigFromEnvironment`, `ConfigLicense`, `ConfigAppName`, `Application.StartTransaction`, `Transaction.StartSegment`, `Transaction.AddAttribute`, `Application.RecordCustomEvent`, `Transaction.NoticeError`, `Application.WaitForConnection`, and `Application.Shutdown`.
-- Local inspection of `github.com/newrelic/go-agent/v3@v3.43.3` shows application log forwarding and runtime/code-level collection defaults that must be considered explicitly in Rally's config.
+- New Relic Go APM agent docs and code show the APIs Rally needs: `ConfigFromEnvironment`, `ConfigLicense`, `ConfigAppName`, `Application.StartTransaction`, `Transaction.StartSegment`, `Transaction.AddAttribute`, `Application.RecordCustomEvent`, `Transaction.NoticeError`, `newrelic.Error`, `newrelic.NewStackTrace`, `Application.WaitForConnection`, and `Application.Shutdown`.
+- Local inspection of `github.com/newrelic/go-agent/v3@v3.43.3` shows application log forwarding defaults to enabled and can be influenced by `NEW_RELIC_APPLICATION_LOGGING_*` environment variables, so Rally should apply explicit logging options after environment config rather than relying on defaults.

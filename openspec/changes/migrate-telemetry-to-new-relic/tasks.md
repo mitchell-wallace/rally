@@ -11,29 +11,31 @@
 ## 2. New Relic Go APM sink
 
 - [ ] 2.1 Add `github.com/newrelic/go-agent/v3` and implement `internal/telemetry/newrelic.go` as `NewRelicSink` satisfying `Sink`.
-- [ ] 2.2 Add New Relic config fields to telemetry initialization: license key, app name, generic host display name, app-log-forwarding disabled flag, startup wait timeout, shutdown timeout, and baked defaults as needed.
+- [ ] 2.2 Add New Relic config fields to telemetry initialization: license key, app name, generic host display name, explicit app-log-forwarding/log-metrics settings, startup wait timeout, shutdown timeout, and baked defaults as needed.
 - [ ] 2.3 Map root relay `StartSpan` calls to New Relic transactions and child run/try spans to New Relic segments while preserving Rally span ids/parent ids as custom attributes.
 - [ ] 2.4 Attach bounded, scrubbed Rally attributes to transactions/segments for operation, description, duration, relay/run/try ids, role, runner, outcome, failure classification, and recovery classification.
-- [ ] 2.5 Map `EmitTryLog` to one `Application.RecordCustomEvent("RallyTry", attrs)` call per persisted try.
+- [ ] 2.5 Map `EmitTryLog` to one `Application.RecordCustomEvent("RallyTry", attrs)` call per persisted try, moving the existing `internal/relay/runner.go` normal and handoff-only `EmitTryLog` calls after successful `store.AppendTry` so failed persistence cannot emit `RallyTry`.
 - [ ] 2.6 Map `CaptureEvent` to `Application.RecordCustomEvent("RallyDiagnostic", attrs)` with a scalar `level`.
-- [ ] 2.7 Map `CaptureFailure` to New Relic error reporting (`Transaction.NoticeError` or equivalent active transaction path) with bounded attributes, and record a `RallyFailure` custom event when useful for NRQL continuity.
+- [ ] 2.7 Map `CaptureFailure` to New Relic error reporting using transaction-scoped `Transaction.NoticeError(newrelic.Error{Message, Class, Attributes})` with bounded attributes, and record a `RallyFailure` custom event when useful for NRQL continuity.
 - [ ] 2.8 Implement `Flush` with bounded `Application.Shutdown`/connection waiting so unreachable New Relic endpoints do not hang CLI exit.
-- [ ] 2.9 Add unit tests with a fake/isolated New Relic app configuration where possible for transaction/segment creation, custom event payload shape, error attributes, shutdown timeout behavior, and no network calls when disabled.
+- [ ] 2.9 Configure native panic capture with `cfg.ErrorCollector.RecordPanics = true`, and implement a panic-aware transaction finish/recovery path where the `Span.Finish` abstraction would otherwise hide deferred `Transaction.End`: recover, notice a `newrelic.Error` with `newrelic.NewStackTrace()` and bounded attributes, end the transaction, then re-panic. String-based panic classification remains only a fallback.
+- [ ] 2.10 Add unit tests with a fake/isolated New Relic app configuration where possible for transaction/segment creation, custom event payload shape, error attributes/classes, panic-aware transaction finish/recovery behavior, shutdown timeout behavior, and no network calls when disabled.
 
 ## 3. Attribute limits and cost guardrails
 
 - [ ] 3.1 Add a deterministic attribute builder that merges Rally tags and contexts into New Relic-compatible scalar attributes.
-- [ ] 3.2 Enforce Rally's local budget: fixed custom event names (`RallyTry`, `RallyDiagnostic`, `RallyFailure`), bounded keys, string/number/bool values only, capped attribute count, and bounded string lengths.
+- [ ] 3.2 Enforce Rally's local budget: fixed custom event names (`RallyTry`, `RallyDiagnostic`, `RallyFailure`), string/number/bool values only, at most 64 attributes per custom event/error, attribute keys under 255 bytes, and bounded string values.
 - [ ] 3.3 Prioritize correlation and failure fields (`relay_id`, `run_id`, `try_id`, `repo`, `lap_id`, `runner`, `role`, `outcome`, `failure_category`, `recovery_classification`, `agent_state`) before lower-priority context fields when the attribute budget is exceeded.
 - [ ] 3.4 Add regression tests that oversized context payloads are dropped deterministically rather than JSON-encoded into a large attribute.
-- [ ] 3.5 Configure the New Relic agent to disable application log forwarding/decorating so prompts, transcripts, local command output, and logs are not shipped as logs.
+- [ ] 3.5 Configure the New Relic agent to keep application logging enabled after any `ConfigFromEnvironment` application, using `ConfigAppLogEnabled(true)`, `ConfigAppLogForwardingEnabled(true)`, `ConfigAppLogMetricsEnabled(true)`, bounded `ConfigAppLogForwardingMaxSamplesStored(...)`, and `ConfigAppLogDecoratingEnabled(false)` or direct equivalent fields.
 - [ ] 3.6 Set a generic New Relic host display name where supported, and avoid adding Rally custom attributes for raw hostname, username, IP, or home-directory username.
-- [ ] 3.7 Confirm event volume stays bounded: one `RallyTry` per persisted try, bounded relay/run/try transactions/segments, no prompt-line/agent-output/log forwarding events.
+- [ ] 3.7 Add regression tests proving Rally's post-environment New Relic config leaves application logging and forwarding enabled, keeps local decorating off, applies the sample limit, and does not add `Application.RecordLog` calls or logger integrations in 0.9.1.
+- [ ] 3.8 Confirm event volume stays bounded: one `RallyTry` per persisted try, bounded relay/run/try transactions/segments, bounded application-log forwarding samples, and no prompt-line/agent-output custom events.
 
 ## 4. Activation and config opt-out
 
 - [ ] 4.1 Extend `internal/config.TelemetryConfig` with `enabled *bool`, `new_relic_app_name`, and optional `new_relic_host_display_name`; remove/deprecate `sentry_dsn`.
-- [ ] 4.2 Update generated `.rally/config.toml` docs/template to make `[telemetry] enabled = false` discoverable as the config-level opt-out and avoid any secret fields.
+- [ ] 4.2 Update generated `.rally/config.toml` docs/template to make `[telemetry]` opt-out discoverable as a commented example (`# enabled = false`) or equivalent unset default, never as active `enabled = false`, and avoid any secret fields.
 - [ ] 4.3 Update `cmd/rally/main.go` telemetry globals and `telemetryConfigForRelay`: remove `DefaultSentryDSN`; add `DefaultNewRelicLicenseKey`, app-name/host-display-name fields, and New Relic agent config options.
 - [ ] 4.4 Update telemetry initialization precedence: `RALLY_TELEMETRY=0`, `[telemetry] enabled=false`, `NEW_RELIC_LICENSE_KEY`, baked `DefaultNewRelicLicenseKey`, no-op.
 - [ ] 4.5 Treat missing New Relic license key as non-activating with no network calls; do not fall back to Sentry.
@@ -49,6 +51,7 @@
 - [ ] 5.5 Bump `internal/buildinfo/VERSION` to `0.9.1` only after the release secret gate is implemented; confirm `main.Version` remains `"dev"`.
 - [ ] 5.6 Add release checklist note: configure `RALLY_NEW_RELIC_LICENSE_KEY` before cutting 0.9.1; do not push tags manually.
 - [ ] 5.7 Update active `release-0-10-0-reliability-and-model-routing` OpenSpec artifacts so telemetry language builds on New Relic Go APM/backend-neutral terminology instead of reintroducing Sentry-specific Issues or fallback behavior.
+- [ ] 5.8 Retire or rewrite obsolete planning references that would steer future work back to Sentry, including `openspec/changes/enrich-sentry-coverage/draft.md` and `openspec/next-up.md`; preserve only backend-neutral/New Relic concepts such as native panic/error capture.
 
 ## 6. Verification
 

@@ -23,12 +23,12 @@ The system SHALL support New Relic telemetry configuration under `[telemetry]` u
 - **THEN** the New Relic agent SHALL use that app name after scrubbing/validation
 
 #### Scenario: Host display name can be generic
-- **WHEN** `NEW_RELIC_HOST_DISPLAY_NAME` or `[telemetry] new_relic_host_display_name` is set
+- **WHEN** New Relic's standard `NEW_RELIC_PROCESS_HOST_DISPLAY_NAME` or `[telemetry] new_relic_host_display_name` is set
 - **THEN** the New Relic agent SHALL use that display name after scrubbing/validation
 
 #### Scenario: Generated config exposes opt-out but no secret field
 - **WHEN** rally initializes a workspace config
-- **THEN** the generated `[telemetry]` section SHALL make the `enabled = false` opt-out discoverable
+- **THEN** the generated `[telemetry]` section SHALL make the `enabled = false` opt-out discoverable without making it active by default, for example as `# enabled = false`
 - **AND** it SHALL NOT include a `new_relic_license_key` field
 
 ### Requirement: Sentry telemetry removal

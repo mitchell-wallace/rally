@@ -27,11 +27,12 @@ The system SHALL provide a telemetry sink that is disabled by default for source
 - **AND** the system SHALL NOT initialize a Sentry client
 
 ### Requirement: Telemetry event taxonomy
-When enabled, the system SHALL use New Relic Go APM transactions/segments for relay/run/try timing, emit one bounded New Relic custom event per try, emit bounded diagnostic custom events, and report genuine operator-worthy failures through New Relic error reporting. Operator-worthy failures SHALL remain limited to failures that warrant attention: infra-class failures (rate limit, harness/launch error, API timeout), a relay ending with all agent types frozen (stall), panic, "agent exited without finalizing", detection of `laps done` emitted as text, and `needs_user` recovery signals. Lap-pin mismatches (`wrong_lap_consumed` / `multi_lap_consumed`) SHALL be warning diagnostics by default, not operator-worthy failures. Ordinary agent-class try failures (recoverable agent errors, short no-ops) SHALL be recorded as spans/logs/custom events, NOT operator-worthy failures, to avoid alert noise. The timeout/handoff lifecycle outcomes (`TryOutcome` `run_timeout`, `handoff_requested`, and `handoff_timeout`) SHALL be recorded as spans/logs/custom events and SHALL NOT be reported as operator-worthy failures. A `needs_user` recovery classification or relay-synthesized cap signal MAY be reported as an operator-worthy failure, while the other four recovery classifications SHALL remain spans/logs/custom events. Failure classification (infra vs agent) is defined by the `harden-relay-run-lifecycle` change.
+When enabled, the system SHALL use New Relic Go APM transactions/segments for relay/run/try timing, emit one bounded New Relic custom event per try, emit bounded diagnostic custom events, and report genuine operator-worthy failures through New Relic error reporting. Operator-worthy failures SHALL remain limited to failures that warrant attention: infra-class failures (rate limit, harness/launch error, API timeout), a relay ending with all agent types frozen (stall), panic, "agent exited without finalizing", detection of `laps done` emitted as text, and `needs_user` recovery signals. Lap-pin mismatches (`wrong_lap_consumed` / `multi_lap_consumed`) SHALL be warning diagnostics by default, not operator-worthy failures. Ordinary agent-class try failures (recoverable agent errors, short no-ops) SHALL be recorded as spans/custom events, NOT operator-worthy failures, to avoid alert noise. The timeout/handoff lifecycle outcomes (`TryOutcome` `run_timeout`, `handoff_requested`, and `handoff_timeout`) SHALL be recorded as spans/custom events and SHALL NOT be reported as operator-worthy failures. A `needs_user` recovery classification or relay-synthesized cap signal MAY be reported as an operator-worthy failure, while the other four recovery classifications SHALL remain spans/custom events. Failure classification (infra vs agent) is defined by the `harden-relay-run-lifecycle` change.
 
 #### Scenario: Try emits a structured custom event
-- **WHEN** a try is appended via the store
-- **THEN** the sink SHALL emit one bounded `RallyTry` New Relic custom event for that try
+- **WHEN** a try is successfully appended via the store
+- **THEN** the sink SHALL emit one bounded `RallyTry` New Relic custom event for that persisted try
+- **AND** a failed append SHALL NOT emit a `RallyTry` event for an unpersisted try
 
 #### Scenario: Relay emits a logical trace hierarchy
 - **WHEN** a relay starts and runs/tries execute
@@ -40,8 +41,14 @@ When enabled, the system SHALL use New Relic Go APM transactions/segments for re
 
 #### Scenario: Infra failure becomes operator-worthy telemetry
 - **WHEN** a try fails with an infra-class failure mode
-- **THEN** the sink SHALL report a New Relic error with bounded failure attributes
+- **THEN** the sink SHALL report a New Relic error using transaction-scoped `NoticeError` with bounded failure attributes and a stable error class
 - **AND** the sink MAY emit a bounded `RallyFailure` custom event for NRQL queryability
+
+#### Scenario: Panic becomes native error telemetry
+- **WHEN** Rally catches a Go panic inside relay or try execution
+- **THEN** the New Relic sink SHALL record it as native error telemetry with a stack trace where supported
+- **AND** any panic-aware finish/recovery path SHALL end the New Relic transaction and then re-panic so Rally's existing process semantics are preserved
+- **AND** panic classification inferred from agent output text SHALL remain a fallback and SHALL NOT be the only panic signal
 
 #### Scenario: Relay stall becomes operator-worthy telemetry
 - **WHEN** a relay pass ends with all agent types frozen
@@ -49,11 +56,11 @@ When enabled, the system SHALL use New Relic Go APM transactions/segments for re
 
 #### Scenario: Agent-class failure does not report an operator failure
 - **WHEN** a try fails with an agent-class failure that remains retry-eligible
-- **THEN** the sink SHALL record it as a span/log/custom event only and SHALL NOT report a New Relic error or `RallyFailure`
+- **THEN** the sink SHALL record it as a span/custom event only and SHALL NOT report a New Relic error or `RallyFailure`
 
 #### Scenario: Handoff outcomes do not report an operator failure
 - **WHEN** a try resolves as `run_timeout`, `handoff_requested`, or `handoff_timeout`
-- **THEN** the sink SHALL record it as a span/log/custom event and SHALL NOT report a New Relic error or `RallyFailure`
+- **THEN** the sink SHALL record it as a span/custom event and SHALL NOT report a New Relic error or `RallyFailure`
 
 #### Scenario: needs_user recovery may report an operator failure
 - **WHEN** a RECOVERY run records the `needs_user` classification, or the relay synthesizes `needs_user` on reaching the consecutive-recovery cap
@@ -70,7 +77,7 @@ When enabled, the system SHALL use New Relic Go APM transactions/segments for re
 - **THEN** the sink SHALL record the rotation as a common recovery custom event and SHALL NOT report it as an operator-worthy failure
 
 ### Requirement: Telemetry PII scrubbing
-The system SHALL apply backend-neutral scrubbing to Rally-supplied telemetry before attributes or custom events are handed to New Relic. The scrubber SHALL never send the contents of `current_task.md` or full agent transcripts; only summaries and metadata SHALL be sent. Sensitive Rally-supplied keys SHALL be dropped entirely rather than retained with a redacted placeholder value. The system SHALL collapse the user's home-directory prefix in any Rally-supplied working-directory or path-shaped field (e.g. `/home/<user>/...` -> `~/...`) so the username is not transmitted by Rally custom attributes, SHALL collapse home paths embedded inside transmitted free-text context fields such as raw provider signals, and SHALL NOT add custom attributes containing raw hostname, username, IP address, prompt text, transcript text, or command log text. New Relic application log forwarding SHALL be disabled.
+The system SHALL apply backend-neutral scrubbing to Rally-supplied telemetry before attributes, custom events, errors, or Rally-controlled log records are handed to New Relic. The scrubber SHALL never send the contents of `current_task.md` or full agent transcripts; only summaries and metadata SHALL be sent. Sensitive Rally-supplied keys SHALL be dropped entirely rather than retained with a redacted placeholder value. The system SHALL collapse the user's home-directory prefix in any Rally-supplied working-directory or path-shaped field (e.g. `/home/<user>/...` -> `~/...`) so the username is not transmitted by Rally custom attributes, SHALL collapse home paths embedded inside transmitted free-text context fields such as raw provider signals, and SHALL NOT add custom attributes or Rally-controlled log records containing raw hostname, username, IP address, prompt text, transcript text, or raw command output. New Relic application log forwarding SHALL be enabled intentionally.
 
 #### Scenario: Task prompt never shipped
 - **WHEN** an event would otherwise include `current_task.md` contents or a full transcript
@@ -90,9 +97,11 @@ The system SHALL apply backend-neutral scrubbing to Rally-supplied telemetry bef
 - **THEN** they SHALL NOT contain raw hostname, username, IP address, prompt text, transcript text, or command log text
 - **AND** the New Relic agent SHALL be configured with a generic host display name where supported
 
-#### Scenario: Application logs are not forwarded
+#### Scenario: Application logs are forwarded intentionally
 - **WHEN** New Relic telemetry is initialized
-- **THEN** New Relic application log forwarding/decorating SHALL be disabled
+- **THEN** New Relic application log forwarding and application-log metrics SHALL be enabled with a bounded sample limit
+- **AND** local log decorating SHALL remain disabled unless a later product decision enables it
+- **AND** the 0.9.1 migration SHALL NOT add new Rally `Application.RecordLog` calls or logger integrations; `RallyTry` custom events remain the per-try observability stream
 
 ### Requirement: Telemetry flush on exit
 The system SHALL flush pending telemetry before the CLI process exits, using a bounded timeout so a slow or unreachable network never blocks exit. For the New Relic Go APM sink this SHALL use bounded New Relic shutdown/wait APIs and return when the timeout expires.
@@ -105,7 +114,7 @@ The system SHALL flush pending telemetry before the CLI process exits, using a b
 - **WHEN** flushing cannot complete because the network is unreachable
 - **THEN** the system SHALL stop waiting after the bounded timeout and exit
 
-### Requirement: Product telemetry DSN activation
+### Requirement: Product telemetry license-key activation
 The system SHALL support a baked default New Relic license key for release binaries while preserving user/operator overrides. The system SHALL resolve telemetry in this order: `RALLY_TELEMETRY=0` disables telemetry regardless of any configured credentials; `[telemetry] enabled=false` disables telemetry; `NEW_RELIC_LICENSE_KEY`; baked `DefaultNewRelicLicenseKey`; no license disables telemetry. The system SHALL initialize telemetry only for commands that run relays, so mechanical commands do not create telemetry side-effect files or open a telemetry client solely because baked credentials exist. The system SHALL NOT activate Sentry from legacy DSN config.
 
 #### Scenario: Baked New Relic license activates release telemetry
@@ -138,11 +147,12 @@ The system SHALL support a baked default New Relic license key for release binar
 ## ADDED Requirements
 
 ### Requirement: New Relic Go APM agent limits
-The system SHALL convert Rally tags and contexts into New Relic-compatible custom attributes before attaching them to transactions, segments, custom events, or errors. Attributes SHALL be simple scalar values; custom event names SHALL be from Rally's fixed set (`RallyTry`, `RallyDiagnostic`, `RallyFailure`); custom event attribute counts and string lengths SHALL be bounded. Rally SHALL apply a local attribute budget to keep payloads predictable. When a payload exceeds limits, the system SHALL preserve correlation tags and failure/outcome fields first, then deterministic lower-priority context fields, and SHALL drop the remainder rather than encoding large nested blobs.
+The system SHALL convert Rally tags and contexts into New Relic-compatible custom attributes before attaching them to transactions, segments, custom events, or errors. Attributes SHALL be simple scalar values; custom event names SHALL be from Rally's fixed set (`RallyTry`, `RallyDiagnostic`, `RallyFailure`); custom event and error payloads SHALL contain at most 64 attributes, attribute keys SHALL be under 255 bytes, and string values SHALL be bounded. Rally SHALL apply a local attribute budget to keep payloads predictable. When a payload exceeds limits, the system SHALL preserve correlation tags and failure/outcome fields first, then deterministic lower-priority context fields, and SHALL drop the remainder rather than encoding large nested blobs.
 
 #### Scenario: Custom event attributes stay within limits
 - **WHEN** a try log, diagnostic event, span attribute set, or failure event is emitted to New Relic
 - **THEN** the event type and attributes SHALL satisfy Rally's local name, key, value-type, attribute-budget, and size limits
+- **AND** custom event and error attributes SHALL stay at or below 64 attributes with keys under 255 bytes
 
 #### Scenario: Correlation fields are prioritized
 - **WHEN** an event has more attributes than the New Relic/Rally budget allows
