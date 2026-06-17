@@ -257,11 +257,11 @@
       "title": "New Relic sink unit tests, app-logging regression tests, volume bounds",
       "description": "OpenSpec change: migrate-telemetry-to-new-relic (tasks 2.10, 3.7, 3.8). Laps 3-4 added the sink; build the thorough test matrix following existing telemetry test patterns (sink_test.go, scrubber_test.go). Tests must run offline with no real network.\n\nOutcome: unit tests (fake/isolated New Relic app config where feasible) cover transaction/segment creation and Rally span-id attributes; RallyTry/RallyDiagnostic/RallyFailure custom-event payload shape and fixed names; NoticeError attributes and stable error classes; shutdown-timeout behavior on Flush; and no network calls when telemetry is disabled (2.10). Regression tests prove Rally's post-environment config leaves application logging + forwarding + metrics enabled, keeps local decorating off, applies the sample limit, and adds no Application.RecordLog calls or logger integrations in 0.9.1 (3.7). Tests assert event volume stays bounded: one RallyTry per persisted try, bounded spans/segments, bounded app-log samples, and no prompt-line/agent-output custom events (3.8).\n\nFiles \u0026 scope: internal/telemetry/newrelic_test.go (+ helpers).\n\nAcceptance: go test ./internal/telemetry passes with the new tests; tests run offline. Do not check tasks.md boxes.",
       "assignee": "JUNIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 327680,
       "createdAt": "2026-06-17T05:39:12.313454504Z",
-      "updatedAt": "2026-06-17T05:39:12.313454504Z",
-      "completedAt": null
+      "updatedAt": "2026-06-17T09:28:07.302225221Z",
+      "completedAt": "2026-06-17T09:28:07.302225221Z"
     },
     {
       "id": "rall-df77",
