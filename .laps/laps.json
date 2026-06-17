@@ -279,11 +279,11 @@
       "title": "Move RallyTry emission after AppendTry",
       "description": "Finish task 2.5 (and the remaining 3.8 gap): move the normal and handoff-only EmitTryLog calls in internal/relay/runner.go so RallyTry is recorded only after store.AppendTry succeeds, and add regression coverage proving failed persistence emits no RallyTry while a persisted try emits exactly one.",
       "assignee": "SENIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 262144,
       "createdAt": "2026-06-17T09:35:48.599468505Z",
-      "updatedAt": "2026-06-17T09:35:48.599468505Z",
-      "completedAt": null
+      "updatedAt": "2026-06-17T09:54:39.866064745Z",
+      "completedAt": "2026-06-17T09:54:39.866064745Z"
     },
     {
       "id": "work-0ac0",
