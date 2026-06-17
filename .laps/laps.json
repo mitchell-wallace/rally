@@ -213,11 +213,11 @@
       "title": "Make telemetry Sink boundary backend-neutral and add LevelWarning",
       "description": "OpenSpec change: migrate-telemetry-to-new-relic (tasks 1.2, 1.4, 1.7). Prepare the sink boundary so the New Relic sink can be added next without leaking Sentry concepts. Sentry MUST keep compiling — do NOT delete sentry.go or the dependency yet (that happens in the cut-over lap).\n\nOutcome: Sink/Span/FailureEvent/Event doc comments in internal/telemetry/sink.go are backend-neutral (\"operator-worthy failure\", \"custom event\", \"flush\") with no \"Sentry Issue\" wording. Scrubbing in scrubber.go is available as backend-neutral helpers that sanitize Rally-supplied scalar attributes and string-keyed context maps, independent of any sentry.Event type. A new telemetry.LevelWarning EventLevel exists alongside LevelInfo/LevelError. The existing SentrySink keeps working by adapting to the neutral scrubber and mapping LevelWarning to sentry.LevelWarning.\n\nFiles \u0026 scope: internal/telemetry/sink.go (comments + LevelWarning const), internal/telemetry/scrubber.go + scrubber_test.go (extract/keep neutral helpers), internal/telemetry/sentry.go (adapt BeforeSend to wrap the neutral helpers; keep functional). Do not touch cmd/rally or internal/relay.\n\nDesign: Keep the Sink interface signatures unchanged — only wording and the added level value. Factor scrubbing into functions over map[string]string / map[string]map[string]interface{}: collapse home prefixes to ~, drop sensitive keys ENTIRELY (no [scrubbed] placeholder), truncate long strings. sentry.go composes these over sentry.Event so behavior is preserved.\n\nAcceptance: scrubber unit tests cover home-path collapse, dropping sensitive keys with no placeholder, and string truncation on plain maps; go build ./... and go test ./internal/telemetry are green; no \"Sentry Issue\" wording remains in sink.go. Do not check tasks.md boxes.",
       "assignee": "SENIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 65536,
       "createdAt": "2026-06-17T05:39:12.313428365Z",
-      "updatedAt": "2026-06-17T05:39:12.313428365Z",
-      "completedAt": null
+      "updatedAt": "2026-06-17T06:41:21.067847006Z",
+      "completedAt": "2026-06-17T06:41:21.067847006Z"
     },
     {
       "id": "rall-b45c",
