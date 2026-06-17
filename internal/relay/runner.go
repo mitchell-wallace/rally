@@ -1936,8 +1936,6 @@ attemptLoop:
 		if task.ResolvedRoute == "recovery" && recoveryClassification != "" {
 			tryLogFields["recovery_classification"] = recoveryClassification
 		}
-		r.tel().EmitTryLog(tryCtx, tryLogFields)
-
 		// Capture provider-limit evidence as low-severity diagnostic telemetry
 		// regardless of whether the failure is operator-worthy enough to become an
 		// Issue. This builds the parser-validation corpus without broadening alerts.
@@ -1995,6 +1993,7 @@ attemptLoop:
 		if err := r.store.AppendTry(tryRecord); err != nil {
 			return outcome(false, false, false), err
 		}
+		r.tel().EmitTryLog(tryCtx, tryLogFields)
 
 		if actionTaken {
 			if r.stopFlag.Load() {
@@ -2405,7 +2404,6 @@ func (r *Runner) runBoundedHandoffOnly(
 	if task.ResolvedRoute == "recovery" && recoveryClassification != "" {
 		tryLogFields["recovery_classification"] = recoveryClassification
 	}
-	r.tel().EmitTryLog(tryCtx, tryLogFields)
 	if task.ResolvedRoute == "recovery" && recoveryClassification == "needs_user" {
 		fs := telemetry.FailureState{
 			Attempt:                attemptNumber,
@@ -2424,6 +2422,7 @@ func (r *Runner) runBoundedHandoffOnly(
 	if err := r.store.AppendTry(tryRecord); err != nil {
 		return outcome, result, succeeded, dirtyHandoff, err
 	}
+	r.tel().EmitTryLog(tryCtx, tryLogFields)
 
 	return outcome, result, succeeded, dirtyHandoff, nil
 }

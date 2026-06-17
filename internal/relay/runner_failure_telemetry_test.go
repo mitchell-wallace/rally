@@ -734,6 +734,166 @@ func makeRunner(t *testing.T, s *store.Store, workspaceDir string, sink *capturi
 	return r
 }
 
+func blockTryPersistence(t *testing.T, workspaceDir string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Join(store.RallyDir(workspaceDir), "state", "tries.jsonl"), 0o755); err != nil {
+		t.Fatalf("block try persistence: %v", err)
+	}
+}
+
+func successfulFileChangingExecutor(t *testing.T, workspaceDir string) agent.Executor {
+	t.Helper()
+	return &funcExecutor{
+		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+			if err := os.WriteFile(filepath.Join(workspaceDir, "done.txt"), []byte("done\n"), 0o644); err != nil {
+				return nil, err
+			}
+			return &agent.TryResult{Completed: true, Summary: "done"}, nil
+		},
+	}
+}
+
+func TestRunOne_AppendTryFailureDoesNotEmitRallyTry(t *testing.T) {
+	s, workspaceDir, sink := setupRunnerForFailureTest(t)
+	r := makeRunner(t, s, workspaceDir, sink, successfulFileChangingExecutor(t, workspaceDir), 1)
+	r.out = io.Discard
+	blockTryPersistence(t, workspaceDir)
+
+	_, err := r.runOne(
+		context.Background(),
+		&store.RelayRecord{ID: 1, TargetIterations: 1},
+		0,
+		agent.ResolvedAgent{Harness: "opencode", Model: cheapTestModel},
+		runTask{Name: "task", Prompt: "do work", Assignee: "senior", ResolvedRoute: "senior"},
+		nil, nil, false, false, nil, nil, io.Discard,
+	)
+	if err == nil {
+		t.Fatal("runOne error = nil, want AppendTry failure")
+	}
+	if got := len(sink.logs); got != 0 {
+		t.Fatalf("RallyTry logs = %d, want 0 after failed AppendTry: %#v", got, sink.logs)
+	}
+	if got := len(s.AllTries()); got != 0 {
+		t.Fatalf("persisted tries = %d, want 0", got)
+	}
+}
+
+func TestRunOne_PersistedTryEmitsExactlyOneRallyTry(t *testing.T) {
+	s, workspaceDir, sink := setupRunnerForFailureTest(t)
+	r := makeRunner(t, s, workspaceDir, sink, successfulFileChangingExecutor(t, workspaceDir), 1)
+	r.out = io.Discard
+
+	res, err := r.runOne(
+		context.Background(),
+		&store.RelayRecord{ID: 1, TargetIterations: 1},
+		0,
+		agent.ResolvedAgent{Harness: "opencode", Model: cheapTestModel},
+		runTask{Name: "task", Prompt: "do work", Assignee: "senior", ResolvedRoute: "senior"},
+		nil, nil, false, false, nil, nil, io.Discard,
+	)
+	if err != nil {
+		t.Fatalf("runOne error = %v", err)
+	}
+	if !res.Success || res.Outcome != reliability.OutcomeCompleted {
+		t.Fatalf("runOne result = success %v outcome %q, want completed success", res.Success, res.Outcome)
+	}
+	tries := s.AllTries()
+	if got := len(tries); got != 1 {
+		t.Fatalf("persisted tries = %d, want 1", got)
+	}
+	if got := len(sink.logs); got != 1 {
+		t.Fatalf("RallyTry logs = %d, want 1: %#v", got, sink.logs)
+	}
+	if got := sink.logs[0]["try_id"]; got != tries[0].ID {
+		t.Fatalf("RallyTry try_id = %#v, want persisted try id %d", got, tries[0].ID)
+	}
+}
+
+func TestRunBoundedHandoffOnly_AppendTryFailureDoesNotEmitRallyTry(t *testing.T) {
+	s, workspaceDir, sink := setupRunnerForFailureTest(t)
+	r := makeRunner(t, s, workspaceDir, sink, &funcExecutor{
+		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+			return &agent.TryResult{Completed: false, Summary: "handoff not completed"}, nil
+		},
+	}, 1)
+	r.out = io.Discard
+	blockTryPersistence(t, workspaceDir)
+	relay := &store.RelayRecord{ID: 1, TargetIterations: 1}
+
+	_, _, _, _, err := r.runBoundedHandoffOnly(
+		context.Background(),
+		relay,
+		0,
+		agent.ResolvedAgent{Harness: "opencode", Model: cheapTestModel},
+		runTask{Name: "task", Prompt: "do work", Assignee: "senior", ResolvedRoute: "recovery", LapID: "lap-1", IsLapsBacked: true},
+		r.rallyContext(relay),
+		"",
+		"sess-handoff",
+		2,
+		1,
+		progressSummaryEntryCount(workspaceDir),
+		"relay-1-run-1",
+		map[string]string{},
+		io.Discard,
+	)
+	if err == nil {
+		t.Fatal("runBoundedHandoffOnly error = nil, want AppendTry failure")
+	}
+	if got := len(sink.logs); got != 0 {
+		t.Fatalf("RallyTry logs = %d, want 0 after failed handoff-only AppendTry: %#v", got, sink.logs)
+	}
+	if got := len(s.AllTries()); got != 0 {
+		t.Fatalf("persisted tries = %d, want 0", got)
+	}
+}
+
+func TestRunBoundedHandoffOnly_PersistedTryEmitsExactlyOneRallyTry(t *testing.T) {
+	s, workspaceDir, sink := setupRunnerForFailureTest(t)
+	r := makeRunner(t, s, workspaceDir, sink, &funcExecutor{
+		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+			return &agent.TryResult{Completed: false, Summary: "handoff not completed"}, nil
+		},
+	}, 1)
+	r.out = io.Discard
+	relay := &store.RelayRecord{ID: 1, TargetIterations: 1}
+
+	outcome, _, succeeded, _, err := r.runBoundedHandoffOnly(
+		context.Background(),
+		relay,
+		0,
+		agent.ResolvedAgent{Harness: "opencode", Model: cheapTestModel},
+		runTask{Name: "task", Prompt: "do work", Assignee: "senior", ResolvedRoute: "recovery", LapID: "lap-1", IsLapsBacked: true},
+		r.rallyContext(relay),
+		"",
+		"sess-handoff",
+		2,
+		1,
+		progressSummaryEntryCount(workspaceDir),
+		"relay-1-run-1",
+		map[string]string{},
+		io.Discard,
+	)
+	if err != nil {
+		t.Fatalf("runBoundedHandoffOnly error = %v", err)
+	}
+	if succeeded || outcome != reliability.OutcomeHandoffTimeout {
+		t.Fatalf("handoff-only result = succeeded %v outcome %q, want handoff_timeout without success", succeeded, outcome)
+	}
+	tries := s.AllTries()
+	if got := len(tries); got != 1 {
+		t.Fatalf("persisted tries = %d, want 1", got)
+	}
+	if got := len(sink.logs); got != 1 {
+		t.Fatalf("RallyTry logs = %d, want 1: %#v", got, sink.logs)
+	}
+	if got := sink.logs[0]["try_id"]; got != tries[0].ID {
+		t.Fatalf("RallyTry try_id = %#v, want persisted try id %d", got, tries[0].ID)
+	}
+	if got := sink.logs[0]["handoff_only"]; got != true {
+		t.Fatalf("RallyTry handoff_only = %#v, want true", got)
+	}
+}
+
 // TestRunOne_TerminalTryFailure_ShortRateLimit verifies a short_rate_limit
 // terminal try failure captures the category, quota fields, and the bounded
 // failure_evidence context with raw_signal and message.

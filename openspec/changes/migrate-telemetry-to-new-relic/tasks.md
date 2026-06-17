@@ -14,7 +14,7 @@
 - [x] 2.2 Add New Relic config fields to telemetry initialization: license key, app name, generic host display name, explicit app-log-forwarding/log-metrics settings, startup wait timeout, shutdown timeout, and baked defaults as needed.
 - [x] 2.3 Map root relay `StartSpan` calls to New Relic transactions and child run/try spans to New Relic segments while preserving Rally span ids/parent ids as custom attributes.
 - [x] 2.4 Attach bounded, scrubbed Rally attributes to transactions/segments for operation, description, duration, relay/run/try ids, role, runner, outcome, failure classification, and recovery classification.
-- [ ] 2.5 Map `EmitTryLog` to one `Application.RecordCustomEvent("RallyTry", attrs)` call per persisted try, moving the existing `internal/relay/runner.go` normal and handoff-only `EmitTryLog` calls after successful `store.AppendTry` so failed persistence cannot emit `RallyTry`.
+- [x] 2.5 Map `EmitTryLog` to one `Application.RecordCustomEvent("RallyTry", attrs)` call per persisted try, moving the existing `internal/relay/runner.go` normal and handoff-only `EmitTryLog` calls after successful `store.AppendTry` so failed persistence cannot emit `RallyTry`.
 - [x] 2.6 Map `CaptureEvent` to `Application.RecordCustomEvent("RallyDiagnostic", attrs)` with a scalar `level`.
 - [x] 2.7 Map `CaptureFailure` to New Relic error reporting using transaction-scoped `Transaction.NoticeError(newrelic.Error{Message, Class, Attributes})` with bounded attributes, and record a `RallyFailure` custom event when useful for NRQL continuity.
 - [x] 2.8 Implement `Flush` with bounded `Application.Shutdown`/connection waiting so unreachable New Relic endpoints do not hang CLI exit.
@@ -30,7 +30,7 @@
 - [x] 3.5 Configure the New Relic agent to keep application logging enabled after any `ConfigFromEnvironment` application, using `ConfigAppLogEnabled(true)`, `ConfigAppLogForwardingEnabled(true)`, `ConfigAppLogMetricsEnabled(true)`, bounded `ConfigAppLogForwardingMaxSamplesStored(...)`, and `ConfigAppLogDecoratingEnabled(false)` or direct equivalent fields.
 - [x] 3.6 Set a generic New Relic host display name where supported, and avoid adding Rally custom attributes for raw hostname, username, IP, or home-directory username.
 - [ ] 3.7 Add regression tests proving Rally's post-environment New Relic config leaves application logging and forwarding enabled, keeps local decorating off, applies the sample limit, and does not add `Application.RecordLog` calls or logger integrations in 0.9.1.
-- [ ] 3.8 Confirm event volume stays bounded: one `RallyTry` per persisted try, bounded relay/run/try transactions/segments, bounded application-log forwarding samples, and no prompt-line/agent-output custom events.
+- [x] 3.8 Confirm event volume stays bounded: one `RallyTry` per persisted try, bounded relay/run/try transactions/segments, bounded application-log forwarding samples, and no prompt-line/agent-output custom events.
 
 ## 4. Activation and config opt-out
 
