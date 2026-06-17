@@ -42,8 +42,13 @@ jobs:
             echo "Error: RALLY_NEW_RELIC_LICENSE_KEY secret is empty but required for new releases." >&2
             exit 1
           fi
+          if [ -z "$RALLY_NEW_RELIC_APP_NAME" ]; then
+            echo "Error: RALLY_NEW_RELIC_APP_NAME variable is empty but required for new releases." >&2
+            exit 1
+          fi
         env:
-          RALLY_NEW_RELIC_LICENSE_KEY: ${{ secrets.RALLY_NEW_RELIC_LICENSE_KEY }}
+          RALLY_NEW_RELIC_LICENSE_KEY: ${{ secrets.RALLY_NEW_RELIC_LICENSE_KEY || secrets.RALLY_NEW_RELIC_LICENCE_KEY }}
+          RALLY_NEW_RELIC_APP_NAME: ${{ vars.RALLY_NEW_RELIC_APP_NAME || secrets.RALLY_NEW_RELIC_APP_NAME }}
 
       - uses: goreleaser/goreleaser-action@v7
         if: steps.check.outputs.exists != 'true'
@@ -53,4 +58,5 @@ jobs:
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          RALLY_NEW_RELIC_LICENSE_KEY: ${{ secrets.RALLY_NEW_RELIC_LICENSE_KEY }}
+          RALLY_NEW_RELIC_LICENSE_KEY: ${{ secrets.RALLY_NEW_RELIC_LICENSE_KEY || secrets.RALLY_NEW_RELIC_LICENCE_KEY }}
+          RALLY_NEW_RELIC_APP_NAME: ${{ vars.RALLY_NEW_RELIC_APP_NAME || secrets.RALLY_NEW_RELIC_APP_NAME }}

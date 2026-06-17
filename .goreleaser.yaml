@@ -15,7 +15,7 @@ builds:
       - amd64
       - arm64
     ldflags:
-      - -s -w -X main.Version={{ .Version }} -X main.DefaultNewRelicLicenseKey={{ .Env.RALLY_NEW_RELIC_LICENSE_KEY }}
+      - -s -w -X main.Version={{ .Version }} -X main.DefaultNewRelicLicenseKey={{ .Env.RALLY_NEW_RELIC_LICENSE_KEY }} -X main.DefaultNewRelicAppName={{ .Env.RALLY_NEW_RELIC_APP_NAME }}
 
 archives:
   - id: rally
