@@ -35,6 +35,16 @@ jobs:
         with:
           go-version-file: go.mod
 
+      - name: Verify telemetry secret
+        if: steps.check.outputs.exists != 'true'
+        run: |
+          if [ -z "$RALLY_NEW_RELIC_LICENSE_KEY" ]; then
+            echo "Error: RALLY_NEW_RELIC_LICENSE_KEY secret is empty but required for new releases." >&2
+            exit 1
+          fi
+        env:
+          RALLY_NEW_RELIC_LICENSE_KEY: ${{ secrets.RALLY_NEW_RELIC_LICENSE_KEY }}
+
       - uses: goreleaser/goreleaser-action@v7
         if: steps.check.outputs.exists != 'true'
         with:
@@ -43,4 +53,4 @@ jobs:
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          RALLY_SENTRY_DSN: ${{ secrets.RALLY_SENTRY_DSN }}
+          RALLY_NEW_RELIC_LICENSE_KEY: ${{ secrets.RALLY_NEW_RELIC_LICENSE_KEY }}
