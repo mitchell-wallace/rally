@@ -290,11 +290,11 @@
       "title": "Add lap-mismatch diagnostics and real NR regression tripwires",
       "description": "Implement task 1.6 end to end: when a try records wrong_lap_consumed or multi_lap_consumed, emit RallyDiagnostic with level=warning, event_kind=lap_pin_mismatch, and mismatch_reason, and do not report RallyFailure by default. Replace the placeholder-only New Relic regression tests in internal/telemetry/newrelic_coverage_test.go with load-bearing assertions/tripwires for no Application.RecordLog/logger integration and bounded custom-event surfaces.",
       "assignee": "SENIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 327680,
       "createdAt": "2026-06-17T09:35:48.532923526Z",
-      "updatedAt": "2026-06-17T09:35:48.532923526Z",
-      "completedAt": null
+      "updatedAt": "2026-06-17T10:01:41.712325675Z",
+      "completedAt": "2026-06-17T10:01:41.712325675Z"
     },
     {
       "id": "rall-e8cf",
