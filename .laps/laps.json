@@ -301,11 +301,11 @@
       "title": "Cut over activation to New Relic and remove Sentry",
       "description": "OpenSpec change: migrate-telemetry-to-new-relic (tasks 1.1, 1.3 code parts, 4.1, 4.3, 4.4, 4.5, 4.6). Keystone lap: the build is green before AND after, but Sentry is removed and New Relic wired here in one coherent change. The New Relic sink already exists from laps 3-4.\n\nOutcome: github.com/getsentry/sentry-go removed from go.mod/go.sum; internal/telemetry/sentry.go and Sentry-specific tests deleted (1.1). DefaultSentryDSN, SENTRY_DSN, the [telemetry] sentry_dsn config field, and Sentry fallback/deprecation branches removed from the code path (1.3 code). internal/telemetry/init.go resolveSink rewritten to the New Relic precedence: RALLY_TELEMETRY=0 -\u003e [telemetry] enabled=false -\u003e NEW_RELIC_LICENSE_KEY -\u003e baked DefaultNewRelicLicenseKey -\u003e no-op; a missing license is a no-op with no network calls and no machine-id file; never falls back to Sentry (4.4, 4.5). telemetry.Config drops Sentry fields, keeps New Relic fields. internal/config.TelemetryConfig (internal/config/config_v2.go) gains enabled *bool, new_relic_app_name, optional new_relic_host_display_name, and removes sentry_dsn (4.1). cmd/rally/main.go: remove the DefaultSentryDSN global; add DefaultNewRelicLicenseKey plus app-name/host-display fields; update telemetryConfigForRelay to populate the New Relic Config (4.3). Mechanical commands (help/version/update) still do not initialize telemetry or create machine-id even with baked credentials (4.6).\n\nFiles \u0026 scope: internal/telemetry/init.go, delete internal/telemetry/sentry.go + its test, internal/config/config_v2.go, cmd/rally/main.go (globals + telemetryConfigForRelay), go.mod/go.sum. Update/delete cmd/rally/main_test.go references to DefaultSentryDSN just enough to compile — the full activation test matrix is the next lap.\n\nDesign: activation precedence is the highest-risk surface — match the spec ordering exactly. Preserve the no-side-effect guarantee: machine-id is created only when a real sink activates (InitWithIdentity). enabled is a *bool so unset differs from false. Removing Sentry must leave no dangling imports. Never read a New Relic license key from tracked config.\n\nAcceptance: go build ./... and go test ./... pass; grep shows no getsentry import, no DefaultSentryDSN, no SENTRY_DSN, no sentry_dsn in the active path; help/version/update create no machine-id file. Do not check tasks.md boxes.",
       "assignee": "SENIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 458752,
       "createdAt": "2026-06-17T05:39:12.313457858Z",
-      "updatedAt": "2026-06-17T05:39:12.313457858Z",
-      "completedAt": null
+      "updatedAt": "2026-06-17T10:20:40.34326829Z",
+      "completedAt": "2026-06-17T10:20:40.34326829Z"
     },
     {
       "id": "rall-6ba6",
