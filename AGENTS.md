@@ -88,15 +88,16 @@ Prompt content lives in packages whose names reflect *who* is being prompted:
 When adding new prompt content, pick the package by audience, not by feature
 area, and keep the distinction intact.
 
-## Observability (Sentry)
+## Observability (New Relic)
 
-Rally reports telemetry to the `moved-by-the-word/rally` Sentry project. When
-investigating relay/run/try failures, use the **`sentry`** CLI — it is
-authenticated (e.g. `sentry issue list moved-by-the-word/rally`,
-`sentry issue events moved-by-the-word/RALLY-<n>`). Do **not** use `sentry-cli`:
-it is a different, unauthenticated binary on this machine and will fail. (Note
-that the `sentry-cli` *skill* refers to that unauthenticated binary; prefer the
-`sentry` CLI here.)
+Rally reports telemetry through the New Relic Go APM agent. When investigating
+relay/run/try failures, use New Relic APM transactions, errors, and custom
+events (`RallyTry`, `RallyFailure`, `RallyDiagnostic`) to understand the
+failure.
+
+Note: Sentry was removed in Rally 0.9.1. Historical issue IDs (e.g., `RALLY-2`,
+`RALLY-Q`) mentioned in older release notes or planning docs are Sentry references
+and cannot be queried in New Relic.
 
 ## Git and commit conventions
 

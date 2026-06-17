@@ -356,11 +356,11 @@
       "title": "Docs: README telemetry section and AGENTS.md observability",
       "description": "OpenSpec change: migrate-telemetry-to-new-relic (tasks 5.3, 5.4, and the docs portion of 1.3).\n\nOutcome: README telemetry docs describe the New Relic Go APM behavior, env/baked credential precedence, [telemetry] enabled = false, RALLY_TELEMETRY=0, data sent, data intentionally NOT sent, and the hard Sentry cutover (5.3); no normative current-Sentry telemetry docs remain (1.3 docs). AGENTS.md observability section switches from the Sentry CLI investigation guidance to New Relic guidance, noting Sentry issue IDs only as historical pre-0.9.1 references (5.4).\n\nFiles \u0026 scope: README.md (telemetry section), AGENTS.md (the section currently headed \"Observability (Sentry)\").\n\nAcceptance: docs match the implemented activation precedence and privacy posture; no live Sentry instructions remain. Do not check tasks.md boxes.",
       "assignee": "JUNIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 786432,
       "createdAt": "2026-06-17T05:39:12.313469938Z",
-      "updatedAt": "2026-06-17T05:39:12.313469938Z",
-      "completedAt": null
+      "updatedAt": "2026-06-17T12:06:00.301375693Z",
+      "completedAt": "2026-06-17T12:06:00.301375693Z"
     },
     {
       "id": "rall-f9fd",

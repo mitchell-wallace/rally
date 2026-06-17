@@ -674,28 +674,26 @@ For a fresh repo, `rally init all` is the quickest path to a fully configured wo
 
 ## Telemetry
 
-Rally sends error and performance telemetry to Sentry when a DSN is
-configured. Release binaries ship with a baked-in product DSN so telemetry
-"just works" without extra setup; source builds report nothing unless you
-provide a DSN.
+Rally sends error, trace, and performance telemetry via the New Relic Go APM
+agent when a license key is configured. Release binaries ship with a baked-in
+New Relic license key so telemetry "just works" without extra setup; source
+builds report nothing unless you provide a license key.
 
-### DSN resolution and kill switch
+### Credential resolution and opt-out
 
-The effective DSN is resolved in this order (first non-empty wins after the
-kill switch):
+The effective telemetry state is resolved in this order (first non-empty wins):
 
 1. **`RALLY_TELEMETRY=0`** — force-disables all telemetry regardless of any
-   DSN. No network calls, no files written.
-2. **`SENTRY_DSN`** environment variable — overrides everything below.
-3. **`[telemetry] sentry_dsn`** in `.rally/config.toml` — overrides the
-   baked default.
-4. **Baked-in default** (`DefaultSentryDSN`) — injected by GoReleaser at
-   release time; used when env and config are both empty.
-5. **No DSN** — telemetry stays off.
+   credentials. No network calls, no files written.
+2. **`[telemetry] enabled = false`** in `.rally/config.toml` — disables telemetry.
+3. **`NEW_RELIC_LICENSE_KEY`** environment variable — overrides everything below.
+4. **Baked-in default** (`DefaultNewRelicLicenseKey`) — injected by GoReleaser
+   at release time; used when env and config are both empty.
+5. **No license key** — telemetry stays off.
 
-Sentry DSNs are client-side ingestion endpoints (public key + project id),
-not privileged API secrets. If you still prefer to opt out, set
-`RALLY_TELEMETRY=0` or leave all DSN sources empty.
+If you prefer to opt out, set `RALLY_TELEMETRY=0` or configure
+`[telemetry] enabled = false`. Sentry telemetry has been entirely removed
+(hard cutover in 0.9.1) and legacy Sentry configuration is ignored.
 
 ### What is sent
 
@@ -703,7 +701,7 @@ Rally sends structured error signals for operator-worthy failures (panics,
 non-zero exits, freeze detections, stall timeouts, unfinalized agents,
 relay stalls, and lap-integrity violations). Each event carries:
 
-**Tags** (scalar, filterable in Sentry):
+**Tags / Custom Attributes** (scalar, filterable):
 
 | Tag | Example | Purpose |
 |---|---|---|
@@ -759,8 +757,8 @@ the `rally` context block — never as a tag.
 
 Rally **never** transmits:
 
-- Hostname, username, or IP address. The Sentry `server_name` field is set
-  to the static value `rally-cli`.
+- Hostname, username, or IP address. The New Relic agent is configured
+  with a generic host display name (`rally-cli`) where supported.
 - Task descriptions, codebase context, file contents, or agent
   transcripts. Fields named `prompt`, `output`, `transcript`,
   `current_task`, `log`, etc. are replaced with `[scrubbed]`.
