@@ -312,11 +312,11 @@
       "title": "Activation test matrix and generated config template",
       "description": "OpenSpec change: migrate-telemetry-to-new-relic (tasks 4.2, 4.7). After the cut-over, lock the precedence with tests and update the generated config docs.\n\nOutcome: the generated .rally/config.toml [telemetry] section exposes the opt-out discoverably as a commented example (# enabled = false) — never an active enabled = false — and contains no new_relic_license_key field (4.2). Activation tests cover every precedence branch (RALLY_TELEMETRY=0; [telemetry] enabled=false; env NEW_RELIC_LICENSE_KEY overriding baked default; baked default; no key -\u003e no-op), kill-switch behavior, config opt-out, source-build no-op, and that tracked config does not accept New Relic secrets (4.7).\n\nFiles \u0026 scope: cmd/rally/main.go (generated-config template — the block that currently emits sentry_dsn around line ~514), cmd/rally/main_test.go and/or a new internal/telemetry init test, internal/config tests.\n\nDesign: mirror the existing activation test patterns (the old DefaultSentryDSN test in main_test.go). Assert no machine-id file is created on every disabled branch.\n\nAcceptance: go test ./cmd/rally ./internal/telemetry ./internal/config green; generated config contains # enabled = false and no secret field. Do not check tasks.md boxes.",
       "assignee": "JUNIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 524288,
       "createdAt": "2026-06-17T05:39:12.313459407Z",
-      "updatedAt": "2026-06-17T05:39:12.313459407Z",
-      "completedAt": null
+      "updatedAt": "2026-06-17T10:32:02.957083483Z",
+      "completedAt": "2026-06-17T10:32:02.957083483Z"
     },
     {
       "id": "rall-8c43",
