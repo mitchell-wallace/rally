@@ -185,8 +185,11 @@ cluster above; treat "dune-vm" as a host label that Sentry doesn't expose.
   proposal treats as a handoff signal.
 - The target shape already exists in-codebase (RALLY-2's
   `event_kind=limit_signal` + `failure_category=short_rate_limit` at `info`).
-  Downgrading mismatches to warning + adding `event_kind=lap_pin_mismatch` /
-  `failure_category=lap_pin_mismatch` tags is a proven pattern, not a new one.
+  Downgrading mismatches to warning + adding `event_kind=lap_pin_mismatch` is a
+  proven pattern, not a new one. **Erratum after 0.9.0 recovery/outcome work:**
+  do not add `failure_category=lap_pin_mismatch`; `failure_category` is now
+  reserved for failed lifecycle outcomes. Use `mismatch_reason` for the mismatch
+  detail instead.
 - Mismatches co-occur with "agent exited without finalizing" (RALLY-3/RALLY-B)
   and rate limits in the same traces — consistent with the proposal's view that
   they arise in already-messy, transient relay states and should route to the

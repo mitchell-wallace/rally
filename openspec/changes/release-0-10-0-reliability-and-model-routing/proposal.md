@@ -55,6 +55,9 @@ This release introduces warning-first mismatch handling, first-class cancelled o
    - `wrong_lap_consumed` and `multi_lap_consumed` are warning-level observations.
    - They should still be persisted, but **not** flagged as operator errors by default.
    - Route action is handoff/next candidate, not resume-tidy-for-the-same-run.
+   - Telemetry uses `event_kind=lap_pin_mismatch` plus `mismatch_reason`; it does
+     not mint a new `FailureCategory` or attach `failure_category` to a
+     non-failed lifecycle event.
 
 2. **Counter model**
    - `-i` progress in non-laps mode is run-state count (`run: current/target`).
@@ -70,6 +73,9 @@ This release introduces warning-first mismatch handling, first-class cancelled o
 5. **Cancelled outcome policy**
    - Ctrl+S skip, graceful stop that cancels/drains a running attempt, and quit-now are operator intent, not harness failure.
    - These paths override normal executor exit/error handling and persist/display `cancelled` with source metadata (`skip`, `graceful_stop`, `quit_now`).
+   - `cancelled` extends the existing 0.9.x `TryOutcome` lifecycle model and is
+     stored in `TryRecord.Outcome`; do not add a parallel `TryRecord.Status`
+     taxonomy for tries.
    - Cancelled attempts do not increment retry/freeze/failure counters and do not emit Sentry failure captures.
 
 6. **opencode usage-limit detection (spike-2)**
@@ -102,3 +108,6 @@ This release introduces warning-first mismatch handling, first-class cancelled o
 4. Ctrl+X graceful stop changes semantics in this release: it cancels/drains the active attempt, records `cancelled` with source `graceful_stop`, then stops the relay.
 5. Lap mismatch diagnostics use telemetry `LevelWarning` without becoming Sentry Issues by default.
 6. opencode usage-limit observability uses opencode's **server-log tail** for the session as the evidence source when the JSON stream stalls (preferred over guessing usage-limit from a silent stall). Finding A is **resolved** (third-pass live log re-inspection, 2026-06-16 20:58): stdout stays empty through the internal-retry stall and the structured error reaches only the server log as the flat `error.error="<Wrapper>: <message>"` field under `AI_APICallError`/`AI_RetryError`; the matcher list is finalized and the server-log-tail path is required, not optional.
+7. The release implementation bumps `internal/buildinfo/VERSION` from `0.9.0` to
+   `0.10.0`; `main.Version` remains `"dev"` and CI creates the tag from the
+   version file.

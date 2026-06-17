@@ -77,7 +77,7 @@ the upstream classification, reset parsing, and signal observability are wrong.
 
 5. **Operator exits should render as cancelled, not failed.**
    - Ctrl+S skip, graceful stop that cancels/drains an attempt, and quit-now must override ordinary executor error handling.
-   - The stored try/run outcome should be `cancelled` with an explicit source (`skip`, `graceful_stop`, `quit_now`) rather than `failed: harness error`.
+   - The stored try/run outcome should extend the existing `TryOutcome` model with `cancelled` plus an explicit source (`skip`, `graceful_stop`, `quit_now`) rather than `failed: harness error`.
    - Console output should use muted/grey styling, not red failure or green success.
    - Cancelled attempts should not count as infra/agent failures, freeze signals, retryable failures, or Sentry failure captures.
 
@@ -106,7 +106,7 @@ the upstream classification, reset parsing, and signal observability are wrong.
 ## Resolved review items before implementation
 
 1. Role-level alias entries live in `[reasoning]`, with harness-scoped aliases resolved after harness selection.
-2. Lap mismatch events are logged as telemetry `LevelWarning` diagnostics with `event_kind=lap_pin_mismatch` and `failure_category=lap_pin_mismatch`, but do not become Sentry Issues by default.
+2. Lap mismatch events are logged as telemetry `LevelWarning` diagnostics with `event_kind=lap_pin_mismatch` and `mismatch_reason=wrong_lap_consumed|multi_lap_consumed`, but do not become Sentry Issues by default and do not attach `failure_category` unless the try has a real failed lifecycle outcome.
 3. Syntax highlighting remains opt-in; default tail output stays plain.
 4. Default non-laps headers put model text on the same line with role/harness.
 5. Ctrl+X graceful stop cancels/drains the active attempt, records `cancelled` with source `graceful_stop`, then stops the relay.

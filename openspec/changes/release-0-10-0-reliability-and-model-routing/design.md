@@ -21,13 +21,16 @@
 1. In `runOne`, split `lapPinMismatch` handling from failure taxonomy:
    - do not force operator escalation on mismatch.
    - keep fail/failure record (`FailReason` includes mismatch reason) for audit.
-   - keep `FailureClass` as a non-`FailureInfra` value to avoid Sentry alerting.
+   - keep it outside `FailureCategory`; 0.9.x reserves failure categories for
+     `OutcomeFailed` causes, while mismatch is a warning diagnostic.
 2. In mismatch branch, allow normal route fallback as the “next action” by leaving scheduler state as failed but not escalating as infra/agent failure.
 3. Add optional post-run state preflight before next cycle:
    - if pinned lap already completed elsewhere, mark the current run as complete and route next.
    - if a different single lap appears active/recorded incorrectly, keep warning path but still advance route.
 4. Update telemetry tags/comments:
-   - include `mismatch=wrong_lap_consumed|multi_lap_consumed` tags.
+   - include `event_kind=lap_pin_mismatch` and
+     `mismatch_reason=wrong_lap_consumed|multi_lap_consumed` tags.
+   - do not attach `failure_category` to mismatch-only warning events.
    - include warning text in run log and run summary.
 
 ### 1.3 docs and tests
@@ -96,7 +99,8 @@
    - lap-pin mismatch warning
    - ordinary executor/failure classification
 4. Persist cancellation with concrete store fields:
-   - `TryRecord.Status string json:"status,omitempty"` (`success`, `failed`, `incomplete`, `cancelled`)
+   - extend the existing 0.9.x `reliability.TryOutcome` enum with `OutcomeCancelled = "cancelled"`
+   - store cancellation as `TryRecord.Outcome = OutcomeCancelled`
    - `TryRecord.CancellationSource string json:"cancellation_source,omitempty"` (`skip`, `graceful_stop`, `quit_now`)
    - derive legacy `Completed=false` for cancelled records for backward compatibility.
 5. Update downstream consumers so cancelled records do not become failed summaries:
@@ -324,3 +328,5 @@ This release is intentionally staged:
 3. Richer syntax highlighting stays opt-in for this release; plain output remains default.
 4. Ctrl+X graceful stop cancels/drains the current attempt and records source `graceful_stop`.
 5. Lap mismatch diagnostics use telemetry `LevelWarning` but do not capture Sentry Issues by default.
+6. Cancelled attempts extend the existing `TryOutcome` lifecycle model rather
+   than introducing a parallel try status field.

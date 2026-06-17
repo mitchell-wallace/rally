@@ -25,7 +25,7 @@ The system SHALL consider a try failed if the agent reports `Completed: false`, 
 - **agent-class**: ordinary agent error or short no-op.
 - **incomplete**: file changes were produced but the agent did not finalize the lap (`laps done` or `laps handoff`).
 
-Long usage/quota exhaustion (`usage_limit`), invalid-model/config (`invalid_model`), and authentication/proxy (`auth_or_proxy`) failures SHALL NOT be classified infra-class; they are handled by benching/routing (see "Usage-limit benching and reset recovery") and SHALL NOT increment the pause/freeze counter.
+Long usage/quota exhaustion (`usage_limit`), invalid-model/config (`invalid_model`), and authentication/proxy (`auth_or_proxy`) failures SHALL NOT be classified infra-class; they are handled by benching/routing and SHALL NOT increment the pause/freeze counter. A try whose outcome is `run_timeout`, `handoff_timeout`, or `cancelled` SHALL likewise NOT be classified infra-class and SHALL NOT increment the pause/freeze counter.
 
 Only repeated infra-class failures SHALL drive the per-agent-type resilience cascade; a single infra-class failure retries without escalation. Agent-class and incomplete failures SHALL fail the try and be retry-eligible but SHALL NOT increment the pause/freeze counter. Rate-limit flags SHALL be tracked per harness-model pair (`harness:model`) using a `ResilienceKey` type, not per harness alone, so that an opencode runner using multiple providers does not freeze wholesale when only one provider hits its rate limit. All resilience methods (`getState`, `PauseAgent`, `RecordHourlyFailure`, `FreezeAgent`, `UnpauseAgent`, `SelectActiveAgent`) and their callers in `runner.go` and `route_runtime.go` SHALL use the `ResilienceKey`.
 
@@ -53,6 +53,10 @@ Only repeated infra-class failures SHALL drive the per-agent-type resilience cas
 - **WHEN** a try fails with a `usage_limit`, `invalid_model`, or `auth_or_proxy` category
 - **THEN** the system SHALL NOT classify it infra-class and SHALL NOT increment the pause/freeze counter
 
+#### Scenario: Lifecycle outcomes are not infra-class
+- **WHEN** a try resolves with a `run_timeout`, `handoff_timeout`, or `cancelled` outcome
+- **THEN** the system SHALL NOT classify it infra-class, SHALL NOT increment the pause/freeze counter, and SHALL NOT treat it as a usage-limit or harness failure
+
 #### Scenario: opencode subscription-provider limit benches the quota scope
 - **WHEN** an opencode runner on a subscription provider (e.g. `zai-coding-plan`, `opencode-go`) fails because that provider's 5h/weekly/monthly usage limit is reached
 - **THEN** the system SHALL classify the failure `usage_limit` (not `agent_error`) and SHALL bench the runner's quota scope until the parsed reset, even when the limit was surfaced from opencode's server log after an internal-retry stall rather than from the JSON error event
@@ -64,7 +68,7 @@ Only repeated infra-class failures SHALL drive the per-agent-type resilience cas
 ## ADDED Requirements
 
 ### Requirement: Operator cancellation outcome
-The system SHALL represent operator-driven attempt termination as a first-class `cancelled` outcome with a stable source value. Supported sources SHALL include `skip`, `graceful_stop`, and `quit_now`. A cancelled try SHALL be persisted for audit with `TryRecord.Status = "cancelled"` and `TryRecord.CancellationSource` set to the source. Legacy `TryRecord.Completed` SHALL be false for cancelled records, but downstream consumers SHALL use `Status` to distinguish cancellation from failure. A cancelled try SHALL NOT be classified as a failure, retried, counted toward pause/freeze resilience, counted as a failed run in summaries, shown as a harness error, or converted into a post-loop `incomplete_finalization` failure.
+The system SHALL represent operator-driven attempt termination as a first-class `cancelled` `TryOutcome` with a stable source value. Supported sources SHALL include `skip`, `graceful_stop`, and `quit_now`. A cancelled try SHALL be persisted for audit with `TryRecord.Outcome = "cancelled"` and `TryRecord.CancellationSource` set to the source. Legacy `TryRecord.Completed` SHALL be false for cancelled records, but downstream consumers SHALL use `Outcome` to distinguish cancellation from failure. A cancelled try SHALL NOT be classified as a failure, retried, counted toward pause/freeze resilience, counted as a failed run in summaries, shown as a harness error, or converted into a post-loop `incomplete_finalization` failure.
 
 #### Scenario: Skip records cancelled outcome
 - **WHEN** the operator presses Ctrl+S and the active attempt exits through the cancellation path

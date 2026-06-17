@@ -3,17 +3,17 @@
 - [ ] 1.1 Split mismatch outcomes in `internal/relay/runner.go`:
   - keep reason values (`wrong_lap_consumed`, `multi_lap_consumed`),
   - stop treating mismatches as issue-worthy operator failures,
-  - still record `fail_reason`/`category` metadata in run/try records.
+  - still record `fail_reason`/mismatch metadata in run/try records without adding a `FailureCategory`.
 - [ ] 1.2 Keep mismatch as non-retry terminal run result (advance to next scheduler entry) and document warning path in inline logs and telemetry.
 - [ ] 1.3 Add/adjust run-level test(s) verifying no Sentry issue capture for mismatch-only runs, while run/try records remain complete.
 - [ ] 1.4 Add run-state preflight guard for already-complete pinned lap before/just after mismatch detection.
-- [ ] 1.5 Add telemetry assertions that mismatch events gain `event_kind=lap_pin_mismatch` and `failure_category=lap_pin_mismatch` tags without error-level issue capture.
+- [ ] 1.5 Add telemetry assertions that mismatch events gain `event_kind=lap_pin_mismatch` and `mismatch_reason=wrong_lap_consumed|multi_lap_consumed` tags without `failure_category` or error-level issue capture.
 - [ ] 1.6 Add `telemetry.LevelWarning` support and map it through the Sentry sink so mismatch diagnostics are warning-level events without becoming Sentry Issues.
 
 ## 2. Cancelled state for operator-controlled exits
 
 - [ ] 2.1 Add concrete try outcome fields in `internal/store/records.go`:
-  - `Status string json:"status,omitempty"` with values `success`, `failed`, `incomplete`, `cancelled`,
+  - extend `reliability.TryOutcome` with `cancelled` and persist it via the existing `TryRecord.Outcome`,
   - `CancellationSource string json:"cancellation_source,omitempty"` with values `skip`, `graceful_stop`, `quit_now`,
   - compatibility behavior deriving `Completed=false` for cancelled records.
 - [ ] 2.2 Track explicit operator cancellation source in `internal/relay/runner.go`:
@@ -137,3 +137,8 @@
   - a quota-scope bench is triggered for `opencode:zai-coding-plan` / `opencode:opencode-go` on these failures (not `agent_error`).
 - [x] 8.5 Confirm the precise emitted error shape for these limits before finalizing the 8.1 matcher, per spike-2 finding A. **Resolved (third-pass live log re-inspection, 2026-06-16 20:58):** stdout stays empty through opencode's internal-retry stall; the structured provider error reaches only the server log as the flat `error.error="<Wrapper>: <message>"` field under `AI_APICallError` / `AI_RetryError` (no native `UsageLimitError`/`QuotaExceededError`). The 8.1 matcher list is finalized and the 8.3 server-log-tail path is required, not optional. See `spike-2-report.md` §"Third-pass confirmation".
 - [ ] 8.6 Update release notes / Sentry incident list with the opencode usage-limit issues (`RALLY-Q`, `RALLY-K`, `RALLY-D`).
+
+## 9. Release versioning
+
+- [ ] 9.1 Bump `internal/buildinfo/VERSION` from `0.9.0` to `0.10.0` as part of the release change.
+- [ ] 9.2 Confirm `main.Version` remains `"dev"` and leave tag creation to the existing `auto-tag` workflow.
