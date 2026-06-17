@@ -229,13 +229,12 @@ func TestIsValidMachineID(t *testing.T) {
 func TestInitWithIdentity_DisabledTelemetryNoFile(t *testing.T) {
 	dir := t.TempDir()
 
-	// Kill switch disables telemetry — should NOT create machine-id file.
 	t.Setenv(envKillSwitch, "0")
-	t.Setenv(envSentryDSN, "https://key@sentry.io/123")
+	t.Setenv(envNewRelicLicenseKey, testNewRelicLicense)
 
 	result := InitWithIdentity(Config{
-		SentryDSN: "https://key@sentry.io/456",
-		DataDir:   dir,
+		DefaultNewRelicLicenseKey: testNewRelicLicense,
+		DataDir:                   dir,
 	})
 	defer result.Cleanup()
 
@@ -253,11 +252,11 @@ func TestInitWithIdentity_DisabledTelemetryNoFile(t *testing.T) {
 	}
 }
 
-func TestInitWithIdentity_NoDSNNoFile(t *testing.T) {
+func TestInitWithIdentity_NoLicenseNoFile(t *testing.T) {
 	dir := t.TempDir()
 
 	t.Setenv(envKillSwitch, "")
-	t.Setenv(envSentryDSN, "")
+	t.Setenv(envNewRelicLicenseKey, "")
 
 	result := InitWithIdentity(Config{DataDir: dir})
 	defer result.Cleanup()
@@ -266,13 +265,13 @@ func TestInitWithIdentity_NoDSNNoFile(t *testing.T) {
 		t.Fatalf("expected NoopSink, got %T", result.Sink)
 	}
 	if result.MachineID != "" {
-		t.Errorf("no-DSN telemetry should have empty MachineID, got %q", result.MachineID)
+		t.Errorf("no-license telemetry should have empty MachineID, got %q", result.MachineID)
 	}
 
 	// No machine-id file should exist.
 	idPath := filepath.Join(dir, machineIDFile)
 	if _, err := os.Stat(idPath); !os.IsNotExist(err) {
-		t.Errorf("machine-id file should not exist when no DSN, stat err: %v", err)
+		t.Errorf("machine-id file should not exist when no license, stat err: %v", err)
 	}
 }
 
@@ -280,13 +279,11 @@ func TestInitWithIdentity_ActiveTelemetryCreatesMachineID(t *testing.T) {
 	dir := t.TempDir()
 
 	t.Setenv(envKillSwitch, "")
-	t.Setenv(envSentryDSN, "https://key@sentry.io/active")
+	t.Setenv(envNewRelicLicenseKey, "")
 
-	result := InitWithIdentity(Config{DataDir: dir})
+	result := InitWithIdentity(Config{DefaultNewRelicLicenseKey: testNewRelicLicense, DataDir: dir})
 	defer result.Cleanup()
 
-	// Should get a SentrySink (or NoopSink if SDK rejected the DSN),
-	// but MachineID should be populated either way since DSN is non-empty.
 	if result.MachineID == "" {
 		t.Fatal("active telemetry should produce a non-empty MachineID")
 	}
@@ -307,9 +304,9 @@ func TestInitWithIdentity_ActiveTelemetryCreatesMachineID(t *testing.T) {
 
 func TestInitWithIdentity_NoDataDirEphemeral(t *testing.T) {
 	t.Setenv(envKillSwitch, "")
-	t.Setenv(envSentryDSN, "https://key@sentry.io/ephemeral")
+	t.Setenv(envNewRelicLicenseKey, "")
 
-	result := InitWithIdentity(Config{DataDir: ""})
+	result := InitWithIdentity(Config{DefaultNewRelicLicenseKey: testNewRelicLicense, DataDir: ""})
 	defer result.Cleanup()
 
 	// Should get an ephemeral MachineID.

@@ -29,11 +29,18 @@ import (
 
 var Version = "dev"
 
-// DefaultSentryDSN is the baked-in Sentry DSN for release binaries.
-// GoReleaser injects it via -X main.DefaultSentryDSN=... at build time.
+// DefaultNewRelicLicenseKey is the baked-in New Relic license key for release
+// binaries. GoReleaser injects it via -X main.DefaultNewRelicLicenseKey=... at
+// build time.
 // Dev builds (go build) leave it empty, so telemetry only activates when
-// explicitly configured via env or config file.
-var DefaultSentryDSN = ""
+// explicitly configured via env.
+var DefaultNewRelicLicenseKey = ""
+
+// DefaultNewRelicAppName and DefaultNewRelicHostDisplayName are optional
+// release-time defaults. Empty values allow telemetry's backend defaults to
+// apply.
+var DefaultNewRelicAppName = ""
+var DefaultNewRelicHostDisplayName = ""
 
 // activeTelemetry defaults to a no-op so mechanical commands stay telemetry-free.
 // Relay execution initializes a real sink when telemetry is configured.
@@ -87,10 +94,27 @@ func resolveWorkspaceDir() (string, error) {
 }
 
 func telemetryConfigForRelay(cfg config.V2Config, dataDir string) telemetry.Config {
+	appName := cfg.Telemetry.NewRelicAppName
+	if appName == "" {
+		appName = DefaultNewRelicAppName
+	}
+	hostDisplayName := cfg.Telemetry.NewRelicHostDisplayName
+	if hostDisplayName == "" {
+		hostDisplayName = DefaultNewRelicHostDisplayName
+	}
+	trueValue := true
+	falseValue := false
 	return telemetry.Config{
-		SentryDSN:  cfg.Telemetry.SentryDSN,
-		DefaultDSN: DefaultSentryDSN,
-		DataDir:    dataDir,
+		Enabled:                                  cfg.Telemetry.Enabled,
+		DefaultNewRelicLicenseKey:                DefaultNewRelicLicenseKey,
+		NewRelicAppName:                          appName,
+		NewRelicHostDisplayName:                  hostDisplayName,
+		NewRelicAppLogEnabled:                    &trueValue,
+		NewRelicAppLogForwardingEnabled:          &trueValue,
+		NewRelicAppLogMetricsEnabled:             &trueValue,
+		NewRelicAppLogDecoratingEnabled:          &falseValue,
+		NewRelicAppLogForwardingMaxSamplesStored: 1000,
+		DataDir:                                  dataDir,
 	}
 }
 
@@ -214,8 +238,9 @@ func runRelay(cmd *cobra.Command, args []string) error {
 	}
 
 	// Init telemetry only for relay execution. Mechanical commands like help,
-	// version, and update never reach this path, so a baked release DSN cannot
-	// create machine-id files or open a Sentry client for those commands.
+	// version, and update never reach this path, so baked release credentials
+	// cannot create machine-id files or open a telemetry client for those
+	// commands.
 	telemetryResult := telemetry.InitWithIdentity(telemetryConfigForRelay(cfg, dataDir))
 	activeTelemetry = telemetryResult.Sink
 	activeMachineID = telemetryResult.MachineID
@@ -511,7 +536,9 @@ opencode_model = ""
 antigravity_model = ""
 
 [telemetry]
-sentry_dsn = ""
+# enabled = false
+new_relic_app_name = ""
+new_relic_host_display_name = ""
 `
 		if err := os.WriteFile(configPath, []byte(content), 0o644); err != nil {
 			return err

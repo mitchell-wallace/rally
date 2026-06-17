@@ -88,20 +88,21 @@ antigravity_model = ""
 	}
 }
 
-func TestVersionCommandDoesNotInitializeTelemetryWithBakedDSN(t *testing.T) {
+func assertRootCommandDoesNotInitializeTelemetryWithBakedNewRelicLicense(t *testing.T, args ...string) {
+	t.Helper()
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("RALLY_TELEMETRY", "")
-	t.Setenv("SENTRY_DSN", "")
+	t.Setenv("NEW_RELIC_LICENSE_KEY", "")
 
-	prevDefaultDSN := DefaultSentryDSN
+	prevDefaultLicense := DefaultNewRelicLicenseKey
 	prevTelemetry := activeTelemetry
 	prevMachineID := activeMachineID
-	DefaultSentryDSN = "https://default@example.com/123"
+	DefaultNewRelicLicenseKey = "baked-license"
 	activeTelemetry = telemetry.NoopSink{}
 	activeMachineID = ""
 	t.Cleanup(func() {
-		DefaultSentryDSN = prevDefaultDSN
+		DefaultNewRelicLicenseKey = prevDefaultLicense
 		activeTelemetry = prevTelemetry
 		activeMachineID = prevMachineID
 		rootCmd.SetArgs(nil)
@@ -109,20 +110,28 @@ func TestVersionCommandDoesNotInitializeTelemetryWithBakedDSN(t *testing.T) {
 		rootCmd.SetErr(os.Stderr)
 	})
 
-	rootCmd.SetArgs([]string{"--version"})
+	rootCmd.SetArgs(args)
 	rootCmd.SetOut(io.Discard)
 	rootCmd.SetErr(io.Discard)
 	if err := rootCmd.Execute(); err != nil {
-		t.Fatalf("version command failed: %v", err)
+		t.Fatalf("%v command failed: %v", args, err)
 	}
 
 	machineIDPath := filepath.Join(home, ".local", "share", "rally", "machine-id")
 	if _, err := os.Stat(machineIDPath); !os.IsNotExist(err) {
-		t.Fatalf("version command must not create machine-id file, stat err=%v", err)
+		t.Fatalf("%v command must not create machine-id file, stat err=%v", args, err)
 	}
 	if activeMachineID != "" {
-		t.Fatalf("version command initialized activeMachineID = %q", activeMachineID)
+		t.Fatalf("%v command initialized activeMachineID = %q", args, activeMachineID)
 	}
+}
+
+func TestVersionCommandDoesNotInitializeTelemetryWithBakedNewRelicLicense(t *testing.T) {
+	assertRootCommandDoesNotInitializeTelemetryWithBakedNewRelicLicense(t, "--version")
+}
+
+func TestHelpCommandDoesNotInitializeTelemetryWithBakedNewRelicLicense(t *testing.T) {
+	assertRootCommandDoesNotInitializeTelemetryWithBakedNewRelicLicense(t, "--help")
 }
 
 func TestRunInit_WritesNewShapeConfig(t *testing.T) {

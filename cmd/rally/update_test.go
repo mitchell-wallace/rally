@@ -4,11 +4,13 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/mitchell-wallace/rally/internal/laps"
 	"github.com/mitchell-wallace/rally/internal/release"
+	"github.com/mitchell-wallace/rally/internal/telemetry"
 )
 
 func captureOutput(t *testing.T, fn func()) (string, string) {
@@ -92,6 +94,62 @@ func TestUpdateCommandWiring_LapsAlreadyUpToDate(t *testing.T) {
 	}
 	if stderr != "" {
 		t.Errorf("expected stderr to be empty, got: %q", stderr)
+	}
+}
+
+func TestUpdateCommandDoesNotInitializeTelemetryWithBakedNewRelicLicense(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("RALLY_TELEMETRY", "")
+	t.Setenv("NEW_RELIC_LICENSE_KEY", "")
+
+	oldUpdateCurrentBinary := release.UpdateCurrentBinary
+	oldUpdateTool := release.UpdateTool
+	oldInstalledVersion := laps.CompanionVersion
+	prevDefaultLicense := DefaultNewRelicLicenseKey
+	prevTelemetry := activeTelemetry
+	prevMachineID := activeMachineID
+	defer func() {
+		release.UpdateCurrentBinary = oldUpdateCurrentBinary
+		release.UpdateTool = oldUpdateTool
+		laps.CompanionVersion = oldInstalledVersion
+		DefaultNewRelicLicenseKey = prevDefaultLicense
+		activeTelemetry = prevTelemetry
+		activeMachineID = prevMachineID
+		rootCmd.SetArgs(nil)
+		rootCmd.SetOut(os.Stdout)
+		rootCmd.SetErr(os.Stderr)
+	}()
+
+	release.UpdateCurrentBinary = func(currentVersion, destination string) (string, string, bool, error) {
+		return "dev", "dev", false, nil
+	}
+	laps.CompanionVersion = func() (string, bool) {
+		return "0.1.0", true
+	}
+	release.UpdateTool = func(tool release.Tool, currentVersion, destination string) (string, string, bool, error) {
+		return currentVersion, currentVersion, false, nil
+	}
+
+	DefaultNewRelicLicenseKey = "0123456789012345678901234567890123456789"
+	activeTelemetry = telemetry.NoopSink{}
+	activeMachineID = ""
+
+	rootCmd.SetArgs([]string{"update"})
+	rootCmd.SetOut(io.Discard)
+	rootCmd.SetErr(io.Discard)
+	captureOutput(t, func() {
+		if err := rootCmd.Execute(); err != nil {
+			t.Fatalf("update command failed: %v", err)
+		}
+	})
+
+	machineIDPath := filepath.Join(home, ".local", "share", "rally", "machine-id")
+	if _, err := os.Stat(machineIDPath); !os.IsNotExist(err) {
+		t.Fatalf("update command must not create machine-id file, stat err=%v", err)
+	}
+	if activeMachineID != "" {
+		t.Fatalf("update command initialized activeMachineID = %q", activeMachineID)
 	}
 }
 

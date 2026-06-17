@@ -97,7 +97,7 @@ func FailureFingerprint(tags map[string]string) []string {
 // machineIDPrefixLen is the number of leading hex chars of the full anonymous
 // machine id used as the low-cardinality `machine_id_prefix` tag and as the
 // machine component of relay_guid. The full id stays context-only to keep
-// Sentry tag cardinality bounded.
+// telemetry tag cardinality bounded.
 const machineIDPrefixLen = 12
 
 // RallyContext carries the relay-level identity and run environment used to

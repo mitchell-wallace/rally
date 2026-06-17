@@ -175,7 +175,9 @@ type HarnessConfig struct {
 }
 
 type TelemetryConfig struct {
-	SentryDSN string `toml:"sentry_dsn,omitempty"`
+	Enabled                 *bool  `toml:"enabled,omitempty"`
+	NewRelicAppName         string `toml:"new_relic_app_name,omitempty"`
+	NewRelicHostDisplayName string `toml:"new_relic_host_display_name,omitempty"`
 }
 
 type V2Config struct {

@@ -5,7 +5,6 @@ go 1.26
 require (
 	github.com/charmbracelet/huh v1.0.0
 	github.com/charmbracelet/lipgloss v1.1.0
-	github.com/getsentry/sentry-go v0.46.2
 	github.com/muesli/termenv v0.16.0
 	github.com/newrelic/go-agent/v3 v3.43.3
 	github.com/pelletier/go-toml/v2 v2.2.4
