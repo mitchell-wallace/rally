@@ -136,13 +136,19 @@ func TestBuildAttributes_PrioritizesCorrelationAndFailureFieldsOverBudget(t *tes
 	if len(attrs) != maxNewRelicAttributes {
 		t.Fatalf("attribute count = %d, want %d", len(attrs), maxNewRelicAttributes)
 	}
+	retainedPriority := 0
 	for _, key := range priorityAttributeKeys {
-		if attrs[key] != tags[key] {
-			t.Fatalf("priority attribute %q = %#v, want %q", key, attrs[key], tags[key])
+		wantValue, present := tags[key]
+		if !present {
+			continue
+		}
+		retainedPriority++
+		if attrs[key] != wantValue {
+			t.Fatalf("priority attribute %q = %#v, want %q", key, attrs[key], wantValue)
 		}
 	}
 
-	remainingBudget := maxNewRelicAttributes - len(priorityAttributeKeys)
+	remainingBudget := maxNewRelicAttributes - retainedPriority
 	for i := 0; i < remainingBudget; i++ {
 		key := fmt.Sprintf("ctx.field_%03d", i)
 		if _, ok := attrs[key]; !ok {

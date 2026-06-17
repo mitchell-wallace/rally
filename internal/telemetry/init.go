@@ -22,6 +22,19 @@ type Config struct {
 	SentryDSN  string
 	DefaultDSN string
 
+	NewRelicLicenseKey        string
+	DefaultNewRelicLicenseKey string
+	NewRelicAppName           string
+	NewRelicHostDisplayName   string
+
+	NewRelicAppLogEnabled                    *bool
+	NewRelicAppLogForwardingEnabled          *bool
+	NewRelicAppLogMetricsEnabled             *bool
+	NewRelicAppLogDecoratingEnabled          *bool
+	NewRelicAppLogForwardingMaxSamplesStored int
+	NewRelicStartupWaitTimeout               time.Duration
+	NewRelicShutdownTimeout                  time.Duration
+
 	// DataDir is the resolved data directory (e.g. ~/.local/share/rally)
 	// where the persistent machine-id file is stored. An empty value means
 	// no data directory is available — machine identity falls back to an

@@ -27,10 +27,14 @@ var priorityAttributeKeys = []string{
 	"relay_id",
 	"run_id",
 	"try_id",
+	"rally_span_id",
+	"rally_parent_span_id",
 	"repo",
 	"lap_id",
 	"runner",
 	"role",
+	"operation",
+	"duration_ms",
 	"outcome",
 	"failure_category",
 	"recovery_classification",
@@ -46,6 +50,10 @@ func buildFailureAttributes(evt FailureEvent) map[string]interface{} {
 	return buildAttributes(evt.Tags, evt.Contexts)
 }
 
+func buildFailureAttributesWithFields(evt FailureEvent, fields map[string]interface{}) map[string]interface{} {
+	return buildAttributePayload(evt.Tags, fields, evt.Contexts)
+}
+
 func buildEventAttributes(evt Event) map[string]interface{} {
 	tags := cloneStringMap(evt.Tags)
 	if evt.Level != "" {
@@ -54,13 +62,39 @@ func buildEventAttributes(evt Event) map[string]interface{} {
 	return buildAttributes(tags, evt.Contexts)
 }
 
+func buildEventAttributesWithFields(evt Event, fields map[string]interface{}) map[string]interface{} {
+	tags := cloneStringMap(evt.Tags)
+	if evt.Level != "" {
+		tags["level"] = string(evt.Level)
+	}
+	return buildAttributePayload(tags, fields, evt.Contexts)
+}
+
+func buildFlatAttributes(fields map[string]interface{}) map[string]interface{} {
+	return buildAttributePayload(nil, fields, nil)
+}
+
+func buildSpanAttributes(tags map[string]string, fields map[string]interface{}, contexts map[string]map[string]interface{}) map[string]interface{} {
+	return buildAttributePayload(tags, fields, contexts)
+}
+
 func buildAttributes(tags map[string]string, contexts map[string]map[string]interface{}) map[string]interface{} {
+	return buildAttributePayload(tags, nil, contexts)
+}
+
+func buildAttributePayload(tags map[string]string, fields map[string]interface{}, contexts map[string]map[string]interface{}) map[string]interface{} {
 	candidates := make(map[string]interface{})
 
 	tagCopy := cloneStringMap(tags)
 	scrubStringMap(tagCopy)
 	for _, key := range sortedStringMapKeys(tagCopy) {
 		addAttributeCandidate(candidates, key, tagCopy[key])
+	}
+
+	fieldCopy := cloneAttributeMap(fields)
+	scrubAttributeMap(fieldCopy)
+	for _, key := range sortedAttributeMapKeys(fieldCopy) {
+		addAttributeCandidate(candidates, key, fieldCopy[key])
 	}
 
 	contextCopy := cloneContextMaps(contexts)
