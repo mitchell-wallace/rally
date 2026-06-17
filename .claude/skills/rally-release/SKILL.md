@@ -1,6 +1,16 @@
 ---
 name: rally-release
-description: Lightweight ship-it workflow for Rally — land code on main and (if VERSION was bumped) publish a new auto-tagged release. Use proactively whenever the user wants to push a release, merge to main, ship, cut a version, or do anything that results in a new rally binary being published. Also use when the user is on dev and asks to push to main. Starts from either a feature branch (full flow: branch → dev → main) or directly from dev (simplified flow: dev → main). Stops on non-trivial merge conflicts, local test/lint failures, CI failures, or when main is already at the current branch tip. Do not use for OpenSpec changes (use openspec-* skills), preparing laps (use prepare-laps), or post-relay forensics (use post-relay-review).
+description: >-
+  Lightweight ship-it workflow for Rally — land code on main and (if VERSION was
+  bumped) publish a new auto-tagged release. Use proactively whenever the user
+  wants to push a release, merge to main, ship, cut a version, or do anything
+  that results in a new rally binary being published. Also use when the user is
+  on dev and asks to push to main. Starts from either a feature branch (full
+  flow: branch → dev → main) or directly from dev (simplified flow: dev → main).
+  Stops on non-trivial merge conflicts, local test/lint failures, CI failures,
+  or when main is already at the current branch tip. Do not use for OpenSpec
+  changes (use openspec-* skills), preparing laps (use prepare-laps), or
+  post-relay forensics (use post-relay-review).
 license: MIT
 metadata:
   author: rally
