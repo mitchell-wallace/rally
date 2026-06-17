@@ -98,6 +98,83 @@ func TestCollapseHomePaths_EmptyHomeDir(t *testing.T) {
 	}
 }
 
+func TestScrubStringMap_HomePathCollapse(t *testing.T) {
+	orig := homeDir
+	homeDir = "/home/testuser"
+	defer func() { homeDir = orig }()
+
+	fields := map[string]string{
+		"cwd":    "/home/testuser/projects/rally",
+		"signal": "provider referenced /home/testuser/.config/rally/config.toml",
+		"other":  "/opt/rally/bin",
+	}
+
+	scrubStringMap(fields)
+
+	if fields["cwd"] != "~/projects/rally" {
+		t.Errorf("cwd = %q, want ~/projects/rally", fields["cwd"])
+	}
+	if fields["signal"] != "provider referenced ~/.config/rally/config.toml" {
+		t.Errorf("signal = %q", fields["signal"])
+	}
+	if fields["other"] != "/opt/rally/bin" {
+		t.Errorf("other = %q, want unchanged", fields["other"])
+	}
+}
+
+func TestScrubStringMap_DropsSensitiveKeysWithoutPlaceholder(t *testing.T) {
+	fields := map[string]string{
+		"prompt":      "full prompt text",
+		"transcript":  "full transcript",
+		"hostname":    "workstation.local",
+		"role":        "senior",
+		"prompt_size": "120000",
+	}
+
+	scrubStringMap(fields)
+
+	for _, key := range []string{"prompt", "transcript", "hostname"} {
+		if _, ok := fields[key]; ok {
+			t.Errorf("sensitive key %q should be dropped", key)
+		}
+	}
+	placeholder := strings.Join([]string{"[", "scrubbed", "]"}, "")
+	for key, value := range fields {
+		if value == placeholder {
+			t.Errorf("field %q retained scrubbed placeholder", key)
+		}
+	}
+	if fields["role"] != "senior" {
+		t.Errorf("role = %q, want senior", fields["role"])
+	}
+	if fields["prompt_size"] != "120000" {
+		t.Errorf("prompt_size = %q, want 120000", fields["prompt_size"])
+	}
+}
+
+func TestScrubContextMaps_TruncatesStringValues(t *testing.T) {
+	oversized := strings.Repeat("x", maxValueBytes+100)
+	contexts := map[string]map[string]interface{}{
+		"signal": {
+			"raw_signal": oversized,
+			"count":      2,
+		},
+	}
+
+	scrubContextMaps(contexts)
+
+	got := contexts["signal"]["raw_signal"].(string)
+	if len(got) >= len(oversized) {
+		t.Fatalf("raw_signal length = %d, want truncated below %d", len(got), len(oversized))
+	}
+	if !strings.HasSuffix(got, "[truncated]") {
+		t.Errorf("raw_signal = %q, want truncation marker", got)
+	}
+	if contexts["signal"]["count"] != 2 {
+		t.Errorf("count = %v, want 2", contexts["signal"]["count"])
+	}
+}
+
 func TestScrubEvent_HomePathCollapseInMessage(t *testing.T) {
 	orig := homeDir
 	homeDir = "/home/testuser"
@@ -197,23 +274,23 @@ func TestScrubEvent_RecursivelyScrubsNestedValues(t *testing.T) {
 	if outer["path"] != "~/project/file.go" {
 		t.Errorf("nested path = %v", outer["path"])
 	}
-	if outer["prompt"] != scrubbedPlaceholder {
-		t.Errorf("nested prompt = %v, want scrubbed", outer["prompt"])
+	if _, ok := outer["prompt"]; ok {
+		t.Errorf("nested prompt should be dropped, got %v", outer["prompt"])
 	}
 	items := outer["items"].([]interface{})
 	if items[0] != "~/.cache/rally/a.log" {
 		t.Errorf("nested slice path = %v", items[0])
 	}
 	itemMap := items[1].(map[string]interface{})
-	if itemMap["transcript"] != scrubbedPlaceholder {
-		t.Errorf("nested transcript = %v, want scrubbed", itemMap["transcript"])
+	if _, ok := itemMap["transcript"]; ok {
+		t.Errorf("nested transcript should be dropped, got %v", itemMap["transcript"])
 	}
 	if itemMap["cwd"] != "~/repo" {
 		t.Errorf("nested cwd = %v", itemMap["cwd"])
 	}
 }
 
-func TestScrubEvent_SensitiveKeysStillScrubbedWithHomePaths(t *testing.T) {
+func TestScrubEvent_SensitiveKeysDroppedWithHomePaths(t *testing.T) {
 	orig := homeDir
 	homeDir = "/home/testuser"
 	defer func() { homeDir = orig }()
@@ -231,8 +308,8 @@ func TestScrubEvent_SensitiveKeysStillScrubbedWithHomePaths(t *testing.T) {
 	got := scrubEvent(event)
 
 	ctx := got.Contexts["try"]
-	if ctx["prompt"] != scrubbedPlaceholder {
-		t.Errorf("sensitive key prompt = %v, want scrubbed", ctx["prompt"])
+	if _, ok := ctx["prompt"]; ok {
+		t.Errorf("sensitive key prompt should be dropped, got %v", ctx["prompt"])
 	}
 	if ctx["cwd"] != "~/project" {
 		t.Errorf("cwd = %v, want ~/project", ctx["cwd"])
@@ -261,16 +338,16 @@ func TestScrubEvent_ScrubsHostIdentityKeys(t *testing.T) {
 	got := scrubEvent(event)
 	ctx := got.Contexts["env"]
 	for _, key := range []string{"hostname", "username", "ip_address", "server_name"} {
-		if ctx[key] != scrubbedPlaceholder {
-			t.Errorf("context identity key %q = %v, want scrubbed", key, ctx[key])
+		if _, ok := ctx[key]; ok {
+			t.Errorf("context identity key %q should be dropped, got %v", key, ctx[key])
 		}
 	}
 	if ctx["go_os"] != "linux" {
 		t.Errorf("non-sensitive context go_os = %v", ctx["go_os"])
 	}
 	for _, key := range []string{"host", "ip"} {
-		if got.Breadcrumbs[0].Data[key] != scrubbedPlaceholder {
-			t.Errorf("breadcrumb identity key %q = %v, want scrubbed", key, got.Breadcrumbs[0].Data[key])
+		if _, ok := got.Breadcrumbs[0].Data[key]; ok {
+			t.Errorf("breadcrumb identity key %q should be dropped, got %v", key, got.Breadcrumbs[0].Data[key])
 		}
 	}
 }
@@ -299,8 +376,8 @@ func TestScrubEvent_DropsSensitiveKeys(t *testing.T) {
 
 	ctx := got.Contexts["try"]
 	for _, k := range []string{"current_task", "prompt", "transcript"} {
-		if ctx[k] != scrubbedPlaceholder {
-			t.Errorf("context key %q = %v, want %q", k, ctx[k], scrubbedPlaceholder)
+		if _, ok := ctx[k]; ok {
+			t.Errorf("context key %q should be dropped, got %v", k, ctx[k])
 		}
 	}
 	if ctx["role"] != "senior" {
@@ -309,14 +386,14 @@ func TestScrubEvent_DropsSensitiveKeys(t *testing.T) {
 	if ctx["prompt_bytes"] != 120000 {
 		t.Errorf("size field prompt_bytes was altered: %v", ctx["prompt_bytes"])
 	}
-	if got.Breadcrumbs[0].Data["task_prompt"] != scrubbedPlaceholder {
-		t.Errorf("breadcrumb task_prompt not scrubbed: %v", got.Breadcrumbs[0].Data["task_prompt"])
+	if _, ok := got.Breadcrumbs[0].Data["task_prompt"]; ok {
+		t.Errorf("breadcrumb task_prompt should be dropped, got %v", got.Breadcrumbs[0].Data["task_prompt"])
 	}
 	if got.Breadcrumbs[0].Data["try_id"] != 7 {
 		t.Errorf("breadcrumb try_id was altered: %v", got.Breadcrumbs[0].Data["try_id"])
 	}
-	if got.Spans[0].Data["output"] != scrubbedPlaceholder {
-		t.Errorf("span output not scrubbed: %v", got.Spans[0].Data["output"])
+	if _, ok := got.Spans[0].Data["output"]; ok {
+		t.Errorf("span output should be dropped, got %v", got.Spans[0].Data["output"])
 	}
 }
 
@@ -344,6 +421,12 @@ func TestScrubEvent_NeverShipsTaskBodyBytes(t *testing.T) {
 func TestScrubEvent_NilSafe(t *testing.T) {
 	if scrubEvent(nil) != nil {
 		t.Fatal("scrubEvent(nil) should return nil")
+	}
+}
+
+func TestSentryLevelWarning(t *testing.T) {
+	if got := sentryLevel(LevelWarning); got != sentry.LevelWarning {
+		t.Fatalf("sentryLevel(LevelWarning) = %v, want %v", got, sentry.LevelWarning)
 	}
 }
 

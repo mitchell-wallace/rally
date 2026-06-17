@@ -81,6 +81,41 @@ func (s *SentrySink) EmitTryLog(ctx context.Context, fields map[string]interface
 	}, nil)
 }
 
+// scrubEvent adapts the backend-neutral map scrubbers to Sentry's event shape.
+// It is wired as Sentry's BeforeSend/BeforeSendTransaction hook.
+func scrubEvent(event *sentry.Event) *sentry.Event {
+	if event == nil {
+		return nil
+	}
+
+	event.Message = truncateValue(collapseHomePaths(event.Message))
+	event.Transaction = truncateValue(collapseHomePaths(event.Transaction))
+
+	// Defense-in-depth: ensure no host-derived server_name is ever
+	// transmitted, even if the SDK overrides ClientOptions.ServerName.
+	event.ServerName = anonymousServerName
+
+	scrubStringMap(event.Tags)
+	for name, ctx := range event.Contexts {
+		if isSensitiveKey(name) {
+			delete(event.Contexts, name)
+			continue
+		}
+		scrubAttributeMap(ctx)
+	}
+	for _, b := range event.Breadcrumbs {
+		if b != nil {
+			scrubAttributeMap(b.Data)
+		}
+	}
+	for _, s := range event.Spans {
+		if s != nil {
+			scrubAttributeMap(s.Data)
+		}
+	}
+	return event
+}
+
 // CaptureFailure reports an operator-worthy failure as a Sentry event
 // (Issue). Tags are set on a cloned scope so they don't leak. Context
 // blocks are attached via scope.SetContext for structured nested data.
@@ -121,6 +156,8 @@ func sentryLevel(level EventLevel) sentry.Level {
 	switch level {
 	case LevelInfo:
 		return sentry.LevelInfo
+	case LevelWarning:
+		return sentry.LevelWarning
 	case LevelError:
 		return sentry.LevelError
 	default:

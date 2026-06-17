@@ -1,6 +1,6 @@
 // Package telemetry provides an opt-in telemetry sink abstraction.
-// The default implementation is a no-op; a Sentry-backed implementation
-// activates only when a DSN is configured.
+// The default implementation is a no-op; backend implementations activate
+// only when explicitly configured.
 package telemetry
 
 import (
@@ -9,8 +9,8 @@ import (
 )
 
 // Sink is the narrow telemetry interface. Implementations must be safe for
-// concurrent use. The interface is intentionally small so an OpenTelemetry
-// backend can be swapped in later without changing call sites.
+// concurrent use. The interface is intentionally small so telemetry backends
+// can be swapped without changing call sites.
 type Sink interface {
 	// StartSpan begins a new span (relay, run, or try). The returned Span
 	// must be finished by the caller. The context carries the span for
@@ -21,13 +21,13 @@ type Sink interface {
 	// string-keyed; values should be simple scalars (string, int, float).
 	EmitTryLog(ctx context.Context, fields map[string]interface{})
 
-	// CaptureFailure reports an operator-worthy failure as a Sentry Issue
-	// (or equivalent). The FailureEvent carries scalar tags for filtering
-	// and context blocks for structured nested data.
+	// CaptureFailure reports an operator-worthy failure. The FailureEvent
+	// carries scalar tags for filtering and context blocks for structured
+	// nested data.
 	CaptureFailure(ctx context.Context, msg string, evt FailureEvent)
 
-	// CaptureEvent reports a non-Issue structured event such as a low-severity
-	// diagnostic signal. Implementations should preserve the event level.
+	// CaptureEvent records a custom event such as a low-severity diagnostic
+	// signal. Implementations should preserve the event level.
 	CaptureEvent(ctx context.Context, msg string, evt Event)
 
 	// Flush drains buffered events with a bounded timeout. It must return
@@ -38,14 +38,15 @@ type Sink interface {
 type EventLevel string
 
 const (
-	LevelInfo  EventLevel = "info"
-	LevelError EventLevel = "error"
+	LevelInfo    EventLevel = "info"
+	LevelWarning EventLevel = "warning"
+	LevelError   EventLevel = "error"
 )
 
 // FailureEvent carries structured data for a captured failure. Tags are
-// scalar filterable values (Sentry tags); Contexts are nested structured
-// blocks (Sentry contexts). This separation prevents high-cardinality or
-// nested data from being smuggled into indexed tags.
+// scalar filterable values; Contexts are nested structured blocks. This
+// separation prevents high-cardinality or nested data from being smuggled
+// into indexed tags.
 type FailureEvent struct {
 	// Tags are scalar key-value pairs attached to the event for filtering
 	// and grouping (e.g., relay_id, run_id, role).
@@ -60,9 +61,9 @@ type FailureEvent struct {
 	Fingerprint []string
 }
 
-// Event carries structured data for a non-Issue telemetry event. Tags and
-// contexts follow the same split as FailureEvent, with Level controlling
-// severity in the backend.
+// Event carries structured data for a custom telemetry event. Tags and contexts
+// follow the same split as FailureEvent, with Level controlling severity in the
+// backend.
 type Event struct {
 	Level       EventLevel
 	Tags        map[string]string
