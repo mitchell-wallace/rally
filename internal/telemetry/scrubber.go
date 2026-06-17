@@ -70,6 +70,7 @@ var sensitiveKeys = map[string]struct{}{
 	"logs":             {},
 	"output":           {},
 	"username":         {},
+	"user":             {},
 }
 
 func isSensitiveKey(key string) bool {
