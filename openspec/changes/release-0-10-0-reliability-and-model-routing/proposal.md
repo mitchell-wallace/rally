@@ -67,7 +67,7 @@ This release introduces warning-first mismatch handling, first-class cancelled o
    - Use role + harness/model in each block header for quick routing and model traceability.
 
 4. **Research-backed limit handling**
-   - Keep limit signals as low-severity events when `failure_category=short_rate_limit` (confirmed as info-level patterns in `sentry`).
+   - Keep limit signals as low-severity events when `failure_category=short_rate_limit` (confirmed as info-level patterns in New Relic APM).
    - Keep operator-grade `event_kind` tags available for existing alerting filters.
 
 5. **Cancelled outcome policy**

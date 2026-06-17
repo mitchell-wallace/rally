@@ -217,7 +217,7 @@ junior = 'g55-l'
   surfaced under opencode's catch-all `UnknownError`, whose `data.message` is
   often the generic "Unexpected server error. Check server logs for details."
   So the failure falls through to the `agent_error` default and the quota scope
-  is never benched. Verified in Sentry: `RALLY-Q` (`opencode:zai-coding-plan/
+  is never benched. Verified via New Relic APM: `RALLY-Q` (`opencode:zai-coding-plan/
   glm-5.2`), `RALLY-K`/`RALLY-D` (`opencode:opencode-go/*`) all `agent_error`.
 - opencode retries the provider error internally before emitting anything to the
   `--format json` stream; live reproductions emitted **zero stdout** for 180s+

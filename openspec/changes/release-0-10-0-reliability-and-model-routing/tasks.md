@@ -112,7 +112,7 @@
 ## 7. Research and telemetry closure
 
 - [ ] 7.1 Ensure short rate-limit remains non-error (`info`) and retains existing tags (`event_kind=limit_signal`, `failure_category=short_rate_limit`) without reclassifying as crash/failure event.
-- [ ] 7.2 Add/adjust release notes with exact historical telemetry incident IDs from the Sentry-era incident set (`RALLY-2`, `RALLY-3`, `RALLY-4`, `RALLY-6`, `RALLY-8`, `RALLY-9`, `RALLY-B`, `RALLY-C`) while describing 0.10.0 behavior in backend-neutral/New Relic terms.
+- [ ] 7.2 Add/adjust release notes with exact historical telemetry incident IDs from the legacy incident set (`RALLY-2`, `RALLY-3`, `RALLY-4`, `RALLY-6`, `RALLY-8`, `RALLY-9`, `RALLY-B`, `RALLY-C`) while describing 0.10.0 behavior in backend-neutral/New Relic terms.
 - [ ] 7.3 Add release checklist verification: no alert regression for routine rate-limit categories, corrected run header text in default relay output, cancelled output is muted, and `rally tail` defaults to active output rather than old completed relays.
 
 ## 8. opencode usage-limit detection and reset parsing

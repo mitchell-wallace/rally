@@ -12,7 +12,7 @@ The current draft/proposal/design include intended behavior for reasoning level 
 2. Which harnesses do not support reasoning effort, and how should Rally represent that cleanly?
 3. What does `rally tail` do today during a real active run?
 4. Does `rally tail` currently follow new log output, select the active try, and present enough context to distinguish run/try/role?
-5. What exact Sentry evidence supports changing `wrong_lap_consumed` and `multi_lap_consumed` from failure-level events to warning-level events?
+5. What exact telemetry evidence supports changing `wrong_lap_consumed` and `multi_lap_consumed` from failure-level events to warning-level events?
 
 ## Required Checks
 
@@ -61,9 +61,9 @@ During an active Rally run:
 
 Record the exact commands used and the observed behavior.
 
-### 3. Sentry evidence
+### 3. Telemetry evidence
 
-Use the authenticated `sentry` CLI, not `sentry-cli`.
+Use the New Relic APM dashboard or CLI.
 
 Check Rally events related to:
 
@@ -96,7 +96,7 @@ The report should include:
 
 - A table of harness reasoning support and exact settings.
 - A short transcript or summary of the live `rally tail` test.
-- Sentry findings with issue IDs and implications for error handling.
+- Telemetry findings with issue IDs and implications for error handling.
 - Recommended changes to `draft.md`, `proposal.md`, `design.md`, and `tasks.md` if the spike disproves any current assumption.
 
 ## Constraints
@@ -104,5 +104,4 @@ The report should include:
 - Do not implement product changes during this spike.
 - Do not modify unrelated files.
 - Prefer a disposable test repo for live Rally behavior.
-- Use `sentry`, never `sentry-cli`.
 - If a harness is unavailable or blocked by quota, record the exact blocker and the strongest evidence still available.

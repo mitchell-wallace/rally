@@ -23,7 +23,7 @@ then recommend the concrete change for the 0.10.0 release.
 4. Does the reset window (5h / weekly / monthly) parse into a bench deadline, or
    does Rally fall back to the default bench duration?
 5. Is this opencode-specific, or a general all-provider detection/timing gap?
-6. What does `sentry` show for these runner failures?
+6. What does New Relic APM show for these runner failures?
 
 ## Required Checks
 
@@ -46,16 +46,16 @@ Trace each provider's reset phrasing through `parseResetsIn` /
 `parseRetryAfterSeconds` / `benchResetDeadline`. Record whether a correct bench
 deadline is produced.
 
-### 4. Sentry evidence
+### 4. Telemetry evidence
 
-Use the authenticated `sentry` CLI (never `sentry-cli`). Find the terminal
+Use the New Relic APM dashboard or CLI. Find the terminal
 failures for `opencode:zai-coding-plan/*` and `opencode:opencode-go/*` runners
 and record their `failure_category`, `level`, and `event_kind` tags.
 
 ## Deliverable
 
 A concise report `spike-2-report.md` in this change folder, with the live
-signatures, the root-cause classification trace, Sentry findings, and
+signatures, the root-cause classification trace, telemetry findings, and
 recommended edits to `draft.md`, `proposal.md`, `design.md`, `tasks.md`, and the
 spec deltas.
 
@@ -63,9 +63,8 @@ spec deltas.
 
 - Do not implement product changes during this spike.
 - Prefer a disposable repo/workspace for live opencode behavior.
-- Use `sentry`, never `sentry-cli`.
 - If a provider's limit has reset and can no longer be reproduced live, record
-  the exact blocker and rely on opencode server logs + Sentry for the signature.
+  the exact blocker and rely on opencode server logs + New Relic APM for the signature.
 
 ## Follow-up: confirm finding A (exact emitted JSON error event)
 
@@ -127,5 +126,5 @@ task 8.3 server-log-tail evidence path is required, not optional.
 
 ### Constraints (same as above)
 
-- No product changes; disposable workspace; `sentry` not `sentry-cli`.
+- No product changes; disposable workspace.
 - Clean up any background opencode processes and the temp workspace afterward.

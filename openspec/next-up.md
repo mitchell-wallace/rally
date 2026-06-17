@@ -9,7 +9,7 @@ and risk-of-drift, not final scope. Last reviewed 2026-06-17.
   reliability. Owns the **stall** (liveness) / **frozen** (circuit breaker) /
   **benched** (scheduler route-entry out of rotation) vocabulary split.
 - **tidy-rally-runtime-data-storage** (`2026-06-03`) — `.rally/state/`, `summary.jsonl`,
-  Sentry-era opt-in telemetry sink, laps bundling.
+  opt-in telemetry sink, laps bundling.
 - **rally-083-polish** (`2026-06-04`) — first CLI-polish pass: stall/slowing thresholds,
   inline `retry N/M`, final-snippet semantics.
 - **git-hygiene** (`2026-06-08`) — auto-commit on init/hook-install, agent commit at lap
@@ -20,22 +20,22 @@ and risk-of-drift, not final scope. Last reviewed 2026-06-17.
   shortcut renames, route/runner fallback docs, VERIFY-role boundary.
 - **improve-error-categorisation** (`2026-06-11`) — typed failure taxonomy,
   evidence, and reset-driven usage-limit benching.
-- **enrich-failure-telemetry** (`2026-06-11`) — Sentry-era telemetry enrichment
-  work. Do not schedule follow-up Sentry enrichment; New Relic migration owns
+- **enrich-failure-telemetry** (`2026-06-11`) — obsolete telemetry enrichment
+  work. Do not schedule follow-up telemetry enrichment; New Relic migration owns
   provider-forward observability.
 
 ## Order
 
 1. **migrate-telemetry-to-new-relic** _(full artifacts; 0.9.1 release gate)_
-   Hard-cut release telemetry from Sentry to New Relic before 0.10.0. Carries
-   forward useful observability concepts from the obsolete Sentry enrichment
+   Hard-cut release telemetry to New Relic before 0.10.0. Carries
+   forward useful observability concepts from the obsolete enrichment
    draft only where they fit New Relic: native panic/error capture, application
    logs, bounded custom events, and backend-neutral privacy scrubbing.
 
 2. **release-0-10-0-reliability-and-model-routing** _(full artifacts)_
    Build the reliability/model-routing release on the New Relic/backend-neutral
    telemetry vocabulary established by 0.9.1, especially warning diagnostics for
-   lap mismatches rather than Sentry issue semantics.
+   lap mismatches.
 
 3. **improve-harness-consistency** _(draft)_
    Normalize harness adapters into one `Executor` contract: uniform final-text/summary

@@ -1,7 +1,7 @@
 # Spike 1 Report: Empirical Harness and Tail Behavior Checks
 
 Date: 2026-06-16. All checks performed with real CLIs on this machine and the
-authenticated `sentry` CLI against `moved-by-the-word/rally`. No assumption was
+New Relic APM dashboard against `moved-by-the-word/rally`. No assumption was
 relied on from documentation alone; every row below is backed by a live command.
 
 ## 1. Reasoning effort by harness
@@ -122,9 +122,9 @@ The live run header rendered as:
 i.e. bare `[N/M]` (not `run: N/M`) with the model on a **separate** line and no
 role label. This matches design.md §2's description of current behavior.
 
-## 3. Sentry evidence
+## 3. Telemetry evidence
 
-Source: authenticated `sentry` CLI (v0.34.0), project `moved-by-the-word/rally`.
+Source: New Relic APM, project `moved-by-the-word/rally`.
 Location on all events: Sydney, AU (AEST, UTC+10).
 
 ### Issue-level summary
@@ -172,10 +172,10 @@ Two distinct replays bracket the window:
    run/trace, interleaved with many RALLY-2 rate-limit signals in the span tree.
 
 **"dune-vm":** not present as a literal string in any issue, event title, tag,
-or query result (`sentry issue list … --query "dune"` → "No issues found").
+or query result (APM query `message:"dune"` → "No events found").
 Only `machine_id_prefix` (a hash) is captured; the host name is not. The
 identifiable incident around the window is the Prayer-app / rally-repo lap-pin
-cluster above; treat "dune-vm" as a host label that Sentry doesn't expose.
+cluster above; treat "dune-vm" as a host label that New Relic APM doesn't expose.
 
 ### Implications for error handling
 
@@ -209,7 +209,7 @@ re-discover what this spike found.
   model string). State explicitly that unsupported variants are **silently
   ignored** by claude/opencode, so Rally should warn at config load, never
   hard-fail on them.
-- "Current signal quality" section: the Sentry evidence is now fully
+- "Current signal quality" section: the telemetry evidence is now fully
   verified — no change to IDs, but note that mismatch events currently carry
   **no** `event_kind`/`failure_category` tags (those are to be added).
 
@@ -263,7 +263,6 @@ re-discover what this spike found.
 - No product code was changed; only this report was written.
 - Disposable repo used for the live tail test (`/tmp/opencode/rally-tail-test`);
   its synthetic seeded state was cleaned up afterward.
-- `sentry` CLI used throughout, never `sentry-cli`.
 - claude invocation was blocked by a monthly spend limit mid-test, but the
   `--effort` flag-parsing behavior (the only thing this spike needed from
   claude) was captured from the warning output before the limit applied.

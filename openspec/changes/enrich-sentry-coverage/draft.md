@@ -1,25 +1,20 @@
-## Draft: Enrich Sentry Coverage — Metrics, Structured Logs, and Panic Recovery
+## Draft: Enrich Telemetry Coverage — Metrics, Structured Logs, and Panic Recovery
 
 ## Status
 
-Superseded by `migrate-telemetry-to-new-relic`. Do not implement the
-Sentry-specific candidate work below. Transferable intent has moved into the
-New Relic migration where it still matters:
+Superseded by `migrate-telemetry-to-new-relic`. The intent has moved into the New Relic migration where it is actively implemented:
 
-- Native panic/error capture via New Relic error reporting and stack traces.
-- Application logs enabled through the New Relic Go APM agent, with Rally kept
-  from deliberately writing prompts, transcripts, or raw command output as log
-  records.
-- Explicit custom metrics remain deferred unless a later New Relic-specific
-  change needs them.
+- Native panic/error capture via New Relic error reporting (`NoticeError`) and stack traces.
+- Application logs enabled through the New Relic Go APM agent, with Rally kept from deliberately writing prompts, transcripts, or raw command output as log records.
+- Explicit custom metrics remain deferred unless a later New Relic-specific change needs them.
 
 ## Why
 
-Rally's telemetry stack (`internal/telemetry/`) already provides tracing (relay→run→try spans), failure capture via `CaptureMessage`, and per-try breadcrumbs. Three Sentry features are wired into the SDK but not yet used:
+Rally's telemetry stack (`internal/telemetry/`) provides tracing (relay→run→try spans), failure capture via `NoticeError`, and per-try custom events. Three observability features are planned to be enriched:
 
-- **Metrics** (`sentry.NewMeter`): completely absent. No counters, gauges, or distributions are emitted anywhere.
-- **Structured Logs** (`EnableLogs: true`): Sentry's native log ingestion is disabled. `EmitTryLog` sends breadcrumbs instead, which are attached to error events but not independently queryable as logs.
-- **Panic / Exception Recovery** (`sentry.Recovery()`, `sentry.CaptureException`): Rally's runner catches panics at the failure-reason string level (`runner.go:1706` checks for "panic" in text), but never captures Go panic stack traces or `error` values through Sentry's native exception path.
+- **Metrics** (`newrelic.RecordCustomMetric`): completely absent. No counters, gauges, or distributions are emitted anywhere.
+- **Structured Logs** (log forwarding): Native log ingestion is currently unconfigured. `EmitTryLog` sends custom events instead, which are attached to error events but not independently queryable as logs.
+- **Panic / Exception Recovery** (`newrelic.NoticeError` in recovery blocks): Rally's runner catches panics at the failure-reason string level (`runner.go:1706` checks for "panic" in text), but never captures Go panic stack traces or `error` values through the native exception path.
 
 Filling these gaps gives a complete observability picture: traces for performance, structured logs for searchable per-try output, metrics for aggregate trends, and proper exception capture for crash diagnostics.
 
@@ -27,7 +22,7 @@ Filling these gaps gives a complete observability picture: traces for performanc
 
 ### Metrics
 
-Add a `Meter` method to the `Sink` interface and implement it in `SentrySink` using `sentry.NewMeter`. Emit metrics at existing instrumentation points in `internal/relay/runner.go`:
+Add a `Meter` method to the `Sink` interface and implement it using `newrelic.RecordCustomMetric`. Emit metrics at existing instrumentation points in `internal/relay/runner.go`:
 
 | Metric | Type | Code path | When |
 |--------|------|-----------|------|
@@ -40,32 +35,31 @@ Add a `Meter` method to the `Sink` interface and implement it in `SentrySink` us
 | `agent.exit_without_finalize` | Counter | `runner.go:1801` | Agent exited dirty |
 | `relay.stall` | Counter | `runner.go:583` | All agents frozen |
 
-`NoopSink` returns a no-op meter. The meter is created once per `SentrySink` and reused.
+`NoopSink` returns a no-op meter.
 
 ### Structured Logs
 
-Enable Sentry's log ingestion by setting `EnableLogs: true` in the `sentry.ClientOptions` at `internal/telemetry/sentry.go:27`. Add a `Log` method to the `Sink` interface that emits structured log entries via the Sentry logs API (the SDK's `sentry.Logger` / log-to-Sentry path). The existing `EmitTryLog` breadcrumbs can be supplemented (not replaced) with proper log entries for the fields already being collected at `runner.go:1652`.
+Enable APM log forwarding in the New Relic configuration. Add a `Log` method to the `Sink` interface that emits structured log entries via the logging API. The existing `EmitTryLog` custom events can be supplemented (not replaced) with proper log entries for the fields already being collected at `runner.go:1652`.
 
 ### Panic / Exception Recovery
 
-- Add `sentry.Recovery()` or a `defer sentry.Recover()` call in the relay entry path (`cmd/rally/main.go:219` area or `runner.go` relay start).
-- Use `sentry.CaptureException(err)` in error-return paths where structured `error` values are available, rather than only `CaptureMessage` with stringified descriptions. Key locations: runner command execution failures in `internal/agent/log.go:38-82` `runLoggedCommand`, and the reliability classification paths in `internal/relay/runner.go`.
-- The existing string-based panic detection in `runner.go:1706` can remain as a fallback classification, but native Go panic recovery should feed Sentry proper stack traces.
+- Add a `defer` block in the relay entry path (`cmd/rally/main.go:219` area or `runner.go` relay start) that recovers from panics and reports them via `NoticeError`.
+- Use `NoticeError(err)` in error-return paths where structured `error` values are available, rather than only stringified descriptions. Key locations: runner command execution failures in `internal/agent/log.go:38-82` `runLoggedCommand`, and the reliability classification paths in `internal/relay/runner.go`.
+- The existing string-based panic detection in `runner.go:1706` can remain as a fallback classification, but native Go panic recovery should feed APM proper stack traces.
 
 ## Initial Questions
 
-- Should `Sink.Meter()` return a long-lived `*sentry.Meter` or should each call site create its own scoped meter? The SDK's `NewMeter` is cheap but context-scoped — the interface design should clarify ownership.
-- Should structured logs replace breadcrumbs (`EmitTryLog`) or run alongside them? Breadcrumbs attach to error events; logs are independently queryable. Both have value, but doubling traffic may not be desirable.
+- Should structured logs replace custom events (`EmitTryLog`) or run alongside them? Custom events are useful for querying structured data, while logs are better for streaming. Both have value, but doubling traffic may not be desirable.
 - For panic recovery, should the recovery happen at the relay boundary (top-level `cmd/rally/main.go`) or at the run/try boundary (`runner.go`)? Relay-level is simpler but coarser; try-level gives per-try stack traces attached to the right span context.
-- What sample rate for logs? Tracing is at 100% (`TracesSampleRate: 1.0`), but log volume may be higher since every try emits. Consider a configurable log sample rate.
+- What sample rate for logs? Tracing is at 100%, but log volume may be higher since every try emits. Consider a configurable log sample rate.
 
 ## Candidate Work
 
 - Extend `Sink` interface with `Meter() Meter` and `Log(ctx, level, message, fields)` methods; add no-op implementations.
-- Implement `SentrySink.Meter()` returning `sentry.NewMeter(context.Background())`.
-- Implement `SentrySink.Log()` using Sentry's structured log emission.
-- Set `EnableLogs: true` in `NewSentrySink()` options.
-- Add `defer sentry.Recover()` at relay and/or try boundaries.
-- Replace `CaptureMessage` with `CaptureException` where structured `error` values are available.
+- Implement `Meter()` returning a New Relic specific implementation.
+- Implement `Log()` using structured log emission.
+- Enable log forwarding in APM options.
+- Add `defer` panic recovery at relay and/or try boundaries.
+- Replace string captures with `NoticeError` where structured `error` values are available.
 - Instrument runner.go with metric emissions at the call sites listed above.
 - Update `internal/telemetry/sink_test.go` with meter and log method tests.

@@ -15,7 +15,7 @@ The default in this batch is explicit warning/cancelled visibility without treat
 
 ## Current signal quality (research)
 
-Sentry evidence using `sentry` confirms the observed shape:
+New Relic APM evidence confirms the observed shape:
 
 - `wrong_lap_consumed`: `RALLY-4`, `RALLY-6`, `RALLY-C` (`error`, user-facing event message: `wrong_lap_consumed`)
 - `multi_lap_consumed`: `RALLY-8`, `RALLY-9` (`error`, user-facing event message: `multi_lap_consumed`)

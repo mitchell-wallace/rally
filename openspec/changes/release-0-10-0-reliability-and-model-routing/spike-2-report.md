@@ -3,8 +3,8 @@
 Date: 2026-06-16. All signatures below are from live opencode `1.17.7` on this
 machine with real auth for `zai-coding-plan` (5h limit, resetting ~18:29:51
 AEST during the spike) and `opencode-go` (monthly limit, "Resets in 7 days"),
-opencode's own server log, and the authenticated `sentry` CLI against
-`moved-by-the-word/rally`. `sentry-cli` was not used.
+opencode's own server log, and the New Relic APM dashboard against
+`moved-by-the-word/rally`.
 
 ## TL;DR
 
@@ -110,9 +110,9 @@ or
 These wrappers (`AI_APICallError` / `AI_RetryError`) and their specific substrings must be added to task 8.1's matcher list so that the parser can classify them correctly when they are read from either the JSON stream (if it does emit) or the server log tail.
 
 
-## 2. How Rally classifies these today (Sentry)
+## 2. How Rally classifies these today (Telemetry)
 
-Authenticated `sentry` CLI, project `moved-by-the-word/rally`, terminal failures
+New Relic APM dashboard, project `moved-by-the-word/rally`, terminal failures
 in the last few hours:
 
 | Issue | Runner | failure_category | event_kind | level | Title |
@@ -146,7 +146,7 @@ probe (`LivenessProbeSupported() == false`). So the try is stall-killed (or
 context-times-out) at ~180s — *before* any usage-limit text is emitted. The log
 tail then contains no "usage limit" string, so classification falls through
 priority 4 to the priority-5 default: `agent_error` (`patterns.go:358-365`).
-This is what produces the Sentry `agent_error` tags, and it applies to **any**
+This is what produces the APM `agent_error` tags, and it applies to **any**
 harness whose CLI retries provider errors internally (codex/claude/gemini), not
 just opencode.
 
@@ -231,7 +231,7 @@ A new reliability work group, **"opencode (and general) usage-limit detection"**
 - Add a sixth grouped behavior: **opencode usage-limit detection & reset parsing**
   (zai-coding-plan / opencode-go and general providers), with the three root
   causes summarized.
-- Extend "Current signal quality (research)" with the §2 Sentry rows
+- Extend "Current signal quality (research)" with the §2 telemetry rows
   (RALLY-Q/K/D as `agent_error`) and the §1 live signatures.
 
 ### proposal.md
@@ -264,10 +264,9 @@ A new reliability work group, **"opencode (and general) usage-limit detection"**
 - No product code changed; only spike artifacts written.
 - Live reproductions used a disposable `/tmp/oc-spike` workspace, since removed;
   no opencode processes left running.
-- `sentry` CLI used throughout; never `sentry-cli`.
 - zai's 5h limit reset (~18:29:51) mid-spike, so its live JSON error could not be
   re-triggered after reset; the signature is taken from opencode's server log and
-  Sentry. opencode-go's monthly limit remained active but never emitted to stdout
+  New Relic APM. opencode-go's monthly limit remained active but never emitted to stdout
   within a 320s budget (finding A).
 
 ### Additional second-pass confirmation
