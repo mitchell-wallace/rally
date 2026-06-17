@@ -246,11 +246,11 @@
       "title": "Add panic-aware New Relic transaction finish/recovery",
       "description": "OpenSpec change: migrate-telemetry-to-new-relic (task 2.9; design Decision 1 panic path and Risks). Because Rally hides transaction ending behind Span.Finish, cfg.ErrorCollector.RecordPanics alone is insufficient. Isolated high-risk control-flow lap.\n\nOutcome: cfg.ErrorCollector.RecordPanics = true is set. A panic-aware finish/recovery path: where a transaction-backed span would defer Transaction.End, instead recover(), notice a newrelic.Error with newrelic.NewStackTrace() and bounded attributes, end the transaction, then re-panic so Rally's existing process/exit semantics are unchanged. Existing string-based panic classification remains only a fallback for agent-output text.\n\nFiles \u0026 scope: internal/telemetry/newrelic.go (transaction-backed span Finish/recover path). Do not change relay panic handling or process-exit ordering.\n\nDesign: the recover+re-panic must preserve the original panic value/stack as seen by upstream recover sites; only New Relic recording is added. Bound attributes via the attribute builder. Ensure there is no double-End on the transaction in the normal (non-panic) path.\n\nAcceptance: a unit test triggers a panic through a transaction-backed span and asserts the transaction is ended, a New Relic error with a stack trace is recorded (fake/isolated app where feasible), and the panic is re-raised. go test ./internal/telemetry green. Do not check tasks.md boxes.",
       "assignee": "SENIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 262144,
       "createdAt": "2026-06-17T05:39:12.313452735Z",
-      "updatedAt": "2026-06-17T05:39:12.313452735Z",
-      "completedAt": null
+      "updatedAt": "2026-06-17T07:23:31.849448901Z",
+      "completedAt": "2026-06-17T07:23:31.849448901Z"
     },
     {
       "id": "rall-9597",

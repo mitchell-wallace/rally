@@ -90,6 +90,7 @@ func newRelicConfigOptions(cfg Config) []nr.ConfigOption {
 					nrc.HostDisplayName = defaultNewRelicHostDisplayName
 				}
 			}
+			nrc.ErrorCollector.RecordPanics = true
 		},
 		func(nrc *nr.Config) {
 			appLogEnabled := boolConfigValue(cfg.NewRelicAppLogEnabled, true)
@@ -340,6 +341,11 @@ func (s *newRelicSpan) Finish() {
 		return
 	}
 
+	var recovered interface{}
+	if segment == nil && txn != nil {
+		recovered = recover()
+	}
+
 	attrs := buildSpanAttributes(tags, fields, contexts)
 	for key, value := range attrs {
 		if segment != nil {
@@ -356,10 +362,34 @@ func (s *newRelicSpan) Finish() {
 		return
 	}
 	if txn != nil {
-		// Lap 4 will wrap transaction ending with panic-aware recovery. This
-		// lap intentionally keeps Finish as a plain bounded transaction end.
+		if recovered != nil {
+			msg := newRelicPanicMessage(recovered)
+			txn.NoticeError(nr.Error{
+				Message:    msg,
+				Class:      newRelicPanicClass,
+				Attributes: buildPanicAttributes(tags, fields, contexts, recovered, msg),
+				Stack:      nr.NewStackTrace(),
+			})
+			txn.End()
+			panic(recovered)
+		}
 		txn.End()
 	}
+}
+
+const newRelicPanicClass = "RallyPanic"
+
+func newRelicPanicMessage(recovered interface{}) string {
+	msg := fmt.Sprint(recovered)
+	return truncateValue(collapseHomePaths(msg))
+}
+
+func buildPanicAttributes(tags map[string]string, fields map[string]interface{}, contexts map[string]map[string]interface{}, recovered interface{}, msg string) map[string]interface{} {
+	panicFields := cloneAttributeMap(fields)
+	panicFields["error_class"] = newRelicPanicClass
+	panicFields["message"] = msg
+	panicFields["panic_type"] = fmt.Sprintf("%T", recovered)
+	return buildSpanAttributes(tags, panicFields, contexts)
 }
 
 func (s *newRelicSpan) snapshotForFinish() (map[string]string, map[string]interface{}, map[string]map[string]interface{}, *nr.Segment, *nr.Transaction, bool) {
