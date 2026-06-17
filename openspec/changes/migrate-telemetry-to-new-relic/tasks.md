@@ -1,8 +1,8 @@
 ## 1. Telemetry boundary and Sentry removal
 
-- [ ] 1.1 Remove `github.com/getsentry/sentry-go` from `go.mod`/`go.sum`, delete `internal/telemetry/sentry.go`, and remove Sentry-specific tests.
+- [x] 1.1 Remove `github.com/getsentry/sentry-go` from `go.mod`/`go.sum`, delete `internal/telemetry/sentry.go`, and remove Sentry-specific tests.
 - [x] 1.2 Update `internal/telemetry/sink.go` comments so the public sink contract is backend-neutral (`operator-worthy failure`, `custom event`, `flush`) rather than Sentry-specific.
-- [ ] 1.3 Remove `DefaultSentryDSN`, `SENTRY_DSN`, `[telemetry] sentry_dsn`, Sentry fallback/deprecation branches, Sentry release ldflags, and docs that describe current Sentry telemetry.
+- [x] 1.3 Remove `DefaultSentryDSN`, `SENTRY_DSN`, `[telemetry] sentry_dsn`, Sentry fallback/deprecation branches, Sentry release ldflags, and docs that describe current Sentry telemetry. (Code/runtime parts verified removed; the `.goreleaser.yaml` ldflag swap is handled by task 5.1 release wiring.)
 - [x] 1.4 Extract or retain backend-neutral scrubbing helpers that sanitize Rally-supplied scalar attributes and context maps before New Relic receives them.
 - [ ] 1.5 Add tests proving Rally-supplied New Relic attributes drop prompt/transcript/log/current_task and host/user identity keys, collapse home paths, truncate long strings, and do not emit `[scrubbed]` placeholder attributes for removed sensitive keys.
 - [x] 1.6 Add tests proving lap mismatch telemetry uses `RallyDiagnostic` with `level=warning`, `event_kind=lap_pin_mismatch`, and `mismatch_reason`, not `RallyFailure`.
@@ -34,13 +34,13 @@
 
 ## 4. Activation and config opt-out
 
-- [ ] 4.1 Extend `internal/config.TelemetryConfig` with `enabled *bool`, `new_relic_app_name`, and optional `new_relic_host_display_name`; remove/deprecate `sentry_dsn`.
-- [ ] 4.2 Update generated `.rally/config.toml` docs/template to make `[telemetry]` opt-out discoverable as a commented example (`# enabled = false`) or equivalent unset default, never as active `enabled = false`, and avoid any secret fields.
-- [ ] 4.3 Update `cmd/rally/main.go` telemetry globals and `telemetryConfigForRelay`: remove `DefaultSentryDSN`; add `DefaultNewRelicLicenseKey`, app-name/host-display-name fields, and New Relic agent config options.
-- [ ] 4.4 Update telemetry initialization precedence: `RALLY_TELEMETRY=0`, `[telemetry] enabled=false`, `NEW_RELIC_LICENSE_KEY`, baked `DefaultNewRelicLicenseKey`, no-op.
-- [ ] 4.5 Treat missing New Relic license key as non-activating with no network calls; do not fall back to Sentry.
-- [ ] 4.6 Preserve no-side-effect mechanical commands: help/version/update must not initialize telemetry or create `machine-id` because baked New Relic credentials exist.
-- [ ] 4.7 Add activation tests for every precedence branch, kill switch behavior, config opt-out behavior, source-build no-op behavior, and tracked config not accepting New Relic secrets.
+- [x] 4.1 Extend `internal/config.TelemetryConfig` with `enabled *bool`, `new_relic_app_name`, and optional `new_relic_host_display_name`; remove/deprecate `sentry_dsn`.
+- [x] 4.2 Update generated `.rally/config.toml` docs/template to make `[telemetry]` opt-out discoverable as a commented example (`# enabled = false`) or equivalent unset default, never as active `enabled = false`, and avoid any secret fields.
+- [x] 4.3 Update `cmd/rally/main.go` telemetry globals and `telemetryConfigForRelay`: remove `DefaultSentryDSN`; add `DefaultNewRelicLicenseKey`, app-name/host-display-name fields, and New Relic agent config options.
+- [x] 4.4 Update telemetry initialization precedence: `RALLY_TELEMETRY=0`, `[telemetry] enabled=false`, `NEW_RELIC_LICENSE_KEY`, baked `DefaultNewRelicLicenseKey`, no-op.
+- [x] 4.5 Treat missing New Relic license key as non-activating with no network calls; do not fall back to Sentry.
+- [x] 4.6 Preserve no-side-effect mechanical commands: help/version/update must not initialize telemetry or create `machine-id` because baked New Relic credentials exist.
+- [x] 4.7 Add activation tests for every precedence branch, kill switch behavior, config opt-out behavior, source-build no-op behavior, and tracked config not accepting New Relic secrets.
 
 ## 5. Release wiring and documentation
 
