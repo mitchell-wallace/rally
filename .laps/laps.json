@@ -345,11 +345,11 @@
       "title": "Release wiring: GoReleaser ldflags and workflow secret gate",
       "description": "OpenSpec change: migrate-telemetry-to-new-relic (tasks 5.1, 5.2). The operational secret RALLY_NEW_RELIC_LICENSE_KEY and the variable RALLY_NEW_RELIC_APP_NAME are already configured in GitHub.\n\nOutcome: .goreleaser.yaml ldflags change from -X main.DefaultSentryDSN={{ .Env.RALLY_SENTRY_DSN }} to -X main.DefaultNewRelicLicenseKey={{ .Env.RALLY_NEW_RELIC_LICENSE_KEY }} (5.1, around line ~18). .github/workflows/release.yml passes RALLY_NEW_RELIC_LICENSE_KEY from secrets (replacing RALLY_SENTRY_DSN at line ~46) and fails BEFORE GoReleaser when building a not-yet-existing release with an empty New Relic secret (5.2).\n\nFiles \u0026 scope: .goreleaser.yaml, .github/workflows/release.yml. Do NOT bump VERSION here — that is gated to a later lap.\n\nDesign: the empty-secret gate must run only on the not-yet-existing-release path (mirror the existing release-exists no-op check) so re-runs for an existing release still no-op. Keep the secret out of logs.\n\nAcceptance: goreleaser config references only New Relic; the workflow fails fast on an empty secret for a new release; no RALLY_SENTRY_DSN remains. Do not check tasks.md boxes.",
       "assignee": "JUNIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 720896,
       "createdAt": "2026-06-17T05:39:12.313468365Z",
-      "updatedAt": "2026-06-17T05:39:12.313468365Z",
-      "completedAt": null
+      "updatedAt": "2026-06-17T11:59:04.539020724Z",
+      "completedAt": "2026-06-17T11:59:04.539020724Z"
     },
     {
       "id": "rall-f4de",
