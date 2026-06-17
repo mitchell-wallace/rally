@@ -27,5 +27,5 @@ None.
 
 - Code: `internal/telemetry`, `internal/config`, `cmd/rally`, `.goreleaser.yaml`, `.github/workflows/release.yml`, README telemetry docs, `AGENTS.md` observability guidance, and telemetry-focused tests.
 - Dependencies: remove `github.com/getsentry/sentry-go`; add `github.com/newrelic/go-agent/v3`.
-- Operations: configure a New Relic ingest license key as a GitHub Actions secret before cutting 0.9.1; keep `RALLY_TELEMETRY=0` and add `[telemetry] enabled = false` as user opt-outs.
+- Operations: the New Relic ingest license key has already been configured as the GitHub Actions secret `RALLY_NEW_RELIC_LICENSE_KEY`, and the app name has already been configured as GitHub variable `RALLY_NEW_RELIC_APP_NAME`; keep `RALLY_TELEMETRY=0` and add `[telemetry] enabled = false` as user opt-outs.
 - Privacy/cost: preserve Rally-supplied payload scrubbing and no-transcript guarantees, enable New Relic application logs intentionally, and add custom-event/attribute/log-volume limits so larger ingest allowance does not become unbounded telemetry volume.

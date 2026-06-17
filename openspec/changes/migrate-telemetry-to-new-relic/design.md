@@ -79,6 +79,10 @@ Environment/config metadata:
 - optional host display name: New Relic's standard `NEW_RELIC_PROCESS_HOST_DISPLAY_NAME`, `[telemetry] new_relic_host_display_name`, or default `"rally-cli"`; do not introduce a Rally-specific host-display env alias unless a later product decision asks for one.
 - optional New Relic host/collector override for tests/advanced use: standard New Relic agent environment/config where supported, not generated into config by default
 
+Operational setup already completed:
+- GitHub Actions secret `RALLY_NEW_RELIC_LICENSE_KEY` is configured for release telemetry injection. Do not commit or print its value.
+- GitHub Actions variable `RALLY_NEW_RELIC_APP_NAME` is configured for release app naming. This value is non-secret.
+
 ### 4. Agent configuration and volume guardrails
 
 New Relic's larger allowance is not a license to emit unbounded Rally data.
@@ -145,7 +149,7 @@ Versioning:
 6. Update README and `AGENTS.md`.
 7. Add release workflow secret gate.
 8. Bump version to `0.9.1`.
-9. Configure GitHub secret `RALLY_NEW_RELIC_LICENSE_KEY` before merging/releasing.
+9. Confirm GitHub secret `RALLY_NEW_RELIC_LICENSE_KEY` and variable `RALLY_NEW_RELIC_APP_NAME` are still configured before merging/releasing. They were set before implementation planning completed.
 
 Rollback:
 - Set `RALLY_TELEMETRY=0` or `[telemetry] enabled = false` to disable all telemetry immediately.

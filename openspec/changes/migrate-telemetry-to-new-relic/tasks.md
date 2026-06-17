@@ -49,7 +49,7 @@
 - [ ] 5.3 Update README telemetry docs for Go APM agent behavior, env/baked credential precedence, `[telemetry] enabled = false`, `RALLY_TELEMETRY=0`, data sent, data intentionally not sent, and the hard Sentry cutover.
 - [ ] 5.4 Update `AGENTS.md` observability guidance from Sentry CLI investigation to New Relic guidance, while noting Sentry issue IDs only as historical pre-0.9.1 references.
 - [ ] 5.5 Bump `internal/buildinfo/VERSION` to `0.9.1` only after the release secret gate is implemented; confirm `main.Version` remains `"dev"`.
-- [ ] 5.6 Add release checklist note: configure `RALLY_NEW_RELIC_LICENSE_KEY` before cutting 0.9.1; do not push tags manually.
+- [ ] 5.6 Add release checklist note: `RALLY_NEW_RELIC_LICENSE_KEY` and `RALLY_NEW_RELIC_APP_NAME` are already configured in GitHub; verify they are still present before cutting 0.9.1, keep the license key secret, and do not push tags manually.
 - [ ] 5.7 Update active `release-0-10-0-reliability-and-model-routing` OpenSpec artifacts so telemetry language builds on New Relic Go APM/backend-neutral terminology instead of reintroducing Sentry-specific Issues or fallback behavior.
 - [ ] 5.8 Retire or rewrite obsolete planning references that would steer future work back to Sentry, including `openspec/changes/enrich-sentry-coverage/draft.md` and `openspec/next-up.md`; preserve only backend-neutral/New Relic concepts such as native panic/error capture.
 
