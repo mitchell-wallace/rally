@@ -367,11 +367,11 @@
       "title": "Retire obsolete Sentry planning references and align 0.10.0 plans",
       "description": "OpenSpec change: migrate-telemetry-to-new-relic (tasks 5.7, 5.8). Keep Rally's OpenSpec planning coherent after the migration.\n\nOutcome: the active release-0-10-0-reliability-and-model-routing artifacts are updated so telemetry language builds on New Relic Go APM / backend-neutral terminology instead of reintroducing Sentry Issues or fallback behavior (5.7). Obsolete Sentry planning references are retired or rewritten — openspec/changes/enrich-sentry-coverage/draft.md and openspec/next-up.md — preserving only backend-neutral / New Relic concepts such as native panic/error capture (5.8).\n\nFiles \u0026 scope: openspec/changes/release-0-10-0-reliability-and-model-routing/**, openspec/changes/enrich-sentry-coverage/draft.md, openspec/next-up.md. Do NOT modify the migrate-telemetry-to-new-relic specs/tasks themselves.\n\nDesign: where a Sentry concept maps cleanly to New Relic (Issue -\u003e operator-worthy failure / NoticeError; breadcrumb -\u003e custom event), rewrite rather than delete. Drop guidance that would steer future work back to Sentry.\n\nAcceptance: no active 0.10.0 plan reintroduces Sentry semantics; the panic/error-capture intent survives in New Relic terms. Do not check tasks.md boxes.",
       "assignee": "JUNIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 851968,
       "createdAt": "2026-06-17T05:39:12.313472018Z",
-      "updatedAt": "2026-06-17T05:39:12.313472018Z",
-      "completedAt": null
+      "updatedAt": "2026-06-17T13:03:00.876895884Z",
+      "completedAt": "2026-06-17T13:03:00.876895884Z"
     },
     {
       "id": "rall-e638",
