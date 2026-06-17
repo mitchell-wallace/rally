@@ -268,10 +268,32 @@
       "title": "Verify New Relic sink phase",
       "description": "OpenSpec change: migrate-telemetry-to-new-relic. Phase verification covering laps 1-5 (tasks 1.2, 1.4, 1.7, 2.1-2.10, 3.1-3.8), before the activation cut-over.\n\nUse the openspec-verify-change skill against migrate-telemetry-to-new-relic, focused on the sink phase. Identify the intended merge target before diffing — ask the user, or read PR metadata / repo docs / branch config / recent history; do NOT assume main — then use git diff \u003ctarget\u003e...HEAD. Identify the first lap/try of this batch and treat earlier branch work as pre-existing; flag but do not remove it.\n\nTrace the real lines, not just green tests: StartSpan maps to transactions/segments with preserved span ids; EmitTryLog emits exactly one RallyTry; CaptureFailure uses NoticeError with a stable Class; Flush is bounded; the panic path recovers, ends the transaction, then re-panics; the attribute builder enforces the 64-attr / key-length / scalar-value budget and drops sensitive keys with NO [scrubbed] placeholder. Run go test ./internal/telemetry.\n\nDo not rewrite git history. For substantive gaps add focused head laps (laps add head ...) using additive/revert commits; fix only tiny safe one-liners here. Report findings first. Then check off the tasks.md boxes for 1.2, 1.4, 1.7, 2.1-2.10, 3.1-3.8 only for work verified correct and thorough.",
       "assignee": "VERIFY",
-      "isDone": false,
+      "isDone": true,
       "order": 393216,
       "createdAt": "2026-06-17T05:39:12.313456119Z",
-      "updatedAt": "2026-06-17T05:39:12.313456119Z",
+      "updatedAt": "2026-06-17T09:36:19.775977451Z",
+      "completedAt": "2026-06-17T09:36:19.775977451Z"
+    },
+    {
+      "id": "work-ea05",
+      "title": "Move RallyTry emission after AppendTry",
+      "description": "Finish task 2.5 (and the remaining 3.8 gap): move the normal and handoff-only EmitTryLog calls in internal/relay/runner.go so RallyTry is recorded only after store.AppendTry succeeds, and add regression coverage proving failed persistence emits no RallyTry while a persisted try emits exactly one.",
+      "assignee": "SENIOR",
+      "isDone": false,
+      "order": 262144,
+      "createdAt": "2026-06-17T09:35:48.599468505Z",
+      "updatedAt": "2026-06-17T09:35:48.599468505Z",
+      "completedAt": null
+    },
+    {
+      "id": "work-0ac0",
+      "title": "Add lap-mismatch diagnostics and real NR regression tripwires",
+      "description": "Implement task 1.6 end to end: when a try records wrong_lap_consumed or multi_lap_consumed, emit RallyDiagnostic with level=warning, event_kind=lap_pin_mismatch, and mismatch_reason, and do not report RallyFailure by default. Replace the placeholder-only New Relic regression tests in internal/telemetry/newrelic_coverage_test.go with load-bearing assertions/tripwires for no Application.RecordLog/logger integration and bounded custom-event surfaces.",
+      "assignee": "SENIOR",
+      "isDone": false,
+      "order": 327680,
+      "createdAt": "2026-06-17T09:35:48.532923526Z",
+      "updatedAt": "2026-06-17T09:35:48.532923526Z",
       "completedAt": null
     },
     {
