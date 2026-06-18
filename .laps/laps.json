@@ -28,11 +28,11 @@
       "title": "Run/role header semantics (run: X/Y + role + model)",
       "description": "Context: design §2, tasks 3.1-3.4. The non-laps header today renders a bare [N/M] counter and shows the model on a separate line.\n\nOutcome: the non-laps run counter renders run: N/M; the header is role-first with harness/model on the same line (e.g. \"VERIFY: codex - g55-xh - started 16:40\"), preserving attempts inline. The lap-backed header path (title + laps: X/Y) is unchanged.\n\nFiles \u0026 scope: internal/style/style.go (add RoleLabel to HeaderOptions; change the non-laps counter format; put model on the role header line), internal/relay/runner.go (header call site passes role via task.Assignee + model context), internal/style/style_test.go.\n\nAcceptance: update style_test.go assertions from [N/M] to run: N/M (3.3); add a snapshot-style assertion that the no-laps header includes role + model on one line (3.4); go test ./internal/style/... ./internal/relay/... passes. Do not tick tasks.md.",
       "assignee": "JUNIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 196608,
       "createdAt": "2026-06-18T00:23:53.405091635Z",
-      "updatedAt": "2026-06-18T00:23:53.405091635Z",
-      "completedAt": null
+      "updatedAt": "2026-06-18T04:52:12.368828848Z",
+      "completedAt": "2026-06-18T04:52:12.368828848Z"
     },
     {
       "id": "rall-dfe7",
