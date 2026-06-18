@@ -62,6 +62,8 @@ func tailTarget(workspaceDir string, tryNum int) (*store.TryRecord, error) {
 		return nil, fmt.Errorf("load store: %w", err)
 	}
 
+	tries := s.AllTries()
+
 	if tryNum <= 0 {
 		rs, err := progress.LoadRunState(workspaceDir)
 		if err == nil && rs.ActiveLogPath != "" {
@@ -74,6 +76,9 @@ func tailTarget(workspaceDir string, tryNum int) (*store.TryRecord, error) {
 			} else if startedAt, err := time.Parse(time.RFC3339, rs.ActiveStartedAt); err == nil && time.Since(startedAt) > 24*time.Hour {
 				isStale = true
 				staleReason = "implausibly old active_started_at"
+			} else if activeTryRecorded(tries, rs.ActiveTryID) {
+				isStale = true
+				staleReason = "metadata already recorded in try history"
 			} else {
 				relay := s.GetRelay(rs.ActiveRelayID)
 				if relay == nil || relay.EndedAt != "" {
@@ -89,7 +94,6 @@ func tailTarget(workspaceDir string, tryNum int) (*store.TryRecord, error) {
 			}
 		}
 
-		tries := s.AllTries()
 		if len(tries) == 0 {
 			return nil, fmt.Errorf("no tries recorded in this workspace")
 		}
@@ -102,7 +106,6 @@ func tailTarget(workspaceDir string, tryNum int) (*store.TryRecord, error) {
 		return &tries[len(tries)-1], nil
 	}
 
-	tries := s.AllTries()
 	if len(tries) == 0 {
 		return nil, fmt.Errorf("no tries recorded in this workspace")
 	}
@@ -113,6 +116,18 @@ func tailTarget(workspaceDir string, tryNum int) (*store.TryRecord, error) {
 
 	rec := tries[tryNum-1]
 	return &rec, nil
+}
+
+func activeTryRecorded(tries []store.TryRecord, activeTryID int) bool {
+	if activeTryID <= 0 {
+		return false
+	}
+	for _, tr := range tries {
+		if tr.ID == activeTryID {
+			return true
+		}
+	}
+	return false
 }
 
 func followFile(ctx context.Context, f *os.File, out io.Writer) error {
@@ -157,7 +172,7 @@ func followFile(ctx context.Context, f *os.File, out io.Writer) error {
 }
 
 func init() {
-	tailCmd.Flags().Int("try", 0, "Try number to tail (1-based, default: latest)")
+	tailCmd.Flags().Int("try", 0, "Try number to tail (1-based historical try; default: active or latest completed)")
 	tailCmd.Flags().String("highlight", "off", "Syntax highlighting mode: off, heuristic, chroma")
 	rootCmd.AddCommand(tailCmd)
 }

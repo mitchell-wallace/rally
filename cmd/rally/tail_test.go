@@ -3,15 +3,24 @@ package main
 import (
 	"bytes"
 	"context"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/charmbracelet/lipgloss"
 	"github.com/mitchell-wallace/rally/internal/progress"
 	"github.com/mitchell-wallace/rally/internal/store"
+	"github.com/muesli/termenv"
 )
+
+func init() {
+	lipgloss.SetColorProfile(termenv.TrueColor)
+}
 
 func TestTailLatest(t *testing.T) {
 	dir := t.TempDir()
@@ -303,27 +312,42 @@ func initGitRepoForTail(t *testing.T, dir string) {
 }
 
 func TestTailHighlight(t *testing.T) {
-	hw := newHighlightWriter(&bytes.Buffer{}, "heuristic")
-	if hw == nil {
-		t.Fatal("expected highlightWriter")
-	}
+	const ansi = `\x1b\[[0-9;]*m`
+	ansiRe := regexp.MustCompile(ansi)
 
-	cw := newHighlightWriter(&bytes.Buffer{}, "chroma")
-	if cw == nil {
-		t.Fatal("expected highlightWriter")
-	}
+	t.Run("off passthrough", func(t *testing.T) {
+		var buf bytes.Buffer
+		w := newHighlightWriter(&buf, "off")
+		input := []byte("plain output\n")
+		if _, err := w.Write(input); err != nil {
+			t.Fatalf("Write error: %v", err)
+		}
+		if got := buf.String(); got != string(input) {
+			t.Fatalf("off output = %q, want %q", got, input)
+		}
+	})
 
-	ow := newHighlightWriter(&bytes.Buffer{}, "off")
-	if ow == nil {
-		t.Fatal("expected highlightWriter")
-	}
+	t.Run("heuristic adds ansi", func(t *testing.T) {
+		var buf bytes.Buffer
+		w := newHighlightWriter(&buf, "heuristic")
+		if _, err := w.Write([]byte("2026-06-18T12:00:00Z error https://example.com\n")); err != nil {
+			t.Fatalf("Write error: %v", err)
+		}
+		if got := buf.String(); !ansiRe.MatchString(got) {
+			t.Fatalf("heuristic output missing ANSI escapes: %q", got)
+		}
+	})
 
-	var buf bytes.Buffer
-	hw2 := newHighlightWriter(&buf, "heuristic")
-	hw2.Write([]byte("this is an error line\n"))
-	if !bytes.Contains(buf.Bytes(), []byte("error")) {
-		t.Errorf("heuristic writer failed to write")
-	}
+	t.Run("chroma adds ansi", func(t *testing.T) {
+		var buf bytes.Buffer
+		w := newHighlightWriter(&buf, "chroma")
+		if _, err := w.Write([]byte("{\"ok\":true}\n")); err != nil {
+			t.Fatalf("Write error: %v", err)
+		}
+		if got := buf.String(); !ansiRe.MatchString(got) {
+			t.Fatalf("chroma output missing ANSI escapes: %q", got)
+		}
+	})
 }
 
 func TestTailActiveMetadata(t *testing.T) {
@@ -340,14 +364,14 @@ func TestTailActiveMetadata(t *testing.T) {
 	// 1. Fresh workspace with active metadata tails the active log instead of erroring
 	activeLog1 := filepath.Join(dir, "active1.log")
 	os.WriteFile(activeLog1, []byte("active1\n"), 0o644)
-	
+
 	// Need to append a relay so the metadata isn't considered "crashed/finished"
 	_ = s.AppendRelay(store.RelayRecord{ID: 1, StartedAt: time.Now().Format(time.RFC3339)})
-	
+
 	err = progress.SetActiveTry(dir, progress.ActiveTryMetadata{
 		RelayID:   1,
 		RunID:     1,
-		TryID:     1,
+		TryID:     2,
 		LogPath:   activeLog1,
 		StartedAt: time.Now(),
 	})
@@ -388,7 +412,7 @@ func TestTailActiveMetadata(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	
+
 	target, err = tailTarget(dir, 0)
 	if err != nil {
 		t.Fatalf("expected fallback, got error: %v", err)
@@ -400,9 +424,9 @@ func TestTailActiveMetadata(t *testing.T) {
 	// 4. Stale active metadata from a crashed/finished relay is ignored
 	activeLog2 := filepath.Join(dir, "active2.log")
 	os.WriteFile(activeLog2, []byte("active2\n"), 0o644)
-	
+
 	_ = s.AppendRelay(store.RelayRecord{ID: 2, StartedAt: time.Now().Format(time.RFC3339), EndedAt: time.Now().Format(time.RFC3339)})
-	
+
 	err = progress.SetActiveTry(dir, progress.ActiveTryMetadata{
 		RelayID:   2,
 		RunID:     1,
@@ -413,7 +437,7 @@ func TestTailActiveMetadata(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	
+
 	target, err = tailTarget(dir, 0)
 	if err != nil {
 		t.Fatalf("expected fallback, got error: %v", err)
@@ -426,7 +450,7 @@ func TestTailActiveMetadata(t *testing.T) {
 	activeLog3 := filepath.Join(dir, "active3.log")
 	os.WriteFile(activeLog3, []byte("active3\n"), 0o644)
 	_ = s.AppendRelay(store.RelayRecord{ID: 3, StartedAt: time.Now().Format(time.RFC3339)})
-	
+
 	err = progress.SetActiveTry(dir, progress.ActiveTryMetadata{
 		RelayID:   3,
 		RunID:     1,
@@ -437,7 +461,7 @@ func TestTailActiveMetadata(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	
+
 	target, err = tailTarget(dir, 0)
 	if err != nil {
 		t.Fatalf("expected fallback, got error: %v", err)
@@ -453,6 +477,105 @@ func TestTailActiveMetadata(t *testing.T) {
 	}
 	if target.LogPath != completedLog {
 		t.Fatalf("expected try 1 log %q, got %q", completedLog, target.LogPath)
+	}
+}
+
+func TestTailActiveMetadataWarnsAndFallsBack(t *testing.T) {
+	dir := t.TempDir()
+	rallyDir := store.RallyDir(dir)
+	os.MkdirAll(rallyDir, 0o755)
+	initGitRepoForTail(t, dir)
+
+	s, err := store.NewStore(rallyDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_ = s.AppendRelay(store.RelayRecord{ID: 1, StartedAt: time.Now().Format(time.RFC3339)})
+
+	completedLog := filepath.Join(dir, "completed.log")
+	if err := os.WriteFile(completedLog, []byte("completed\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.AppendTry(store.TryRecord{ID: 1, AgentType: "claude", LogPath: completedLog, Completed: true}); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := progress.SetActiveTry(dir, progress.ActiveTryMetadata{
+		RelayID:   1,
+		RunID:     1,
+		TryID:     3,
+		LogPath:   filepath.Join(dir, "missing.log"),
+		StartedAt: time.Now(),
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	warning := captureStderr(t, func() {
+		target, err := tailTarget(dir, 0)
+		if err != nil {
+			t.Fatalf("tailTarget error: %v", err)
+		}
+		if target.LogPath != completedLog {
+			t.Fatalf("LogPath = %q, want %q", target.LogPath, completedLog)
+		}
+	})
+
+	if !strings.Contains(warning, "warning: stale active try ignored (missing log path)") {
+		t.Fatalf("warning = %q, want missing-log fallback warning", warning)
+	}
+}
+
+func TestTailActiveMetadataRecordedTryFallsBack(t *testing.T) {
+	dir := t.TempDir()
+	rallyDir := store.RallyDir(dir)
+	os.MkdirAll(rallyDir, 0o755)
+	initGitRepoForTail(t, dir)
+
+	s, err := store.NewStore(rallyDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_ = s.AppendRelay(store.RelayRecord{ID: 1, StartedAt: time.Now().Format(time.RFC3339)})
+
+	staleLog := filepath.Join(dir, "stale.log")
+	if err := os.WriteFile(staleLog, []byte("stale\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	latestCompletedLog := filepath.Join(dir, "latest.log")
+	if err := os.WriteFile(latestCompletedLog, []byte("latest\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.AppendTry(store.TryRecord{ID: 1, AgentType: "claude", LogPath: staleLog, Completed: true}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.AppendTry(store.TryRecord{ID: 2, AgentType: "claude", LogPath: latestCompletedLog, Completed: true}); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := progress.SetActiveTry(dir, progress.ActiveTryMetadata{
+		RelayID:   1,
+		RunID:     1,
+		TryID:     1,
+		LogPath:   staleLog,
+		StartedAt: time.Now(),
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	warning := captureStderr(t, func() {
+		target, err := tailTarget(dir, 0)
+		if err != nil {
+			t.Fatalf("tailTarget error: %v", err)
+		}
+		if target.LogPath != latestCompletedLog {
+			t.Fatalf("LogPath = %q, want %q", target.LogPath, latestCompletedLog)
+		}
+	})
+
+	if !strings.Contains(warning, "warning: stale active try ignored (metadata already recorded in try history)") {
+		t.Fatalf("warning = %q, want recorded-history fallback warning", warning)
 	}
 }
 
@@ -480,4 +603,32 @@ func TestFallbackToNewestUncompleted(t *testing.T) {
 	if target.LogPath != uncompletedLog {
 		t.Fatalf("expected fallback to uncompleted log %q, got %q", uncompletedLog, target.LogPath)
 	}
+}
+
+func captureStderr(t *testing.T, fn func()) string {
+	t.Helper()
+
+	original := os.Stderr
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("os.Pipe: %v", err)
+	}
+	os.Stderr = w
+	defer func() {
+		os.Stderr = original
+	}()
+
+	fn()
+
+	if err := w.Close(); err != nil {
+		t.Fatalf("stderr close: %v", err)
+	}
+	data, err := io.ReadAll(r)
+	if err != nil {
+		t.Fatalf("read captured stderr: %v", err)
+	}
+	if err := r.Close(); err != nil {
+		t.Fatalf("stderr read close: %v", err)
+	}
+	return string(data)
 }

@@ -86,23 +86,23 @@
 
 ## 5. Syntax highlighting for `rally tail`
 
-- [ ] 5.1 Add `--highlight` flag to `cmd/rally/tail.go` (`off|heuristic|chroma`, default `off`).
-- [ ] 5.2 Add lexer/highlighter pass in output loop for `heuristic` mode (no new dependency).
-- [ ] 5.3 Add optional rich mode behind dependency and gate with `--highlight=chroma`.
-- [ ] 5.4 Preserve deterministic behavior under plain mode.
+- [x] 5.1 Add `--highlight` flag to `cmd/rally/tail.go` (`off|heuristic|chroma`, default `off`).
+- [x] 5.2 Add lexer/highlighter pass in output loop for `heuristic` mode (no new dependency).
+- [x] 5.3 Add optional rich mode behind dependency and gate with `--highlight=chroma`.
+- [x] 5.4 Preserve deterministic behavior under plain mode.
 
 ## 6. `rally tail` active try targeting
 
-- [ ] 6.1 Extend progress run-state with active try metadata (`active_relay_id`, `active_run_id`, `active_try_id`, `active_log_path`, `active_started_at`).
-- [ ] 6.2 Write active try metadata at try start before the executor runs, and clear only the active metadata fields after the try is appended to the store:
+- [x] 6.1 Extend progress run-state with active try metadata (`active_relay_id`, `active_run_id`, `active_try_id`, `active_log_path`, `active_started_at`).
+- [x] 6.2 Write active try metadata at try start before the executor runs, and clear only the active metadata fields after the try is appended to the store:
   - add a helper that preserves `RunID`, `PinnedLapID`, `RecordedLaps`, `LapsAttempted`, `HandoffState`, and `SessionID`,
   - do not call `progress.ClearRunState` for active-tail cleanup.
-- [ ] 6.3 In `tailTarget`:
+- [x] 6.3 In `tailTarget`:
   - if `--try 0` and active run metadata exists, use its active try log,
   - if no active metadata, fall back to newest completed try,
   - retain explicit historical `--try N` semantics.
-- [ ] 6.4 Add fallback checks for stale/missing active files (warn, then use newest completed try when available).
-- [ ] 6.5 Add targeted tests:
+- [x] 6.4 Add fallback checks for stale/missing active files (warn, then use newest completed try when available).
+- [x] 6.5 Add targeted tests:
   - fresh workspace with active metadata tails the active log instead of erroring,
   - active metadata beats an older completed try,
   - stale/missing active path falls back with a warning,

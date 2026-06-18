@@ -193,11 +193,11 @@
       "title": "Verify stage 4 (tail highlighting + active targeting)",
       "description": "Use openspec-verify-change against the change, focused on phase 5 (tail syntax highlighting) and phase 6 (tail active-try targeting).\n\nIdentify the merge target (not assumed main) and the batch start; git diff \u003ctarget\u003e...HEAD.\n\nTrace: confirm --highlight default off is byte-identical to prior output and heuristic/chroma behave; confirm active try metadata is written at try start and cleared field-wise (RunID/PinnedLapID/RecordedLaps/LapsAttempted/HandoffState/SessionID preserved, ClearRunState not called); confirm --try 0 picks active over newest-completed, falls back with a warning on stale/missing, and historical --try N stays 1-based. Smoke-check that rally tail on a fresh workspace does not error when only an active try exists. go test ./cmd/rally/... ./internal/store/... ./internal/relay/....\n\nCheck off tasks.md 5.1-5.4 and 6.1-6.5 where verified; head-lap gaps; no history rewrites.",
       "assignee": "VERIFY",
-      "isDone": false,
+      "isDone": true,
       "order": 1114112,
       "createdAt": "2026-06-18T00:23:53.405114373Z",
-      "updatedAt": "2026-06-18T00:23:53.405114373Z",
-      "completedAt": null
+      "updatedAt": "2026-06-18T13:10:58.910886186Z",
+      "completedAt": "2026-06-18T13:10:58.910886186Z"
     },
     {
       "id": "rall-7114",
