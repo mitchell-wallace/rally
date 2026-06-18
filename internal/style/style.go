@@ -115,6 +115,12 @@ type HeaderOptions struct {
 	LapsStarted  int
 	LapsTotal    int
 	Model        string
+	// RoleLabel is the routing role for the run (e.g. "verify", "JUNIOR").
+	// When set, the non-laps header renders a role-first label —
+	// "ROLE: harness - model - started HH:MM" — instead of a bare harness
+	// name. It is ignored for laps-backed headers, which keep their
+	// title + laps format.
+	RoleLabel string
 }
 
 // RenderHeader renders a try header with separator lines, agent name, run index,
@@ -137,11 +143,25 @@ func RenderHeader(opts HeaderOptions) string {
 		}
 		label = fmt.Sprintf("%s%s — %s — started %s", opts.AgentName, attemptStr, title, timeStr)
 	} else {
+		counter := fmt.Sprintf("run: %d/%d", opts.RunIndex+1, opts.TotalRuns)
+		attemptStr := ""
 		if opts.Attempt > 1 {
-			label = fmt.Sprintf("[%d/%d] %s (attempt %d) — started %s", opts.RunIndex+1, opts.TotalRuns, opts.AgentName, opts.Attempt, timeStr)
-		} else {
-			label = fmt.Sprintf("[%d/%d] %s — started %s", opts.RunIndex+1, opts.TotalRuns, opts.AgentName, timeStr)
+			attemptStr = fmt.Sprintf(" (attempt %d)", opts.Attempt)
 		}
+		// Build the identity segment, joining harness and model with " - ".
+		var parts []string
+		if strings.TrimSpace(opts.AgentName) != "" {
+			parts = append(parts, opts.AgentName)
+		}
+		if strings.TrimSpace(opts.Model) != "" {
+			parts = append(parts, opts.Model)
+		}
+		ident := strings.Join(parts, " - ")
+		// Prepend a role label when available: "ROLE: harness - model".
+		if role := strings.TrimSpace(opts.RoleLabel); role != "" {
+			ident = strings.ToUpper(role) + ": " + ident
+		}
+		label = fmt.Sprintf("%s %s%s - started %s", counter, ident, attemptStr, timeStr)
 	}
 
 	maxLabelW := w - labelIndent
@@ -165,7 +185,10 @@ func RenderHeader(opts HeaderOptions) string {
 		sb.WriteString("\n  ")
 		sb.WriteString(DimStyle.Render(fmt.Sprintf("laps: %d/%d", opts.LapsStarted, opts.LapsTotal)))
 	}
-	if strings.TrimSpace(opts.Model) != "" {
+	// The model lives on its own dim line only for laps-backed headers,
+	// which keep their title + laps format. Non-laps headers fold the model
+	// into the role label line above.
+	if opts.IsLapsBacked && strings.TrimSpace(opts.Model) != "" {
 		sb.WriteString("\n  ")
 		sb.WriteString(DimStyle.Render(fmt.Sprintf("model: %s", opts.Model)))
 	}

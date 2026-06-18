@@ -23,10 +23,11 @@ func TestRenderHeader(t *testing.T) {
 		Attempt:   1,
 		StartTime: start,
 		Model:     "sonnet-4",
+		RoleLabel: "junior",
 	})
 
-	if !strings.Contains(got, "[3/10]") {
-		t.Errorf("expected [3/10] in header, got: %s", got)
+	if !strings.Contains(got, "run: 3/10") {
+		t.Errorf("expected 'run: 3/10' in header, got: %s", got)
 	}
 	if !strings.Contains(got, "claude") {
 		t.Errorf("expected agent name 'claude' in header, got: %s", got)
@@ -37,8 +38,13 @@ func TestRenderHeader(t *testing.T) {
 	if !strings.Contains(got, strings.Repeat("═", maxSepWidth)) {
 		t.Errorf("expected full-width separator line in header, got: %s", got)
 	}
-	if !strings.Contains(got, "model: sonnet-4") {
-		t.Errorf("expected 'model: sonnet-4' in header, got: %s", got)
+	// Non-laps headers fold the model into the role label line rather than a
+	// separate `model:` line.
+	if strings.Contains(got, "model: sonnet-4") {
+		t.Errorf("non-laps header should not carry a separate 'model:' line, got: %s", got)
+	}
+	if !strings.Contains(got, "JUNIOR: claude - sonnet-4") {
+		t.Errorf("expected role-first label 'JUNIOR: claude - sonnet-4' in header, got: %s", got)
 	}
 	if !strings.Contains(got, "\x1b[") {
 		t.Logf("no ANSI codes found in header (possible TTY detection); output: %q", got)
@@ -82,11 +88,44 @@ func TestRenderHeaderAttemptTwo(t *testing.T) {
 		StartTime: start,
 	})
 
-	if !strings.Contains(got, "[1/5]") {
-		t.Errorf("expected [1/5] in header, got: %s", got)
+	if !strings.Contains(got, "run: 1/5") {
+		t.Errorf("expected 'run: 1/5' in header, got: %s", got)
 	}
 	if !strings.Contains(got, "(attempt 2)") {
 		t.Errorf("expected '(attempt 2)' in header for attempt > 1, got: %s", got)
+	}
+}
+
+// TestRenderHeaderNoLapsRoleAndModelInline is the snapshot-style assertion for
+// design §2: the non-laps header puts the role label, harness, and model on a
+// single role-first line (no separate `model:` line).
+func TestRenderHeaderNoLapsRoleAndModelInline(t *testing.T) {
+	start := time.Date(2024, 6, 15, 16, 40, 0, 0, time.Local)
+	got := RenderHeader(HeaderOptions{
+		RunIndex:  1,
+		TotalRuns: 18,
+		AgentName: "codex",
+		Attempt:   1,
+		StartTime: start,
+		Model:     "g55-xh",
+		RoleLabel: "verify",
+	})
+
+	plain := stripAnsi(got)
+	// The label line carries role + harness + model + start time on one line.
+	const wantLabel = "  run: 2/18 VERIFY: codex - g55-xh - started 16:40"
+	if !strings.Contains(plain, wantLabel) {
+		t.Errorf("expected label line\n  %q\nin header, got:\n%s", wantLabel, plain)
+	}
+	// Model must not also appear on its own dim line.
+	if strings.Contains(plain, "model: g55-xh") {
+		t.Errorf("non-laps header must not carry a separate 'model:' line, got: %s", plain)
+	}
+	// The role+harness+model segment is a single line: ensure it is not split.
+	for _, line := range strings.Split(plain, "\n") {
+		if strings.Contains(line, "VERIFY: codex") != strings.Contains(line, "g55-xh") {
+			t.Errorf("role and model must be on the same line, got line: %q", line)
+		}
 	}
 }
 

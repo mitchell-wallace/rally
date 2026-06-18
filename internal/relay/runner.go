@@ -1463,6 +1463,7 @@ attemptLoop:
 				LapsStarted:  lapsStarted,
 				LapsTotal:    lapsTotal,
 				Model:        picked.Model,
+				RoleLabel:    task.Assignee,
 			})
 			fmt.Println(header)
 		}
