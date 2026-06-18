@@ -182,11 +182,11 @@
       "title": "tailTarget active selection + stale fallback + tests",
       "description": "Context: design §5.1, tasks 6.3, 6.4, 6.5. Builds on the active metadata from the prior lap.\n\nOutcome: in tailTarget, --try 0 uses the active run's active try log when active metadata exists; with no active metadata, fall back to the newest completed try; explicit historical --try N keeps its 1-based semantics. Stale/missing active files (missing log path, implausibly old active_started_at, or metadata belonging to no unfinished relay/run) produce a warning and fall back to the newest completed try.\n\nFiles \u0026 scope: cmd/rally/tail.go (tailTarget), cmd/rally/tail_test.go.\n\nAcceptance: tests — a fresh workspace with active metadata tails the active log instead of erroring; active metadata beats an older completed try; a stale/missing active path falls back with a warning; stale active metadata from a crashed/finished relay is ignored; historical --try N remains 1-based and unchanged. go test ./cmd/rally/.... Do not tick tasks.md.",
       "assignee": "JUNIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 1048576,
       "createdAt": "2026-06-18T00:23:53.405113556Z",
-      "updatedAt": "2026-06-18T00:23:53.405113556Z",
-      "completedAt": null
+      "updatedAt": "2026-06-18T13:00:56.567014021Z",
+      "completedAt": "2026-06-18T13:00:56.567014021Z"
     },
     {
       "id": "rall-fcb8",

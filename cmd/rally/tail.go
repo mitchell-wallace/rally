@@ -7,6 +7,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/mitchell-wallace/rally/internal/progress"
 	"github.com/mitchell-wallace/rally/internal/store"
 	"github.com/spf13/cobra"
 )
@@ -61,15 +62,51 @@ func tailTarget(workspaceDir string, tryNum int) (*store.TryRecord, error) {
 		return nil, fmt.Errorf("load store: %w", err)
 	}
 
+	if tryNum <= 0 {
+		rs, err := progress.LoadRunState(workspaceDir)
+		if err == nil && rs.ActiveLogPath != "" {
+			isStale := false
+			var staleReason string
+
+			if _, err := os.Stat(rs.ActiveLogPath); os.IsNotExist(err) {
+				isStale = true
+				staleReason = "missing log path"
+			} else if startedAt, err := time.Parse(time.RFC3339, rs.ActiveStartedAt); err == nil && time.Since(startedAt) > 24*time.Hour {
+				isStale = true
+				staleReason = "implausibly old active_started_at"
+			} else {
+				relay := s.GetRelay(rs.ActiveRelayID)
+				if relay == nil || relay.EndedAt != "" {
+					isStale = true
+					staleReason = "metadata belonging to no unfinished relay/run"
+				}
+			}
+
+			if isStale {
+				fmt.Fprintf(os.Stderr, "warning: stale active try ignored (%s), falling back to newest completed try\n", staleReason)
+			} else {
+				return &store.TryRecord{LogPath: rs.ActiveLogPath}, nil
+			}
+		}
+
+		tries := s.AllTries()
+		if len(tries) == 0 {
+			return nil, fmt.Errorf("no tries recorded in this workspace")
+		}
+
+		for i := len(tries) - 1; i >= 0; i-- {
+			if tries[i].Completed {
+				return &tries[i], nil
+			}
+		}
+		return &tries[len(tries)-1], nil
+	}
+
 	tries := s.AllTries()
 	if len(tries) == 0 {
 		return nil, fmt.Errorf("no tries recorded in this workspace")
 	}
 
-	if tryNum <= 0 {
-		rec := tries[len(tries)-1]
-		return &rec, nil
-	}
 	if tryNum > len(tries) || tryNum < 1 {
 		return nil, fmt.Errorf("valid range: 1-%d", len(tries))
 	}

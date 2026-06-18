@@ -172,3 +172,4 @@
 {"run_id":"relay-8-run-14","summary":"Applied role-resolved reasoning when deriving route-runtime resilience keys and added regressions for bench, pause, and probation behavior.","updated_at":"2026-06-18T12:04:38Z","laps_completed":["work-8c70"]}
 {"run_id":"relay-8-run-15","summary":"Added --highlight flag to tail with off/heuristic/chroma modes","updated_at":"2026-06-18T12:25:20Z","laps_completed":["rall-13c6"]}
 {"run_id":"relay-8-run-16","summary":"Added active try metadata to run-state, wrote it before executor start, cleared only active fields after try append, and added preservation/regression tests.","updated_at":"2026-06-18T12:33:55Z","laps_completed":["rall-d16d"]}
+{"run_id":"relay-8-run-17","summary":"Updated tailTarget to prefer active try metadata and added staleness checks and fallbacks.","updated_at":"2026-06-18T13:01:01Z","laps_completed":["rall-705b"]}

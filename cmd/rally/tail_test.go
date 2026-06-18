@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/mitchell-wallace/rally/internal/progress"
 	"github.com/mitchell-wallace/rally/internal/store"
 )
 
@@ -322,5 +323,161 @@ func TestTailHighlight(t *testing.T) {
 	hw2.Write([]byte("this is an error line\n"))
 	if !bytes.Contains(buf.Bytes(), []byte("error")) {
 		t.Errorf("heuristic writer failed to write")
+	}
+}
+
+func TestTailActiveMetadata(t *testing.T) {
+	dir := t.TempDir()
+	rallyDir := store.RallyDir(dir)
+	os.MkdirAll(rallyDir, 0o755)
+	initGitRepoForTail(t, dir)
+
+	s, err := store.NewStore(rallyDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// 1. Fresh workspace with active metadata tails the active log instead of erroring
+	activeLog1 := filepath.Join(dir, "active1.log")
+	os.WriteFile(activeLog1, []byte("active1\n"), 0o644)
+	
+	// Need to append a relay so the metadata isn't considered "crashed/finished"
+	_ = s.AppendRelay(store.RelayRecord{ID: 1, StartedAt: time.Now().Format(time.RFC3339)})
+	
+	err = progress.SetActiveTry(dir, progress.ActiveTryMetadata{
+		RelayID:   1,
+		RunID:     1,
+		TryID:     1,
+		LogPath:   activeLog1,
+		StartedAt: time.Now(),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	target, err := tailTarget(dir, 0)
+	if err != nil {
+		t.Fatalf("expected active log, got error: %v", err)
+	}
+	if target.LogPath != activeLog1 {
+		t.Fatalf("expected LogPath %q, got %q", activeLog1, target.LogPath)
+	}
+
+	// 2. Active metadata beats an older completed try
+	completedLog := filepath.Join(dir, "completed.log")
+	os.WriteFile(completedLog, []byte("completed\n"), 0o644)
+	_ = s.AppendTry(store.TryRecord{ID: 1, AgentType: "claude", LogPath: completedLog, Completed: true})
+
+	target, err = tailTarget(dir, 0)
+	if err != nil {
+		t.Fatalf("expected active log, got error: %v", err)
+	}
+	if target.LogPath != activeLog1 {
+		t.Fatalf("expected LogPath %q, got %q", activeLog1, target.LogPath)
+	}
+
+	// 3. Stale/missing active path falls back with a warning
+	activeLogMissing := filepath.Join(dir, "missing.log")
+	err = progress.SetActiveTry(dir, progress.ActiveTryMetadata{
+		RelayID:   1,
+		RunID:     1,
+		TryID:     2,
+		LogPath:   activeLogMissing,
+		StartedAt: time.Now(),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	
+	target, err = tailTarget(dir, 0)
+	if err != nil {
+		t.Fatalf("expected fallback, got error: %v", err)
+	}
+	if target.LogPath != completedLog {
+		t.Fatalf("expected fallback to completed log %q, got %q", completedLog, target.LogPath)
+	}
+
+	// 4. Stale active metadata from a crashed/finished relay is ignored
+	activeLog2 := filepath.Join(dir, "active2.log")
+	os.WriteFile(activeLog2, []byte("active2\n"), 0o644)
+	
+	_ = s.AppendRelay(store.RelayRecord{ID: 2, StartedAt: time.Now().Format(time.RFC3339), EndedAt: time.Now().Format(time.RFC3339)})
+	
+	err = progress.SetActiveTry(dir, progress.ActiveTryMetadata{
+		RelayID:   2,
+		RunID:     1,
+		TryID:     3,
+		LogPath:   activeLog2,
+		StartedAt: time.Now(),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	
+	target, err = tailTarget(dir, 0)
+	if err != nil {
+		t.Fatalf("expected fallback, got error: %v", err)
+	}
+	if target.LogPath != completedLog {
+		t.Fatalf("expected fallback to completed log %q, got %q", completedLog, target.LogPath)
+	}
+
+	// 5. Implausibly old active_started_at falls back
+	activeLog3 := filepath.Join(dir, "active3.log")
+	os.WriteFile(activeLog3, []byte("active3\n"), 0o644)
+	_ = s.AppendRelay(store.RelayRecord{ID: 3, StartedAt: time.Now().Format(time.RFC3339)})
+	
+	err = progress.SetActiveTry(dir, progress.ActiveTryMetadata{
+		RelayID:   3,
+		RunID:     1,
+		TryID:     4,
+		LogPath:   activeLog3,
+		StartedAt: time.Now().Add(-25 * time.Hour),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	
+	target, err = tailTarget(dir, 0)
+	if err != nil {
+		t.Fatalf("expected fallback, got error: %v", err)
+	}
+	if target.LogPath != completedLog {
+		t.Fatalf("expected fallback to completed log %q, got %q", completedLog, target.LogPath)
+	}
+
+	// 6. Explicit historical --try N remains 1-based and unchanged
+	target, err = tailTarget(dir, 1)
+	if err != nil {
+		t.Fatalf("expected try 1, got error: %v", err)
+	}
+	if target.LogPath != completedLog {
+		t.Fatalf("expected try 1 log %q, got %q", completedLog, target.LogPath)
+	}
+}
+
+// TestFallbackToNewestUncompleted tests that if no completed try exists,
+// it falls back to the newest uncompleted try.
+func TestFallbackToNewestUncompleted(t *testing.T) {
+	dir := t.TempDir()
+	rallyDir := store.RallyDir(dir)
+	os.MkdirAll(rallyDir, 0o755)
+	initGitRepoForTail(t, dir)
+
+	s, err := store.NewStore(rallyDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	uncompletedLog := filepath.Join(dir, "uncompleted.log")
+	os.WriteFile(uncompletedLog, []byte("uncompleted\n"), 0o644)
+	_ = s.AppendTry(store.TryRecord{ID: 1, AgentType: "claude", LogPath: uncompletedLog, Completed: false})
+
+	target, err := tailTarget(dir, 0)
+	if err != nil {
+		t.Fatalf("expected fallback, got error: %v", err)
+	}
+	if target.LogPath != uncompletedLog {
+		t.Fatalf("expected fallback to uncompleted log %q, got %q", uncompletedLog, target.LogPath)
 	}
 }
