@@ -398,6 +398,45 @@ Built-in harnesses (`ag`/`cc`/`cx`/`ge`/`op`) can declare named models but
 **cannot** declare `command`, `model_flag`, `output_strategy`, or
 `tail_stream`.
 
+### `[reasoning]` — role-level variant preferences
+
+`[reasoning]` layers a per-role default on top of `[routes]` and
+`[harness.<name>.models]`. Keys are role names (the same names matched in
+`[routes]`, case-insensitively). Each preference is resolved **only after**
+the route entry's harness is selected, and **only when that entry has no
+explicit model token** — so an explicit model like `cx:g55` always wins.
+
+```toml
+[reasoning]
+verify = "g55-xh"   # high-reasoning variant on the codex-led verify lane
+junior = "g55-l"    # lightweight variant on the opencode-led junior lane
+```
+
+A value may be one of three forms:
+
+- A **bare model alias** resolved in the selected harness (a variant you named
+  under `[harness.<name>.models]`, e.g. `g55-xh`). This changes the model and
+  sets no effort flag.
+- A **harness-scoped alias** like `op:g55-xh`, which resolves only when the
+  route selects that harness and is ignored for others. A scoped alias that
+  names no known model is a hard error in `rally routes check` (likely a typo).
+- A **bare effort token** like `xhigh`, `high`, or `low`, applied as a
+  reasoning-effort flag to the selected harness where supported. Each harness
+  injects effort through its own flag:
+
+  | Harness     | Effort flag                          | Documented values                              |
+  |-------------|--------------------------------------|------------------------------------------------|
+  | codex       | `-c model_reasoning_effort=<value>`  | `none` `minimal` `low` `medium` `high` `xhigh` |
+  | claude      | `--effort <value>`                   | `low` `medium` `high` `xhigh` `max`            |
+  | opencode    | `--variant <value>`                  | provider-specific, no fixed set                |
+  | gemini      | unsupported                          | warned and skipped — pick a model instead      |
+  | antigravity | unsupported as a flag                | reasoning encoded in the model alias/name      |
+
+Unknown effort tokens warn and pass through rather than failing the run (the
+spike confirmed claude/opencode ignore many unsupported values and codex
+rejects invalid values at the API), so a forward-compatible default never
+pre-emptively kills a run on a token Rally doesn't recognise.
+
 ### User-defined harnesses
 
 Declaring `command` on a harness registers a brand-new CLI agent. Example:

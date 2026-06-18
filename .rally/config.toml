@@ -94,3 +94,35 @@ recovery = ['cx:g54', 'cx:g55', 'cc:opus', 'ag:opus', 'op:ds']
 
 # Custom role example
 explore = ['op:dsf:2', 'op:mini:3']
+
+
+# Per-role reasoning / variant preferences. Keys are role names (the same
+# names used in [routes], matched case-insensitively). Each value is resolved
+# ONLY after the selected route entry's harness is known, and ONLY when that
+# entry has no explicit model token — an explicit model like `cx:g55` always
+# wins. Layers role-level defaults on top of [routes] / [harness.*.models].
+#
+# A value may be:
+#   * a bare model alias resolved in the selected harness, e.g. `g55-xh` /
+#     `g55-l` — a variant you named under [harness.cx.models]; changes the
+#     model and sets no effort flag.
+#   * a harness-scoped alias, e.g. `cx:g55-xh` — resolves only when the route
+#     selects codex; ignored for other harnesses.
+#   * a bare effort token, e.g. `xhigh` / `high` / `low` — applied as a
+#     reasoning-effort flag to the selected harness where supported.
+#
+# Harness-specific effort injection (for a bare effort token):
+#   codex       -c model_reasoning_effort=<v>   none|minimal|low|medium|high|xhigh
+#   claude      --effort <v>                    low|medium|high|xhigh|max
+#   opencode    --variant <v>                   provider-specific, no fixed set
+#   gemini      unsupported — warned and skipped (pick a model to change reasoning)
+#   antigravity unsupported as a flag — reasoning encoded in the model alias/name
+#
+# Unknown effort tokens warn and pass through (codex rejects bad values at the
+# API). A missing harness-scoped alias (e.g. `cx:typo`) is a hard error in
+# `rally routes check`. Uncomment to opt in; the aliases below must exist in
+# [harness.<name>.models] to resolve to a model, else they act as effort tokens.
+#
+# [reasoning]
+# verify = 'g55-xh'   # high-reasoning variant on the codex-led verify lane
+# junior = 'g55-l'    # lightweight variant on the opencode-led junior lane
