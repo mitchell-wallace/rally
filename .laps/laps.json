@@ -160,11 +160,11 @@
       "title": "rally tail syntax highlighting (--highlight)",
       "description": "Context: design §5.2, tasks 5.1-5.4.\n\nOutcome: rally tail gains --highlight off|heuristic|chroma (default off). heuristic adds token-aware coloring (errors, JSON-like lines, timestamps, commands, URLs) with no new dependency. chroma offers richer coloring behind a dependency, gated by --highlight=chroma. Plain (off) mode stays byte-for-byte deterministic.\n\nFiles \u0026 scope: cmd/rally/tail.go (flag + output loop), a small heuristic highlighter helper, and the optional chroma path. Default off preserves current output exactly.\n\nAcceptance: --highlight=off output is unchanged; heuristic colorizes without a new required dependency; chroma is gated behind its flag/dependency. go test ./cmd/rally/... (tail_test.go). Do not tick tasks.md.",
       "assignee": "JUNIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 917504,
       "createdAt": "2026-06-18T00:23:53.40510725Z",
-      "updatedAt": "2026-06-18T00:23:53.40510725Z",
-      "completedAt": null
+      "updatedAt": "2026-06-18T12:25:02.178605803Z",
+      "completedAt": "2026-06-18T12:25:02.178605803Z"
     },
     {
       "id": "rall-d16d",
