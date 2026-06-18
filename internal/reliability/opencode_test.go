@@ -221,6 +221,123 @@ func TestParseOpencodeError_ProviderFromModel(t *testing.T) {
 	}
 }
 
+func TestParseOpencodeError_SubscriptionUsageLimitWrappers(t *testing.T) {
+	tests := []struct {
+		name   string
+		stderr string
+		model  string
+	}{
+		{
+			name:   "AI_APICallError wrapped under UnknownError message",
+			stderr: `{"type":"error","error":{"name":"UnknownError","data":{"message":"AI_APICallError: Monthly usage limit reached. Resets in 7 days."}}}`,
+			model:  "opencode/opencode-go",
+		},
+		{
+			name:   "AI_RetryError wrapped message",
+			stderr: `{"type":"error","error":{"name":"UnknownError","data":{"message":"AI_RetryError: Failed after 3 attempts. Last error: Monthly usage limit reached. Resets in 7 days."}}}`,
+			model:  "opencode/opencode-go",
+		},
+		{
+			name:   "flat server-log error.error carrier",
+			stderr: `timestamp=2026-06-16T20:58:00Z level=ERROR run=r1 message="stream error" providerID=opencode-go modelID=foo session.id=ses_1 small=false agent=build mode=primary error.error="AI_APICallError: Monthly usage limit reached. Resets in 7 days."`,
+			model:  "opencode/opencode-go",
+		},
+		{
+			name:   "flat server-log AI_RetryError carrier",
+			stderr: `timestamp=2026-06-16T20:58:00Z level=ERROR run=r1 message="stream error" providerID=opencode-go modelID=foo session.id=ses_1 small=false agent=title mode=primary error.error="AI_RetryError: Failed after 3 attempts. Last error: Monthly usage limit reached. Resets in 7 days."`,
+			model:  "opencode/opencode-go",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ev := ParseOpencodeError(tt.stderr, tt.model)
+			if ev == nil {
+				t.Fatal("expected non-nil evidence")
+			}
+			if ev.Category != CategoryUsageLimit {
+				t.Errorf("category = %q, want %q", ev.Category, CategoryUsageLimit)
+			}
+			if ev.StatusCode != 429 {
+				t.Errorf("statusCode = %d, want 429", ev.StatusCode)
+			}
+			if ev.ResetAfter != 7*24*time.Hour {
+				t.Errorf("resetAfter = %v, want %v", ev.ResetAfter, 7*24*time.Hour)
+			}
+		})
+	}
+}
+
+func TestParseOpencodeError_ResetSpanParsing(t *testing.T) {
+	tests := []struct {
+		name   string
+		msg    string
+		expect time.Duration
+	}{
+		{"days span", "Monthly usage limit reached. Resets in 7 days.", 7 * 24 * time.Hour},
+		{"hour span", "Usage limit reached for 5 hour.", 5 * time.Hour},
+		{"minutes span", "Usage limit reached. Resets in 30 minutes.", 30 * time.Minute},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			stderr := `{"type":"error","error":{"name":"UnknownError","data":{"message":"AI_APICallError: ` + tt.msg + `"}}}`
+			ev := ParseOpencodeError(stderr, "opencode/opencode-go")
+			if ev == nil {
+				t.Fatal("expected non-nil evidence")
+			}
+			if ev.Category != CategoryUsageLimit {
+				t.Fatalf("category = %q, want %q", ev.Category, CategoryUsageLimit)
+			}
+			if ev.ResetAfter != tt.expect {
+				t.Errorf("resetAfter = %v, want %v", ev.ResetAfter, tt.expect)
+			}
+			if ev.ResetAt != nil {
+				t.Errorf("resetAt = %v, want nil", ev.ResetAt)
+			}
+		})
+	}
+}
+
+func TestParseOpencodeError_AbsoluteResetTimestamp(t *testing.T) {
+	tests := []struct {
+		name   string
+		stderr string
+	}{
+		{
+			name:   "structured wrapper message",
+			stderr: `{"type":"error","error":{"name":"UnknownError","data":{"message":"AI_APICallError: Usage limit reached for 5 hour. Your limit will reset at 2026-06-16 18:29:51"}}}`,
+		},
+		{
+			name:   "flat server-log wrapper message",
+			stderr: `timestamp=2026-06-16T20:58:00Z level=ERROR run=r1 message="stream error" providerID=zai-coding-plan modelID=glm-5.2 session.id=ses_1 small=false agent=build mode=primary error.error="AI_RetryError: Failed after 3 attempts. Last error: Usage limit reached for 5 hour. Your limit will reset at 2026-06-16 18:29:51"`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// "reached for 5 hour" also matches the span regex, but the absolute
+			// "will reset at ..." timestamp is the authoritative reset and must win.
+			ev := ParseOpencodeError(tt.stderr, "zai-coding-plan/glm-5.2")
+			if ev == nil {
+				t.Fatal("expected non-nil evidence")
+			}
+			if ev.Category != CategoryUsageLimit {
+				t.Fatalf("category = %q, want %q", ev.Category, CategoryUsageLimit)
+			}
+			if ev.ResetAt == nil {
+				t.Fatal("expected non-nil ResetAt")
+			}
+			want := time.Date(2026, 6, 16, 18, 29, 51, 0, time.Local)
+			if !ev.ResetAt.Equal(want) {
+				t.Errorf("resetAt = %v, want %v", ev.ResetAt, want)
+			}
+			if ev.ResetAfter != 0 {
+				t.Errorf("resetAfter = %v, want 0 (absolute timestamp wins)", ev.ResetAfter)
+			}
+		})
+	}
+}
+
 func TestParseOpencodeError_UsageLimitPriorityOverRateLimit(t *testing.T) {
 	ev := ParseOpencodeError(
 		`{"type":"error","error":{"name":"RateLimitError","data":{"message":"Usage limit reached for your account. Resets in 24h."}}}`,
