@@ -39,11 +39,11 @@
       "title": "Verify stage 1 (lap-pin mismatch + run/role headers)",
       "description": "Use the openspec-verify-change skill against release-0-10-0-reliability-and-model-routing, focused on phase 1 (lap-pin mismatch warning + handoff) and phase 3 (run/role header semantics).\n\nBefore diffing, identify the intended merge target (ask the user / PR metadata / repo docs / branch config / recent history — do not assume main) and the first lap/try of this batch; treat earlier branch work as pre-existing unless the user asks to include it. Use git diff \u003ctarget\u003e...HEAD.\n\nTrace the real lines, not just green tests: confirm the mismatch branch in runner.go no longer reaches issue-worthy / FailureCategory capture yet still records FailReason + mismatch_reason; confirm telemetry.LevelWarning exists and maps to RallyDiagnostic level=warning through the New Relic sink (not Sentry — removed 0.9.1); confirm the preflight guard for an already-complete pinned lap; confirm the header renders run: N/M and a role+model line. Run go build ./... and go test ./internal/relay/... ./internal/style/... ./internal/telemetry/....\n\nCheck off tasks.md 1.1-1.6 and 3.1-3.4 only for work verified correct and thorough. For substantive gaps, laps add head a focused fix lap rather than fixing here (tiny safe one-liners excepted). Do not rewrite git history.",
       "assignee": "VERIFY",
-      "isDone": false,
+      "isDone": true,
       "order": 262144,
       "createdAt": "2026-06-18T00:23:53.405092491Z",
-      "updatedAt": "2026-06-18T00:23:53.405092491Z",
-      "completedAt": null
+      "updatedAt": "2026-06-18T05:30:40.676228481Z",
+      "completedAt": "2026-06-18T05:30:40.676228481Z"
     },
     {
       "id": "rall-9c99",

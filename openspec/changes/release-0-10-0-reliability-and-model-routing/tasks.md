@@ -1,14 +1,14 @@
 ## 1. Lap pin mismatch warning + handoff behavior
 
-- [ ] 1.1 Split mismatch outcomes in `internal/relay/runner.go`:
+- [x] 1.1 Split mismatch outcomes in `internal/relay/runner.go`:
   - keep reason values (`wrong_lap_consumed`, `multi_lap_consumed`),
   - stop treating mismatches as issue-worthy operator failures,
   - still record `fail_reason`/mismatch metadata in run/try records without adding a `FailureCategory`.
-- [ ] 1.2 Keep mismatch as non-retry terminal run result (advance to next scheduler entry) and document warning path in inline logs and telemetry.
-- [ ] 1.3 Add/adjust run-level test(s) verifying no operator-worthy failure capture for mismatch-only runs, while run/try records remain complete.
-- [ ] 1.4 Add run-state preflight guard for already-complete pinned lap before/just after mismatch detection.
-- [ ] 1.5 Add telemetry assertions that mismatch events gain `event_kind=lap_pin_mismatch` and `mismatch_reason=wrong_lap_consumed|multi_lap_consumed` tags without `failure_category` or error-level issue capture.
-- [ ] 1.6 Add `telemetry.LevelWarning` support and map it through the active telemetry sink so mismatch diagnostics are warning-level events without becoming operator-worthy failures (`RallyDiagnostic level=warning` through New Relic after 0.9.1).
+- [x] 1.2 Keep mismatch as non-retry terminal run result (advance to next scheduler entry) and document warning path in inline logs and telemetry.
+- [x] 1.3 Add/adjust run-level test(s) verifying no operator-worthy failure capture for mismatch-only runs, while run/try records remain complete.
+- [x] 1.4 Add run-state preflight guard for already-complete pinned lap before/just after mismatch detection.
+- [x] 1.5 Add telemetry assertions that mismatch events gain `event_kind=lap_pin_mismatch` and `mismatch_reason=wrong_lap_consumed|multi_lap_consumed` tags without `failure_category` or error-level issue capture.
+- [x] 1.6 Add `telemetry.LevelWarning` support and map it through the active telemetry sink so mismatch diagnostics are warning-level events without becoming operator-worthy failures (`RallyDiagnostic level=warning` through New Relic after 0.9.1).
 
 ## 2. Cancelled state for operator-controlled exits
 
@@ -53,13 +53,13 @@
 
 ## 3. Run/role header semantics (`run:` labels)
 
-- [ ] 3.1 Update `internal/style/style.go`:
+- [x] 3.1 Update `internal/style/style.go`:
   - rename/format non-laps run counter to `run: X/Y`,
   - add role label support in header (`VERIFY` / task assignee),
   - include model on same-line role header path and preserve attempts.
-- [ ] 3.2 Update `internal/relay/runner.go` header call site to pass role/agent context.
-- [ ] 3.3 Update `internal/style/style_test.go` assertions from `[N/M]` to `run: N/M`.
-- [ ] 3.4 Add snapshot-style assertion that no-laps header includes role + model in one line.
+- [x] 3.2 Update `internal/relay/runner.go` header call site to pass role/agent context.
+- [x] 3.3 Update `internal/style/style_test.go` assertions from `[N/M]` to `run: N/M`.
+- [x] 3.4 Add snapshot-style assertion that no-laps header includes role + model in one line.
 
 ## 4. Reasoning variant aliases and role resolution
 
