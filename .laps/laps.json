@@ -105,11 +105,11 @@
       "title": "Reasoning config schema + role resolver + propagation",
       "description": "Context: design §4, tasks 4.1, 4.2, 4.3.\n\nOutcome: a [reasoning] table maps role name (case-insensitive) → harness-aware reasoning/model preference, resolved only after the route-selected harness is known (never as a global alias). A resolver helper applies role-level model-alias fallback after ActiveRoute(task.Assignee) selects the route, only when the entry has no explicit model token, preserving explicit route models at higher precedence and resolving to a named model alias in the selected harness. Resolved route/runtime data carries optional {model, reasoning_effort} while preserving model-alias-only behavior.\n\nFiles \u0026 scope: internal/config/config_v2.go + rawConfig ([reasoning] map[string]string), internal/routing (resolver helper), and propagation through agent.ResolvedAgent, agent.RunOptions, relay.Config.Resolver call sites, and routeSelection. Keep existing [routes], [defaults.*_model], and [harness.\u003cname\u003e.models] behavior unchanged.\n\nDesign: lane-aware fallback fires only when task role + selected harness are both known and the route entry has no explicit model. Return both the selected model and the optional effort so each executor can inject via its own mechanism (executor wiring is the next lap).\n\nAcceptance: go build ./...; existing config/routing tests pass; add resolver unit tests for precedence (explicit model wins; role alias resolves to a harness model alias). go test ./internal/config/... ./internal/routing/... ./internal/relay/.... Do not tick tasks.md.",
       "assignee": "SENIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 655360,
       "createdAt": "2026-06-18T00:23:53.405104183Z",
-      "updatedAt": "2026-06-18T00:23:53.405104183Z",
-      "completedAt": null
+      "updatedAt": "2026-06-18T06:45:37.653391838Z",
+      "completedAt": "2026-06-18T06:45:37.653391838Z"
     },
     {
       "id": "rall-33eb",
