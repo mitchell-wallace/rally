@@ -116,11 +116,11 @@
       "title": "Harness-specific effort injection + validation tests",
       "description": "Context: design §4.1/4.2, tasks 4.4, 4.5. Builds on the resolved {model, reasoning_effort}.\n\nOutcome: executor argument builders inject harness-specific effort — codex: -c model_reasoning_effort=\u003cvalue\u003e; claude: --effort \u003cvalue\u003e; opencode: --variant \u003cvalue\u003e; gemini: warn and skip; antigravity: resolve effort via model aliases/model names only. Validation: a missing harness-scoped model alias is a clear rally routes check error (likely an operator typo); an unknown/unsupported effort value warns rather than hard-fails; an unsupported-harness effort warns and skips injection.\n\nFiles \u0026 scope: internal/agent/\u003charness\u003e.go argument builders (codex, claude, opencode, gemini, antigravity), the routes-check validation path, and their tests.\n\nAcceptance: tests for — missing harness-scoped model alias → routes check error; route explicit model still wins; role alias resolves to an existing harness model alias; unknown unsupported effort warns not fails; unsupported harness effort warns + skips. go test ./internal/agent/... ./internal/config/... ./cmd/rally/.... Do not tick tasks.md.",
       "assignee": "SENIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 720896,
       "createdAt": "2026-06-18T00:23:53.40510493Z",
-      "updatedAt": "2026-06-18T00:23:53.40510493Z",
-      "completedAt": null
+      "updatedAt": "2026-06-18T11:32:40.431814168Z",
+      "completedAt": "2026-06-18T11:32:40.431814168Z"
     },
     {
       "id": "rall-058c",

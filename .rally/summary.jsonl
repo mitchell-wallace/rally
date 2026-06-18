@@ -165,3 +165,5 @@
 {"run_id":"relay-8-run-14","summary":"opencode process exited unsuccessfully without a parseable result","updated_at":"2026-06-18T08:11:02Z","laps_completed":"none"}
 {"run_id":"relay-8-run-15","summary":"opencode process exited unsuccessfully without a parseable result","updated_at":"2026-06-18T09:26:03Z","laps_completed":"none"}
 {"run_id":"relay-8-run-13","summary":"(agent exited without finalizing)","updated_at":"2026-06-18T11:23:07Z","laps_completed":"none"}
+{"run_id":"relay-8-run-10","summary":"(agent exited without finalizing)","updated_at":"2026-06-18T11:28:02Z","laps_completed":"none"}
+{"run_id":"relay-8-run-11","summary":"Fixed reasoning effort warning logging for executor argument builders and verified the harness-specific effort validation tests.","updated_at":"2026-06-18T11:33:02Z","laps_completed":["rall-33eb"]}
