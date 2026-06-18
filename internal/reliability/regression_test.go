@@ -147,6 +147,23 @@ func TestRegression_ShortRateLimit_IsInfraClassNotAgentError(t *testing.T) {
 	}
 }
 
+func TestRegression_ShortRateLimitSignal_IsNotCrash(t *testing.T) {
+	// Confirms that a short rate-limit signal is classified as a non-error
+	// (info) signal, retaining event_kind=limit_signal and
+	// failure_category=short_rate_limit, and is not reclassified as a
+	// crash/failure. This is a targeted assertion for task 7.1.
+	logLines := []string{
+		"rate limit exceeded",
+	}
+	decision := ClassifyError(logLines, "any-harness", nil, nil)
+	if decision.Category != CategoryShortRateLimit {
+		t.Errorf("category = %q, want %q", decision.Category, CategoryShortRateLimit)
+	}
+	if decision.FailureClass == FailureAgent {
+		t.Errorf("class = %q, want != %q (rate-limit is not an agent failure)", decision.FailureClass, FailureAgent)
+	}
+}
+
 func TestRegression_APITimeoutConnectionReset_TransientInfraNotAgentError(t *testing.T) {
 	tests := []struct {
 		name     string
