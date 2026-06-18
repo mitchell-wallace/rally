@@ -37,13 +37,15 @@ func FormatMixLabel(stored string) string {
 }
 
 type routeRuntime struct {
-	selector   *routing.Selector
-	override   *routing.OverrideRoute
-	schedulers map[string]*routing.Scheduler
-	resolver   Resolver
-	store      *store.Store
-	lastAgent  map[string]agent.ResolvedAgent
-	warnings   []string
+	selector          *routing.Selector
+	override          *routing.OverrideRoute
+	schedulers        map[string]*routing.Scheduler
+	resolver          Resolver
+	reasoning         map[string]string
+	reasoningResolver routing.RoleReasoningResolver
+	store             *store.Store
+	lastAgent         map[string]agent.ResolvedAgent
+	warnings          []string
 }
 
 func (r *routeRuntime) Warnings() []string {
@@ -82,9 +84,9 @@ func (e *routeSelectionError) Error() string {
 func newRouteRuntimeFromConfig(cfg Config) (*routeRuntime, string, error) {
 	switch {
 	case cfg.UseOverrideRoute:
-		return newOverrideRouteRuntime(cfg.AgentMixSpecs, cfg.RouteSpecs, cfg.Resolver, !cfg.LapsEnabled)
+		return newOverrideRouteRuntimeWithReasoning(cfg.AgentMixSpecs, cfg.RouteSpecs, cfg.Resolver, cfg.Reasoning, cfg.ReasoningResolver, !cfg.LapsEnabled)
 	case len(cfg.RouteSpecs) > 0:
-		rt, err := newResolvedRouteRuntime(cfg.RouteSpecs, cfg.Resolver, !cfg.LapsEnabled, nil)
+		rt, err := newResolvedRouteRuntimeWithReasoning(cfg.RouteSpecs, cfg.Resolver, cfg.Reasoning, cfg.ReasoningResolver, !cfg.LapsEnabled, nil)
 		return rt, relaySelectionModeRoutes, err
 	default:
 		return newLegacyMixRouteRuntime(cfg.AgentMixSpecs, cfg.Resolver, !cfg.LapsEnabled)
@@ -97,11 +99,11 @@ func newRouteRuntimeFromStoredLabel(cfg Config, stored string) (*routeRuntime, s
 		if len(cfg.RouteSpecs) == 0 {
 			return nil, "", fmt.Errorf("resume relay: stored route-based relay requires configured routes")
 		}
-		rt, err := newResolvedRouteRuntime(cfg.RouteSpecs, cfg.Resolver, !cfg.LapsEnabled, nil)
+		rt, err := newResolvedRouteRuntimeWithReasoning(cfg.RouteSpecs, cfg.Resolver, cfg.Reasoning, cfg.ReasoningResolver, !cfg.LapsEnabled, nil)
 		return rt, relaySelectionModeRoutes, err
 	case strings.HasPrefix(stored, relaySelectionModeOverridePrefix):
 		specs := strings.Fields(strings.TrimSpace(strings.TrimPrefix(stored, relaySelectionModeOverridePrefix)))
-		return newOverrideRouteRuntime(specs, cfg.RouteSpecs, cfg.Resolver, !cfg.LapsEnabled)
+		return newOverrideRouteRuntimeWithReasoning(specs, cfg.RouteSpecs, cfg.Resolver, cfg.Reasoning, cfg.ReasoningResolver, !cfg.LapsEnabled)
 	default:
 		return newLegacyMixRouteRuntime(strings.Fields(stored), cfg.Resolver, !cfg.LapsEnabled)
 	}
@@ -124,12 +126,16 @@ func newLegacyMixRouteRuntime(specs []string, resolver Resolver, noBackend bool)
 }
 
 func newOverrideRouteRuntime(specs []string, routeSpecs map[string][]string, resolver Resolver, noBackend bool) (*routeRuntime, string, error) {
+	return newOverrideRouteRuntimeWithReasoning(specs, routeSpecs, resolver, nil, nil, noBackend)
+}
+
+func newOverrideRouteRuntimeWithReasoning(specs []string, routeSpecs map[string][]string, resolver Resolver, reasoning map[string]string, reasoningResolver routing.RoleReasoningResolver, noBackend bool) (*routeRuntime, string, error) {
 	override, err := routing.BuildOverrideRoute("override", specs, routeSpecs, routing.AgentResolver(resolver))
 	if err != nil {
 		return nil, "", err
 	}
 
-	rt, err := newResolvedRouteRuntime(routeSpecs, resolver, noBackend, override)
+	rt, err := newResolvedRouteRuntimeWithReasoning(routeSpecs, resolver, reasoning, reasoningResolver, noBackend, override)
 	if err != nil {
 		return nil, "", err
 	}
@@ -138,6 +144,10 @@ func newOverrideRouteRuntime(specs []string, routeSpecs map[string][]string, res
 }
 
 func newResolvedRouteRuntime(routeSpecs map[string][]string, resolver Resolver, noBackend bool, override *routing.OverrideRoute) (*routeRuntime, error) {
+	return newResolvedRouteRuntimeWithReasoning(routeSpecs, resolver, nil, nil, noBackend, override)
+}
+
+func newResolvedRouteRuntimeWithReasoning(routeSpecs map[string][]string, resolver Resolver, reasoning map[string]string, reasoningResolver routing.RoleReasoningResolver, noBackend bool, override *routing.OverrideRoute) (*routeRuntime, error) {
 	selector, err := routing.NewSelector(routeSpecs, noBackend)
 	if err != nil {
 		return nil, err
@@ -170,12 +180,14 @@ func newResolvedRouteRuntime(routeSpecs map[string][]string, resolver Resolver, 
 	}
 
 	return &routeRuntime{
-		selector:   selector,
-		override:   override,
-		schedulers: schedulers,
-		resolver:   resolver,
-		lastAgent:  make(map[string]agent.ResolvedAgent, len(schedulers)),
-		warnings:   warnings,
+		selector:          selector,
+		override:          override,
+		schedulers:        schedulers,
+		resolver:          resolver,
+		reasoning:         reasoning,
+		reasoningResolver: reasoningResolver,
+		lastAgent:         make(map[string]agent.ResolvedAgent, len(schedulers)),
+		warnings:          warnings,
 	}, nil
 }
 
@@ -248,6 +260,10 @@ func (r *routeRuntime) next(task runTask, resilience *Resilience) (routeSelectio
 	picked, err := resolveAgentSpec(selectedEntry.Spec, nil)
 	if err != nil {
 		return routeSelection{}, err
+	}
+	picked, err = routing.ApplyRoleReasoningFallback(picked, selectedEntry, effectiveAssignee, r.reasoning, r.reasoningResolver)
+	if err != nil {
+		return routeSelection{}, fmt.Errorf("routing: route %q entry %q: %w", route.Name, selectedEntry.Raw, err)
 	}
 
 	st, since := resilience.GetState(KeyFromAgent(picked))

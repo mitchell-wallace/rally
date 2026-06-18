@@ -50,6 +50,14 @@ var builtInAliases = map[string]string{
 	"opencode":    "opencode",
 }
 
+var builtInHarnessLookupOrder = map[string][]string{
+	"antigravity": {"antigravity", "ag", "agy"},
+	"claude":      {"claude", "cc"},
+	"codex":       {"codex", "cx"},
+	"gemini":      {"gemini", "ge"},
+	"opencode":    {"opencode", "op"},
+}
+
 var builtInCanonical = map[string]bool{
 	"ag":          true,
 	"agy":         true,
@@ -197,6 +205,7 @@ type V2Config struct {
 	Reliability ReliabilityConfig
 	Harnesses   map[string]*HarnessConfig
 	Routes      map[string][]string
+	Reasoning   map[string]string
 	Telemetry   TelemetryConfig
 
 	DeprecationNotes []string
@@ -225,6 +234,7 @@ type rawConfig struct {
 	Reliability ReliabilityConfig         `toml:"reliability"`
 	Harnesses   map[string]*HarnessConfig `toml:"harness"`
 	Routes      map[string][]string       `toml:"routes"`
+	Reasoning   map[string]string         `toml:"reasoning"`
 	Telemetry   TelemetryConfig           `toml:"telemetry,omitempty"`
 }
 
@@ -237,7 +247,11 @@ func LoadV2(workspaceDir string) (V2Config, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			return V2Config{Harnesses: make(map[string]*HarnessConfig)}, nil
+			return V2Config{
+				Harnesses: make(map[string]*HarnessConfig),
+				Routes:    make(map[string][]string),
+				Reasoning: make(map[string]string),
+			}, nil
 		}
 		return V2Config{}, err
 	}
@@ -258,8 +272,15 @@ func LoadV2(workspaceDir string) (V2Config, error) {
 		Reliability:          raw.Reliability,
 		Harnesses:            raw.Harnesses,
 		Routes:               raw.Routes,
+		Reasoning:            raw.Reasoning,
 		Telemetry:            raw.Telemetry,
 	}
+
+	reasoning, err := normalizeReasoning(cfg.Reasoning)
+	if err != nil {
+		return V2Config{}, err
+	}
+	cfg.Reasoning = reasoning
 
 	if raw.Fallback.InstructionsFile != "" {
 		if cfg.FreeRun.PromptFile == "" {
@@ -485,6 +506,24 @@ func validateRoutes(routes map[string][]string) error {
 	return nil
 }
 
+func normalizeReasoning(reasoning map[string]string) (map[string]string, error) {
+	normalized := make(map[string]string, len(reasoning))
+	seen := map[string]string{}
+	for key, value := range reasoning {
+		trimmedKey := strings.TrimSpace(key)
+		if trimmedKey == "" {
+			return nil, fmt.Errorf("config: [reasoning] contains an empty role key")
+		}
+		lower := strings.ToLower(trimmedKey)
+		if prev, exists := seen[lower]; exists {
+			return nil, fmt.Errorf("config: duplicate reasoning keys %q and %q differ only by case", prev, key)
+		}
+		seen[lower] = key
+		normalized[lower] = strings.TrimSpace(value)
+	}
+	return normalized, nil
+}
+
 func ValidateRoutesTable(routes map[string][]string) error {
 	return validateRoutes(routes)
 }
@@ -553,6 +592,106 @@ func (c V2Config) ResolveAgent(spec string) (agent.ResolvedAgent, error) {
 	}
 
 	return agent.ResolvedAgent{Harness: harness, Model: right}, nil
+}
+
+func (c V2Config) ResolveRoleReasoning(role, selectedHarness, preference string) (string, string, error) {
+	roleKey := strings.ToLower(strings.TrimSpace(role))
+	selected := canonicalHarnessName(selectedHarness)
+	preference = strings.TrimSpace(preference)
+	if selected == "" || preference == "" {
+		return "", "", nil
+	}
+
+	if scopedHarness, alias, scoped := strings.Cut(preference, ":"); scoped {
+		scopedHarness = strings.TrimSpace(scopedHarness)
+		alias = strings.TrimSpace(alias)
+		if alias == "" {
+			return "", "", fmt.Errorf("config: [reasoning].%s references an empty model alias for harness %q", roleKey, selected)
+		}
+		canonicalScoped := canonicalHarnessName(scopedHarness)
+		if canonicalScoped != selected {
+			return "", "", nil
+		}
+		if model, ok := c.lookupModelAlias(canonicalScoped, scopedHarness, alias); ok {
+			return model, "", nil
+		}
+		if suggestions := didYouMean(alias, c.modelAliasNamesForHarness(canonicalScoped, scopedHarness)); suggestions != "" {
+			return "", "", fmt.Errorf("config: [reasoning].%s references unknown model alias %q for harness %q; did you mean %s?", roleKey, alias, selected, suggestions)
+		}
+		return "", "", fmt.Errorf("config: [reasoning].%s references unknown model alias %q for harness %q", roleKey, alias, selected)
+	}
+
+	if model, ok := c.lookupModelAlias(selected, "", preference); ok {
+		return model, "", nil
+	}
+	return "", preference, nil
+}
+
+func canonicalHarnessName(name string) string {
+	name = strings.TrimSpace(name)
+	if mapped, ok := builtInAliases[strings.ToLower(name)]; ok {
+		return mapped
+	}
+	return name
+}
+
+func (c V2Config) lookupModelAlias(harness, preferredAlias, modelName string) (string, bool) {
+	if c.Harnesses == nil {
+		return "", false
+	}
+	for _, key := range harnessLookupKeys(harness, preferredAlias) {
+		h := c.Harnesses[key]
+		if h == nil || h.Models == nil {
+			continue
+		}
+		model, ok := h.Models[modelName]
+		if ok {
+			return model, true
+		}
+	}
+	return "", false
+}
+
+func (c V2Config) modelAliasNamesForHarness(harness, preferredAlias string) []string {
+	names := []string{}
+	seen := map[string]bool{}
+	for _, key := range harnessLookupKeys(harness, preferredAlias) {
+		h := c.Harnesses[key]
+		if h == nil || h.Models == nil {
+			continue
+		}
+		for name := range h.Models {
+			if !seen[name] {
+				names = append(names, name)
+				seen[name] = true
+			}
+		}
+	}
+	return names
+}
+
+func harnessLookupKeys(harness, preferredAlias string) []string {
+	seen := map[string]bool{}
+	keys := []string{}
+	add := func(key string) {
+		key = strings.TrimSpace(key)
+		if key == "" || seen[key] {
+			return
+		}
+		keys = append(keys, key)
+		seen[key] = true
+	}
+
+	add(preferredAlias)
+	canonical := canonicalHarnessName(harness)
+	if order, ok := builtInHarnessLookupOrder[canonical]; ok {
+		for _, key := range order {
+			add(key)
+		}
+	} else {
+		add(canonical)
+	}
+	return keys
 }
 
 func modelNamesForHarness(harnesses map[string]*HarnessConfig, harness string, alias string) []string {
@@ -657,6 +796,10 @@ func SaveV2(workspaceDir string, cfg V2Config) error {
 	if err := validateRoutes(cfg.Routes); err != nil {
 		return err
 	}
+	reasoning, err := normalizeReasoning(cfg.Reasoning)
+	if err != nil {
+		return err
+	}
 
 	raw := rawConfig{
 		SchemaVersion:        ExpectedSchemaVersion,
@@ -677,6 +820,7 @@ func SaveV2(workspaceDir string, cfg V2Config) error {
 		Reliability: cfg.Reliability,
 		Harnesses:   cfg.Harnesses,
 		Routes:      cfg.Routes,
+		Reasoning:   reasoning,
 		Telemetry:   cfg.Telemetry,
 	}
 

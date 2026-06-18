@@ -36,6 +36,7 @@ type Config struct {
 	MachineID        string
 	AgentMixSpecs    []string
 	RouteSpecs       map[string][]string
+	Reasoning        map[string]string
 	UseOverrideRoute bool
 	TargetIterations int
 	StallThreshold   time.Duration
@@ -53,6 +54,7 @@ type Config struct {
 	TaskPrompt             string
 	OverwriteMixOnResume   bool
 	Resolver               Resolver
+	ReasoningResolver      routing.RoleReasoningResolver
 	LapsInstructionsFile   string
 	FreeRunPromptFile      string
 	RecentTryCount         int
@@ -1468,6 +1470,7 @@ attemptLoop:
 		opts := agent.RunOptions{
 			Persona:          picked.Harness,
 			Model:            picked.Model,
+			ReasoningEffort:  picked.ReasoningEffort,
 			Role:             task.promptAssignee(),
 			TaskName:         task.Name,
 			TaskRequirements: task.Requirements,
@@ -2458,6 +2461,7 @@ func (r *Runner) runBoundedHandoffOnly(
 	opts := agent.RunOptions{
 		Persona:          picked.Harness,
 		Model:            picked.Model,
+		ReasoningEffort:  picked.ReasoningEffort,
 		TaskName:         task.Name,
 		TaskRequirements: task.Requirements,
 		Instructions:     r.resolveInstructions(),

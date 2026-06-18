@@ -12,11 +12,12 @@ var singleQuotaRe = regexp.MustCompile(`^\d+$`)
 var rangeQuotaRe = regexp.MustCompile(`^(\d+)-(\d+)$`)
 
 type ParsedEntry struct {
-	Raw      string
-	Spec     string
-	QuotaMin int
-	QuotaMax int
-	HasQuota bool
+	Raw           string
+	Spec          string
+	QuotaMin      int
+	QuotaMax      int
+	HasQuota      bool
+	ExplicitModel bool
 }
 
 func (e ParsedEntry) QuotaSingle() bool {
@@ -52,11 +53,12 @@ func ParseEntry(raw string) (ParsedEntry, error) {
 	spec := strings.Join(idSegments, ":")
 
 	return ParsedEntry{
-		Raw:      raw,
-		Spec:     spec,
-		QuotaMin: quotaMin,
-		QuotaMax: quotaMax,
-		HasQuota: hasQuota,
+		Raw:           raw,
+		Spec:          spec,
+		QuotaMin:      quotaMin,
+		QuotaMax:      quotaMax,
+		HasQuota:      hasQuota,
+		ExplicitModel: len(idSegments) == 2,
 	}, nil
 }
 

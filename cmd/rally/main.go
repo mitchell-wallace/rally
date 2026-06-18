@@ -252,6 +252,8 @@ func runRelay(cmd *cobra.Command, args []string) error {
 		MachineID:              activeMachineID,
 		AgentMixSpecs:          selectedSpecs,
 		RouteSpecs:             cfg.Routes,
+		Reasoning:              cfg.Reasoning,
+		ReasoningResolver:      cfg.ResolveRoleReasoning,
 		UseOverrideRoute:       usedOverride,
 		TargetIterations:       iterations,
 		StallThreshold:         cfg.Reliability.StallThreshold(),
@@ -274,7 +276,7 @@ func runRelay(cmd *cobra.Command, args []string) error {
 		if err != nil {
 			return agent.ResolvedAgent{}, err
 		}
-		return agent.ResolvedAgent{Harness: ra.Harness, Model: ra.Model}, nil
+		return ra, nil
 	}
 
 	if usedOverride {

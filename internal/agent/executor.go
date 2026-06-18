@@ -17,13 +17,15 @@ func boundedExecutorFinalText(text string) string {
 }
 
 type ResolvedAgent struct {
-	Harness string
-	Model   string
+	Harness         string
+	Model           string
+	ReasoningEffort string
 }
 
 type RunOptions struct {
 	Persona          string
 	Model            string
+	ReasoningEffort  string
 	Role             string
 	TaskName         string
 	TaskRequirements string

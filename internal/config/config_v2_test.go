@@ -757,6 +757,32 @@ func TestSaveV2_PreservesHarnesses(t *testing.T) {
 	}
 }
 
+func TestSaveV2_PreservesReasoning(t *testing.T) {
+	dir := t.TempDir()
+	rallyDir := store.RallyDir(dir)
+	if err := os.MkdirAll(rallyDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg := V2Config{
+		Reasoning: map[string]string{
+			"VERIFY": "g55-xh",
+		},
+	}
+
+	if err := SaveV2(dir, cfg); err != nil {
+		t.Fatalf("SaveV2 failed: %v", err)
+	}
+
+	cfg2, err := LoadV2(dir)
+	if err != nil {
+		t.Fatalf("re-load failed: %v", err)
+	}
+	if cfg2.Reasoning["verify"] != "g55-xh" {
+		t.Fatalf("Reasoning[verify] = %q, want g55-xh", cfg2.Reasoning["verify"])
+	}
+}
+
 func TestLoadV2_NoConfigFile(t *testing.T) {
 	dir := t.TempDir()
 	cfg, err := LoadV2(dir)
@@ -1109,6 +1135,83 @@ func TestResolveAgent_RawModelString(t *testing.T) {
 	}
 	if resolved.Model != "zai-coding-plan/glm-5.1" {
 		t.Errorf("Model = %q, want 'zai-coding-plan/glm-5.1'", resolved.Model)
+	}
+}
+
+func TestResolveRoleReasoning_BareAliasResolvesInSelectedHarness(t *testing.T) {
+	cfg := V2Config{
+		Harnesses: map[string]*HarnessConfig{
+			"cx": {Models: map[string]string{
+				"g55-xh": "gpt-5.5-extra-high",
+			}},
+		},
+	}
+	model, effort, err := cfg.ResolveRoleReasoning("verify", "codex", "g55-xh")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if model != "gpt-5.5-extra-high" {
+		t.Errorf("model = %q, want resolved harness model alias", model)
+	}
+	if effort != "" {
+		t.Errorf("effort = %q, want empty when alias resolves to a model", effort)
+	}
+}
+
+func TestResolveRoleReasoning_HarnessScopedAlias(t *testing.T) {
+	cfg := V2Config{
+		Harnesses: map[string]*HarnessConfig{
+			"op": {Models: map[string]string{
+				"g55-xh": "zai/glm-5.1-xh",
+			}},
+		},
+	}
+
+	// Scoped alias targeting the selected harness resolves to the model.
+	model, effort, err := cfg.ResolveRoleReasoning("verify", "opencode", "op:g55-xh")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if model != "zai/glm-5.1-xh" {
+		t.Errorf("model = %q, want scoped harness model alias", model)
+	}
+	if effort != "" {
+		t.Errorf("effort = %q, want empty", effort)
+	}
+
+	// Scoped alias for a different harness than the one selected is a no-op.
+	model, effort, err = cfg.ResolveRoleReasoning("verify", "codex", "op:g55-xh")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if model != "" || effort != "" {
+		t.Errorf("scoped alias for other harness applied: model=%q effort=%q", model, effort)
+	}
+}
+
+func TestResolveRoleReasoning_EffortTokenWhenNoAlias(t *testing.T) {
+	cfg := V2Config{Harnesses: map[string]*HarnessConfig{}}
+	model, effort, err := cfg.ResolveRoleReasoning("verify", "codex", "high")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if model != "" {
+		t.Errorf("model = %q, want empty for a bare effort token", model)
+	}
+	if effort != "high" {
+		t.Errorf("effort = %q, want 'high'", effort)
+	}
+}
+
+func TestResolveRoleReasoning_UnknownScopedAliasErrors(t *testing.T) {
+	cfg := V2Config{
+		Harnesses: map[string]*HarnessConfig{
+			"cx": {Models: map[string]string{"g55-xh": "gpt-5.5-extra-high"}},
+		},
+	}
+	_, _, err := cfg.ResolveRoleReasoning("verify", "codex", "cx:nope")
+	if err == nil {
+		t.Fatal("expected error for unknown scoped model alias")
 	}
 }
 
