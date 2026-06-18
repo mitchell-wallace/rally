@@ -171,11 +171,11 @@
       "title": "tail active-try run-state metadata + field-wise cleanup",
       "description": "Context: design §5.1/5.3, tasks 6.1, 6.2. This is the subtle half of active-try tail targeting.\n\nOutcome: progress run-state carries active try metadata — active_relay_id, active_run_id, active_try_id, active_log_path, active_started_at — written at try start before the executor runs and cleared after the try is appended to the store, but only the active-* fields are cleared, via a helper that preserves RunID, PinnedLapID, RecordedLaps, LapsAttempted, HandoffState, and SessionID. Active-tail cleanup must NOT call progress.ClearRunState.\n\nFiles \u0026 scope: the progress run-state struct + helpers (internal/store or progress package), internal/relay/runner.go (write at try start, field-wise clear after append).\n\nDesign: the risk is erasing run/lap/handoff/session fields needed by follow-up handling. Add a dedicated field-wise clear helper; never reuse ClearRunState here.\n\nAcceptance: go build ./...; a unit test proves the clear helper preserves RunID/PinnedLapID/RecordedLaps/LapsAttempted/HandoffState/SessionID while dropping the active-* fields. go test ./internal/store/... ./internal/relay/.... Do not tick tasks.md.",
       "assignee": "SENIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 983040,
       "createdAt": "2026-06-18T00:23:53.40510792Z",
-      "updatedAt": "2026-06-18T00:23:53.40510792Z",
-      "completedAt": null
+      "updatedAt": "2026-06-18T12:33:44.446093295Z",
+      "completedAt": "2026-06-18T12:33:44.446093295Z"
     },
     {
       "id": "rall-705b",
