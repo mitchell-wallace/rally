@@ -64,6 +64,11 @@ func (o *OpenCodeExecutor) Execute(ctx context.Context, opts RunOptions) (*TryRe
 	if model != "" {
 		args = append(args, "--model", model)
 	}
+	if opts.ReasoningEffort != "" {
+		var warning string
+		args, warning = applyReasoningEffort(args, "opencode", opts.ReasoningEffort)
+		emitReasoningWarning(opts.LogPath, warning)
+	}
 	// opencode uses a client/server model: `opencode run` connects to a server
 	// process that resolves relative file paths against ITS cwd, not the client's
 	// cmd.Dir. Setting cmd.Dir alone leaks files into the launching process's

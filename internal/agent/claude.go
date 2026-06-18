@@ -48,6 +48,11 @@ func (c *ClaudeExecutor) Execute(ctx context.Context, opts RunOptions) (*TryResu
 	if model != "" {
 		args = append(args, "--model", model)
 	}
+	if opts.ReasoningEffort != "" {
+		var warning string
+		args, warning = applyReasoningEffort(args, "claude", opts.ReasoningEffort)
+		emitReasoningWarning(opts.LogPath, warning)
+	}
 	if opts.ResumeSessionID != "" {
 		args = append(args, "--resume", opts.ResumeSessionID)
 	}

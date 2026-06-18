@@ -97,6 +97,96 @@ default = ["cc:0"]
 	}
 }
 
+func TestRoutesCheckReasoningMissingScopedAlias(t *testing.T) {
+	workspaceDir := t.TempDir()
+	writeRoutesConfig(t, workspaceDir, `schema_version = 2
+
+[harness.cc.models]
+opus-high = "claude-opus-4-8"
+
+[reasoning]
+verify = "cc:opus-hihg"
+
+[routes]
+default = ["cc"]
+`)
+
+	_, err := executeRoutesCheck(t, workspaceDir)
+	if err == nil {
+		t.Fatal("Execute() error = nil, want missing scoped alias failure")
+	}
+	errStr := err.Error()
+	if !strings.Contains(errStr, "[reasoning].verify") {
+		t.Fatalf("error = %q, want role name in diagnostic", errStr)
+	}
+	if !strings.Contains(errStr, "opus-hihg") || !strings.Contains(errStr, "did you mean") {
+		t.Fatalf("error = %q, want unknown alias and suggestion", errStr)
+	}
+}
+
+func TestRoutesCheckReasoningScopedAliasResolves(t *testing.T) {
+	workspaceDir := t.TempDir()
+	writeRoutesConfig(t, workspaceDir, `schema_version = 2
+
+[harness.cc.models]
+opus-high = "claude-opus-4-8"
+
+[reasoning]
+verify = "cc:opus-high"
+
+[routes]
+default = ["cc"]
+`)
+
+	output, err := executeRoutesCheck(t, workspaceDir)
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if strings.Contains(output, "[reasoning].verify") {
+		t.Fatalf("output = %q, want no reasoning warning for a resolvable scoped alias", output)
+	}
+}
+
+func TestRoutesCheckReasoningBareEffortNoWarning(t *testing.T) {
+	workspaceDir := t.TempDir()
+	writeRoutesConfig(t, workspaceDir, `schema_version = 2
+
+[reasoning]
+verify = "high"
+
+[routes]
+default = ["cc"]
+`)
+
+	output, err := executeRoutesCheck(t, workspaceDir)
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if strings.Contains(output, "[reasoning].verify") {
+		t.Fatalf("output = %q, want no warning for a documented effort token", output)
+	}
+}
+
+func TestRoutesCheckReasoningUnknownBareTokenWarns(t *testing.T) {
+	workspaceDir := t.TempDir()
+	writeRoutesConfig(t, workspaceDir, `schema_version = 2
+
+[reasoning]
+verify = "ludicrous"
+
+[routes]
+default = ["cc"]
+`)
+
+	output, err := executeRoutesCheck(t, workspaceDir)
+	if err != nil {
+		t.Fatalf("Execute() error = %v, want warning rather than hard failure", err)
+	}
+	if !strings.Contains(output, "[reasoning].verify") || !strings.Contains(output, "ludicrous") {
+		t.Fatalf("output = %q, want pass-through warning for an unknown bare token", output)
+	}
+}
+
 func TestRoutesCheckResolutionErrorShowsDidYouMean(t *testing.T) {
 	workspaceDir := t.TempDir()
 	writeRoutesConfig(t, workspaceDir, `schema_version = 2

@@ -57,6 +57,11 @@ func (g *GeminiExecutor) Execute(ctx context.Context, opts RunOptions) (*TryResu
 	if model != "" {
 		args = append(args, "--model", model)
 	}
+	if opts.ReasoningEffort != "" {
+		var warning string
+		args, warning = applyReasoningEffort(args, "gemini", opts.ReasoningEffort)
+		emitReasoningWarning(opts.LogPath, warning)
+	}
 
 	cmd := exec.CommandContext(ctx, "gemini", args...)
 	if opts.WorkspaceDir != "" {

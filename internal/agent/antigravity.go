@@ -82,6 +82,11 @@ func (a *AntigravityExecutor) Execute(ctx context.Context, opts RunOptions) (*Tr
 	if opts.ResumeSessionID != "" {
 		args = append(args, "--conversation="+opts.ResumeSessionID)
 	}
+	if opts.ReasoningEffort != "" {
+		var warning string
+		args, warning = applyReasoningEffort(args, "antigravity", opts.ReasoningEffort)
+		emitReasoningWarning(opts.LogPath, warning)
+	}
 	args = append(args, "--print", prompt)
 
 	cmd := exec.CommandContext(ctx, "agy", args...)

@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/mitchell-wallace/rally/internal/agent"
 	"github.com/mitchell-wallace/rally/internal/agent_prompt"
 	"github.com/mitchell-wallace/rally/internal/config"
 	"github.com/mitchell-wallace/rally/internal/gitx"
@@ -100,6 +101,12 @@ func CheckRoutes(workspaceDir string, cfg config.V2Config) (RouteCheckResult, er
 			EntryCount: len(route.Entries),
 		})
 	}
+
+	reasoningWarnings, err := validateReasoning(cfg)
+	if err != nil {
+		return result, err
+	}
+	result.Warnings = append(result.Warnings, reasoningWarnings...)
 
 	for _, note := range cfg.DeprecationNotes {
 		result.Warnings = append(result.Warnings, "warning: "+note)
@@ -264,6 +271,64 @@ func renderRouteCheckResult(w io.Writer, result RouteCheckResult) {
 		fmt.Fprintln(w, snippetText)
 		fmt.Fprintln(w, "---")
 	}
+}
+
+// validateReasoning checks the `[reasoning]` table. A harness-scoped model
+// alias (e.g. `cc:opus-high`) names its harness, so a missing alias is almost
+// certainly an operator typo and is reported as a hard error. A bare token is
+// resolved against the route-selected harness only at runtime — it may be a
+// model alias or a passthrough effort value — so it never hard-fails; it only
+// warns when it matches neither a configured model alias nor a documented
+// reasoning effort.
+func validateReasoning(cfg config.V2Config) ([]string, error) {
+	if len(cfg.Reasoning) == 0 {
+		return nil, nil
+	}
+
+	roles := make([]string, 0, len(cfg.Reasoning))
+	for role := range cfg.Reasoning {
+		roles = append(roles, role)
+	}
+	sort.Strings(roles)
+
+	var warnings []string
+	for _, role := range roles {
+		preference := strings.TrimSpace(cfg.Reasoning[role])
+		if preference == "" {
+			continue
+		}
+
+		if scopedHarness, _, scoped := strings.Cut(preference, ":"); scoped {
+			if _, _, err := cfg.ResolveRoleReasoning(role, strings.TrimSpace(scopedHarness), preference); err != nil {
+				return nil, fmt.Errorf("routes check: %w", err)
+			}
+			continue
+		}
+
+		if reasoningTokenRecognised(cfg, preference) {
+			continue
+		}
+		warnings = append(warnings, fmt.Sprintf(
+			"warning: [reasoning].%s value %q is not a known model alias or documented reasoning effort; it will be passed through to the selected harness as-is",
+			role, preference))
+	}
+
+	return warnings, nil
+}
+
+func reasoningTokenRecognised(cfg config.V2Config, token string) bool {
+	if agent.IsKnownReasoningEffort(token) {
+		return true
+	}
+	for _, hc := range cfg.Harnesses {
+		if hc == nil || hc.Models == nil {
+			continue
+		}
+		if _, ok := hc.Models[token]; ok {
+			return true
+		}
+	}
+	return false
 }
 
 func validateRouteEntry(cfg config.V2Config, routeName string, entry routing.ParsedEntry) error {
