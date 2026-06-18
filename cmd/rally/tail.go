@@ -19,6 +19,7 @@ var tailCmd = &cobra.Command{
 
 func runTail(cmd *cobra.Command, args []string) error {
 	tryNum, _ := cmd.Flags().GetInt("try")
+	highlight, _ := cmd.Flags().GetString("highlight")
 
 	workspaceDir, err := resolveWorkspaceDir()
 	if err != nil {
@@ -43,7 +44,15 @@ func runTail(cmd *cobra.Command, args []string) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	return followFile(ctx, f, os.Stdout)
+	var out io.Writer = os.Stdout
+	if highlight != "off" && highlight != "" {
+		if highlight != "heuristic" && highlight != "chroma" {
+			return fmt.Errorf("invalid highlight mode %q, expected one of: off, heuristic, chroma", highlight)
+		}
+		out = newHighlightWriter(out, highlight)
+	}
+
+	return followFile(ctx, f, out)
 }
 
 func tailTarget(workspaceDir string, tryNum int) (*store.TryRecord, error) {
@@ -112,5 +121,6 @@ func followFile(ctx context.Context, f *os.File, out io.Writer) error {
 
 func init() {
 	tailCmd.Flags().Int("try", 0, "Try number to tail (1-based, default: latest)")
+	tailCmd.Flags().String("highlight", "off", "Syntax highlighting mode: off, heuristic, chroma")
 	rootCmd.AddCommand(tailCmd)
 }

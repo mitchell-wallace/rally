@@ -300,3 +300,27 @@ func initGitRepoForTail(t *testing.T, dir string) {
 	cmd.Dir = dir
 	_ = cmd.Run()
 }
+
+func TestTailHighlight(t *testing.T) {
+	hw := newHighlightWriter(&bytes.Buffer{}, "heuristic")
+	if hw == nil {
+		t.Fatal("expected highlightWriter")
+	}
+
+	cw := newHighlightWriter(&bytes.Buffer{}, "chroma")
+	if cw == nil {
+		t.Fatal("expected highlightWriter")
+	}
+
+	ow := newHighlightWriter(&bytes.Buffer{}, "off")
+	if ow == nil {
+		t.Fatal("expected highlightWriter")
+	}
+
+	var buf bytes.Buffer
+	hw2 := newHighlightWriter(&buf, "heuristic")
+	hw2.Write([]byte("this is an error line\n"))
+	if !bytes.Contains(buf.Bytes(), []byte("error")) {
+		t.Errorf("heuristic writer failed to write")
+	}
+}
