@@ -60,7 +60,7 @@ func (g *GeminiExecutor) Execute(ctx context.Context, opts RunOptions) (*TryResu
 	if opts.ReasoningEffort != "" {
 		var warning string
 		args, warning = applyReasoningEffort(args, "gemini", opts.ReasoningEffort)
-		emitReasoningWarning(opts.LogPath, warning)
+		defer emitReasoningWarning(opts.LogPath, warning)
 	}
 
 	cmd := exec.CommandContext(ctx, "gemini", args...)

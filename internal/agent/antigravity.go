@@ -85,7 +85,7 @@ func (a *AntigravityExecutor) Execute(ctx context.Context, opts RunOptions) (*Tr
 	if opts.ReasoningEffort != "" {
 		var warning string
 		args, warning = applyReasoningEffort(args, "antigravity", opts.ReasoningEffort)
-		emitReasoningWarning(opts.LogPath, warning)
+		defer emitReasoningWarning(opts.LogPath, warning)
 	}
 	args = append(args, "--print", prompt)
 

@@ -179,7 +179,7 @@ func (c *CodexExecutor) Execute(ctx context.Context, opts RunOptions) (*TryResul
 	if opts.ReasoningEffort != "" {
 		var warning string
 		args, warning = applyReasoningEffort(args, "codex", opts.ReasoningEffort)
-		emitReasoningWarning(opts.LogPath, warning)
+		defer emitReasoningWarning(opts.LogPath, warning)
 	}
 	if opts.ResumeSessionID != "" {
 		args = append(args, "resume", opts.ResumeSessionID)

@@ -67,7 +67,7 @@ func (o *OpenCodeExecutor) Execute(ctx context.Context, opts RunOptions) (*TryRe
 	if opts.ReasoningEffort != "" {
 		var warning string
 		args, warning = applyReasoningEffort(args, "opencode", opts.ReasoningEffort)
-		emitReasoningWarning(opts.LogPath, warning)
+		defer emitReasoningWarning(opts.LogPath, warning)
 	}
 	// opencode uses a client/server model: `opencode run` connects to a server
 	// process that resolves relative file paths against ITS cwd, not the client's
