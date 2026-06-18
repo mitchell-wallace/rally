@@ -10,6 +10,7 @@ type TryRecord struct {
 	AgentType              string                 `json:"agent_type"`
 	Completed              bool                   `json:"completed"`
 	Outcome                reliability.TryOutcome `json:"outcome,omitempty"`
+	CancellationSource     string                 `json:"cancellation_source,omitempty"`
 	HandoffOnly            bool                   `json:"handoff_only,omitempty"`
 	ResolvedRoute          string                 `json:"resolved_route,omitempty"`
 	DirtyHandoff           bool                   `json:"dirty_handoff,omitempty"`

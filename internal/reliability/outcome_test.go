@@ -18,6 +18,7 @@ func TestTryOutcomeSuccessAndFailureCategoryBoundary(t *testing.T) {
 		{OutcomeHandoffTimeout, false, false, FailureAgent, true, false},
 		{OutcomeFailed, false, true, FailureInfra, false, true},
 		{OutcomeInterrupted, false, false, FailureAgent, false, false},
+		{OutcomeCancelled, false, false, FailureAgent, false, false},
 	}
 
 	for _, tt := range tests {
@@ -55,6 +56,7 @@ func TestTryOutcomeTerminalForRun(t *testing.T) {
 		{"failed_short_rate_limit", OutcomeFailed, CategoryShortRateLimit, false},
 		{"run_timeout_observability_record", OutcomeRunTimeout, "", false},
 		{"handoff_requested", OutcomeHandoffRequested, "", false},
+		{"cancelled", OutcomeCancelled, "", true},
 	}
 
 	for _, tt := range tests {

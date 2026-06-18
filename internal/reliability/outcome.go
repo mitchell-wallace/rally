@@ -12,6 +12,7 @@ const (
 	OutcomeHandoffTimeout   TryOutcome = "handoff_timeout"
 	OutcomeFailed           TryOutcome = "failed"
 	OutcomeInterrupted      TryOutcome = "interrupted"
+	OutcomeCancelled        TryOutcome = "cancelled"
 )
 
 // IsSuccess reports outcomes that successfully finalized the current try's
@@ -45,7 +46,7 @@ func (o TryOutcome) FailureClass(category FailureCategory) FailureClass {
 // source of truth.
 func (o TryOutcome) IsTerminalForRun(category FailureCategory) bool {
 	switch o {
-	case OutcomeHandoffTimeout, OutcomeInterrupted:
+	case OutcomeHandoffTimeout, OutcomeInterrupted, OutcomeCancelled:
 		return true
 	case OutcomeFailed:
 		return category == CategoryUsageLimit || category == CategoryAuthOrProxy

@@ -116,6 +116,47 @@ func TestTryRecordPersistsOutcomeAndHandoffOnly(t *testing.T) {
 	}
 }
 
+func TestTryRecordCancelledOutcomeAndSource(t *testing.T) {
+	sources := []string{"skip", "graceful_stop", "quit_now"}
+	for _, src := range sources {
+		t.Run(src, func(t *testing.T) {
+			rallyDir, s := setupTempStore(t)
+
+			if err := s.AppendTry(TryRecord{
+				ID:                 1,
+				RunID:              1,
+				AgentType:          "claude",
+				Completed:          false,
+				Outcome:            reliability.OutcomeCancelled,
+				CancellationSource: src,
+				Summary:            "operator cancelled",
+			}); err != nil {
+				t.Fatalf("AppendTry: %v", err)
+			}
+
+			read, err := readJSONL[TryRecord](filepath.Join(rallyDir, "state", "tries.jsonl"))
+			if err != nil {
+				t.Fatalf("read tries: %v", err)
+			}
+			if len(read) != 1 {
+				t.Fatalf("tries = %d, want 1", len(read))
+			}
+			if read[0].Outcome != reliability.OutcomeCancelled {
+				t.Fatalf("Outcome = %q, want %q", read[0].Outcome, reliability.OutcomeCancelled)
+			}
+			if read[0].CancellationSource != src {
+				t.Fatalf("CancellationSource = %q, want %q", read[0].CancellationSource, src)
+			}
+			if read[0].Completed {
+				t.Fatal("Completed = true, want false for cancelled outcome")
+			}
+			if read[0].Category != "" {
+				t.Fatalf("Category = %q, want empty for cancelled outcome", read[0].Category)
+			}
+		})
+	}
+}
+
 func TestRecoveryPendingForLapUsesResolvingTryOfMostRecentRun(t *testing.T) {
 	_, s := setupTempStore(t)
 
