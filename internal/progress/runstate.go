@@ -12,18 +12,33 @@ import (
 
 // RunState tracks the current run's mutable state in .rally/state/run-state.json.
 type RunState struct {
-	RunID         string       `json:"run_id"`
-	HandoffState  int          `json:"handoff_state"`
-	RecordedLaps  []string     `json:"recorded_laps"`
-	PinnedLapID   string       `json:"pinned_lap_id,omitempty"`
-	LapsAttempted []LapAttempt `json:"laps_attempted,omitempty"`
-	SessionID     string       `json:"session_id,omitempty"`
+	RunID           string       `json:"run_id"`
+	HandoffState    int          `json:"handoff_state"`
+	RecordedLaps    []string     `json:"recorded_laps"`
+	PinnedLapID     string       `json:"pinned_lap_id,omitempty"`
+	LapsAttempted   []LapAttempt `json:"laps_attempted,omitempty"`
+	SessionID       string       `json:"session_id,omitempty"`
+	ActiveRelayID   int          `json:"active_relay_id,omitempty"`
+	ActiveRunID     int          `json:"active_run_id,omitempty"`
+	ActiveTryID     int          `json:"active_try_id,omitempty"`
+	ActiveLogPath   string       `json:"active_log_path,omitempty"`
+	ActiveStartedAt string       `json:"active_started_at,omitempty"`
 }
 
 // LapAttempt records a laps command observed during the current run.
 type LapAttempt struct {
 	LapID     string `json:"lap_id"`
 	Timestamp string `json:"timestamp"`
+}
+
+// ActiveTryMetadata identifies the in-flight try log before the try record is
+// appended to history.
+type ActiveTryMetadata struct {
+	RelayID   int
+	RunID     int
+	TryID     int
+	LogPath   string
+	StartedAt time.Time
 }
 
 // RunStatePath returns the path to run-state.json for a workspace.
@@ -69,6 +84,47 @@ func ClearRunState(workspaceDir string) error {
 		return err
 	}
 	return nil
+}
+
+// SetActiveTry records the try currently executing so live tailing can target
+// its log before the final try record exists.
+func SetActiveTry(workspaceDir string, active ActiveTryMetadata) error {
+	rs, err := LoadRunState(workspaceDir)
+	if err != nil {
+		return err
+	}
+	rs.ActiveRelayID = active.RelayID
+	rs.ActiveRunID = active.RunID
+	rs.ActiveTryID = active.TryID
+	rs.ActiveLogPath = active.LogPath
+	rs.ActiveStartedAt = active.StartedAt.UTC().Format(time.RFC3339)
+	return SaveRunState(workspaceDir, rs)
+}
+
+// ClearActiveTry clears only active-tail metadata from run-state. It preserves
+// run, lap, handoff, and session fields needed by finalization/retry handling.
+func ClearActiveTry(workspaceDir string) error {
+	if _, err := os.Stat(RunStatePath(workspaceDir)); err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+	rs, err := LoadRunState(workspaceDir)
+	if err != nil {
+		return err
+	}
+	rs.ClearActiveTry()
+	return SaveRunState(workspaceDir, rs)
+}
+
+// ClearActiveTry clears only active-tail fields on an in-memory run-state.
+func (rs *RunState) ClearActiveTry() {
+	rs.ActiveRelayID = 0
+	rs.ActiveRunID = 0
+	rs.ActiveTryID = 0
+	rs.ActiveLogPath = ""
+	rs.ActiveStartedAt = ""
 }
 
 // RecordLap appends a lap ID to the run state's RecordedLaps.

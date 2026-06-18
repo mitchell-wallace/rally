@@ -1503,7 +1503,7 @@ attemptLoop:
 			return outcome(false, false, false), fmt.Errorf("write current_task.md: %w", err)
 		}
 
-		tryLogPath := filepath.Join(r.cfg.DataDir, "tries", repoKey(r.cfg.WorkspaceDir), fmt.Sprintf("try-%d.log", r.store.NextTryID()))
+		tryLogPath := filepath.Join(r.cfg.DataDir, "tries", repoKey(r.cfg.WorkspaceDir), fmt.Sprintf("try-%d.log", tryID))
 		_ = os.MkdirAll(filepath.Dir(tryLogPath), 0o755)
 		opts.LogPath = tryLogPath
 
@@ -1535,6 +1535,17 @@ attemptLoop:
 				RoleLabel:    task.Assignee,
 			})
 			fmt.Println(header)
+		}
+
+		if err := progress.SetActiveTry(r.cfg.WorkspaceDir, progress.ActiveTryMetadata{
+			RelayID:   relay.ID,
+			RunID:     runIndex + 1,
+			TryID:     tryID,
+			LogPath:   tryLogPath,
+			StartedAt: startedAt,
+		}); err != nil {
+			trySpan.Finish()
+			return outcome(false, false, false), fmt.Errorf("set active try metadata: %w", err)
 		}
 
 		kb := keyboard.NewKeyboard(os.Stdin, os.Stdout)
@@ -1744,7 +1755,7 @@ attemptLoop:
 			}
 
 			tryRecord := store.TryRecord{
-				ID:                     r.store.NextTryID(),
+				ID:                     tryID,
 				RunID:                  runIndex + 1,
 				RelayID:                relay.ID,
 				AgentType:              picked.Harness,
@@ -1805,6 +1816,9 @@ attemptLoop:
 			resolvingOutcome = attemptOutcome
 			if err := r.store.AppendTry(tryRecord); err != nil {
 				return outcome(false, false, false), err
+			}
+			if err := progress.ClearActiveTry(r.cfg.WorkspaceDir); err != nil {
+				return outcome(false, false, false), fmt.Errorf("clear active try metadata: %w", err)
 			}
 			r.tel().EmitTryLog(tryCtx, map[string]interface{}{
 				"event":               "try",
@@ -2062,7 +2076,7 @@ attemptLoop:
 		}
 
 		tryRecord := store.TryRecord{
-			ID:                     r.store.NextTryID(),
+			ID:                     tryID,
 			RunID:                  runIndex + 1,
 			RelayID:                relay.ID,
 			AgentType:              picked.Harness,
@@ -2231,6 +2245,9 @@ attemptLoop:
 		resolvingDirtyHandoff = dirtyHandoff
 		if err := r.store.AppendTry(tryRecord); err != nil {
 			return outcome(false, false, false), err
+		}
+		if err := progress.ClearActiveTry(r.cfg.WorkspaceDir); err != nil {
+			return outcome(false, false, false), fmt.Errorf("clear active try metadata: %w", err)
 		}
 		r.tel().EmitTryLog(tryCtx, tryLogFields)
 
@@ -2482,6 +2499,17 @@ func (r *Runner) runBoundedHandoffOnly(
 
 	tryCtx, trySpan := r.tel().StartSpan(ctx, "try", fmt.Sprintf("relay-%d-run-%d-try-%d", relay.ID, runIndex+1, tryID))
 
+	if err := progress.SetActiveTry(r.cfg.WorkspaceDir, progress.ActiveTryMetadata{
+		RelayID:   relay.ID,
+		RunID:     runIndex + 1,
+		TryID:     tryID,
+		LogPath:   tryLogPath,
+		StartedAt: startedAt,
+	}); err != nil {
+		trySpan.Finish()
+		return reliability.OutcomeHandoffTimeout, nil, false, false, fmt.Errorf("set active try metadata: %w", err)
+	}
+
 	handoffCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
@@ -2663,6 +2691,9 @@ func (r *Runner) runBoundedHandoffOnly(
 
 	if err := r.store.AppendTry(tryRecord); err != nil {
 		return outcome, result, succeeded, dirtyHandoff, err
+	}
+	if err := progress.ClearActiveTry(r.cfg.WorkspaceDir); err != nil {
+		return outcome, result, succeeded, dirtyHandoff, fmt.Errorf("clear active try metadata: %w", err)
 	}
 	r.tel().EmitTryLog(tryCtx, tryLogFields)
 

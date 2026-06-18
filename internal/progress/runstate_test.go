@@ -2,6 +2,7 @@ package progress
 
 import (
 	"os"
+	"reflect"
 	"testing"
 
 	"github.com/mitchell-wallace/rally/internal/store"
@@ -77,6 +78,46 @@ func TestClearRunState(t *testing.T) {
 	// Clearing again should be a no-op.
 	if err := ClearRunState(tmp); err != nil {
 		t.Fatalf("ClearRunState on missing file error: %v", err)
+	}
+}
+
+func TestClearActiveTryPreservesRunStateFields(t *testing.T) {
+	rs := &RunState{
+		RunID:           "relay-7-run-3",
+		PinnedLapID:     "lap-pin",
+		RecordedLaps:    []string{"lap-a", "lap-b"},
+		LapsAttempted:   []LapAttempt{{LapID: "lap-a", Timestamp: "2026-06-18T12:00:00Z"}},
+		HandoffState:    1,
+		SessionID:       "sess-123",
+		ActiveRelayID:   7,
+		ActiveRunID:     3,
+		ActiveTryID:     11,
+		ActiveLogPath:   "/tmp/try-11.log",
+		ActiveStartedAt: "2026-06-18T12:01:00Z",
+	}
+
+	rs.ClearActiveTry()
+
+	if rs.ActiveRelayID != 0 || rs.ActiveRunID != 0 || rs.ActiveTryID != 0 || rs.ActiveLogPath != "" || rs.ActiveStartedAt != "" {
+		t.Fatalf("active fields not cleared: relay=%d run=%d try=%d log=%q started=%q", rs.ActiveRelayID, rs.ActiveRunID, rs.ActiveTryID, rs.ActiveLogPath, rs.ActiveStartedAt)
+	}
+	if rs.RunID != "relay-7-run-3" {
+		t.Fatalf("RunID = %q, want preserved", rs.RunID)
+	}
+	if rs.PinnedLapID != "lap-pin" {
+		t.Fatalf("PinnedLapID = %q, want preserved", rs.PinnedLapID)
+	}
+	if got, want := rs.RecordedLaps, []string{"lap-a", "lap-b"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("RecordedLaps = %v, want %v", got, want)
+	}
+	if got, want := rs.LapsAttempted, []LapAttempt{{LapID: "lap-a", Timestamp: "2026-06-18T12:00:00Z"}}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("LapsAttempted = %v, want %v", got, want)
+	}
+	if rs.HandoffState != 1 {
+		t.Fatalf("HandoffState = %d, want preserved", rs.HandoffState)
+	}
+	if rs.SessionID != "sess-123" {
+		t.Fatalf("SessionID = %q, want preserved", rs.SessionID)
 	}
 }
 
