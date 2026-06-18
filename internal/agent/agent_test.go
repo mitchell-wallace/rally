@@ -2054,3 +2054,328 @@ done
 		t.Errorf("codex args should not contain resume when ResumeSessionID is empty, got:\n%s", string(argsData))
 	}
 }
+
+// --- Harness-specific effort injection integration tests ---
+
+func TestCodexExecutor_EffortFlagInArgs(t *testing.T) {
+	binDir, argsPath := testMockBinDir(t, "codex")
+	scriptPath := filepath.Join(binDir, "codex")
+	script := fmt.Sprintf(`#!/bin/sh
+printf '%%s\n' "$@" > %q
+printf '%%s\n' '{"type":"thread.started","thread_id":"codex-eff-sess"}'
+printf '%%s\n' '{"type":"item.completed","item":{"id":"item_0","type":"agent_message","text":"ok"}}'
+next=0
+for i in "$@"; do
+  if [ "$next" = "1" ]; then printf '{"completed":true,"summary":"codex ok"}' > "$i"; break; fi
+  if [ "$i" = "-o" ]; then next=1; fi
+done
+`, argsPath)
+	if err := os.WriteFile(scriptPath, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	exec := &CodexExecutor{}
+	_, err := exec.Execute(context.Background(), RunOptions{
+		Prompt:          "do work",
+		ReasoningEffort: "high",
+	})
+	if err != nil {
+		t.Fatalf("Execute failed: %v", err)
+	}
+
+	argsData, err := os.ReadFile(argsPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	args := string(argsData)
+	if !strings.Contains(args, "-c") || !strings.Contains(args, "model_reasoning_effort=high") {
+		t.Errorf("codex args missing -c model_reasoning_effort=high, got:\n%s", args)
+	}
+}
+
+func TestClaudeExecutor_EffortFlagInArgs(t *testing.T) {
+	binDir, argsPath := testMockBinDir(t, "claude")
+	scriptPath := filepath.Join(binDir, "claude")
+	script := fmt.Sprintf(`#!/bin/sh
+printf '%%s\n' "$@" > %q
+printf '%%s\n' '{"type":"system","session_id":"mock-eff-sess"}'
+printf '%%s\n' '{"type":"result","result":{"completed":true,"summary":"ok"}}'
+`, argsPath)
+	if err := os.WriteFile(scriptPath, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	tmp := t.TempDir()
+	logPath := filepath.Join(tmp, "try.log")
+	exec := &ClaudeExecutor{}
+	_, err := exec.Execute(context.Background(), RunOptions{
+		Prompt:          "do work",
+		ReasoningEffort: "xhigh",
+		LogPath:         logPath,
+	})
+	if err != nil {
+		t.Fatalf("Execute failed: %v", err)
+	}
+
+	argsData, err := os.ReadFile(argsPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	args := string(argsData)
+	if !strings.Contains(args, "--effort") || !strings.Contains(args, "xhigh") {
+		t.Errorf("claude args missing --effort xhigh, got:\n%s", args)
+	}
+}
+
+func TestOpenCodeExecutor_EffortFlagInArgs(t *testing.T) {
+	binDir, argsPath := testMockBinDir(t, "opencode")
+	scriptPath := filepath.Join(binDir, "opencode")
+	innerJSON := `{"completed":true,"summary":"ok"}`
+	script := fmt.Sprintf(`#!/bin/sh
+printf '%%s\n' "$@" > %q
+printf '%%s\n' '{"type":"text","part":{"type":"text","text":"%s"}}'
+`, argsPath, strings.ReplaceAll(innerJSON, `"`, `\"`))
+	if err := os.WriteFile(scriptPath, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	exec := &OpenCodeExecutor{}
+	_, err := exec.Execute(context.Background(), RunOptions{
+		Prompt:          "do work",
+		ReasoningEffort: "max",
+	})
+	if err != nil {
+		t.Fatalf("Execute failed: %v", err)
+	}
+
+	argsData, err := os.ReadFile(argsPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	args := string(argsData)
+	if !strings.Contains(args, "--variant") || !strings.Contains(args, "max") {
+		t.Errorf("opencode args missing --variant max, got:\n%s", args)
+	}
+}
+
+func TestGeminiExecutor_EffortSkippedInArgs(t *testing.T) {
+	binDir, argsPath := testMockBinDir(t, "gemini")
+	scriptPath := filepath.Join(binDir, "gemini")
+	script := fmt.Sprintf(`#!/bin/sh
+printf '%%s\n' "$@" > %q
+printf '{"response":"{\"completed\":true,\"summary\":\"ok\"}","session_id":"gem-sess"}'
+`, argsPath)
+	if err := os.WriteFile(scriptPath, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	tmp := t.TempDir()
+	logPath := filepath.Join(tmp, "try.log")
+	exec := &GeminiExecutor{}
+	_, err := exec.Execute(context.Background(), RunOptions{
+		Prompt:          "do work",
+		ReasoningEffort: "high",
+		LogPath:         logPath,
+	})
+	if err != nil {
+		t.Fatalf("Execute failed: %v", err)
+	}
+
+	argsData, err := os.ReadFile(argsPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	args := string(argsData)
+	// Gemini has no reasoning-effort flag; applyReasoningEffort must skip
+	// injection and the args must not contain any effort-related flag.
+	if strings.Contains(args, "--effort") || strings.Contains(args, "model_reasoning_effort") || strings.Contains(args, "--variant") {
+		t.Errorf("gemini args should not contain effort flag, but got:\n%s", args)
+	}
+
+	// The warning should appear in the try log.
+	logData, err := os.ReadFile(logPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(logData), "gemini has no reasoning-effort flag") {
+		t.Errorf("expected unsupported-harness warning in try log, got:\n%s", string(logData))
+	}
+}
+
+func TestAntigravityExecutor_EffortSkippedInArgs(t *testing.T) {
+	tmp := t.TempDir()
+	home := filepath.Join(tmp, "home")
+	t.Setenv("HOME", home)
+
+	binDir, argsPath := testMockBinDir(t, "antigravity")
+	scriptPath := filepath.Join(binDir, "agy")
+	script := fmt.Sprintf(`#!/bin/sh
+printf '%%s\n' "$@" > %q
+printf '%%s\n' '{"completed":true,"summary":"agy ok"}'
+`, argsPath)
+	if err := os.WriteFile(scriptPath, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	logPath := filepath.Join(tmp, "try.log")
+	exec := &AntigravityExecutor{PrintTimeout: time.Second}
+	_, err := exec.Execute(context.Background(), RunOptions{
+		Prompt:          "do work",
+		ReasoningEffort: "high",
+		LogPath:         logPath,
+	})
+	if err != nil {
+		t.Fatalf("Execute failed: %v", err)
+	}
+
+	argsData, err := os.ReadFile(argsPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	args := string(argsData)
+	// Antigravity resolves reasoning via model aliases/names only; no CLI flag.
+	if strings.Contains(args, "--effort") || strings.Contains(args, "model_reasoning_effort") || strings.Contains(args, "--variant") {
+		t.Errorf("antigravity args should not contain effort flag, but got:\n%s", args)
+	}
+
+	logData, err := os.ReadFile(logPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(logData), "antigravity has no reasoning-effort flag") {
+		t.Errorf("expected unsupported-harness warning in try log, got:\n%s", string(logData))
+	}
+}
+
+// --- Route explicit model wins + effort coexistence ---
+
+func TestCodexExecutor_ExplicitModelWinsWithEffort(t *testing.T) {
+	binDir, argsPath := testMockBinDir(t, "codex")
+	scriptPath := filepath.Join(binDir, "codex")
+	script := fmt.Sprintf(`#!/bin/sh
+printf '%%s\n' "$@" > %q
+printf '%%s\n' '{"type":"thread.started","thread_id":"codex-model-sess"}'
+next=0
+for i in "$@"; do
+  if [ "$next" = "1" ]; then printf '{"completed":true,"summary":"codex ok"}' > "$i"; break; fi
+  if [ "$i" = "-o" ]; then next=1; fi
+done
+`, argsPath)
+	if err := os.WriteFile(scriptPath, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	exec := &CodexExecutor{Model: "gpt-5.5-default"}
+	_, err := exec.Execute(context.Background(), RunOptions{
+		Prompt:          "do work",
+		Model:           "gpt-5.5-extra-high",
+		ReasoningEffort: "xhigh",
+	})
+	if err != nil {
+		t.Fatalf("Execute failed: %v", err)
+	}
+
+	argsData, err := os.ReadFile(argsPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	args := string(argsData)
+	// opts.Model must override the executor's default model.
+	if !strings.Contains(args, "gpt-5.5-extra-high") {
+		t.Errorf("expected opts.Model to win, got:\n%s", args)
+	}
+	if strings.Contains(args, "gpt-5.5-default") {
+		t.Errorf("executor default model should be overridden, got:\n%s", args)
+	}
+	// Effort should still be injected alongside the explicit model.
+	if !strings.Contains(args, "model_reasoning_effort=xhigh") {
+		t.Errorf("effort flag should be present alongside explicit model, got:\n%s", args)
+	}
+}
+
+func TestClaudeExecutor_ExplicitModelWinsWithEffort(t *testing.T) {
+	binDir, argsPath := testMockBinDir(t, "claude")
+	scriptPath := filepath.Join(binDir, "claude")
+	script := fmt.Sprintf(`#!/bin/sh
+printf '%%s\n' "$@" > %q
+printf '%%s\n' '{"type":"system","session_id":"mock-model-sess"}'
+printf '%%s\n' '{"type":"result","result":{"completed":true,"summary":"ok"}}'
+`, argsPath)
+	if err := os.WriteFile(scriptPath, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	tmp := t.TempDir()
+	logPath := filepath.Join(tmp, "try.log")
+	exec := &ClaudeExecutor{Model: "claude-opus-default"}
+	_, err := exec.Execute(context.Background(), RunOptions{
+		Prompt:          "do work",
+		Model:           "claude-opus-4-8",
+		ReasoningEffort: "max",
+		LogPath:         logPath,
+	})
+	if err != nil {
+		t.Fatalf("Execute failed: %v", err)
+	}
+
+	argsData, err := os.ReadFile(argsPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	args := string(argsData)
+	if !strings.Contains(args, "claude-opus-4-8") {
+		t.Errorf("expected opts.Model to win, got:\n%s", args)
+	}
+	if strings.Contains(args, "claude-opus-default") {
+		t.Errorf("executor default model should be overridden, got:\n%s", args)
+	}
+	if !strings.Contains(args, "--effort") || !strings.Contains(args, "max") {
+		t.Errorf("effort flag should be present alongside explicit model, got:\n%s", args)
+	}
+}
+
+func TestOpenCodeExecutor_ExplicitModelWinsWithEffort(t *testing.T) {
+	binDir, argsPath := testMockBinDir(t, "opencode")
+	scriptPath := filepath.Join(binDir, "opencode")
+	innerJSON := `{"completed":true,"summary":"ok"}`
+	script := fmt.Sprintf(`#!/bin/sh
+printf '%%s\n' "$@" > %q
+printf '%%s\n' '{"type":"text","part":{"type":"text","text":"%s"}}'
+`, argsPath, strings.ReplaceAll(innerJSON, `"`, `\"`))
+	if err := os.WriteFile(scriptPath, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	exec := &OpenCodeExecutor{Model: "zai-coding-plan/glm-default"}
+	_, err := exec.Execute(context.Background(), RunOptions{
+		Prompt:          "do work",
+		Model:           "zai-coding-plan/glm-5.1",
+		ReasoningEffort: "low",
+	})
+	if err != nil {
+		t.Fatalf("Execute failed: %v", err)
+	}
+
+	argsData, err := os.ReadFile(argsPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	args := string(argsData)
+	if !strings.Contains(args, "zai-coding-plan/glm-5.1") {
+		t.Errorf("expected opts.Model to win, got:\n%s", args)
+	}
+	if strings.Contains(args, "zai-coding-plan/glm-default") {
+		t.Errorf("executor default model should be overridden, got:\n%s", args)
+	}
+	if !strings.Contains(args, "--variant") || !strings.Contains(args, "low") {
+		t.Errorf("variant flag should be present alongside explicit model, got:\n%s", args)
+	}
+}
