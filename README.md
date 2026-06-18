@@ -893,10 +893,25 @@ This configures:
 
 These hooks automatically delegate to `just` if it is installed, falling back to raw `go` commands otherwise.
 
+## Release Checklist
+
+- [ ] No alert regression for routine rate-limit categories.
+- [ ] Corrected run header text.
+- [ ] Muted cancelled output.
+- [ ] `rally tail` defaults to active output.
+
 ## Release notes
 
 
 Recent highlights — see GitHub Releases for the full history.
+
+### v0.10.0 — Telemetry and error reporting improvements
+
+This release improves telemetry and error reporting. Short rate-limit events are now classified as non-error (info) signals, retaining `event_kind=limit_signal` and `failure_category=short_rate_limit`, and are not reclassified as crashes or failures. This update also includes release notes listing exact historical incident IDs from Sentry, now described in New Relic/backend-neutral terms.
+
+The historical incident IDs are:
+- `RALLY-2`, `RALLY-3`, `RALLY-4`, `RALLY-6`, `RALLY-8`, `RALLY-9`, `RALLY-B`, `RALLY-C`
+- `RALLY-Q`, `RALLY-K`, `RALLY-D`
 
 ### v0.9.0 — recovery role and per-run timeouts
 

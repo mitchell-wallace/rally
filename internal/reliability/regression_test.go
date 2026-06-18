@@ -126,6 +126,27 @@ func TestRegression_TaskFileDirtyNoFinalization_IncompleteFinalization(t *testin
 	}
 }
 
+func TestRegression_ShortRateLimit_IsInfraClassNotAgentError(t *testing.T) {
+	logLines := []string{
+		"some agent output...",
+		"rate limit exceeded, please try again later",
+		"process exited with code 1",
+	}
+	decision := ClassifyError(logLines, "any-harness", nil, nil)
+	if decision.Category != CategoryShortRateLimit {
+		t.Errorf("category = %q, want %q", decision.Category, CategoryShortRateLimit)
+	}
+	if decision.FailureClass != FailureInfra {
+		t.Errorf("class = %q, want %q (rate-limit is infra, not agent)", decision.FailureClass, FailureInfra)
+	}
+	if decision.Strategy != StrategyWaitResume {
+		t.Errorf("strategy = %q, want %q", decision.Strategy, StrategyWaitResume)
+	}
+	if decision.Cooldown == 0 {
+		t.Error("cooldown must be > 0 for rate-limit errors")
+	}
+}
+
 func TestRegression_APITimeoutConnectionReset_TransientInfraNotAgentError(t *testing.T) {
 	tests := []struct {
 		name     string

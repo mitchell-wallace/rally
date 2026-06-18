@@ -248,11 +248,11 @@
       "title": "Release notes + checklist + short rate-limit assertion",
       "description": "Context: design §7, tasks 7.1, 7.2, 7.3, 8.6. Per AGENTS.md, the historical RALLY-* incident IDs are legacy Sentry references that cannot be queried in New Relic — cite them as historical only and describe 0.10.0 behavior in backend-neutral / New Relic terms.\n\nOutcome: short rate-limit stays a non-error (info) signal retaining event_kind=limit_signal + failure_category=short_rate_limit (not reclassified as a crash/failure) — add/confirm a small assertion (7.1). Release notes list the exact historical incident IDs: the 7.2 set (RALLY-2, RALLY-3, RALLY-4, RALLY-6, RALLY-8, RALLY-9, RALLY-B, RALLY-C) and the opencode set 8.6 (RALLY-Q, RALLY-K, RALLY-D), described in New Relic / backend-neutral terms. Capture the release checklist verification (7.3): no alert regression for routine rate-limit categories, corrected run header text, muted cancelled output, and rally tail defaulting to active output.\n\nFiles \u0026 scope: the changelog / release-notes doc, README if it hosts the checklist, and a reliability test for the short-rate-limit tags if not already covered.\n\nAcceptance: incident IDs are present and labeled historical; the checklist is captured; go test ./internal/reliability/... for the short-rate-limit assertion. Do not tick tasks.md.",
       "assignee": "JUNIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 1441792,
       "createdAt": "2026-06-18T00:23:53.405120941Z",
-      "updatedAt": "2026-06-18T00:23:53.405120941Z",
-      "completedAt": null
+      "updatedAt": "2026-06-18T19:13:00.842370129Z",
+      "completedAt": "2026-06-18T19:13:00.842370129Z"
     },
     {
       "id": "rall-0719",
