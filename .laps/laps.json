@@ -259,11 +259,11 @@
       "title": "Bump VERSION to 0.10.0",
       "description": "Context: design decision 7, tasks 9.1, 9.2. NOTE: the task text says \"from 0.9.0\", but the working tree is already at 0.9.3 — bump the current value to 0.10.0 regardless of the stale starting number in the task.\n\nOutcome: internal/buildinfo/VERSION reads 0.10.0. main.Version stays \"dev\" in source (GoReleaser injects the real version via ldflags at build time; the auto-tag workflow creates the vX.Y.Z tag from VERSION on main — do not tag by hand and do not edit main.Version).\n\nFiles \u0026 scope: internal/buildinfo/VERSION only (confirm main.Version is unchanged in source).\n\nAcceptance: VERSION reads 0.10.0; go build ./... reports a v0.10.0-dev dev build; main.Version is still \"dev\". Do not tick tasks.md.",
       "assignee": "JUNIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 1507328,
       "createdAt": "2026-06-18T00:23:53.405121727Z",
-      "updatedAt": "2026-06-18T00:23:53.405121727Z",
-      "completedAt": null
+      "updatedAt": "2026-06-18T19:20:36.775935573Z",
+      "completedAt": "2026-06-18T19:20:36.775935573Z"
     },
     {
       "id": "rall-e145",
