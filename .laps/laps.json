@@ -270,11 +270,11 @@
       "title": "Final full-change verification (0.10.0 release)",
       "description": "Run the complete openspec-verify-change against release-0-10-0-reliability-and-model-routing and inspect the whole diff.\n\nIdentify the intended merge target from the user / PR metadata / repo docs / branch config / recent history (do not assume main) and the first lap/try of this batch; treat pre-batch branch work as pre-existing unless the user asks to include it. Use git diff \u003ctarget\u003e...HEAD across the full change.\n\nVerify the whole outcome end-to-end, tracing actual symbols/strings/commits, not just green tests: mismatch warning-first + handoff (phase 1), run/role headers (phase 3), cancelled state with muted output and no false failures (phase 2), reasoning aliases + harness effort injection (phase 4), tail highlighting (phase 5) + active-try targeting (phase 6), short-rate-limit / telemetry closure + release notes (phase 7), opencode usage-limit detection + server-log-tail (phase 8), and VERSION = 0.10.0 with main.Version still \"dev\" (phase 9). Run go build ./..., the full go test ./..., and go vet ./...; do realistic smoke checks where feasible (rally tail active-run, run header text, cancelled muted output).\n\nConfirm every tasks.md box that is genuinely done-and-verified is checked (including the phase-VERIFY boxes and the already-resolved 8.5); for anything incomplete or wrong, laps add head a focused fix lap rather than implementing here (tiny safe one-liners excepted). Do not rewrite git history; if scope cleanup is needed, use additive/revert commits or ask the user for a recovery strategy.",
       "assignee": "VERIFY",
-      "isDone": false,
+      "isDone": true,
       "order": 1572864,
       "createdAt": "2026-06-18T00:23:53.405122414Z",
-      "updatedAt": "2026-06-18T00:23:53.405122414Z",
-      "completedAt": null
+      "updatedAt": "2026-06-18T21:55:01.263102529Z",
+      "completedAt": "2026-06-18T21:55:01.263102529Z"
     }
   ]
 }
