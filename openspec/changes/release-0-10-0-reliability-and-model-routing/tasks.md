@@ -63,26 +63,26 @@
 
 ## 4. Reasoning variant aliases and role resolution
 
-- [ ] 4.1 Extend config schema with `[reasoning] map[string]string` in `internal/config/config_v2.go` and `rawConfig`.
-- [ ] 4.2 Add resolver helper for role-level model alias fallback after route selection, when the task role and selected harness are both known (lane-aware, preserving explicit model tokens).
+- [x] 4.1 Extend config schema with `[reasoning] map[string]string` in `internal/config/config_v2.go` and `rawConfig`.
+- [x] 4.2 Add resolver helper for role-level model alias fallback after route selection, when the task role and selected harness are both known (lane-aware, preserving explicit model tokens).
 - [ ] 4.3 Extend resolved route/runtime data to carry `{model, reasoning_effort}` where applicable, while preserving model-alias-only behavior:
   - `agent.ResolvedAgent`,
   - `agent.RunOptions`,
   - `relay.Config.Resolver` call sites,
   - `routeSelection`.
-- [ ] 4.4 Wire harness-specific effort injection in executor argument builders and tests:
+- [x] 4.4 Wire harness-specific effort injection in executor argument builders and tests:
   - codex: pass `-c model_reasoning_effort=<value>`,
   - claude: pass `--effort <value>`,
   - opencode: pass `--variant <value>`,
   - gemini: warn and skip,
   - antigravity: resolve effort via model aliases/model names only.
-- [ ] 4.5 Add validation and tests:
+- [x] 4.5 Add validation and tests:
   - missing harness-scoped model alias -> clear `rally routes check` error,
   - route explicit model still wins,
   - role alias resolves to existing harness model alias,
   - unknown unsupported effort value warns rather than hard-fails,
   - unsupported harness effort warns and skips injection.
-- [ ] 4.6 Update `.rally/config.toml` sample and `README.md` routing/model sections with role-variant examples (`verify = "g55-xh"`, `junior = "g55-l"`) and harness-specific effort notes.
+- [x] 4.6 Update `.rally/config.toml` sample and `README.md` routing/model sections with role-variant examples (`verify = "g55-xh"`, `junior = "g55-l"`) and harness-specific effort notes.
 
 ## 5. Syntax highlighting for `rally tail`
 

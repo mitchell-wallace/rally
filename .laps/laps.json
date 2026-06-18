@@ -138,10 +138,21 @@
       "title": "Verify phase 4 (reasoning variant aliases)",
       "description": "Use openspec-verify-change against the change, focused on phase 4 (reasoning variant aliases and role resolution) — a shared routing/model contract.\n\nIdentify the merge target (not assumed main) and the batch start; git diff \u003ctarget\u003e...HEAD.\n\nTrace: confirm [reasoning] resolves only after harness selection (no global-alias leakage), explicit route models keep precedence, and the resolver returns {model, reasoning_effort}; confirm each executor injects/skips correctly (codex -c, claude --effort, opencode --variant, gemini warn/skip, antigravity model-alias); confirm rally routes check errors on a missing harness-scoped alias and warns (not fails) on unknown/unsupported effort; confirm the config.toml + README examples match behavior. go test ./internal/config/... ./internal/routing/... ./internal/agent/... ./cmd/rally/....\n\nCheck off tasks.md 4.1-4.6 where verified; head-lap gaps; no history rewrites.",
       "assignee": "VERIFY",
-      "isDone": false,
+      "isDone": true,
       "order": 851968,
       "createdAt": "2026-06-18T00:23:53.405106505Z",
-      "updatedAt": "2026-06-18T00:23:53.405106505Z",
+      "updatedAt": "2026-06-18T11:55:26.671213291Z",
+      "completedAt": "2026-06-18T11:55:26.671213291Z"
+    },
+    {
+      "id": "work-8c70",
+      "title": "Fix reasoning-resolved resilience keys",
+      "description": "Phase 4 verify found that routeRuntime applies [reasoning] after route selection, but several resilience helpers still derive keys from state.Entry.Spec before role reasoning is applied. This breaks harness-scoped model aliases such as verify=g55-xh: bench/pause/probation and quota fan-out consult codex:\u003cbase-model\u003e while runOne records state for codex:\u003cresolved-variant-model\u003e. Update routeRuntime syncRecoverySignals, selectionWaitError, forceUnpauseAll, and benchQuotaScope to derive keys from the role-resolved selection for the relevant lane/assignee, then add regression coverage proving a reasoning-selected model stays benched/paused until its real resilience key clears.",
+      "assignee": "SENIOR",
+      "isDone": false,
+      "order": 786432,
+      "createdAt": "2026-06-18T11:54:47.305497293Z",
+      "updatedAt": "2026-06-18T11:54:47.305497293Z",
       "completedAt": null
     },
     {
