@@ -1234,6 +1234,62 @@ exit 7
 	}
 }
 
+func TestOpenCodeExecutor_ServerLogTailEvidenceByWorkspaceSession(t *testing.T) {
+	tmp := t.TempDir()
+	binDir := filepath.Join(tmp, "bin")
+	if err := os.MkdirAll(binDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	scriptPath := filepath.Join(binDir, "opencode")
+	script := `#!/bin/sh
+exit 1
+`
+	if err := os.WriteFile(scriptPath, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	workspaceDir := filepath.Join(tmp, "workspace")
+	if err := os.MkdirAll(workspaceDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	serverLogPath := filepath.Join(tmp, "opencode.log")
+	oldServerLogPath := openCodeServerLogPath
+	openCodeServerLogPath = func() string { return serverLogPath }
+	t.Cleanup(func() { openCodeServerLogPath = oldServerLogPath })
+
+	ts := time.Now().UTC().Format(time.RFC3339Nano)
+	logText := strings.Join([]string{
+		fmt.Sprintf(`timestamp=%s level=INFO message=created id=ses_right directory="%s"`, ts, workspaceDir),
+		fmt.Sprintf(`timestamp=%s level=ERROR message="stream error" providerID=opencode-go modelID=kimi session.id=ses_other small=false agent=build error.error="AI_APICallError: Monthly usage limit reached. Resets in 2 days."`, ts),
+		fmt.Sprintf(`timestamp=%s level=ERROR message="stream error" providerID=opencode-go modelID=kimi session.id=ses_right small=true agent=title error.error="AI_RetryError: Failed after 3 attempts. Last error: Monthly usage limit reached. Resets in 7 days."`, ts),
+	}, "\n")
+	if err := os.WriteFile(serverLogPath, []byte(logText), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	exec := &OpenCodeExecutor{Model: "opencode-go/kimi"}
+	tr, err := exec.Execute(context.Background(), RunOptions{Prompt: "do work", WorkspaceDir: workspaceDir})
+	if err == nil {
+		t.Fatal("expected error from opencode mock")
+	}
+	if tr == nil {
+		t.Fatal("expected TryResult, got nil")
+	}
+	if tr.Evidence == nil {
+		t.Fatal("expected server-log usage-limit evidence")
+	}
+	if tr.Evidence.Category != reliability.CategoryUsageLimit {
+		t.Fatalf("Category = %q, want %q", tr.Evidence.Category, reliability.CategoryUsageLimit)
+	}
+	if tr.Evidence.Provider != "opencode-go" {
+		t.Errorf("Provider = %q, want opencode-go", tr.Evidence.Provider)
+	}
+	if tr.Evidence.ResetAfter != 7*24*time.Hour {
+		t.Errorf("ResetAfter = %v, want 168h", tr.Evidence.ResetAfter)
+	}
+}
+
 func TestParseAntigravityOutput_JSON(t *testing.T) {
 	tr, err := parseAntigravityOutput([]byte(`{"completed":true,"summary":"ok"}`), "agy-session-1")
 	if err != nil {
