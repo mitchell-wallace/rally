@@ -226,11 +226,11 @@
       "title": "opencode usage-limit test matrix",
       "description": "Context: task 8.4 — test matrix across the two prior opencode laps.\n\nOutcome: tests cover — opencode fixtures for the exact zai (\"Usage limit reached for 5 hour. Your limit will reset at \u003cts\u003e\") and opencode-go (\"Monthly usage limit reached. Resets in 7 days.\") signatures in the flat error.error=\"\u003cWrapper\u003e: ...\" server-log form, for both AI_APICallError and AI_RetryError wrappers, asserting CategoryUsageLimit + correct ResetAfter/ResetAt; the UnknownError generic-message + server-log-tail evidence path classifies usage_limit; server-log-tail session correlation by directory=\u003cWorkspaceDir\u003e (and the provider+window fallback) picks the right session's limit line; a quota-scope bench is triggered for opencode:zai-coding-plan / opencode:opencode-go on these failures (not agent_error).\n\nFiles \u0026 scope: internal/reliability/opencode_test.go (+ fixtures), internal/agent/*_test.go, and a relay-level bench assertion where appropriate.\n\nAcceptance: go test ./internal/reliability/... ./internal/agent/... ./internal/relay/... passes with each scenario above. Do not tick tasks.md.",
       "assignee": "SENIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 1310720,
       "createdAt": "2026-06-18T00:23:53.405116724Z",
-      "updatedAt": "2026-06-18T00:23:53.405116724Z",
-      "completedAt": null
+      "updatedAt": "2026-06-18T18:46:23.728245375Z",
+      "completedAt": "2026-06-18T18:46:23.728245375Z"
     },
     {
       "id": "rall-5292",
