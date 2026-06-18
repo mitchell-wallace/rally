@@ -127,11 +127,11 @@
       "title": "Document reasoning variants (config.toml + README)",
       "description": "Context: task 4.6.\n\nOutcome: the .rally/config.toml sample and the README routing/model sections document role-variant examples (verify = \"g55-xh\", junior = \"g55-l\") and the harness-specific effort notes (codex -c model_reasoning_effort, claude --effort, opencode --variant, gemini unsupported, antigravity model-alias).\n\nFiles \u0026 scope: .rally/config.toml (sample [reasoning] block), README.md (routing/model section). Docs only — keep examples consistent with the implemented schema and precedence.\n\nAcceptance: examples match the implemented behavior from the two prior reasoning laps; README reads cleanly. Do not tick tasks.md.",
       "assignee": "JUNIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 786432,
       "createdAt": "2026-06-18T00:23:53.405105728Z",
-      "updatedAt": "2026-06-18T00:23:53.405105728Z",
-      "completedAt": null
+      "updatedAt": "2026-06-18T11:48:29.803719678Z",
+      "completedAt": "2026-06-18T11:48:29.803719678Z"
     },
     {
       "id": "rall-4cef",
