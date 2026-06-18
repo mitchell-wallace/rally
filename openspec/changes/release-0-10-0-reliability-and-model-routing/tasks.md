@@ -65,7 +65,7 @@
 
 - [x] 4.1 Extend config schema with `[reasoning] map[string]string` in `internal/config/config_v2.go` and `rawConfig`.
 - [x] 4.2 Add resolver helper for role-level model alias fallback after route selection, when the task role and selected harness are both known (lane-aware, preserving explicit model tokens).
-- [ ] 4.3 Extend resolved route/runtime data to carry `{model, reasoning_effort}` where applicable, while preserving model-alias-only behavior:
+- [x] 4.3 Extend resolved route/runtime data to carry `{model, reasoning_effort}` where applicable, while preserving model-alias-only behavior:
   - `agent.ResolvedAgent`,
   - `agent.RunOptions`,
   - `relay.Config.Resolver` call sites,
@@ -111,9 +111,9 @@
 
 ## 7. Research and telemetry closure
 
-- [ ] 7.1 Ensure short rate-limit remains non-error (`info`) and retains existing tags (`event_kind=limit_signal`, `failure_category=short_rate_limit`) without reclassifying as crash/failure event.
-- [ ] 7.2 Add/adjust release notes with exact historical telemetry incident IDs from the legacy incident set (`RALLY-2`, `RALLY-3`, `RALLY-4`, `RALLY-6`, `RALLY-8`, `RALLY-9`, `RALLY-B`, `RALLY-C`) while describing 0.10.0 behavior in backend-neutral/New Relic terms.
-- [ ] 7.3 Add release checklist verification: no alert regression for routine rate-limit categories, corrected run header text in default relay output, cancelled output is muted, and `rally tail` defaults to active output rather than old completed relays.
+- [x] 7.1 Ensure short rate-limit remains non-error (`info`) and retains existing tags (`event_kind=limit_signal`, `failure_category=short_rate_limit`) without reclassifying as crash/failure event.
+- [x] 7.2 Add/adjust release notes with exact historical telemetry incident IDs from the legacy incident set (`RALLY-2`, `RALLY-3`, `RALLY-4`, `RALLY-6`, `RALLY-8`, `RALLY-9`, `RALLY-B`, `RALLY-C`) while describing 0.10.0 behavior in backend-neutral/New Relic terms.
+- [x] 7.3 Add release checklist verification: no alert regression for routine rate-limit categories, corrected run header text in default relay output, cancelled output is muted, and `rally tail` defaults to active output rather than old completed relays.
 
 ## 8. opencode usage-limit detection and reset parsing
 
@@ -136,9 +136,9 @@
   - server-log-tail session correlation by `directory=<WorkspaceDir>` (and provider+window fallback) picks the right session's limit line,
   - a quota-scope bench is triggered for `opencode:zai-coding-plan` / `opencode:opencode-go` on these failures (not `agent_error`).
 - [x] 8.5 Confirm the precise emitted error shape for these limits before finalizing the 8.1 matcher, per spike-2 finding A. **Resolved (third-pass live log re-inspection, 2026-06-16 20:58):** stdout stays empty through opencode's internal-retry stall; the structured provider error reaches only the server log as the flat `error.error="<Wrapper>: <message>"` field under `AI_APICallError` / `AI_RetryError` (no native `UsageLimitError`/`QuotaExceededError`). The 8.1 matcher list is finalized and the 8.3 server-log-tail path is required, not optional. See `spike-2-report.md` §"Third-pass confirmation".
-- [ ] 8.6 Update release notes / historical incident list with the opencode usage-limit issues (`RALLY-Q`, `RALLY-K`, `RALLY-D`) while using backend-neutral/New Relic telemetry terminology for the implemented behavior.
+- [x] 8.6 Update release notes / historical incident list with the opencode usage-limit issues (`RALLY-Q`, `RALLY-K`, `RALLY-D`) while using backend-neutral/New Relic telemetry terminology for the implemented behavior.
 
 ## 9. Release versioning
 
-- [ ] 9.1 Bump `internal/buildinfo/VERSION` from the current `0.9.x` (`0.9.3` at planning time) to `0.10.0` as part of the release change.
-- [ ] 9.2 Confirm `main.Version` remains `"dev"` and leave tag creation to the existing `auto-tag` workflow.
+- [x] 9.1 Bump `internal/buildinfo/VERSION` from the current `0.9.x` (`0.9.3` at planning time) to `0.10.0` as part of the release change.
+- [x] 9.2 Confirm `main.Version` remains `"dev"` and leave tag creation to the existing `auto-tag` workflow.
