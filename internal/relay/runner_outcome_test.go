@@ -2,17 +2,68 @@ package relay
 
 import (
 	"context"
+	"errors"
 	"io"
 	"os"
 	"path/filepath"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/mitchell-wallace/rally/internal/agent"
 	"github.com/mitchell-wallace/rally/internal/gitx"
+	"github.com/mitchell-wallace/rally/internal/keyboard"
 	"github.com/mitchell-wallace/rally/internal/progress"
 	"github.com/mitchell-wallace/rally/internal/reliability"
 	"github.com/mitchell-wallace/rally/internal/store"
 )
+
+func installOperatorKeyboard(t *testing.T) *os.File {
+	t.Helper()
+	oldStdin := os.Stdin
+	reader, writer, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("create keyboard pipe: %v", err)
+	}
+	os.Stdin = reader
+	t.Cleanup(func() {
+		os.Stdin = oldStdin
+		_ = writer.Close()
+		_ = reader.Close()
+	})
+	return writer
+}
+
+func sendOperatorAction(t *testing.T, input *os.File, action keyboard.Action) {
+	t.Helper()
+	var b byte
+	switch action {
+	case keyboard.ActionQuit:
+		b = 0x03
+	case keyboard.ActionSkip:
+		b = 0x13
+	case keyboard.ActionPause:
+		b = 0x10
+	case keyboard.ActionStop:
+		b = 0x18
+	default:
+		t.Fatalf("unsupported keyboard action %v", action)
+	}
+	if _, err := input.Write([]byte{b, b}); err != nil {
+		t.Fatalf("write keyboard action %v: %v", action, err)
+	}
+}
+
+func awaitRunError(t *testing.T, done <-chan error) error {
+	t.Helper()
+	select {
+	case err := <-done:
+		return err
+	case <-time.After(2 * time.Second):
+		t.Fatal("Run did not return")
+		return nil
+	}
+}
 
 func TestRunOneRecordsHandoffRequestedOutcome(t *testing.T) {
 	workspaceDir := t.TempDir()
@@ -286,6 +337,207 @@ func TestRunOneRetryThenDirtyHandoffUsesRunScopedDirtyDetection(t *testing.T) {
 	}
 	if dirty, _ := gitx.IsWorkspaceDirty(workspaceDir); !dirty {
 		t.Fatal("workspace dirty = false, want retry-owned dirty handoff left uncommitted")
+	}
+}
+
+func TestRunOneOperatorCancellationPersistsCancelledNotFailed(t *testing.T) {
+	tests := []struct {
+		name            string
+		action          keyboard.Action
+		source          string
+		wantInterrupted bool
+		wantSkipFlag    bool
+		wantStopFlag    bool
+	}{
+		{
+			name:         "ctrl+s skip",
+			action:       keyboard.ActionSkip,
+			source:       "skip",
+			wantSkipFlag: true,
+		},
+		{
+			name:            "quit-now overrides harness error",
+			action:          keyboard.ActionQuit,
+			source:          "quit_now",
+			wantInterrupted: true,
+			wantStopFlag:    true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var attempts int32
+			exec := &funcExecutor{
+				fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+					atomic.AddInt32(&attempts, 1)
+					<-ctx.Done()
+					return &agent.TryResult{
+						Completed:     false,
+						Summary:       "operator cancelled the try",
+						RemainingWork: "none",
+					}, errors.New("harness cleanup failed")
+				},
+			}
+			r, s, _ := newTimeoutTestRunner(t, exec, Config{RetryBudget: 3})
+			sink := &capturingSink{}
+			r.SetTelemetry(sink)
+
+			input := installOperatorKeyboard(t)
+			done := driveRunOneTaskAsync(t, r, runTimeoutTask())
+			waitForAttempts(t, &attempts, 1)
+			sendOperatorAction(t, input, tt.action)
+
+			res := awaitRunOne(t, done)
+			if res.Success {
+				t.Fatal("cancelled runOne result must not be marked successful")
+			}
+			if res.Outcome != reliability.OutcomeCancelled {
+				t.Fatalf("run outcome = %q, want %q", res.Outcome, reliability.OutcomeCancelled)
+			}
+			if res.Interrupted != tt.wantInterrupted {
+				t.Fatalf("run interrupted = %v, want %v", res.Interrupted, tt.wantInterrupted)
+			}
+			if res.Category != "" {
+				t.Fatalf("run category = %q, want empty for operator cancellation", res.Category)
+			}
+			if res.InfraFailures != 0 {
+				t.Fatalf("infra failures = %d, want 0 for operator cancellation", res.InfraFailures)
+			}
+			if got := atomic.LoadInt32(&attempts); got != 1 {
+				t.Fatalf("executor attempts = %d, want 1: cancelled attempts must not retry", got)
+			}
+			if r.skipFlag.Load() != tt.wantSkipFlag {
+				t.Fatalf("skipFlag = %v, want %v", r.skipFlag.Load(), tt.wantSkipFlag)
+			}
+			if r.stopFlag.Load() != tt.wantStopFlag {
+				t.Fatalf("stopFlag = %v, want %v", r.stopFlag.Load(), tt.wantStopFlag)
+			}
+
+			tries := s.AllTries()
+			if len(tries) != 1 {
+				t.Fatalf("persisted tries = %d, want 1", len(tries))
+			}
+			try := tries[0]
+			if try.Completed {
+				t.Fatal("cancelled try Completed = true, want false")
+			}
+			if try.Outcome != reliability.OutcomeCancelled {
+				t.Fatalf("try outcome = %q, want %q", try.Outcome, reliability.OutcomeCancelled)
+			}
+			if try.CancellationSource != tt.source {
+				t.Fatalf("try cancellation source = %q, want %q", try.CancellationSource, tt.source)
+			}
+			if try.FailReason != "cancelled ("+tt.source+")" {
+				t.Fatalf("try fail reason = %q, want cancelled source", try.FailReason)
+			}
+			if try.Category != "" {
+				t.Fatalf("try category = %q, want empty", try.Category)
+			}
+			if try.AttemptNumber != 1 {
+				t.Fatalf("try attempt = %d, want 1", try.AttemptNumber)
+			}
+
+			if len(sink.failures) != 0 {
+				t.Fatalf("operator cancellation emitted failure telemetry: %#v", sink.failures)
+			}
+			if len(sink.events) != 0 {
+				t.Fatalf("operator cancellation emitted diagnostic events: %#v", sink.events)
+			}
+			log := findTryLogByOutcome(t, sink, string(reliability.OutcomeCancelled))
+			if got := log["cancellation_source"]; got != tt.source {
+				t.Fatalf("try log cancellation_source = %#v, want %q", got, tt.source)
+			}
+			if got := log["completed"]; got != false {
+				t.Fatalf("try log completed = %#v, want false", got)
+			}
+			for _, key := range []string{"failure_category", "failure_class", "fail_reason"} {
+				if _, found := log[key]; found {
+					t.Fatalf("cancelled try log must not carry %s: %#v", key, log)
+				}
+			}
+			span := findTrySpanByOutcome(t, sink, string(reliability.OutcomeCancelled))
+			wantTag(t, span.tags, "cancellation_source", tt.source)
+			wantNoTag(t, span.tags, "failure_category")
+			if got := span.data["cancellation_source"]; got != tt.source {
+				t.Fatalf("try span cancellation_source = %#v, want %q", got, tt.source)
+			}
+			if got := span.data["completed"]; got != false {
+				t.Fatalf("try span completed = %#v, want false", got)
+			}
+		})
+	}
+}
+
+func TestRunGracefulStopCancellationPersistsAndStopsRelay(t *testing.T) {
+	var attempts int32
+	exec := &funcExecutor{
+		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+			atomic.AddInt32(&attempts, 1)
+			<-ctx.Done()
+			return &agent.TryResult{Completed: false, Summary: "operator stopped the relay"}, ctx.Err()
+		},
+	}
+	r, s, _ := newTimeoutTestRunner(t, exec, Config{
+		AgentMixSpecs:    []string{"op:dsf"},
+		TargetIterations: 3,
+		RetryBudget:      3,
+	})
+	sink := &capturingSink{}
+	r.SetTelemetry(sink)
+
+	input := installOperatorKeyboard(t)
+	done := make(chan error, 1)
+	go func() { done <- r.Run(context.Background()) }()
+	waitForAttempts(t, &attempts, 1)
+	sendOperatorAction(t, input, keyboard.ActionStop)
+
+	if err := awaitRunError(t, done); err != nil {
+		t.Fatalf("Run error = %v, want nil after graceful stop", err)
+	}
+	if got := atomic.LoadInt32(&attempts); got != 1 {
+		t.Fatalf("executor attempts = %d, want 1: graceful stop must halt the relay", got)
+	}
+	if !r.stopFlag.Load() {
+		t.Fatal("stopFlag = false, want true after graceful stop")
+	}
+
+	tries := s.AllTries()
+	if len(tries) != 1 {
+		t.Fatalf("persisted tries = %d, want 1", len(tries))
+	}
+	try := tries[0]
+	if try.Outcome != reliability.OutcomeCancelled {
+		t.Fatalf("try outcome = %q, want %q", try.Outcome, reliability.OutcomeCancelled)
+	}
+	if try.CancellationSource != "graceful_stop" {
+		t.Fatalf("try cancellation source = %q, want graceful_stop", try.CancellationSource)
+	}
+	if try.Completed {
+		t.Fatal("graceful-stop try Completed = true, want false")
+	}
+	if try.Category != "" {
+		t.Fatalf("try category = %q, want empty", try.Category)
+	}
+
+	relays := s.AllRelays()
+	if len(relays) != 1 {
+		t.Fatalf("relays = %d, want 1", len(relays))
+	}
+	if relays[0].CompletedIterations >= relays[0].TargetIterations {
+		t.Fatalf("relay completed %d/%d iterations; graceful stop should halt before completion", relays[0].CompletedIterations, relays[0].TargetIterations)
+	}
+	if got := countAgentStatusEvents(s, "paused", "frozen", "retry_failed", "benched"); got != 0 {
+		t.Fatalf("operator cancellation wrote %d resilience status event(s), want 0", got)
+	}
+	if len(sink.failures) != 0 {
+		t.Fatalf("graceful stop emitted failure telemetry: %#v", sink.failures)
+	}
+	if len(sink.events) != 0 {
+		t.Fatalf("graceful stop emitted diagnostic events: %#v", sink.events)
+	}
+	log := findTryLogByOutcome(t, sink, string(reliability.OutcomeCancelled))
+	if got := log["cancellation_source"]; got != "graceful_stop" {
+		t.Fatalf("try log cancellation_source = %#v, want graceful_stop", got)
 	}
 }
 

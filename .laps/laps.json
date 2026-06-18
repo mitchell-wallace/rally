@@ -83,11 +83,11 @@
       "title": "Cancelled state test matrix",
       "description": "Context: task 2.8 — full cancelled test matrix across the prior three cancelled laps.\n\nOutcome: tests cover — Ctrl+S cancelled try persisted as cancelled not failed; Ctrl+X graceful stop cancels/drains, records graceful_stop, and stops the relay; quit-now cancellation overrides harness error handling and records cancelled; cancelled attempts do not retry / freeze / pause or emit failure telemetry; cancelled laps-backed attempts do not emit incomplete_finalization telemetry; cancelled attempts are not counted as failed in summaries/tallies; style tests prove cancelled output uses muted formatting.\n\nFiles \u0026 scope: internal/relay/*_test.go (runner_action_loop_test.go, runner_tally_test.go, runner_failure_telemetry_test.go, runner_outcome_test.go), internal/style/style_test.go.\n\nAcceptance: go test ./internal/relay/... ./internal/style/... passes with an assertion for each scenario above. Do not tick tasks.md.",
       "assignee": "SENIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 524288,
       "createdAt": "2026-06-18T00:23:53.405102443Z",
-      "updatedAt": "2026-06-18T00:23:53.405102443Z",
-      "completedAt": null
+      "updatedAt": "2026-06-18T06:13:53.612540186Z",
+      "completedAt": "2026-06-18T06:13:53.612540186Z"
     },
     {
       "id": "rall-5932",

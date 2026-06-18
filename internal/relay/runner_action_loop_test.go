@@ -105,6 +105,7 @@ func TestActionLoopStopCancelsAndDrains(t *testing.T) {
 	r := &Runner{}
 	tryCh := make(chan tryResult, 1)
 	actionCh := make(chan keyboard.Action, 1)
+	stoppingCh := make(chan bool, 1)
 	attemptCtx, cancelAttempt := context.WithCancel(context.Background())
 	defer cancelAttempt()
 
@@ -121,7 +122,7 @@ func TestActionLoopStopCancelsAndDrains(t *testing.T) {
 		stallTick:     neverTick(),
 		attemptCtx:    attemptCtx,
 		cancelAttempt: cancelAttempt,
-		mon:           &fakeMonitor{},
+		mon:           &fakeMonitor{onStopping: func(v bool) { stoppingCh <- v }},
 		log:           io.Discard,
 	})
 
@@ -145,6 +146,14 @@ func TestActionLoopStopCancelsAndDrains(t *testing.T) {
 	}
 	if out.result == nil || out.result.Completed {
 		t.Errorf("expected the cancelled try result, got %+v", out.result)
+	}
+	select {
+	case stopping := <-stoppingCh:
+		if !stopping {
+			t.Fatal("expected Ctrl+X to mark the monitor as stopping")
+		}
+	default:
+		t.Fatal("expected Ctrl+X to mark the monitor as stopping")
 	}
 }
 

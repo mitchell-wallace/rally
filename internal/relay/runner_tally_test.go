@@ -66,6 +66,20 @@ func TestTallyRunsCancelledNotFailed(t *testing.T) {
 	}
 }
 
+func TestTallyRunsAllCancellationSourcesNotFailed(t *testing.T) {
+	tries := []store.TryRecord{
+		{ID: 1, RelayID: 1, RunID: 1, AttemptNumber: 1, Completed: false, Outcome: reliability.OutcomeCancelled, CancellationSource: "skip"},
+		{ID: 2, RelayID: 1, RunID: 2, AttemptNumber: 1, Completed: false, Outcome: reliability.OutcomeCancelled, CancellationSource: "graceful_stop"},
+		{ID: 3, RelayID: 1, RunID: 3, AttemptNumber: 1, Completed: false, Outcome: reliability.OutcomeCancelled, CancellationSource: "quit_now"},
+		{ID: 4, RelayID: 1, RunID: 4, AttemptNumber: 1, Completed: false, Outcome: reliability.OutcomeFailed},
+	}
+
+	pass, fail, cancelled := tallyRuns(tries, 1)
+	if pass != 0 || fail != 1 || cancelled != 3 {
+		t.Fatalf("all cancellation sources: want 0 pass / 1 fail / 3 cancelled, got %d pass / %d fail / %d cancelled", pass, fail, cancelled)
+	}
+}
+
 func TestTallyRunsCompletionWinsOverEarlierCancellation(t *testing.T) {
 	tries := []store.TryRecord{
 		{ID: 1, RelayID: 1, RunID: 1, AttemptNumber: 1, Completed: false, Outcome: reliability.OutcomeCancelled, CancellationSource: "skip"},

@@ -184,36 +184,40 @@ func TestRenderFooterFailed(t *testing.T) {
 }
 
 func TestRenderFooterCancelledMuted(t *testing.T) {
-	got := RenderFooter(FooterOptions{
-		Cancelled:          true,
-		Duration:           9 * time.Second,
-		FilesChanged:       1,
-		CancellationSource: "skip",
-		Attempt:            2,
-		MaxAttempts:        5,
-	})
+	for _, source := range []string{"skip", "graceful_stop", "quit_now"} {
+		t.Run(source, func(t *testing.T) {
+			got := RenderFooter(FooterOptions{
+				Cancelled:          true,
+				Duration:           9 * time.Second,
+				FilesChanged:       1,
+				CancellationSource: source,
+				Attempt:            2,
+				MaxAttempts:        5,
+			})
 
-	plain := stripAnsi(got)
-	if !strings.Contains(plain, "cancelled") {
-		t.Errorf("expected 'cancelled' in footer, got: %s", got)
-	}
-	if strings.Contains(plain, "failed") {
-		t.Errorf("cancelled footer must not render as failed, got: %s", plain)
-	}
-	if strings.Contains(plain, "passed") {
-		t.Errorf("cancelled footer must not render as passed, got: %s", plain)
-	}
-	if !strings.Contains(plain, "source: skip") {
-		t.Errorf("expected cancellation source in footer, got: %s", plain)
-	}
-	if !strings.Contains(got, MutedStyle.Render("• cancelled")) {
-		t.Errorf("cancelled outcome should be muted, got: %q", got)
-	}
-	if strings.Contains(got, FailureStyle.Render("• cancelled")) {
-		t.Errorf("cancelled outcome must not use failure style, got: %q", got)
-	}
-	if strings.Contains(got, SuccessStyle.Render("• cancelled")) {
-		t.Errorf("cancelled outcome must not use success style, got: %q", got)
+			plain := stripAnsi(got)
+			if !strings.Contains(plain, "cancelled") {
+				t.Errorf("expected 'cancelled' in footer, got: %s", got)
+			}
+			if strings.Contains(plain, "failed") {
+				t.Errorf("cancelled footer must not render as failed, got: %s", plain)
+			}
+			if strings.Contains(plain, "passed") {
+				t.Errorf("cancelled footer must not render as passed, got: %s", plain)
+			}
+			if !strings.Contains(plain, "source: "+source) {
+				t.Errorf("expected cancellation source %q in footer, got: %s", source, plain)
+			}
+			if !strings.Contains(got, MutedStyle.Render("• cancelled")) {
+				t.Errorf("cancelled outcome should be muted, got: %q", got)
+			}
+			if strings.Contains(got, FailureStyle.Render("• cancelled")) {
+				t.Errorf("cancelled outcome must not use failure style, got: %q", got)
+			}
+			if strings.Contains(got, SuccessStyle.Render("• cancelled")) {
+				t.Errorf("cancelled outcome must not use success style, got: %q", got)
+			}
+		})
 	}
 }
 

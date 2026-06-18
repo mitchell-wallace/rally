@@ -7,10 +7,12 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/mitchell-wallace/rally/internal/agent"
+	"github.com/mitchell-wallace/rally/internal/keyboard"
 	"github.com/mitchell-wallace/rally/internal/laps"
 	"github.com/mitchell-wallace/rally/internal/progress"
 	"github.com/mitchell-wallace/rally/internal/reliability"
@@ -380,6 +382,84 @@ func TestRunOne_UnfinalizedAgent_CapturesIncompleteFinalization(t *testing.T) {
 	if _, ok := evt.Contexts["failure_evidence"]; ok {
 		t.Error("incomplete_finalization capture must not carry a failure_evidence context")
 	}
+}
+
+func TestRunOne_CancelledLapsAttemptDoesNotCaptureIncompleteFinalization(t *testing.T) {
+	var attempts int32
+	var workspaceDir string
+	exec := &funcExecutor{
+		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+			if err := os.WriteFile(filepath.Join(workspaceDir, "partial.txt"), []byte("partial\n"), 0o644); err != nil {
+				return nil, err
+			}
+			atomic.AddInt32(&attempts, 1)
+			<-ctx.Done()
+			return &agent.TryResult{Completed: false, Summary: "cancelled with partial work"}, ctx.Err()
+		},
+	}
+	r, s, ws := newTimeoutTestRunner(t, exec, Config{
+		RetryBudget: 3,
+		LapsEnabled: true,
+	})
+	workspaceDir = ws
+	sink := &capturingSink{}
+	r.SetTelemetry(sink)
+
+	input := installOperatorKeyboard(t)
+	done := driveRunOneTaskAsync(t, r, runTask{
+		Name:          "lap task",
+		Prompt:        "do work",
+		Assignee:      "senior",
+		ResolvedRoute: "senior",
+		LapID:         "lap-1",
+		IsLapsBacked:  true,
+		LapsRemaining: 1,
+	})
+	waitForAttempts(t, &attempts, 1)
+	sendOperatorAction(t, input, keyboard.ActionSkip)
+
+	res := awaitRunOne(t, done)
+	if res.Outcome != reliability.OutcomeCancelled {
+		t.Fatalf("run outcome = %q, want %q", res.Outcome, reliability.OutcomeCancelled)
+	}
+	if got := atomic.LoadInt32(&attempts); got != 1 {
+		t.Fatalf("executor attempts = %d, want 1: cancelled laps attempt must not retry", got)
+	}
+
+	status := runGit(t, workspaceDir, "status", "--porcelain", "partial.txt")
+	if !strings.Contains(status, "partial.txt") {
+		t.Fatalf("test setup should leave partial.txt dirty so incomplete_finalization would otherwise apply, status=%q", status)
+	}
+
+	tries := s.AllTries()
+	if len(tries) != 1 {
+		t.Fatalf("persisted tries = %d, want 1", len(tries))
+	}
+	try := tries[0]
+	if try.Outcome != reliability.OutcomeCancelled {
+		t.Fatalf("try outcome = %q, want %q", try.Outcome, reliability.OutcomeCancelled)
+	}
+	if try.CancellationSource != "skip" {
+		t.Fatalf("try cancellation source = %q, want skip", try.CancellationSource)
+	}
+	if try.Category != "" {
+		t.Fatalf("try category = %q, want empty for cancelled laps attempt", try.Category)
+	}
+	if got := findFailureCount(sink, "without finalizing"); got != 0 {
+		t.Fatalf("cancelled laps attempt emitted %d incomplete_finalization capture(s), want 0", got)
+	}
+	if len(sink.failures) != 0 {
+		t.Fatalf("cancelled laps attempt emitted failure telemetry: %#v", sink.failures)
+	}
+	if len(sink.events) != 0 {
+		t.Fatalf("cancelled laps attempt emitted diagnostic events: %#v", sink.events)
+	}
+	log := findTryLogByOutcome(t, sink, string(reliability.OutcomeCancelled))
+	if _, found := log["failure_category"]; found {
+		t.Fatalf("cancelled laps try log must not carry failure_category: %#v", log)
+	}
+	span := findTrySpanByOutcome(t, sink, string(reliability.OutcomeCancelled))
+	wantNoTag(t, span.tags, "failure_category")
 }
 
 // TestRunOne_AgentClassFailureStaysSpanLogOnly drives a run that fails once with
