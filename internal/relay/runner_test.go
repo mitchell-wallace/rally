@@ -5494,6 +5494,80 @@ func TestLapPinMultiLapRejectionInRunOne(t *testing.T) {
 	}
 }
 
+func TestLapPinMismatchCompletesWhenPinnedLapAlreadyDone(t *testing.T) {
+	workspaceDir := t.TempDir()
+	rallyDir := store.RallyDir(workspaceDir)
+	os.MkdirAll(rallyDir, 0o755)
+	initRepo(t, workspaceDir)
+	runGit(t, workspaceDir, "commit", "--allow-empty", "-m", "initial", "--no-verify")
+
+	lapsDir := filepath.Join(workspaceDir, ".laps")
+	if err := os.MkdirAll(lapsDir, 0o755); err != nil {
+		t.Fatalf("mkdir .laps: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(lapsDir, "laps.json"), []byte(`{"version":2,"tasks":[{"id":"lap-1","isDone":true},{"id":"other-lap","isDone":false}]}`), 0o644); err != nil {
+		t.Fatalf("write laps state: %v", err)
+	}
+
+	s := newTestStore(t, rallyDir)
+	exec := &funcExecutor{
+		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+			rs, _ := progress.LoadRunState(workspaceDir)
+			rs.RecordedLaps = []string{"other-lap"}
+			progress.SaveRunState(workspaceDir, rs)
+			return &agent.TryResult{Completed: true, Summary: "wrong lap but pinned done"}, nil
+		},
+	}
+
+	r := NewRunner(s, Config{
+		WorkspaceDir:     workspaceDir,
+		DataDir:          t.TempDir(),
+		AgentMixSpecs:    []string{"op:dsf"},
+		TargetIterations: 1,
+		RetryBudget:      1,
+		LapsEnabled:      true,
+		Resolver:         cheapTestResolver,
+	}, map[string]agent.Executor{"opencode": exec})
+
+	res, err := r.runOne(
+		context.Background(),
+		&store.RelayRecord{ID: 1, TargetIterations: 1},
+		0,
+		agent.ResolvedAgent{Harness: "opencode", Model: cheapTestModel},
+		runTask{Name: "pinned task", Prompt: "do work", Assignee: "senior", LapID: "lap-1", IsLapsBacked: true, LapsRemaining: 1},
+		nil,
+		nil,
+		false,
+		false,
+		nil,
+		nil,
+		io.Discard,
+	)
+	if err != nil {
+		t.Fatalf("runOne error = %v", err)
+	}
+	if !res.Success {
+		t.Fatal("expected already-complete pinned lap mismatch to complete the run")
+	}
+
+	tries := s.AllTries()
+	if len(tries) != 1 {
+		t.Fatalf("tries = %d, want 1", len(tries))
+	}
+	if !tries[0].Completed {
+		t.Fatal("try should be recorded as completed")
+	}
+	if tries[0].Outcome != reliability.OutcomeCompleted {
+		t.Fatalf("Outcome = %q, want %q", tries[0].Outcome, reliability.OutcomeCompleted)
+	}
+	if tries[0].FailReason != "wrong_lap_consumed" {
+		t.Fatalf("FailReason = %q, want %q", tries[0].FailReason, "wrong_lap_consumed")
+	}
+	if tries[0].Category != "" {
+		t.Fatalf("Category = %q, want empty", tries[0].Category)
+	}
+}
+
 func TestLapPinMismatchClearsFailureClass(t *testing.T) {
 	workspaceDir := t.TempDir()
 	rallyDir := store.RallyDir(workspaceDir)

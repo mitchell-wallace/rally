@@ -3,6 +3,7 @@ package relay
 import (
 	"bufio"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -216,6 +217,18 @@ func limitSignalEvent(baseTags map[string]string, rc telemetry.RallyContext, fs 
 		Tags:     evt.Tags,
 		Contexts: evt.Contexts,
 	}, true
+}
+
+func lapPinMismatchDiagnosticEvent(baseTags map[string]string, rc telemetry.RallyContext, fs telemetry.FailureState, reason string) telemetry.Event {
+	evt := failureStateEvent(baseTags, rc, fs)
+	delete(evt.Tags, "failure_category")
+	evt.Tags["event_kind"] = "lap_pin_mismatch"
+	evt.Tags["mismatch_reason"] = reason
+	return telemetry.Event{
+		Level:    telemetry.LevelWarning,
+		Tags:     evt.Tags,
+		Contexts: evt.Contexts,
+	}
 }
 
 // agentStateName reports the failing runner's current resilience standing using
@@ -1676,12 +1689,20 @@ attemptLoop:
 		lapPinMismatch := false
 		if task.IsLapsBacked {
 			if reason, mismatch := validatePinnedLap(task.LapID, recordedLaps); mismatch {
-				failed = true
 				failReason = reason
 				lapPinMismatch = true
 				runLapPinMismatch = true
+				attemptFailureClass = reliability.FailureAgent
 				failureClass = reliability.FailureAgent
-				fmt.Fprintf(log, "relay %d run %d attempt %d lap pin mismatch: pinned_lap=%q consumed_laps=%v reason=%s\n", relay.ID, runIndex+1, attempt, task.LapID, recordedLaps, reason)
+				failureCategory = ""
+				resetEvidence = nil
+				if pinnedLapCompleteElsewhere(r.cfg.WorkspaceDir, runID, task.LapID, recordedLaps) {
+					failed = false
+					fmt.Fprintf(log, "relay %d run %d attempt %d lap pin mismatch warning: pinned_lap=%q consumed_laps=%v reason=%s pinned_lap_already_complete=true\n", relay.ID, runIndex+1, attempt, task.LapID, recordedLaps, reason)
+				} else {
+					failed = true
+					fmt.Fprintf(log, "relay %d run %d attempt %d lap pin mismatch warning: pinned_lap=%q consumed_laps=%v reason=%s\n", relay.ID, runIndex+1, attempt, task.LapID, recordedLaps, reason)
+				}
 			}
 		}
 		// Stall recovery: if the stall detector killed the process but the agent had
@@ -1938,6 +1959,20 @@ attemptLoop:
 		if task.ResolvedRoute == "recovery" && recoveryClassification != "" {
 			tryLogFields["recovery_classification"] = recoveryClassification
 		}
+		if lapPinMismatch {
+			trySpan.SetTag("event_kind", "lap_pin_mismatch")
+			trySpan.SetData("mismatch_reason", failReason)
+			tryLogFields["event_kind"] = "lap_pin_mismatch"
+			tryLogFields["mismatch_reason"] = failReason
+			fs := telemetry.FailureState{
+				Attempt:     attempt,
+				MaxAttempts: maxAttempts,
+				Outcome:     string(attemptOutcome),
+				AgentState:  r.agentStateName(picked),
+			}
+			r.tel().CaptureEvent(tryCtx, fmt.Sprintf("relay %d run %d try %d lap pin mismatch: %s", relay.ID, runIndex+1, tryRecord.ID, failReason),
+				lapPinMismatchDiagnosticEvent(tryTags, rc, fs, failReason))
+		}
 		// Capture provider-limit evidence as low-severity diagnostic telemetry
 		// regardless of whether the failure is operator-worthy enough to become an
 		// operator failure. This builds the parser-validation corpus without
@@ -1961,24 +1996,15 @@ attemptLoop:
 			if evt, ok := limitSignalEvent(tryTags, rc, fs); ok {
 				r.tel().CaptureEvent(tryCtx, fmt.Sprintf("relay %d run %d try %d provider limit signal: %s", relay.ID, runIndex+1, tryRecord.ID, failReason), evt)
 			}
-			if lapPinMismatch {
-				mismatchEvt := failureStateEvent(tryTags, rc, fs)
-				mismatchEvt.Tags["event_kind"] = "lap_pin_mismatch"
-				mismatchEvt.Tags["mismatch_reason"] = failReason
-				r.tel().CaptureEvent(tryCtx, fmt.Sprintf("relay %d run %d try %d lap pin mismatch: %s", relay.ID, runIndex+1, tryRecord.ID, failReason), telemetry.Event{
-					Level:    telemetry.LevelWarning,
-					Tags:     mismatchEvt.Tags,
-					Contexts: mismatchEvt.Contexts,
-				})
-			}
 
 			// Capture operator-worthy failures. Ordinary
 			// agent-class retries (recoverable agent errors, short no-ops) stay
 			// spans/logs only to avoid alert noise.
-			issueWorthy := failureClass == reliability.FailureInfra ||
-				execErr != nil ||
-				markerAsText != "" ||
-				strings.Contains(strings.ToLower(failReason), "panic")
+			issueWorthy := !lapPinMismatch &&
+				(failureClass == reliability.FailureInfra ||
+					execErr != nil ||
+					markerAsText != "" ||
+					strings.Contains(strings.ToLower(failReason), "panic"))
 			if issueWorthy {
 				// Enrich the terminal-try capture with the structured failure
 				// state already resolved above: attempt/budget, the resolved
@@ -2737,22 +2763,89 @@ func progressLapsCompletedForRun(workspaceDir, runID string) []string {
 		if entry.RunID != runID {
 			continue
 		}
-		switch lapsCompleted := entry.LapsCompleted.(type) {
-		case string:
-			if lapsCompleted != "" && lapsCompleted != "none" {
-				out = append(out, lapsCompleted)
-			}
-		case []string:
-			out = append(out, lapsCompleted...)
-		case []interface{}:
-			for _, value := range lapsCompleted {
-				if s, ok := value.(string); ok && s != "" {
-					out = append(out, s)
-				}
+		out = append(out, progressRunEntryLapIDs(entry)...)
+	}
+	return out
+}
+
+func progressRunEntryLapIDs(entry progress.RunEntry) []string {
+	var out []string
+	switch lapsCompleted := entry.LapsCompleted.(type) {
+	case string:
+		if lapsCompleted != "" && lapsCompleted != "none" {
+			out = append(out, lapsCompleted)
+		}
+	case []string:
+		out = append(out, lapsCompleted...)
+	case []interface{}:
+		for _, value := range lapsCompleted {
+			if s, ok := value.(string); ok && s != "" {
+				out = append(out, s)
 			}
 		}
 	}
 	return out
+}
+
+func pinnedLapCompleteElsewhere(workspaceDir, runID, lapID string, recordedLaps []string) bool {
+	if strings.TrimSpace(lapID) == "" {
+		return false
+	}
+	entries, err := progress.LoadSummaryEntries(workspaceDir)
+	if err == nil {
+		for _, entry := range entries {
+			if entry.RunID == runID {
+				continue
+			}
+			if stringSliceContains(progressRunEntryLapIDs(entry), lapID) {
+				return true
+			}
+		}
+	}
+	if stringSliceContains(recordedLaps, lapID) {
+		return false
+	}
+	done, known := lapDoneInLapsState(workspaceDir, lapID)
+	return known && done
+}
+
+func lapDoneInLapsState(workspaceDir, lapID string) (bool, bool) {
+	data, err := os.ReadFile(filepath.Join(workspaceDir, ".laps", "laps.json"))
+	if err != nil {
+		return false, false
+	}
+	var state struct {
+		Tasks []struct {
+			ID          string  `json:"id"`
+			IsDone      bool    `json:"isDone"`
+			CompletedAt *string `json:"completedAt"`
+		} `json:"tasks"`
+	}
+	if err := json.Unmarshal(data, &state); err != nil {
+		return false, false
+	}
+	for _, task := range state.Tasks {
+		if task.ID != lapID {
+			continue
+		}
+		if task.IsDone {
+			return true, true
+		}
+		if task.CompletedAt != nil && strings.TrimSpace(*task.CompletedAt) != "" {
+			return true, true
+		}
+		return false, true
+	}
+	return false, false
+}
+
+func stringSliceContains(values []string, target string) bool {
+	for _, value := range values {
+		if value == target {
+			return true
+		}
+	}
+	return false
 }
 
 func recordedHandoffEntryForRun(workspaceDir, runID string, firstNewEntry int) *progress.HandoffEntry {

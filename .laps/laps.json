@@ -6,11 +6,11 @@
       "title": "Lap-pin mismatch: warning-first reclassification",
       "description": "Context: OpenSpec change release-0-10-0-reliability-and-model-routing, design §1, tasks 1.1 / 1.2 / 1.4 / 1.6. Today validatePinnedLap sets lapPinMismatch and routes the mismatch through the failed / issue-worthy path; runOne treats it as a terminal failure. Telemetry is New Relic only (Sentry was removed in 0.9.1).\n\nOutcome: wrong_lap_consumed / multi_lap_consumed become warning-level diagnostics, not operator-worthy failures. Run/try records still capture the mismatch reason in FailReason/metadata, but no FailureCategory is attached and no operator Issue is captured. Mismatch stays a non-retry terminal run result that advances to the next scheduler candidate (existing handoff/next-candidate behavior preserved, retry budget unchanged). A new telemetry.LevelWarning level exists and maps through the active New Relic sink as RallyDiagnostic level=warning.\n\nFiles \u0026 scope: internal/relay/runner.go (mismatch branch in runOne / validatePinnedLap, issue-worthy guard, preflight guard); internal/telemetry (add LevelWarning + sink mapping). Do not add a new FailureCategory; do not change retry-budget semantics.\n\nDesign: keep mismatch outside the FailureCategory taxonomy (0.9.x reserves categories for OutcomeFailed). Keep FailReason / mismatch metadata for audit. Add a run-state preflight guard before/just after mismatch detection: if the pinned lap is already complete elsewhere, mark the run complete and route next rather than escalating. Emit event_kind=lap_pin_mismatch + mismatch_reason=... tags without failure_category (the tag assertions land in the next lap). Wire LevelWarning through the New Relic sink so warnings are never promoted to operator-worthy failures.\n\nAcceptance: go build ./...; existing go test ./internal/relay/... ./internal/telemetry/... still pass; the mismatch path no longer reaches issue-worthy capture; LevelWarning is a usable level on the sink. Do not tick tasks.md (VERIFY ticks boxes).",
       "assignee": "SENIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 65536,
       "createdAt": "2026-06-18T00:23:53.405083689Z",
-      "updatedAt": "2026-06-18T00:23:53.405083689Z",
-      "completedAt": null
+      "updatedAt": "2026-06-18T04:21:05.527611983Z",
+      "completedAt": "2026-06-18T04:21:05.527611983Z"
     },
     {
       "id": "rall-ed78",
