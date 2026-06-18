@@ -215,11 +215,11 @@
       "title": "opencode server-log-tail evidence + session correlation",
       "description": "Context: design §6.1.3, task 8.3 (finding A). Highest-risk part of phase 8: a new external-log read plus session correlation, because opencode retries provider errors internally and emits nothing to the JSON stream during the stall.\n\nOutcome: when an opencode try ends without a usable result (stall kill or error event), OpenCodeExecutor reads the tail of opencode's server log (~/.local/share/opencode/log/opencode.log — only this file carries message=\"stream error\" lines; the per-run timestamped *.log files do not) and surfaces any usage-limit signature as FailureEvidence. Correlate the session WITHOUT relying on stdout (empty during the stall): match message=created ... directory=\u003cWorkspaceDir\u003e to recover session.id=, then scan that session's level=ERROR message=\"stream error\" lines; fall back to providerID=\u003cprovider\u003e (the prefix of the --model arg) within the try's wall-clock window, and narrow by --session id when already known (resumed runs). Match either agent=build (small=false) or agent=title (small=true) — both carry the limit text. Prefer this over inferring usage-limit from a silent stall.\n\nFiles \u0026 scope: internal/agent/opencode.go (server-log tail read + correlation, emit FailureEvidence). No bench-side change is needed — routing.QuotaScope already keys opencode:zai-coding-plan / opencode:opencode-go and the runner benches on Category == CategoryUsageLimit. Reuse the prior lap's matchers/reset-parse on the recovered text.\n\nDesign: bound the tail read and the wall-clock window; degrade gracefully if opencode.log is absent.\n\nAcceptance: go build ./...; go test ./internal/agent/... ./internal/reliability/... (full evidence/correlation tests in the next lap). Do not tick tasks.md.",
       "assignee": "SENIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 1245184,
       "createdAt": "2026-06-18T00:23:53.405115974Z",
-      "updatedAt": "2026-06-18T00:23:53.405115974Z",
-      "completedAt": null
+      "updatedAt": "2026-06-18T18:30:31.9925137Z",
+      "completedAt": "2026-06-18T18:30:31.9925137Z"
     },
     {
       "id": "rall-17d1",
