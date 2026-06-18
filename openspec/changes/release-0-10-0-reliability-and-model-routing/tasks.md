@@ -12,8 +12,8 @@
 
 ## 2. Cancelled state for operator-controlled exits
 
-- [ ] 2.1 Add concrete try outcome fields in `internal/store/records.go`:
-  - extend `reliability.TryOutcome` with `cancelled` and persist it via the existing `TryRecord.Outcome`,
+- [ ] 2.1 Add concrete try outcome fields (the `TryOutcome` enum lives in `internal/reliability/outcome.go`; the new store field goes in `internal/store/records.go`):
+  - extend the `reliability.TryOutcome` enum (`internal/reliability/outcome.go`) with `cancelled` and persist it via the existing `TryRecord.Outcome`,
   - `CancellationSource string json:"cancellation_source,omitempty"` with values `skip`, `graceful_stop`, `quit_now`,
   - compatibility behavior deriving `Completed=false` for cancelled records.
 - [ ] 2.2 Track explicit operator cancellation source in `internal/relay/runner.go`:
@@ -140,5 +140,5 @@
 
 ## 9. Release versioning
 
-- [ ] 9.1 Bump `internal/buildinfo/VERSION` from `0.9.0` to `0.10.0` as part of the release change.
+- [ ] 9.1 Bump `internal/buildinfo/VERSION` from the current `0.9.x` (`0.9.3` at planning time) to `0.10.0` as part of the release change.
 - [ ] 9.2 Confirm `main.Version` remains `"dev"` and leave tag creation to the existing `auto-tag` workflow.

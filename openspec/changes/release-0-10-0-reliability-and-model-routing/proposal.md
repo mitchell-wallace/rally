@@ -108,6 +108,6 @@ This release introduces warning-first mismatch handling, first-class cancelled o
 4. Ctrl+X graceful stop changes semantics in this release: it cancels/drains the active attempt, records `cancelled` with source `graceful_stop`, then stops the relay.
 5. Lap mismatch diagnostics use telemetry `LevelWarning` without becoming operator-worthy failures by default; after 0.9.1 this is `RallyDiagnostic level=warning` through the New Relic Go APM sink.
 6. opencode usage-limit observability uses opencode's **server-log tail** for the session as the evidence source when the JSON stream stalls (preferred over guessing usage-limit from a silent stall). Finding A is **resolved** (third-pass live log re-inspection, 2026-06-16 20:58): stdout stays empty through the internal-retry stall and the structured error reaches only the server log as the flat `error.error="<Wrapper>: <message>"` field under `AI_APICallError`/`AI_RetryError`; the matcher list is finalized and the server-log-tail path is required, not optional.
-7. The release implementation bumps `internal/buildinfo/VERSION` from `0.9.0` to
-   `0.10.0`; `main.Version` remains `"dev"` and CI creates the tag from the
-   version file.
+7. The release implementation bumps `internal/buildinfo/VERSION` from the current
+   `0.9.x` (`0.9.3` at planning time) to `0.10.0`; `main.Version` remains `"dev"`
+   and CI creates the tag from the version file.
