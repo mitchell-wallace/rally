@@ -94,11 +94,11 @@
       "title": "Verify phase 2 (cancelled state for operator exits)",
       "description": "Use openspec-verify-change against the change, focused on phase 2 (cancelled state for operator-controlled exits) — the highest-risk slice.\n\nIdentify the merge target (do not assume main) and the batch's first lap/try; pre-existing branch work stays out of scope unless the user includes it; git diff \u003ctarget\u003e...HEAD.\n\nTrace real behavior, not just green tests: confirm OutcomeCancelled + CancellationSource are persisted with Completed=false; confirm operator cancellation wins even when the subprocess exits cleanly after SIGINT; confirm no retry/freeze/pause increments, no failure taxonomy, no operator-worthy failure capture, and no incomplete_finalization for cancelled laps-backed attempts; confirm Ctrl+X drains-then-stops and Ctrl+S advances; confirm tallies/summaries/recent-try/telemetry never count cancelled as failed; confirm muted styling (not red/green). Run go test ./internal/relay/... ./internal/store/... ./internal/reliability/... ./internal/style/....\n\nCheck off tasks.md 2.1-2.8 only where verified correct and thorough; head-lap any substantive gap; no history rewrites.",
       "assignee": "VERIFY",
-      "isDone": false,
+      "isDone": true,
       "order": 589824,
       "createdAt": "2026-06-18T00:23:53.405103394Z",
-      "updatedAt": "2026-06-18T00:23:53.405103394Z",
-      "completedAt": null
+      "updatedAt": "2026-06-18T06:26:33.438626578Z",
+      "completedAt": "2026-06-18T06:26:33.438626578Z"
     },
     {
       "id": "rall-0e61",
