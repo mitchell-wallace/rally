@@ -890,6 +890,53 @@ func TestBenchQuotaScope_BenchesEveryKeyInScopeAcrossLanes(t *testing.T) {
 	}
 }
 
+func TestBenchQuotaScope_OpencodeProviderScopes(t *testing.T) {
+	rt, resilience := newResolvedRouteRuntimeOrDie(t, map[string][]string{
+		"default": {"opencode:zai-coding-plan/glm-5.2", "opencode:opencode-go/kimi"},
+		"verify":  {"opencode:zai-coding-plan/glm-5.1", "claude:opus-4.7"},
+	}, false)
+
+	now := resilience.NowFunc()
+	resetAt := now.Add(5 * time.Hour)
+
+	benched, err := rt.benchQuotaScope(resilience, "opencode:zai-coding-plan", resetAt, 7, "", "")
+	if err != nil {
+		t.Fatalf("benchQuotaScope(zai): %v", err)
+	}
+	if benched != 2 {
+		t.Fatalf("zai benched count = %d, want 2", benched)
+	}
+
+	for _, k := range []ResilienceKey{
+		{Harness: "opencode", Model: "zai-coding-plan/glm-5.2"},
+		{Harness: "opencode", Model: "zai-coding-plan/glm-5.1"},
+	} {
+		if st, _ := resilience.GetState(k); st != StateBenched {
+			t.Errorf("state(%s) = %s, want benched", k, st)
+		}
+	}
+	for _, k := range []ResilienceKey{
+		{Harness: "opencode", Model: "opencode-go/kimi"},
+		{Harness: "claude", Model: "opus-4.7"},
+	} {
+		if st, _ := resilience.GetState(k); st != StateActive {
+			t.Errorf("state(%s) = %s, want active (different quota scope)", k, st)
+		}
+	}
+
+	opencodeGoReset := now.Add(7 * 24 * time.Hour)
+	benched, err = rt.benchQuotaScope(resilience, "opencode:opencode-go", opencodeGoReset, 8, "", "")
+	if err != nil {
+		t.Fatalf("benchQuotaScope(opencode-go): %v", err)
+	}
+	if benched != 1 {
+		t.Fatalf("opencode-go benched count = %d, want 1", benched)
+	}
+	if st, _ := resilience.GetState(ResilienceKey{Harness: "opencode", Model: "opencode-go/kimi"}); st != StateBenched {
+		t.Fatalf("opencode-go state = %s, want benched", st)
+	}
+}
+
 func TestRouteRuntime_ReasoningResolvedQuotaBenchUsesVariantKey(t *testing.T) {
 	rt, resilience := newReasoningRouteRuntimeOrDie(t, map[string][]string{
 		"verify": {"cx:1", "cc:sonnet:1"},

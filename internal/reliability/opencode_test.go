@@ -223,29 +223,47 @@ func TestParseOpencodeError_ProviderFromModel(t *testing.T) {
 
 func TestParseOpencodeError_SubscriptionUsageLimitWrappers(t *testing.T) {
 	tests := []struct {
-		name   string
-		stderr string
-		model  string
+		name               string
+		stderr             string
+		model              string
+		expectedResetAfter time.Duration
+		expectedResetAt    *time.Time
 	}{
 		{
-			name:   "AI_APICallError wrapped under UnknownError message",
-			stderr: `{"type":"error","error":{"name":"UnknownError","data":{"message":"AI_APICallError: Monthly usage limit reached. Resets in 7 days."}}}`,
-			model:  "opencode/opencode-go",
+			name:               "opencode-go structured AI_APICallError wrapper",
+			stderr:             `{"type":"error","error":{"name":"UnknownError","data":{"message":"AI_APICallError: Monthly usage limit reached. Resets in 7 days."}}}`,
+			model:              "opencode/opencode-go",
+			expectedResetAfter: 7 * 24 * time.Hour,
 		},
 		{
-			name:   "AI_RetryError wrapped message",
-			stderr: `{"type":"error","error":{"name":"UnknownError","data":{"message":"AI_RetryError: Failed after 3 attempts. Last error: Monthly usage limit reached. Resets in 7 days."}}}`,
-			model:  "opencode/opencode-go",
+			name:               "opencode-go structured AI_RetryError wrapper",
+			stderr:             `{"type":"error","error":{"name":"UnknownError","data":{"message":"AI_RetryError: Failed after 3 attempts. Last error: Monthly usage limit reached. Resets in 7 days."}}}`,
+			model:              "opencode/opencode-go",
+			expectedResetAfter: 7 * 24 * time.Hour,
 		},
 		{
-			name:   "flat server-log error.error carrier",
-			stderr: `timestamp=2026-06-16T20:58:00Z level=ERROR run=r1 message="stream error" providerID=opencode-go modelID=foo session.id=ses_1 small=false agent=build mode=primary error.error="AI_APICallError: Monthly usage limit reached. Resets in 7 days."`,
-			model:  "opencode/opencode-go",
+			name:               "opencode-go flat AI_APICallError carrier",
+			stderr:             `timestamp=2026-06-16T20:58:00Z level=ERROR run=r1 message="stream error" providerID=opencode-go modelID=foo session.id=ses_1 small=false agent=build mode=primary error.error="AI_APICallError: Monthly usage limit reached. Resets in 7 days."`,
+			model:              "opencode-go/kimi",
+			expectedResetAfter: 7 * 24 * time.Hour,
 		},
 		{
-			name:   "flat server-log AI_RetryError carrier",
-			stderr: `timestamp=2026-06-16T20:58:00Z level=ERROR run=r1 message="stream error" providerID=opencode-go modelID=foo session.id=ses_1 small=false agent=title mode=primary error.error="AI_RetryError: Failed after 3 attempts. Last error: Monthly usage limit reached. Resets in 7 days."`,
-			model:  "opencode/opencode-go",
+			name:               "opencode-go flat AI_RetryError carrier",
+			stderr:             `timestamp=2026-06-16T20:58:00Z level=ERROR run=r1 message="stream error" providerID=opencode-go modelID=foo session.id=ses_1 small=false agent=title mode=primary error.error="AI_RetryError: Failed after 3 attempts. Last error: Monthly usage limit reached. Resets in 7 days."`,
+			model:              "opencode-go/kimi",
+			expectedResetAfter: 7 * 24 * time.Hour,
+		},
+		{
+			name:            "zai flat AI_APICallError carrier",
+			stderr:          `timestamp=2026-06-16T20:58:00Z level=ERROR run=r1 message="stream error" providerID=zai-coding-plan modelID=glm-5.2 session.id=ses_1 small=false agent=build mode=primary error.error="AI_APICallError: Usage limit reached for 5 hour. Your limit will reset at 2026-06-16 18:29:51"`,
+			model:           "zai-coding-plan/glm-5.2",
+			expectedResetAt: ptrTime(time.Date(2026, 6, 16, 18, 29, 51, 0, time.Local)),
+		},
+		{
+			name:            "zai flat AI_RetryError carrier",
+			stderr:          `timestamp=2026-06-16T20:58:00Z level=ERROR run=r1 message="stream error" providerID=zai-coding-plan modelID=glm-5.2 session.id=ses_1 small=false agent=title mode=primary error.error="AI_RetryError: Failed after 3 attempts. Last error: Usage limit reached for 5 hour. Your limit will reset at 2026-06-16 18:29:51"`,
+			model:           "zai-coding-plan/glm-5.2",
+			expectedResetAt: ptrTime(time.Date(2026, 6, 16, 18, 29, 51, 0, time.Local)),
 		},
 	}
 
@@ -261,11 +279,26 @@ func TestParseOpencodeError_SubscriptionUsageLimitWrappers(t *testing.T) {
 			if ev.StatusCode != 429 {
 				t.Errorf("statusCode = %d, want 429", ev.StatusCode)
 			}
-			if ev.ResetAfter != 7*24*time.Hour {
-				t.Errorf("resetAfter = %v, want %v", ev.ResetAfter, 7*24*time.Hour)
+			if tt.expectedResetAfter > 0 && ev.ResetAfter != tt.expectedResetAfter {
+				t.Errorf("resetAfter = %v, want %v", ev.ResetAfter, tt.expectedResetAfter)
+			}
+			if tt.expectedResetAt != nil {
+				if ev.ResetAt == nil {
+					t.Fatal("expected non-nil ResetAt")
+				}
+				if !ev.ResetAt.Equal(*tt.expectedResetAt) {
+					t.Errorf("resetAt = %v, want %v", ev.ResetAt, *tt.expectedResetAt)
+				}
+				if ev.ResetAfter != 0 {
+					t.Errorf("resetAfter = %v, want 0 (absolute timestamp wins)", ev.ResetAfter)
+				}
 			}
 		})
 	}
+}
+
+func ptrTime(t time.Time) *time.Time {
+	return &t
 }
 
 func TestParseOpencodeError_ResetSpanParsing(t *testing.T) {
