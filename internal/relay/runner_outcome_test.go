@@ -345,6 +345,7 @@ func TestRunOneOperatorCancellationPersistsCancelledNotFailed(t *testing.T) {
 		name            string
 		action          keyboard.Action
 		source          string
+		cleanExit       bool
 		wantInterrupted bool
 		wantSkipFlag    bool
 		wantStopFlag    bool
@@ -362,6 +363,19 @@ func TestRunOneOperatorCancellationPersistsCancelledNotFailed(t *testing.T) {
 			wantInterrupted: true,
 			wantStopFlag:    true,
 		},
+		{
+			// Task 2.3: operator cancellation must win even when the
+			// subprocess exits cleanly (Completed=true, nil error) right
+			// after the SIGINT — e.g. the agent happened to finish in the
+			// drain window. The attempt must still persist as cancelled, not
+			// as a completed success.
+			name:            "quit-now overrides clean exit",
+			action:          keyboard.ActionQuit,
+			source:          "quit_now",
+			cleanExit:       true,
+			wantInterrupted: true,
+			wantStopFlag:    true,
+		},
 	}
 
 	for _, tt := range tests {
@@ -371,6 +385,12 @@ func TestRunOneOperatorCancellationPersistsCancelledNotFailed(t *testing.T) {
 				fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
 					atomic.AddInt32(&attempts, 1)
 					<-ctx.Done()
+					if tt.cleanExit {
+						return &agent.TryResult{
+							Completed: true,
+							Summary:   "agent finished cleanly after SIGINT",
+						}, nil
+					}
 					return &agent.TryResult{
 						Completed:     false,
 						Summary:       "operator cancelled the try",

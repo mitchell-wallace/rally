@@ -12,37 +12,37 @@
 
 ## 2. Cancelled state for operator-controlled exits
 
-- [ ] 2.1 Add concrete try outcome fields (the `TryOutcome` enum lives in `internal/reliability/outcome.go`; the new store field goes in `internal/store/records.go`):
+- [x] 2.1 Add concrete try outcome fields (the `TryOutcome` enum lives in `internal/reliability/outcome.go`; the new store field goes in `internal/store/records.go`):
   - extend the `reliability.TryOutcome` enum (`internal/reliability/outcome.go`) with `cancelled` and persist it via the existing `TryRecord.Outcome`,
   - `CancellationSource string json:"cancellation_source,omitempty"` with values `skip`, `graceful_stop`, `quit_now`,
   - compatibility behavior deriving `Completed=false` for cancelled records.
-- [ ] 2.2 Track explicit operator cancellation source in `internal/relay/runner.go`:
+- [x] 2.2 Track explicit operator cancellation source in `internal/relay/runner.go`:
   - add a typed source to `actionLoopResult`,
   - set `skip` for Ctrl+S,
   - change Ctrl+X graceful stop to cancel/drain the current attempt, set `graceful_stop`, then stop the relay,
   - set `quit_now` for Ctrl+C.
-- [ ] 2.3 Make cancelled source override normal executor exit handling after the attempt drains:
+- [x] 2.3 Make cancelled source override normal executor exit handling after the attempt drains:
   - no `failed: harness error`,
   - cancelled wins even if the subprocess exits cleanly after SIGINT,
   - no failure taxonomy classification,
   - no retry scheduling,
   - no infra/freeze/pause counter increments,
   - no operator-worthy failure capture.
-- [ ] 2.4 Preserve existing route semantics:
+- [x] 2.4 Preserve existing route semantics:
   - Ctrl+S still advances to the next scheduler candidate,
   - graceful stop still halts after the current cancellation/drain point,
   - quit-now still aborts the relay after recording the cancelled attempt.
-- [ ] 2.5 Update downstream consumers so cancelled records are not counted or displayed as failed:
+- [x] 2.5 Update downstream consumers so cancelled records are not counted or displayed as failed:
   - `tallyRuns`,
   - final relay summary rendering,
   - recent-try context generation,
   - telemetry try log fields,
   - failure capture guards.
-- [ ] 2.6 Render cancelled outcome in muted/grey styling through the style layer, not red failure or green success.
-- [ ] 2.7 Make post-loop unfinalized-run handling cancellation-aware:
+- [x] 2.6 Render cancelled outcome in muted/grey styling through the style layer, not red failure or green success.
+- [x] 2.7 Make post-loop unfinalized-run handling cancellation-aware:
   - cancelled laps-backed attempts must not call the `incomplete_finalization` failure-capture path,
   - active run-state cleanup for cancellation must not erase lap/handoff/session fields needed by follow-up handling.
-- [ ] 2.8 Add tests:
+- [x] 2.8 Add tests:
   - Ctrl+S cancelled try is persisted as cancelled and not failed,
   - Ctrl+X graceful stop cancels/drains, records `graceful_stop`, and stops the relay,
   - quit-now cancellation overrides harness error handling and records cancelled,
