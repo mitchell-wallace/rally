@@ -892,46 +892,57 @@ func (r *Runner) Run(ctx context.Context) error {
 	}
 
 	// Print relay summary
-	totalRuns := relay.CompletedIterations
+	passCount, failCount, cancelledCount := tallyRuns(r.store.AllTries(), relay.ID)
+	totalRuns := passCount + failCount + cancelledCount
 	if totalRuns > 0 {
-		passCount, failCount := tallyRuns(r.store.AllTries(), relay.ID)
 		totalDuration := time.Since(r.relayStart)
-		summary := style.RenderSummary(totalRuns, passCount, failCount, totalDuration)
+		summary := style.RenderSummary(totalRuns, passCount, failCount, totalDuration, cancelledCount)
 		fmt.Println(summary)
 	}
 
 	return nil
 }
 
-// tallyRuns aggregates try records into a run-level pass/fail count for the
-// given relay. Each run (identified by RunID) is counted exactly once: it passes
-// if any of its attempts ultimately completed, and fails only if every attempt
-// in its retry budget was exhausted without completion. A retry-then-success run
-// is therefore one pass and zero failures; an exhausted run is one failure.
-func tallyRuns(tries []store.TryRecord, relayID int) (passCount, failCount int) {
-	completedByRun := make(map[int]bool)
+// tallyRuns aggregates try records into run-level pass/fail/cancelled counts
+// for the given relay. Each run (identified by RunID) is counted exactly once:
+// it passes if any attempt ultimately completed, is cancelled if no attempt
+// completed and an operator-cancelled attempt resolved the run, and fails only
+// when every attempt exhausted without completion or cancellation.
+func tallyRuns(tries []store.TryRecord, relayID int) (passCount, failCount, cancelledCount int) {
+	type runState struct {
+		completed bool
+		cancelled bool
+	}
+	byRun := make(map[int]runState)
 	order := make([]int, 0)
 	for _, tr := range tries {
 		if tr.RelayID != relayID {
 			continue
 		}
-		if _, seen := completedByRun[tr.RunID]; !seen {
+		state, seen := byRun[tr.RunID]
+		if !seen {
 			order = append(order, tr.RunID)
 		}
-		if tr.Completed {
-			completedByRun[tr.RunID] = true
-		} else if _, seen := completedByRun[tr.RunID]; !seen {
-			completedByRun[tr.RunID] = false
+		if tr.Completed || tr.Outcome.IsSuccess() {
+			state.completed = true
 		}
+		if tr.Outcome == reliability.OutcomeCancelled {
+			state.cancelled = true
+		}
+		byRun[tr.RunID] = state
 	}
 	for _, runID := range order {
-		if completedByRun[runID] {
+		state := byRun[runID]
+		switch {
+		case state.completed:
 			passCount++
-		} else {
+		case state.cancelled:
+			cancelledCount++
+		default:
 			failCount++
 		}
 	}
-	return passCount, failCount
+	return passCount, failCount, cancelledCount
 }
 
 func (r *Runner) prepareExecutorForSelection(relayID, runIndex int, selection routeSelection, log io.Writer) {
@@ -964,7 +975,7 @@ func buildRecentContext(tries []store.TryRecord, perSummaryLimit, overallLimit i
 			tailSize := perSummaryLimit - headSize
 			summary = summary[:headSize] + textutil.HeadTailTruncationMarker + summary[len(summary)-tailSize:]
 		}
-		fmt.Fprintf(&buf, "Run %d (%s): completed=%v summary=%s\n", t.RunID, t.AgentType, t.Completed, summary)
+		fmt.Fprintf(&buf, "Run %d (%s): %s summary=%s\n", t.RunID, t.AgentType, recentContextStatus(t), summary)
 	}
 	if overallLimit > 0 && buf.Len() > overallLimit {
 		result := buf.String()
@@ -973,6 +984,17 @@ func buildRecentContext(tries []store.TryRecord, perSummaryLimit, overallLimit i
 		return result[:headSize] + textutil.HeadTailTruncationMarker + result[len(result)-tailSize:]
 	}
 	return buf.String()
+}
+
+func recentContextStatus(t store.TryRecord) string {
+	if t.Outcome == "" {
+		return fmt.Sprintf("completed=%v", t.Completed)
+	}
+	status := "outcome=" + string(t.Outcome)
+	if t.Outcome == reliability.OutcomeCancelled && strings.TrimSpace(t.CancellationSource) != "" {
+		status += " source=" + strings.TrimSpace(t.CancellationSource)
+	}
+	return status
 }
 
 // forceKillGroup escalates the cancel drain to an immediate group-wide SIGKILL,
@@ -1698,18 +1720,19 @@ attemptLoop:
 			}
 
 			// Render a terminal footer for the cancelled attempt. The persisted
-			// outcome/source below are the source of truth; muted cancelled
-			// styling is owned by the style-layer follow-up.
+			// outcome/source below are the source of truth; the style layer owns
+			// the muted cancelled presentation.
 			renderRunFooter(r.outWriter(), style.FooterOptions{
-				Passed:       false,
-				Duration:     runtime,
-				FilesChanged: filesChangedCount,
-				CommitHash:   shortHash,
-				CommitTitle:  commitTitle,
-				FailReason:   failReason,
-				Interim:      false,
-				Attempt:      attempt,
-				MaxAttempts:  maxAttempts,
+				Cancelled:          true,
+				Duration:           runtime,
+				FilesChanged:       filesChangedCount,
+				CommitHash:         shortHash,
+				CommitTitle:        commitTitle,
+				FailReason:         failReason,
+				CancellationSource: cancellationSourceValue,
+				Interim:            false,
+				Attempt:            attempt,
+				MaxAttempts:        maxAttempts,
 			})
 
 			// Fold rally state (same as the normal path).
@@ -1794,7 +1817,6 @@ attemptLoop:
 				"completed":           false,
 				"outcome":             string(attemptOutcome),
 				"cancellation_source": cancellationSourceValue,
-				"fail_reason":         failReason,
 				"runtime_ms":          runtime.Milliseconds(),
 				"files_changed":       filesChangedCount,
 				"tool_calls":          tryRecord.ToolCalls,

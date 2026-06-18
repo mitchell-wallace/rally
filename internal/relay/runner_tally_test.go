@@ -3,6 +3,7 @@ package relay
 import (
 	"testing"
 
+	"github.com/mitchell-wallace/rally/internal/reliability"
 	"github.com/mitchell-wallace/rally/internal/store"
 )
 
@@ -14,9 +15,9 @@ func TestTallyRunsRetryThenSuccess(t *testing.T) {
 		{ID: 2, RelayID: 1, RunID: 1, AttemptNumber: 2, Completed: true},
 	}
 
-	pass, fail := tallyRuns(tries, 1)
-	if pass != 1 || fail != 0 {
-		t.Fatalf("retry-then-success: want 1 pass / 0 fail, got %d pass / %d fail", pass, fail)
+	pass, fail, cancelled := tallyRuns(tries, 1)
+	if pass != 1 || fail != 0 || cancelled != 0 {
+		t.Fatalf("retry-then-success: want 1 pass / 0 fail / 0 cancelled, got %d pass / %d fail / %d cancelled", pass, fail, cancelled)
 	}
 }
 
@@ -28,9 +29,9 @@ func TestTallyRunsAllExhausted(t *testing.T) {
 		{ID: 3, RelayID: 1, RunID: 1, AttemptNumber: 3, Completed: false},
 	}
 
-	pass, fail := tallyRuns(tries, 1)
-	if pass != 0 || fail != 1 {
-		t.Fatalf("all-exhausted: want 0 pass / 1 fail, got %d pass / %d fail", pass, fail)
+	pass, fail, cancelled := tallyRuns(tries, 1)
+	if pass != 0 || fail != 1 || cancelled != 0 {
+		t.Fatalf("all-exhausted: want 0 pass / 1 fail / 0 cancelled, got %d pass / %d fail / %d cancelled", pass, fail, cancelled)
 	}
 }
 
@@ -46,15 +47,40 @@ func TestTallyRunsAggregatesMultipleRuns(t *testing.T) {
 		{ID: 5, RelayID: 2, RunID: 3, AttemptNumber: 1, Completed: false},
 	}
 
-	pass, fail := tallyRuns(tries, 1)
-	if pass != 1 || fail != 1 {
-		t.Fatalf("multi-run: want 1 pass / 1 fail, got %d pass / %d fail", pass, fail)
+	pass, fail, cancelled := tallyRuns(tries, 1)
+	if pass != 1 || fail != 1 || cancelled != 0 {
+		t.Fatalf("multi-run: want 1 pass / 1 fail / 0 cancelled, got %d pass / %d fail / %d cancelled", pass, fail, cancelled)
+	}
+}
+
+func TestTallyRunsCancelledNotFailed(t *testing.T) {
+	tries := []store.TryRecord{
+		{ID: 1, RelayID: 1, RunID: 1, AttemptNumber: 1, Completed: false, Outcome: reliability.OutcomeCancelled, CancellationSource: "skip"},
+		{ID: 2, RelayID: 1, RunID: 2, AttemptNumber: 1, Completed: false, Outcome: reliability.OutcomeFailed},
+		{ID: 3, RelayID: 1, RunID: 3, AttemptNumber: 1, Completed: true, Outcome: reliability.OutcomeCompleted},
+	}
+
+	pass, fail, cancelled := tallyRuns(tries, 1)
+	if pass != 1 || fail != 1 || cancelled != 1 {
+		t.Fatalf("cancelled tally: want 1 pass / 1 fail / 1 cancelled, got %d pass / %d fail / %d cancelled", pass, fail, cancelled)
+	}
+}
+
+func TestTallyRunsCompletionWinsOverEarlierCancellation(t *testing.T) {
+	tries := []store.TryRecord{
+		{ID: 1, RelayID: 1, RunID: 1, AttemptNumber: 1, Completed: false, Outcome: reliability.OutcomeCancelled, CancellationSource: "skip"},
+		{ID: 2, RelayID: 1, RunID: 1, AttemptNumber: 2, Completed: true, Outcome: reliability.OutcomeCompleted},
+	}
+
+	pass, fail, cancelled := tallyRuns(tries, 1)
+	if pass != 1 || fail != 0 || cancelled != 0 {
+		t.Fatalf("completion-wins tally: want 1 pass / 0 fail / 0 cancelled, got %d pass / %d fail / %d cancelled", pass, fail, cancelled)
 	}
 }
 
 func TestTallyRunsEmpty(t *testing.T) {
-	pass, fail := tallyRuns(nil, 1)
-	if pass != 0 || fail != 0 {
-		t.Fatalf("empty: want 0/0, got %d/%d", pass, fail)
+	pass, fail, cancelled := tallyRuns(nil, 1)
+	if pass != 0 || fail != 0 || cancelled != 0 {
+		t.Fatalf("empty: want 0/0/0, got %d/%d/%d", pass, fail, cancelled)
 	}
 }

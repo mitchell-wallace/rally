@@ -183,6 +183,40 @@ func TestRenderFooterFailed(t *testing.T) {
 	}
 }
 
+func TestRenderFooterCancelledMuted(t *testing.T) {
+	got := RenderFooter(FooterOptions{
+		Cancelled:          true,
+		Duration:           9 * time.Second,
+		FilesChanged:       1,
+		CancellationSource: "skip",
+		Attempt:            2,
+		MaxAttempts:        5,
+	})
+
+	plain := stripAnsi(got)
+	if !strings.Contains(plain, "cancelled") {
+		t.Errorf("expected 'cancelled' in footer, got: %s", got)
+	}
+	if strings.Contains(plain, "failed") {
+		t.Errorf("cancelled footer must not render as failed, got: %s", plain)
+	}
+	if strings.Contains(plain, "passed") {
+		t.Errorf("cancelled footer must not render as passed, got: %s", plain)
+	}
+	if !strings.Contains(plain, "source: skip") {
+		t.Errorf("expected cancellation source in footer, got: %s", plain)
+	}
+	if !strings.Contains(got, MutedStyle.Render("• cancelled")) {
+		t.Errorf("cancelled outcome should be muted, got: %q", got)
+	}
+	if strings.Contains(got, FailureStyle.Render("• cancelled")) {
+		t.Errorf("cancelled outcome must not use failure style, got: %q", got)
+	}
+	if strings.Contains(got, SuccessStyle.Render("• cancelled")) {
+		t.Errorf("cancelled outcome must not use success style, got: %q", got)
+	}
+}
+
 func TestRenderFooterSingularFile(t *testing.T) {
 	got := RenderFooter(FooterOptions{
 		Passed:       true,
@@ -355,11 +389,30 @@ func TestRenderSummaryEdgeCases(t *testing.T) {
 	}
 }
 
+func TestRenderSummaryCancelledMuted(t *testing.T) {
+	got := RenderSummary(3, 1, 1, 42*time.Second, 1)
+
+	plain := stripAnsi(got)
+	if !strings.Contains(plain, "1 cancelled") {
+		t.Errorf("expected cancelled bucket in summary, got: %s", got)
+	}
+	if !strings.Contains(got, MutedStyle.Render("1 cancelled")) {
+		t.Errorf("cancelled summary bucket should be muted, got: %q", got)
+	}
+	if strings.Contains(got, FailureStyle.Render("1 cancelled")) {
+		t.Errorf("cancelled summary bucket must not use failure style, got: %q", got)
+	}
+	if strings.Contains(got, SuccessStyle.Render("1 cancelled")) {
+		t.Errorf("cancelled summary bucket must not use success style, got: %q", got)
+	}
+}
+
 func TestStylesDoNotPanic(t *testing.T) {
 	_ = SuccessStyle.Render("ok")
 	_ = FailureStyle.Render("fail")
 	_ = WarningStyle.Render("warn")
 	_ = DimStyle.Render("dim")
+	_ = MutedStyle.Render("muted")
 	_ = BoldStyle.Render("bold")
 }
 

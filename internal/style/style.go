@@ -60,6 +60,7 @@ var (
 	FailureStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("9"))
 	WarningStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("11"))
 	DimStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("245"))
+	MutedStyle   = DimStyle
 	BoldStyle    = lipgloss.NewStyle().Bold(true)
 )
 
@@ -198,11 +199,15 @@ func RenderHeader(opts HeaderOptions) string {
 // FooterOptions carries parameters for rendering a run footer.
 type FooterOptions struct {
 	Passed       bool
+	Cancelled    bool
 	Duration     time.Duration
 	FilesChanged int
 	CommitHash   string
 	CommitTitle  string
 	FailReason   string
+	// CancellationSource identifies operator-driven cancellation paths such
+	// as skip, graceful_stop, and quit_now.
+	CancellationSource string
 
 	// Interim marks a within-budget retry: instead of the coloured terminal
 	// block, RenderFooter emits a single neutral (dim) line suitable for
@@ -232,14 +237,19 @@ func RenderFooter(opts FooterOptions) string {
 	var outcomeIcon, outcomeText string
 	var outcomeStyle lipgloss.Style
 
-	if opts.Passed {
+	switch {
+	case opts.Cancelled:
+		outcomeIcon = "•"
+		outcomeText = "cancelled"
+		outcomeStyle = MutedStyle
+	case opts.Passed:
 		outcomeIcon = "✓"
 		outcomeText = "passed"
 		if opts.Attempt > 1 {
 			outcomeText = fmt.Sprintf("passed on try %d/%d", opts.Attempt, opts.MaxAttempts)
 		}
 		outcomeStyle = SuccessStyle
-	} else {
+	default:
 		outcomeIcon = "✗"
 		outcomeText = "failed"
 		if opts.Attempt > 1 {
@@ -253,7 +263,19 @@ func RenderFooter(opts FooterOptions) string {
 	filesStr := DimStyle.Render(fmt.Sprintf("%d file%s", opts.FilesChanged, plural(opts.FilesChanged)))
 
 	var extraStr string
-	if opts.Passed {
+	switch {
+	case opts.Cancelled:
+		source := strings.TrimSpace(opts.CancellationSource)
+		if source == "" {
+			source = strings.TrimSpace(opts.FailReason)
+		}
+		if source == "" {
+			source = "—"
+		} else if !strings.HasPrefix(source, "source:") && !strings.HasPrefix(source, "cancelled") {
+			source = "source: " + source
+		}
+		extraStr = MutedStyle.Render(source)
+	case opts.Passed:
 		commit := opts.CommitHash
 		if commit == "" {
 			commit = "—"
@@ -261,7 +283,7 @@ func RenderFooter(opts FooterOptions) string {
 			commit = fmt.Sprintf("%s (%s)", commit, opts.CommitTitle)
 		}
 		extraStr = DimStyle.Render(commit)
-	} else {
+	default:
 		reason := opts.FailReason
 		if reason == "" {
 			reason = "—"
@@ -300,20 +322,32 @@ func tries(n int) string {
 	return "tries"
 }
 
-// RenderSummary renders a relay summary with total runs, pass/fail counts, and
-// total runtime.
-func RenderSummary(totalRuns, passedCount, failedCount int, totalDuration time.Duration) string {
+// RenderSummary renders a relay summary with total runs, outcome counts, and
+// total runtime. cancelledCount is optional for compatibility with older call
+// sites; when present and non-zero it is shown as a muted outcome bucket.
+func RenderSummary(totalRuns, passedCount, failedCount int, totalDuration time.Duration, cancelledCount ...int) string {
 	w := sepWidth()
 
 	runsStr := fmt.Sprintf("%d run%s", totalRuns, plural(totalRuns))
 	passedStr := SuccessStyle.Render(fmt.Sprintf("%d passed", passedCount))
 	failedStr := FailureStyle.Render(fmt.Sprintf("%d failed", failedCount))
 	durStr := DimStyle.Render(fmt.Sprintf("total %s", formatDuration(totalDuration)))
+	cancelled := 0
+	if len(cancelledCount) > 0 {
+		cancelled = cancelledCount[0]
+	}
+
+	parts := []string{runsStr, passedStr, failedStr}
+	if cancelled > 0 {
+		parts = append(parts, MutedStyle.Render(fmt.Sprintf("%d cancelled", cancelled)))
+	}
+	parts = append(parts, durStr)
 
 	var sb strings.Builder
 	sb.WriteString(separatorForWidth(w))
 	sb.WriteString("\n")
-	sb.WriteString(fmt.Sprintf("Relay complete: %s  │  %s  │  %s  │  %s", runsStr, passedStr, failedStr, durStr))
+	sb.WriteString("Relay complete: ")
+	sb.WriteString(strings.Join(parts, "  │  "))
 	sb.WriteString("\n")
 	sb.WriteString(separatorForWidth(w))
 	return sb.String()

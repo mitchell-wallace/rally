@@ -72,11 +72,11 @@
       "title": "Cancelled downstream consumers + muted styling",
       "description": "Context: design §3.2 steps 5-6, tasks 2.5, 2.6.\n\nOutcome: every consumer treats cancelled as neither failed nor success. Update tallyRuns, the final relay summary rendering (style.RenderSummary / footer), recent-try context generation, telemetry try-log fields, and failure-capture guards so cancelled records are not counted or displayed as failed. Render the cancelled outcome in muted/grey styling through the style layer (not red failure, not green success); summaries print cancelled rather than failed.\n\nFiles \u0026 scope: internal/relay/runner.go (tallyRuns, recent-try context, telemetry fields, failure-capture guards), internal/style/style.go (muted cancelled rendering in header/footer/summary).\n\nAcceptance: go build ./...; cancelled appears in muted form in summary/footer output; go test ./internal/relay/... ./internal/style/... passes (dedicated assertions added in the cancelled-tests lap). Do not tick tasks.md.",
       "assignee": "SENIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 458752,
       "createdAt": "2026-06-18T00:23:53.405101554Z",
-      "updatedAt": "2026-06-18T00:23:53.405101554Z",
-      "completedAt": null
+      "updatedAt": "2026-06-18T06:04:38.796388066Z",
+      "completedAt": "2026-06-18T06:04:38.796388066Z"
     },
     {
       "id": "rall-4db7",

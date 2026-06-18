@@ -5292,6 +5292,27 @@ func TestPromptBudget_ShortSummariesPassThrough(t *testing.T) {
 	}
 }
 
+func TestBuildRecentContextCancelledUsesOutcome(t *testing.T) {
+	tries := []store.TryRecord{
+		{
+			RunID:              1,
+			AgentType:          "codex",
+			Completed:          false,
+			Outcome:            reliability.OutcomeCancelled,
+			CancellationSource: "graceful_stop",
+			Summary:            "operator stopped the run",
+		},
+	}
+
+	result := buildRecentContext(tries, 1000, 0)
+	if !strings.Contains(result, "outcome=cancelled source=graceful_stop") {
+		t.Fatalf("expected cancelled outcome/source in recent context, got: %q", result)
+	}
+	if strings.Contains(result, "completed=false") {
+		t.Fatalf("cancelled recent context should not look like a generic failed try, got: %q", result)
+	}
+}
+
 func TestPromptBudget_CountHonored(t *testing.T) {
 	var tries []store.TryRecord
 	for i := 1; i <= 3; i++ {
