@@ -204,6 +204,28 @@ func TestRunOne_LapPinMismatchTelemetryIsWarningDiagnostic(t *testing.T) {
 			wantTag(t, evt.Tags, "event_kind", "lap_pin_mismatch")
 			wantTag(t, evt.Tags, "mismatch_reason", tt.wantReason)
 			wantTag(t, evt.Tags, "lap_id", "lap-1")
+			wantNoTag(t, evt.Tags, "failure_category")
+			if evt.Level == telemetry.LevelError {
+				t.Fatal("lap mismatch diagnostic must not be error-level")
+			}
+
+			log := findTryLogByOutcome(t, sink, string(reliability.OutcomeFailed))
+			if got := log["event_kind"]; got != "lap_pin_mismatch" {
+				t.Fatalf("try log event_kind = %#v, want lap_pin_mismatch", got)
+			}
+			if got := log["mismatch_reason"]; got != tt.wantReason {
+				t.Fatalf("try log mismatch_reason = %#v, want %q", got, tt.wantReason)
+			}
+			if _, found := log["failure_category"]; found {
+				t.Fatalf("lap mismatch try log must not carry failure_category: %#v", log)
+			}
+
+			span := findTrySpanByOutcome(t, sink, string(reliability.OutcomeFailed))
+			wantTag(t, span.tags, "event_kind", "lap_pin_mismatch")
+			wantNoTag(t, span.tags, "failure_category")
+			if got := span.data["mismatch_reason"]; got != tt.wantReason {
+				t.Fatalf("try span mismatch_reason = %#v, want %q", got, tt.wantReason)
+			}
 
 			tries := s.AllTries()
 			if len(tries) != 1 {

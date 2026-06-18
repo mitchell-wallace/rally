@@ -17,11 +17,11 @@
       "title": "Lap-pin mismatch tests + telemetry assertions",
       "description": "Context: builds on the warning-first mismatch behavior from the previous lap. Tasks 1.3, 1.5.\n\nOutcome: tests prove a mismatch-only run keeps complete run/try records carrying the mismatch reason but produces no operator-worthy failure capture and no FailureCategory; telemetry tests assert mismatch events carry event_kind=lap_pin_mismatch and mismatch_reason=wrong_lap_consumed|multi_lap_consumed and do NOT carry failure_category or an error-level issue capture.\n\nFiles \u0026 scope: internal/relay/*_test.go (extend runner_outcome_test.go / runner_telemetry_test.go / runner_failure_telemetry_test.go following existing patterns).\n\nAcceptance: go test ./internal/relay/... passes; the new assertions fail if mismatch ever regains failure-category or issue capture. Do not tick tasks.md.",
       "assignee": "SENIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 131072,
       "createdAt": "2026-06-18T00:23:53.405090219Z",
-      "updatedAt": "2026-06-18T00:23:53.405090219Z",
-      "completedAt": null
+      "updatedAt": "2026-06-18T04:36:12.051121164Z",
+      "completedAt": "2026-06-18T04:36:12.051121164Z"
     },
     {
       "id": "rall-2955",

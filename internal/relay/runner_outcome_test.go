@@ -523,6 +523,131 @@ func TestRunOneRecoveryClassificationPersistence(t *testing.T) {
 	}
 }
 
+func TestRunOneLapPinMismatchPersistsRunAndTryReasonWithoutCategory(t *testing.T) {
+	tests := []struct {
+		name         string
+		recordedLaps []string
+		wantReason   string
+	}{
+		{name: "wrong lap", recordedLaps: []string{"lap-2"}, wantReason: "wrong_lap_consumed"},
+		{name: "multiple laps", recordedLaps: []string{"lap-1", "lap-2"}, wantReason: "multi_lap_consumed"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			workspaceDir := t.TempDir()
+			rallyDir := store.RallyDir(workspaceDir)
+			if err := os.MkdirAll(rallyDir, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			initRepo(t, workspaceDir)
+			runGit(t, workspaceDir, "commit", "--allow-empty", "-m", "initial", "--no-verify")
+
+			s := newTestStore(t, rallyDir)
+			exec := &funcExecutor{
+				fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+					rs, err := progress.LoadRunState(workspaceDir)
+					if err != nil {
+						return nil, err
+					}
+					rs.RecordedLaps = tt.recordedLaps
+					if err := progress.SaveRunState(workspaceDir, rs); err != nil {
+						return nil, err
+					}
+					return &agent.TryResult{Completed: true, Summary: "completed a different lap"}, nil
+				},
+			}
+
+			r := NewRunner(s, Config{
+				WorkspaceDir:     workspaceDir,
+				DataDir:          t.TempDir(),
+				AgentMixSpecs:    []string{"op:dsf"},
+				TargetIterations: 1,
+				RetryBudget:      1,
+				LapsEnabled:      true,
+				Resolver:         cheapTestResolver,
+			}, map[string]agent.Executor{"opencode": exec})
+
+			res, err := r.runOne(
+				context.Background(),
+				&store.RelayRecord{ID: 1, TargetIterations: 1},
+				0,
+				agent.ResolvedAgent{Harness: "opencode", Model: cheapTestModel},
+				runTask{Name: "pinned task", Prompt: "do work", Assignee: "senior", ResolvedRoute: "senior", LapID: "lap-1", IsLapsBacked: true, LapsRemaining: 1},
+				nil,
+				nil,
+				false,
+				false,
+				nil,
+				nil,
+				io.Discard,
+			)
+			if err != nil {
+				t.Fatalf("runOne error = %v", err)
+			}
+			if res.Success {
+				t.Fatal("run success = true, want mismatch-only failure")
+			}
+			if res.Outcome != reliability.OutcomeFailed {
+				t.Fatalf("run outcome = %q, want %q", res.Outcome, reliability.OutcomeFailed)
+			}
+			if res.FailReason != tt.wantReason {
+				t.Fatalf("run FailReason = %q, want %q", res.FailReason, tt.wantReason)
+			}
+			if res.Category != "" {
+				t.Fatalf("run category = %q, want empty for lap-pin mismatch", res.Category)
+			}
+			if res.FailureClass != reliability.FailureAgent {
+				t.Fatalf("run failure class = %q, want %q", res.FailureClass, reliability.FailureAgent)
+			}
+			if res.InfraFailures != 0 {
+				t.Fatalf("infra failures = %d, want 0", res.InfraFailures)
+			}
+
+			tries := s.AllTries()
+			if len(tries) != 1 {
+				t.Fatalf("tries = %d, want 1", len(tries))
+			}
+			try := tries[0]
+			if try.Completed {
+				t.Fatal("try completed = true, want false for mismatch-only failure")
+			}
+			if try.Outcome != reliability.OutcomeFailed {
+				t.Fatalf("try outcome = %q, want %q", try.Outcome, reliability.OutcomeFailed)
+			}
+			if try.FailReason != tt.wantReason {
+				t.Fatalf("try FailReason = %q, want %q", try.FailReason, tt.wantReason)
+			}
+			if try.Category != "" {
+				t.Fatalf("try category = %q, want empty for lap-pin mismatch", try.Category)
+			}
+			if try.LapID != "lap-1" {
+				t.Fatalf("try lap id = %q, want lap-1", try.LapID)
+			}
+			if try.ResolvedRoute != "senior" {
+				t.Fatalf("try resolved route = %q, want senior", try.ResolvedRoute)
+			}
+			if try.LapAssignee != "senior" {
+				t.Fatalf("try lap assignee = %q, want senior", try.LapAssignee)
+			}
+			if try.AttemptNumber != 1 {
+				t.Fatalf("try attempt = %d, want 1", try.AttemptNumber)
+			}
+			if try.StartedAt == "" || try.EndedAt == "" {
+				t.Fatalf("try timestamps incomplete: started=%q ended=%q", try.StartedAt, try.EndedAt)
+			}
+			if len(try.RecordedLaps) != len(tt.recordedLaps) {
+				t.Fatalf("try recorded laps = %v, want %v", try.RecordedLaps, tt.recordedLaps)
+			}
+			for i := range tt.recordedLaps {
+				if try.RecordedLaps[i] != tt.recordedLaps[i] {
+					t.Fatalf("try recorded laps = %v, want %v", try.RecordedLaps, tt.recordedLaps)
+				}
+			}
+		})
+	}
+}
+
 func TestRunOneIncompleteAndOrdinaryFailedDoNotSetDirtyHandoff(t *testing.T) {
 	tests := []struct {
 		name        string

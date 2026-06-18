@@ -145,3 +145,47 @@ func TestRallyFailure_DoesNotMutateBaseTags(t *testing.T) {
 		t.Error("rallyFailure mutated the caller's base tag map")
 	}
 }
+
+func TestLapPinMismatchDiagnosticEventCarriesReasonWithoutFailureCategory(t *testing.T) {
+	rc := testRallyContext()
+	base := telemetry.Tags(telemetry.EventInfo{RelayID: rc.RelayID, RunID: 2, TryID: 4, Repo: rc.Repo, LapID: "lap-1"})
+	base["failure_category"] = "usage_limit"
+
+	tests := []struct {
+		name   string
+		reason string
+	}{
+		{name: "wrong lap", reason: "wrong_lap_consumed"},
+		{name: "multiple laps", reason: "multi_lap_consumed"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			evt := lapPinMismatchDiagnosticEvent(base, rc, telemetry.FailureState{
+				Attempt:     1,
+				MaxAttempts: 2,
+				Outcome:     "failed",
+				Category:    "agent_error",
+				AgentState:  "active",
+			}, tt.reason)
+
+			if evt.Level != telemetry.LevelWarning {
+				t.Fatalf("event level = %q, want %q", evt.Level, telemetry.LevelWarning)
+			}
+			wantTag(t, evt.Tags, "event_kind", "lap_pin_mismatch")
+			wantTag(t, evt.Tags, "mismatch_reason", tt.reason)
+			wantTag(t, evt.Tags, "outcome", "failed")
+			wantTag(t, evt.Tags, "attempt", "1")
+			wantTag(t, evt.Tags, "max_attempts", "2")
+			wantTag(t, evt.Tags, "agent_state", "active")
+			wantNoTag(t, evt.Tags, "failure_category")
+			if evt.Level == telemetry.LevelError {
+				t.Fatal("lap-pin mismatch diagnostic must not be error-level")
+			}
+		})
+	}
+
+	if base["failure_category"] != "usage_limit" {
+		t.Fatalf("base tags were mutated, failure_category = %q", base["failure_category"])
+	}
+}
