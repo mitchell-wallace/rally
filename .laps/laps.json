@@ -50,11 +50,11 @@
       "title": "Cancelled outcome data model (enum + store field)",
       "description": "Context: design §3, task 2.1. The TryOutcome enum lives in internal/reliability/outcome.go (not records.go, despite the task heading); TryRecord is in internal/store/records.go.\n\nOutcome: a first-class cancelled lifecycle outcome exists. reliability.TryOutcome gains OutcomeCancelled = \"cancelled\" with its predicate methods updated so cancelled is neither success nor failure: not IsSuccess, not CarriesFailureCategory, not ShouldCaptureIssue, FailureClass = FailureAgent (never infra/freeze), and not terminal-via-failure-category. TryRecord gains CancellationSource string `json:\"cancellation_source,omitempty\"` with values skip|graceful_stop|quit_now, and cancelled records derive legacy Completed=false for backward compatibility.\n\nFiles \u0026 scope: internal/reliability/outcome.go, internal/store/records.go. Do NOT add a parallel TryRecord.Status taxonomy — cancelled extends the existing Outcome model (design decision 6). Keep store JSON omitempty so existing fixtures are unaffected.\n\nAcceptance: go build ./...; extend internal/reliability/outcome_test.go and internal/store/store_test.go (or migration_test.go) to cover the cancelled predicates + Completed=false derivation; go test ./internal/reliability/... ./internal/store/... passes. Do not tick tasks.md.",
       "assignee": "SENIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 327680,
       "createdAt": "2026-06-18T00:23:53.405093331Z",
-      "updatedAt": "2026-06-18T00:23:53.405093331Z",
-      "completedAt": null
+      "updatedAt": "2026-06-18T05:35:14.772353883Z",
+      "completedAt": "2026-06-18T05:35:14.772353883Z"
     },
     {
       "id": "rall-8d6c",
