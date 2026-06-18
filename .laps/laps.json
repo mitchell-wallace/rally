@@ -237,11 +237,11 @@
       "title": "Verify phase 8 (opencode usage-limit detection)",
       "description": "Use openspec-verify-change against the change, focused on phase 8 (opencode usage-limit detection + reset parsing + server-log-tail evidence) — a production failure-classification path that gates quota benching.\n\nIdentify the merge target (not assumed main) and the batch start; git diff \u003ctarget\u003e...HEAD.\n\nTrace real behavior: confirm ParseOpencodeError matches the flat server-log error.error=\"\u003cWrapper\u003e: \u003cmessage\u003e\" form across AI_APICallError / AI_RetryError / UnknownError and that usage_limit beats short_rate_limit; confirm reset parsing handles both spans and the timezone-less absolute timestamp in time.Local without overloading the gemini regex; confirm the server-log-tail path correlates the session by directory and falls back by provider+window, reads only opencode.log, and emits FailureEvidence despite an empty-stdout stall; confirm CategoryUsageLimit benches opencode:zai-coding-plan / opencode:opencode-go (not agent_error). Note 8.5 is already resolved/checked — confirm it is correctly marked. go test ./internal/reliability/... ./internal/agent/... ./internal/relay/....\n\nCheck off tasks.md 8.1-8.4 where verified; head-lap gaps; no history rewrites.",
       "assignee": "VERIFY",
-      "isDone": false,
+      "isDone": true,
       "order": 1376256,
       "createdAt": "2026-06-18T00:23:53.405117443Z",
-      "updatedAt": "2026-06-18T00:23:53.405117443Z",
-      "completedAt": null
+      "updatedAt": "2026-06-18T18:58:44.932434097Z",
+      "completedAt": "2026-06-18T18:58:44.932434097Z"
     },
     {
       "id": "rall-3f32",

@@ -117,20 +117,20 @@
 
 ## 8. opencode usage-limit detection and reset parsing
 
-- [ ] 8.1 Broaden `reliability.ParseOpencodeError` (`internal/reliability/opencode.go`) to classify subscription-provider usage limits as `usage_limit`:
+- [x] 8.1 Broaden `reliability.ParseOpencodeError` (`internal/reliability/opencode.go`) to classify subscription-provider usage limits as `usage_limit`:
   - match across opencode's `AI_APICallError` / `AI_RetryError` / `UnknownError` wrappers, checking `error.name`, `error.data.message`, **and the flat server-log `error.error="<Wrapper>: <message>"` value** (confirmed third-pass: the structured error reaches only the server log as this flat field, never a nested `data.message` on stdout),
   - add substrings `usage limit reached`, `monthly usage limit`, `usage limit reached for` (matcher list finalized — see 8.5),
   - keep `usage_limit` winning over `short_rate_limit` when both could match (preserve the existing priority test).
-- [ ] 8.2 Add opencode-specific reset parsing (do not overload the gemini regex):
+- [x] 8.2 Add opencode-specific reset parsing (do not overload the gemini regex):
   - space-separated spans: `Resets in 7 days`, `… 5 hour(s)`, `… 30 minutes` (the gemini `(\S+)` grabs only the number; capture `(\d+)\s+(day|hour|minute|second)s?`),
   - absolute timestamps: `reset at 2026-06-16 18:29:51`, `will reset at …` — **no timezone marker; parse in `time.Local`** (layout `2006-01-02 15:04:05`) and treat as approximate (bench slightly long is the safe direction),
   - feed `FailureEvidence.ResetAfter` / `ResetAt` so `benchResetDeadline` uses the real reset instead of `BenchDefaultDuration`.
-- [ ] 8.3 Make the limit observable despite opencode's internal retry (finding A, confirmed third-pass):
+- [x] 8.3 Make the limit observable despite opencode's internal retry (finding A, confirmed third-pass):
   - when an opencode try stalls or errors without a usable result, have `OpenCodeExecutor` (`internal/agent/opencode.go`) read the tail of opencode's server log (`~/.local/share/opencode/log/opencode.log` — only this file carries `message="stream error"` lines; the per-run timestamped `*.log` files do not) and surface any usage-limit signature as `FailureEvidence`,
   - correlate the session **without relying on stdout** (which is empty during the stall): match `message=created … directory=<WorkspaceDir>` to recover the `session.id=`, then scan that session's `level=ERROR message="stream error"` lines; fall back to `providerID=<provider>` (the prefix of the `--model` arg) within the try's wall-clock window, and narrow by `--session` id when already known (resumed runs),
   - match either `agent=build` (small=false) or `agent=title` (small=true) lines — both carry the limit text,
   - prefer this over inferring usage-limit from a silent stall.
-- [ ] 8.4 Add tests:
+- [x] 8.4 Add tests:
   - opencode fixtures for the exact zai (`Usage limit reached for 5 hour. Your limit will reset at <ts>`) and opencode-go (`Monthly usage limit reached. Resets in 7 days.`) signatures in the flat `error.error="<Wrapper>: …"` server-log form, both `AI_APICallError` and `AI_RetryError` wrappers, asserting `CategoryUsageLimit` + correct `ResetAfter`/`ResetAt`,
   - the `UnknownError` generic-message + server-log-tail evidence path classifies `usage_limit`,
   - server-log-tail session correlation by `directory=<WorkspaceDir>` (and provider+window fallback) picks the right session's limit line,

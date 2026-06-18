@@ -254,6 +254,12 @@ func TestParseOpencodeError_SubscriptionUsageLimitWrappers(t *testing.T) {
 			expectedResetAfter: 7 * 24 * time.Hour,
 		},
 		{
+			name:               "opencode-go flat UnknownError carrier",
+			stderr:             `timestamp=2026-06-16T20:58:00Z level=ERROR run=r1 message="stream error" providerID=opencode-go modelID=foo session.id=ses_1 small=false agent=build mode=primary error.error="UnknownError: Monthly usage limit reached. Resets in 7 days."`,
+			model:              "opencode-go/kimi",
+			expectedResetAfter: 7 * 24 * time.Hour,
+		},
+		{
 			name:            "zai flat AI_APICallError carrier",
 			stderr:          `timestamp=2026-06-16T20:58:00Z level=ERROR run=r1 message="stream error" providerID=zai-coding-plan modelID=glm-5.2 session.id=ses_1 small=false agent=build mode=primary error.error="AI_APICallError: Usage limit reached for 5 hour. Your limit will reset at 2026-06-16 18:29:51"`,
 			model:           "zai-coding-plan/glm-5.2",
