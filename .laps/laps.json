@@ -204,11 +204,11 @@
       "title": "opencode usage-limit classification + reset parsing",
       "description": "Context: design §6, tasks 8.1, 8.2; spike-2 finding A is resolved (8.5 already done). Telemetry is New Relic (Sentry removed 0.9.1).\n\nOutcome: reliability.ParseOpencodeError classifies subscription-provider usage limits as usage_limit. Match across opencode's AI_APICallError / AI_RetryError / UnknownError wrappers, checking error.name, error.data.message, AND the flat server-log error.error=\"\u003cWrapper\u003e: \u003cmessage\u003e\" value (confirmed third-pass: the structured error reaches only the server log as this flat field, never a nested data.message on stdout). Add substrings \"usage limit reached\", \"monthly usage limit\", \"usage limit reached for\"; keep usage_limit winning over short_rate_limit (preserve the existing priority test). Add opencode-specific reset parsing (do NOT overload the gemini regex): space-separated spans via (\\d+)\\s+(day|hour|minute|second)s? (\"Resets in 7 days\" / \"... 5 hour\" / \"... 30 minutes\") and absolute timestamps (\"reset at\" / \"will reset at 2026-06-16 18:29:51\") with NO timezone marker — parse in time.Local (layout 2006-01-02 15:04:05), treat as approximate (benching slightly long is the safe direction). Feed FailureEvidence.ResetAfter / ResetAt so benchResetDeadline uses the real reset instead of BenchDefaultDuration.\n\nFiles \u0026 scope: internal/reliability/opencode.go (+ a reset-parse helper). Server-log-tail evidence sourcing is the next lap.\n\nAcceptance: go build ./...; go test ./internal/reliability/... passes including the usage_limit-over-short_rate_limit priority test. Do not tick tasks.md.",
       "assignee": "SENIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 1179648,
       "createdAt": "2026-06-18T00:23:53.405115197Z",
-      "updatedAt": "2026-06-18T00:23:53.405115197Z",
-      "completedAt": null
+      "updatedAt": "2026-06-18T18:22:28.727903718Z",
+      "completedAt": "2026-06-18T18:22:28.727903718Z"
     },
     {
       "id": "rall-9f58",
