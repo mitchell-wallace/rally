@@ -61,11 +61,11 @@
       "title": "Runner cancellation plumbing + exit override",
       "description": "Context: design §3.2, tasks 2.2, 2.3, 2.4, 2.7. Builds on OutcomeCancelled + CancellationSource. This is the highest-risk slice: operator intent must win over process/context cancellation surfacing as a harness error.\n\nOutcome: add a typed cancellation source to actionLoopResult (e.g. CancellationSourceNone|Skip|GracefulStop|QuitNow) instead of inferring from actionTaken/skipFlag/stopFlag. Set skip for Ctrl+S; change Ctrl+X graceful stop to cancel/drain the active attempt, set graceful_stop, then stop the relay; set quit_now for Ctrl+C. After draining tryCh, derive the attempt outcome in this order: explicit operator cancellation → success/finalization → lap-pin mismatch warning → ordinary failure classification.\n\nFor cancelled: no \"failed: harness error\"; cancelled wins even if the subprocess exits cleanly after SIGINT; no failure taxonomy / retry classification; no retry scheduling; no infra/freeze/pause counter increments; no operator-worthy failure capture. Preserve route semantics: Ctrl+S still advances to the next scheduler candidate; graceful stop halts after the cancellation/drain point; quit-now aborts the relay after recording the cancelled attempt. Make post-loop unfinalized-run handling cancellation-aware: cancelled laps-backed attempts must NOT hit the incomplete_finalization failure-capture path, and active run-state cleanup for cancellation must not erase lap/handoff/session fields needed downstream.\n\nFiles \u0026 scope: internal/relay/runner.go (action loop, runOne outcome derivation, maybeWriteStubAndClearState / post-loop handling). Tests land in the cancelled-tests lap.\n\nAcceptance: go build ./...; go test ./internal/relay/... still passes (full cancelled-scenario tests added later). Do not tick tasks.md.",
       "assignee": "SENIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 393216,
       "createdAt": "2026-06-18T00:23:53.405095309Z",
-      "updatedAt": "2026-06-18T00:23:53.405095309Z",
-      "completedAt": null
+      "updatedAt": "2026-06-18T05:47:39.866120831Z",
+      "completedAt": "2026-06-18T05:47:39.866120831Z"
     },
     {
       "id": "rall-cd9a",

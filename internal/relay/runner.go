@@ -1061,20 +1061,42 @@ type actionLoopResult struct {
 	// proceed to the bounded handoff) from a per-try cap firing with run budget
 	// still remaining (the attempt may retry). Only meaningful when timedOut.
 	runBudgetExhausted bool
+	// cancellationSource records the operator-initiated cancellation that ended
+	// this attempt. When non-empty, the attempt is classified as
+	// OutcomeCancelled rather than failed/success, and all failure taxonomy,
+	// retry scheduling, and resilience counter updates are skipped.
+	cancellationSource CancellationSource
+}
+
+// CancellationSource identifies the explicit operator action that cancelled an
+// attempt. It is intentionally separate from actionTaken/skipFlag/stopFlag so
+// outcome derivation can honor operator intent before executor exit handling.
+type CancellationSource string
+
+const (
+	CancellationSourceNone         CancellationSource = ""
+	CancellationSourceSkip         CancellationSource = "skip"
+	CancellationSourceGracefulStop CancellationSource = "graceful_stop"
+	CancellationSourceQuitNow      CancellationSource = "quit_now"
+)
+
+func (s CancellationSource) String() string {
+	return string(s)
 }
 
 // runActionLoop is the in-try select-based state machine. It blocks until the
 // attempt resolves on tryCh, or an operator action redirects it:
 //
-//   - Ctrl+S (skip) / Ctrl+P (pause): cancel the attempt, then drain tryCh.
-//   - Ctrl+X (stop): set stopFlag and keep waiting so the current try finishes
-//     naturally; the relay halts afterwards.
+//   - Ctrl+S (skip): cancel the attempt, record source=skip, then drain tryCh.
+//   - Ctrl+P (pause): cancel the attempt, then drain tryCh.
+//   - Ctrl+X (stop): cancel the attempt, record source=graceful_stop, drain
+//     tryCh, and halt the relay afterwards.
 //   - Ctrl+C (quit now): set stopFlag, cancel the attempt immediately, and drain
 //     tryCh while staying responsive — a second Ctrl+C within the grace window
 //     escalates to a group-wide SIGKILL via forceKillGroup rather than waiting
 //     the window out.
 //
-// While quit-now drains, the monitor shows a "stopping…" indicator so the UI
+// While stop/quit drains, the monitor shows a "stopping…" indicator so the UI
 // does not look frozen. Stall detection (stallTick) and late pid reports
 // (pidCh) are handled alongside the action cases.
 //
@@ -1134,9 +1156,8 @@ actionLoop:
 				d.cancelAttempt()
 				r.skipFlag.Store(true)
 				out.actionTaken = true
-				res := <-d.tryCh
-				out.result = res.result
-				out.execErr = res.err
+				out.cancellationSource = CancellationSourceSkip
+				r.drainOperatorCancellation(d, &out)
 				break actionLoop
 			case keyboard.ActionPause:
 				d.cancelAttempt()
@@ -1146,11 +1167,19 @@ actionLoop:
 				out.execErr = res.err
 				break actionLoop
 			case keyboard.ActionStop:
-				// Graceful stop (Ctrl+X): let the current try finish, then
-				// stop the relay. The outer loop sees stopFlag and launches
-				// no further runs. For a frozen agent this is bounded by the
-				// stall detector.
+				// Graceful stop (Ctrl+X): cancel the running try, drain the
+				// result, set stopFlag so the relay halts after recording the
+				// cancelled attempt. Unlike the old passive-wait behaviour,
+				// the attempt is cancelled immediately so the operator sees a
+				// clean OutcomeCancelled record rather than whatever the agent
+				// happens to be doing when the relay eventually stops.
 				r.stopFlag.Store(true)
+				d.cancelAttempt()
+				d.mon.SetStopping(true)
+				out.actionTaken = true
+				out.cancellationSource = CancellationSourceGracefulStop
+				r.drainOperatorCancellation(d, &out)
+				break actionLoop
 			case keyboard.ActionQuit:
 				// Quit now (Ctrl+C): cancel the running try immediately and
 				// abort the relay. cancelAttempt fires Cmd.Cancel, which sends
@@ -1164,33 +1193,48 @@ actionLoop:
 				d.cancelAttempt()
 				d.mon.SetStopping(true)
 				out.actionTaken = true
-			drainLoop:
-				for {
-					select {
-					case res := <-d.tryCh:
-						out.result = res.result
-						out.execErr = res.err
-						break drainLoop
-					case pid := <-d.pidCh:
-						// A late OnStart can land here if the try hadn't
-						// reported its pid yet; capture it so a second quit
-						// can target the right group.
-						out.attemptPGID = pid
-					case a := <-d.actionCh:
-						// Second quit-now: escalate past the grace window.
-						// SIGKILL is idempotent (a re-signalled or already
-						// exited group resolves to nil), so this cannot race
-						// the WaitDelay/Cmd.Cancel escalation into an error.
-						if a == keyboard.ActionQuit && out.attemptPGID > 0 {
-							_ = r.forceKillGroup(out.attemptPGID)
-						}
-					}
-				}
+				out.cancellationSource = CancellationSourceQuitNow
+				r.drainOperatorCancellation(d, &out)
 				break actionLoop
 			}
 		}
 	}
 	return out
+}
+
+// drainOperatorCancellation waits for the cancelled attempt's result while
+// retaining the quit-now escalation path. If the operator escalates with
+// Ctrl+C while a skip or graceful-stop cancellation is draining, the source is
+// promoted to quit_now and the relay stop flag is set.
+func (r *Runner) drainOperatorCancellation(d actionLoopDeps, out *actionLoopResult) {
+drainLoop:
+	for {
+		select {
+		case res := <-d.tryCh:
+			out.result = res.result
+			out.execErr = res.err
+			break drainLoop
+		case pid := <-d.pidCh:
+			// A late OnStart can land here if the try hadn't reported its pid
+			// yet; capture it so a quit escalation can target the right group.
+			out.attemptPGID = pid
+		case action := <-d.actionCh:
+			if action != keyboard.ActionQuit {
+				continue
+			}
+			r.stopFlag.Store(true)
+			if d.mon != nil {
+				d.mon.SetStopping(true)
+			}
+			out.cancellationSource = CancellationSourceQuitNow
+			// SIGKILL is idempotent (a re-signalled or already exited group
+			// resolves to nil), so this cannot race the WaitDelay/Cmd.Cancel
+			// escalation into an error.
+			if out.attemptPGID > 0 {
+				_ = r.forceKillGroup(out.attemptPGID)
+			}
+		}
+	}
 }
 
 // benchResetDeadline derives the bench-window end from parsed reset evidence,
@@ -1631,6 +1675,137 @@ attemptLoop:
 			}
 		} else if commitHash != "" {
 			shortHash = commitHash
+		}
+
+		// Operator cancellation short-circuit: when the action loop recorded
+		// a cancellation source (skip / graceful_stop / quit_now), the attempt
+		// is classified as OutcomeCancelled without entering the normal failure
+		// taxonomy, retry scheduling, or resilience counter updates. The
+		// cancelled try is persisted with its source and the attempt loop breaks
+		// immediately; route semantics (skip advances, stop/quit halts) are
+		// preserved by the existing skipFlag/stopFlag handling after the break.
+		cancellationSource := loopOut.cancellationSource
+		if cancellationSource != CancellationSourceNone {
+			cancellationSourceValue := cancellationSource.String()
+			attemptOutcome := reliability.OutcomeCancelled
+			failReason = "cancelled (" + cancellationSourceValue + ")"
+
+			// Capture session id before it goes out of scope — cancelled
+			// attempts may still carry a resumable session that downstream
+			// handling (bounded handoff continuation) needs.
+			if result != nil && result.SessionID != "" {
+				sessionID = result.SessionID
+			}
+
+			// Render a terminal footer for the cancelled attempt. The persisted
+			// outcome/source below are the source of truth; muted cancelled
+			// styling is owned by the style-layer follow-up.
+			renderRunFooter(r.outWriter(), style.FooterOptions{
+				Passed:       false,
+				Duration:     runtime,
+				FilesChanged: filesChangedCount,
+				CommitHash:   shortHash,
+				CommitTitle:  commitTitle,
+				FailReason:   failReason,
+				Interim:      false,
+				Attempt:      attempt,
+				MaxAttempts:  maxAttempts,
+			})
+
+			// Fold rally state (same as the normal path).
+			if err := gitx.FoldRallyState(r.cfg.WorkspaceDir); err != nil {
+				fmt.Fprintf(log, "relay %d run %d attempt %d rally state fold warning: %v\n", relay.ID, runIndex+1, attempt, err)
+			}
+
+			tryRecord := store.TryRecord{
+				ID:                     r.store.NextTryID(),
+				RunID:                  runIndex + 1,
+				RelayID:                relay.ID,
+				AgentType:              picked.Harness,
+				Completed:              false,
+				Outcome:                attemptOutcome,
+				CancellationSource:     cancellationSourceValue,
+				ResolvedRoute:          task.ResolvedRoute,
+				RecoveryClassification: recoveryClassification,
+				Summary:                "",
+				RemainingWork:          "",
+				FilesChanged:           filesChangedList,
+				CommitHash:             commitHash,
+				CommitHistory:          commitHistory,
+				StartedAt:              startedAt.Format(time.RFC3339),
+				EndedAt:                endedAt.Format(time.RFC3339),
+				AttemptNumber:          attempt,
+				LogPath:                tryLogPath,
+				FailReason:             failReason,
+				RuntimeMs:              runtime.Milliseconds(),
+				LapID:                  task.LapID,
+				LapAssignee:            task.Assignee,
+				RecordedLaps:           recordedLaps,
+				LapsAttempted:          lapsAttempted,
+			}
+			if result != nil {
+				tryRecord.Summary = result.Summary
+				tryRecord.RemainingWork = result.RemainingWork
+				tryRecord.ToolCalls = result.ToolCalls
+				if len(result.FilesChanged) > 0 {
+					tryRecord.FilesChanged = result.FilesChanged
+				}
+			}
+			fmt.Fprintf(log, "relay %d run %d attempt %d cancelled: source=%q runtime=%s files_changed=%d commit=%q lap_id=%q assignee=%q\n",
+				relay.ID, runIndex+1, attempt, cancellationSourceValue, runtime, filesChangedCount, shortHash, task.LapID, task.Assignee)
+
+			// Telemetry: span tags + structured log, but NO failure capture and
+			// NO issue-worthy classification — this is a deliberate operator
+			// action, not a fault.
+			tryTags := telemetry.Tags(telemetry.EventInfo{
+				RelayID:  relay.ID,
+				RunID:    runIndex + 1,
+				TryID:    tryRecord.ID,
+				Role:     task.promptAssignee(),
+				Harness:  picked.Harness,
+				Model:    picked.Model,
+				Repo:     rc.Repo,
+				RepoName: rc.RepoName,
+				LapID:    task.LapID,
+			})
+			applyTags(trySpan, tryTags)
+			trySpan.SetTag("outcome", string(attemptOutcome))
+			trySpan.SetTag("cancellation_source", cancellationSourceValue)
+			trySpan.SetData("completed", false)
+			trySpan.SetData("outcome", string(attemptOutcome))
+			trySpan.SetData("cancellation_source", cancellationSourceValue)
+			trySpan.Finish()
+
+			resolvingOutcome = attemptOutcome
+			if err := r.store.AppendTry(tryRecord); err != nil {
+				return outcome(false, false, false), err
+			}
+			r.tel().EmitTryLog(tryCtx, map[string]interface{}{
+				"event":               "try",
+				"relay_id":            relay.ID,
+				"run_id":              runIndex + 1,
+				"try_id":              tryRecord.ID,
+				"attempt":             attempt,
+				"role":                task.promptAssignee(),
+				"runner":              telemetry.RunnerLabel(picked.Harness, picked.Model),
+				"repo":                rc.Repo,
+				"repo_name":           rc.RepoName,
+				"lap_id":              task.LapID,
+				"completed":           false,
+				"outcome":             string(attemptOutcome),
+				"cancellation_source": cancellationSourceValue,
+				"fail_reason":         failReason,
+				"runtime_ms":          runtime.Milliseconds(),
+				"files_changed":       filesChangedCount,
+				"tool_calls":          tryRecord.ToolCalls,
+			})
+
+			// Cancelled is terminal for the attempt loop. The route semantics
+			// (skip → advance, stop/quit → halt relay) are preserved because
+			// skipFlag and stopFlag were set by the action loop and are checked
+			// by the actionTaken handling below and the Run() dispatch loop.
+			lastResult = result
+			break attemptLoop
 		}
 
 		// Compute failed before rendering the footer so the displayed result
@@ -2150,7 +2325,8 @@ attemptLoop:
 	wroteUnfinalized, _ := r.maybeWriteStubAndClearState(stubSummary)
 	designedHandoffOutcome := resolvingOutcome == reliability.OutcomeRunTimeout ||
 		resolvingOutcome == reliability.OutcomeHandoffTimeout ||
-		resolvingOutcome == reliability.OutcomeHandoffRequested
+		resolvingOutcome == reliability.OutcomeHandoffRequested ||
+		resolvingOutcome == reliability.OutcomeCancelled
 	if wroteUnfinalized && !success && !designedHandoffOutcome && !runLapPinMismatch {
 		// "agent exited without finalizing" is an operator-worthy recognized
 		// failure — the agent process ended without `laps done`/`laps handoff`.
@@ -2181,7 +2357,8 @@ attemptLoop:
 	if lastResult != nil && lastResult.MessageAddressed != nil {
 		addressed = *lastResult.MessageAddressed
 	}
-	return outcome(success, addressed, false), nil
+	interrupted := resolvingOutcome == reliability.OutcomeCancelled && r.stopFlag.Load()
+	return outcome(success, addressed, interrupted), nil
 }
 
 // noHandoffResumeReason explains, for a budget-cancelled implementation try that

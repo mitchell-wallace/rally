@@ -87,6 +87,9 @@ func TestActionLoopQuitCancelsAndAbortsWithoutWaiting(t *testing.T) {
 	if !out.actionTaken {
 		t.Error("expected actionTaken=true for quit-now")
 	}
+	if out.cancellationSource != CancellationSourceQuitNow {
+		t.Fatalf("cancellationSource = %q, want %q", out.cancellationSource, CancellationSourceQuitNow)
+	}
 	if !r.stopFlag.Load() {
 		t.Error("expected stopFlag set so the relay aborts")
 	}
@@ -95,15 +98,20 @@ func TestActionLoopQuitCancelsAndAbortsWithoutWaiting(t *testing.T) {
 	}
 }
 
-// TestActionLoopStopLetsTryFinish pins acceptance (2): Ctrl+X lets the current
-// try finish, then stops. The loop must keep waiting (not cancel) after the
-// stop action, returning only once the try delivers its own result.
-func TestActionLoopStopLetsTryFinish(t *testing.T) {
+// TestActionLoopStopCancelsAndDrains pins the 0.10 semantics: Ctrl+X graceful
+// stop cancels the current attempt, drains it, records graceful_stop, and then
+// halts the relay.
+func TestActionLoopStopCancelsAndDrains(t *testing.T) {
 	r := &Runner{}
 	tryCh := make(chan tryResult, 1)
 	actionCh := make(chan keyboard.Action, 1)
 	attemptCtx, cancelAttempt := context.WithCancel(context.Background())
 	defer cancelAttempt()
+
+	go func() {
+		<-attemptCtx.Done()
+		tryCh <- tryResult{result: &agent.TryResult{Completed: false, Summary: "cancelled"}, err: attemptCtx.Err()}
+	}()
 
 	actionCh <- keyboard.ActionStop
 	done := runLoopAsync(r, actionLoopDeps{
@@ -117,33 +125,26 @@ func TestActionLoopStopLetsTryFinish(t *testing.T) {
 		log:           io.Discard,
 	})
 
-	// The loop must not return until the try finishes. Give it time to process
-	// the stop action, then confirm it is still waiting and has not cancelled.
-	select {
-	case <-done:
-		t.Fatal("loop returned before the try finished; Ctrl+X must let it complete")
-	case <-time.After(100 * time.Millisecond):
-	}
-	if !r.stopFlag.Load() {
-		t.Error("expected stopFlag set after Ctrl+X")
-	}
-	if attemptCtx.Err() != nil {
-		t.Error("Ctrl+X must not cancel the running attempt")
-	}
-
-	// Now let the try finish naturally.
-	tryCh <- tryResult{result: &agent.TryResult{Completed: true, Summary: "ok"}}
 	var out actionLoopResult
 	select {
 	case out = <-done:
 	case <-time.After(2 * time.Second):
-		t.Fatal("loop did not return after the try finished")
+		t.Fatal("action loop did not return promptly on Ctrl+X")
 	}
-	if out.actionTaken {
-		t.Error("Ctrl+X is not an in-loop actionTaken break; expected actionTaken=false")
+	if !r.stopFlag.Load() {
+		t.Error("expected stopFlag set after Ctrl+X")
 	}
-	if out.result == nil || !out.result.Completed {
-		t.Errorf("expected the try's own completed result, got %+v", out.result)
+	if attemptCtx.Err() == nil {
+		t.Error("expected Ctrl+X to cancel the running attempt")
+	}
+	if !out.actionTaken {
+		t.Error("expected actionTaken=true for Ctrl+X cancellation")
+	}
+	if out.cancellationSource != CancellationSourceGracefulStop {
+		t.Fatalf("cancellationSource = %q, want %q", out.cancellationSource, CancellationSourceGracefulStop)
+	}
+	if out.result == nil || out.result.Completed {
+		t.Errorf("expected the cancelled try result, got %+v", out.result)
 	}
 }
 
@@ -209,6 +210,9 @@ func TestActionLoopStalledAttemptQuitsPromptly(t *testing.T) {
 	}
 	if !out.actionTaken || !r.stopFlag.Load() {
 		t.Error("expected quit-now to set actionTaken and stopFlag")
+	}
+	if out.cancellationSource != CancellationSourceQuitNow {
+		t.Fatalf("cancellationSource = %q, want %q", out.cancellationSource, CancellationSourceQuitNow)
 	}
 	if attemptCtx.Err() == nil {
 		t.Error("expected the stalled attempt to be cancelled by quit-now")
@@ -379,6 +383,9 @@ func TestActionLoopSkipReturnsResultAndSetsFlag(t *testing.T) {
 
 	if !out.actionTaken {
 		t.Error("expected actionTaken=true for skip")
+	}
+	if out.cancellationSource != CancellationSourceSkip {
+		t.Fatalf("cancellationSource = %q, want %q", out.cancellationSource, CancellationSourceSkip)
 	}
 	if !r.skipFlag.Load() {
 		t.Error("expected skipFlag set after ActionSkip")
