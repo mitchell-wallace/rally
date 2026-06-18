@@ -649,7 +649,7 @@ func (r *Runner) Run(ctx context.Context) error {
 				}
 				switch outcome {
 				case waitSkipped:
-					unpaused, err := routeRuntime.forceUnpauseAll(resilience, relay.ID)
+					unpaused, err := routeRuntime.forceUnpauseAll(resilience, relay.ID, routeErr.RouteName, routeErr.EffectiveAssignee)
 					if err != nil {
 						return err
 					}
@@ -809,7 +809,7 @@ func (r *Runner) Run(ctx context.Context) error {
 			if res.Category == reliability.CategoryUsageLimit {
 				resetAt := benchResetDeadline(res.ResetEvidence, time.Now())
 				scope := routing.QuotaScope(selection.Agent.Harness, selection.Agent.Model)
-				benched, benchErr := routeRuntime.benchQuotaScope(resilience, scope, resetAt, relay.ID)
+				benched, benchErr := routeRuntime.benchQuotaScope(resilience, scope, resetAt, relay.ID, selection.Route.Name, selection.EffectiveAssignee)
 				if benchErr != nil {
 					return benchErr
 				}

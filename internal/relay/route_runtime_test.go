@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/mitchell-wallace/rally/internal/agent"
 	"github.com/mitchell-wallace/rally/internal/reliability"
 	"github.com/mitchell-wallace/rally/internal/store"
 )
@@ -39,6 +40,46 @@ func newOverrideRouteRuntimeOrDie(t *testing.T, specs []string, routeSpecs map[s
 	rt, _, err := newOverrideRouteRuntime(specs, routeSpecs, testResolver, noBackend)
 	if err != nil {
 		t.Fatalf("newOverrideRouteRuntime() error = %v", err)
+	}
+	return rt, newRouteRuntimeHarness(t)
+}
+
+const (
+	reasoningBaseModel   = "gpt-5.5"
+	reasoningVerifyModel = "gpt-5.5-extra-high"
+	reasoningJuniorModel = "gpt-5.5-low"
+)
+
+func newReasoningRouteRuntimeOrDie(t *testing.T, routeSpecs map[string][]string) (*routeRuntime, *Resilience) {
+	t.Helper()
+
+	resolver := func(spec string) (agent.ResolvedAgent, error) {
+		if spec == "cx" || spec == "codex" {
+			return agent.ResolvedAgent{Harness: "codex", Model: reasoningBaseModel}, nil
+		}
+		return testResolver(spec)
+	}
+	reasoning := map[string]string{
+		"verify": "g55-xh",
+		"junior": "g55-l",
+	}
+	reasoningResolver := func(role, selectedHarness, preference string) (string, string, error) {
+		if selectedHarness != "codex" {
+			return "", "", nil
+		}
+		switch {
+		case strings.EqualFold(role, "verify") && preference == "g55-xh":
+			return reasoningVerifyModel, "", nil
+		case strings.EqualFold(role, "junior") && preference == "g55-l":
+			return reasoningJuniorModel, "", nil
+		default:
+			return "", "", nil
+		}
+	}
+
+	rt, err := newResolvedRouteRuntimeWithReasoning(routeSpecs, resolver, reasoning, reasoningResolver, false, nil)
+	if err != nil {
+		t.Fatalf("newResolvedRouteRuntimeWithReasoning() error = %v", err)
 	}
 	return rt, newRouteRuntimeHarness(t)
 }
@@ -331,7 +372,7 @@ func TestRouteRuntime_ForceUnpauseAll(t *testing.T) {
 		t.Fatalf("PauseAgent(codex): %v", err)
 	}
 
-	unpaused, err := rt.forceUnpauseAll(resilience, 1)
+	unpaused, err := rt.forceUnpauseAll(resilience, 1, "", "")
 	if err != nil {
 		t.Fatalf("forceUnpauseAll: %v", err)
 	}
@@ -348,7 +389,7 @@ func TestRouteRuntime_ForceUnpauseAll(t *testing.T) {
 	}
 
 	// Idempotent: a second call finds nothing to unpause.
-	again, err := rt.forceUnpauseAll(resilience, 1)
+	again, err := rt.forceUnpauseAll(resilience, 1, "", "")
 	if err != nil {
 		t.Fatalf("second forceUnpauseAll: %v", err)
 	}
@@ -557,7 +598,7 @@ func TestRouteRuntime_ProbationOneShotSyncRecoverySignals(t *testing.T) {
 	entry := entryStates[0]
 
 	// First sync: entry should be unbenched by ResetEntry, probation event persisted.
-	rt.syncRecoverySignals(scheduler, resilience)
+	rt.syncRecoverySignals(scheduler, resilience, "")
 	if entry.Benched {
 		t.Fatal("expected entry NOT benched after first sync (ResetEntry)")
 	}
@@ -580,7 +621,7 @@ func TestRouteRuntime_ProbationOneShotSyncRecoverySignals(t *testing.T) {
 	}
 
 	// Second sync: entry should be Benched (re-benched because probation exists).
-	rt.syncRecoverySignals(scheduler, resilience)
+	rt.syncRecoverySignals(scheduler, resilience, "")
 	if !entry.Benched {
 		t.Fatal("expected entry benched after second sync")
 	}
@@ -592,13 +633,13 @@ func TestRouteRuntime_ProbationOneShotSyncRecoverySignals(t *testing.T) {
 	// Unset Benched to verify the guard re-benches when only Exhausted is set.
 	entry.Benched = false
 	entry.Exhausted = true
-	rt.syncRecoverySignals(scheduler, resilience)
+	rt.syncRecoverySignals(scheduler, resilience, "")
 	if !entry.Benched || !entry.Exhausted {
 		t.Fatal("expected entry re-benched+exhausted when only Benched was clear")
 	}
 	// Fourth sync: true no-op because already Benched+Exhausted.
 	entryBefore := *entry
-	rt.syncRecoverySignals(scheduler, resilience)
+	rt.syncRecoverySignals(scheduler, resilience, "")
 	if entry.Benched != entryBefore.Benched || entry.Exhausted != entryBefore.Exhausted {
 		t.Fatal("expected no-op when already Benched+Exhausted")
 	}
@@ -642,7 +683,7 @@ func TestRouteRuntime_ForceUnpauseAllMixedStates(t *testing.T) {
 		t.Fatalf("expected frozen, got %s", st)
 	}
 
-	unpaused, err := rt.forceUnpauseAll(resilience, 1)
+	unpaused, err := rt.forceUnpauseAll(resilience, 1, "", "")
 	if err != nil {
 		t.Fatalf("forceUnpauseAll: %v", err)
 	}
@@ -820,7 +861,7 @@ func TestBenchQuotaScope_BenchesEveryKeyInScopeAcrossLanes(t *testing.T) {
 
 	// claude is a direct harness: its QuotaScope ignores the model, so both
 	// claude entries (across both lanes) share scope "claude".
-	benched, err := rt.benchQuotaScope(resilience, "claude", resetAt, 7)
+	benched, err := rt.benchQuotaScope(resilience, "claude", resetAt, 7, "", "")
 	if err != nil {
 		t.Fatalf("benchQuotaScope: %v", err)
 	}
@@ -846,6 +887,168 @@ func TestBenchQuotaScope_BenchesEveryKeyInScopeAcrossLanes(t *testing.T) {
 		if st, _ := resilience.GetState(k); st != StateActive {
 			t.Errorf("state(%s) = %s, want active (out of scope)", k, st)
 		}
+	}
+}
+
+func TestRouteRuntime_ReasoningResolvedQuotaBenchUsesVariantKey(t *testing.T) {
+	rt, resilience := newReasoningRouteRuntimeOrDie(t, map[string][]string{
+		"verify": {"cx:1", "cc:sonnet:1"},
+		"junior": {"cx:1"},
+	})
+
+	now := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
+	clock := now
+	resilience.NowFunc = func() time.Time { return clock }
+
+	selection := mustNextRouteSelection(t, rt, resilience, "verify")
+	if got := agentRouteSpec(selection.Agent); got != "codex:"+reasoningVerifyModel {
+		t.Fatalf("initial pick = %q, want codex:%s", got, reasoningVerifyModel)
+	}
+
+	resetAt := clock.Add(3 * time.Hour)
+	benched, err := rt.benchQuotaScope(resilience, "codex", resetAt, 7, selection.Route.Name, selection.EffectiveAssignee)
+	if err != nil {
+		t.Fatalf("benchQuotaScope: %v", err)
+	}
+	if benched != 2 {
+		t.Fatalf("benched count = %d, want 2 reasoning-resolved codex variants", benched)
+	}
+
+	baseKey := ResilienceKey{Harness: "codex", Model: reasoningBaseModel}
+	verifyKey := ResilienceKey{Harness: "codex", Model: reasoningVerifyModel}
+	juniorKey := ResilienceKey{Harness: "codex", Model: reasoningJuniorModel}
+	for _, key := range []ResilienceKey{verifyKey, juniorKey} {
+		if st, _ := resilience.GetState(key); st != StateBenched {
+			t.Fatalf("state(%s) = %s, want benched", key, st)
+		}
+	}
+	if st, _ := resilience.GetState(baseKey); st != StateActive {
+		t.Fatalf("base state(%s) = %s, want active; bench must target resolved variant key", baseKey, st)
+	}
+
+	// The verify codex entry stays out of rotation while the resolved variant
+	// key is benched even though the base codex key has no resilience event.
+	selection = mustNextRouteSelection(t, rt, resilience, "verify")
+	if got := agentRouteSpec(selection.Agent); got != "claude:sonnet" {
+		t.Fatalf("pre-reset pick = %q, want claude:sonnet while codex variant is benched", got)
+	}
+
+	clock = resetAt.Add(time.Minute)
+	selection = mustNextRouteSelection(t, rt, resilience, "verify")
+	if got := agentRouteSpec(selection.Agent); got != "codex:"+reasoningVerifyModel {
+		t.Fatalf("post-reset pick = %q, want codex:%s after resolved variant bench clears", got, reasoningVerifyModel)
+	}
+}
+
+func TestRouteRuntime_ReasoningResolvedPauseWaitAndForceUnpauseUseVariantKey(t *testing.T) {
+	rt, resilience := newReasoningRouteRuntimeOrDie(t, map[string][]string{
+		"verify": {"cx:1"},
+	})
+
+	now := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
+	resilience.NowFunc = func() time.Time { return now }
+	resilience.PauseDuration = time.Hour
+
+	baseKey := ResilienceKey{Harness: "codex", Model: reasoningBaseModel}
+	verifyKey := ResilienceKey{Harness: "codex", Model: reasoningVerifyModel}
+	if err := resilience.PauseAgent(verifyKey, 7); err != nil {
+		t.Fatalf("PauseAgent: %v", err)
+	}
+	if st, _ := resilience.GetState(baseKey); st != StateActive {
+		t.Fatalf("base state(%s) = %s, want active before selection", baseKey, st)
+	}
+
+	_, err := rt.next(runTask{Assignee: "verify"}, resilience)
+	if err == nil {
+		t.Fatal("next() error = nil, want wait while reasoning-resolved variant is paused")
+	}
+	var routeErr *routeSelectionError
+	if !errors.As(err, &routeErr) {
+		t.Fatalf("error = %T, want *routeSelectionError", err)
+	}
+	if routeErr.AllFrozen {
+		t.Fatalf("route error = %+v, want paused wait", routeErr)
+	}
+	if routeErr.Wait != time.Hour {
+		t.Fatalf("wait = %v, want 1h from resolved variant pause", routeErr.Wait)
+	}
+
+	cleared, err := rt.forceUnpauseAll(resilience, 7, routeErr.RouteName, routeErr.EffectiveAssignee)
+	if err != nil {
+		t.Fatalf("forceUnpauseAll: %v", err)
+	}
+	if cleared != 1 {
+		t.Fatalf("cleared = %d, want 1 resolved variant key", cleared)
+	}
+	if st, _ := resilience.GetState(verifyKey); st != StateActive {
+		t.Fatalf("state(%s) = %s, want active after force unpause", verifyKey, st)
+	}
+
+	selection := mustNextRouteSelection(t, rt, resilience, "verify")
+	if got := agentRouteSpec(selection.Agent); got != "codex:"+reasoningVerifyModel {
+		t.Fatalf("pick after unpause = %q, want codex:%s", got, reasoningVerifyModel)
+	}
+}
+
+func TestRouteRuntime_ReasoningResolvedProbationUsesVariantKey(t *testing.T) {
+	rt, resilience := newReasoningRouteRuntimeOrDie(t, map[string][]string{
+		"verify": {"cx:1"},
+	})
+
+	now := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
+	resilience.NowFunc = func() time.Time { return now }
+	resilience.FreezeDuration = 5 * time.Hour
+
+	baseKey := ResilienceKey{Harness: "codex", Model: reasoningBaseModel}
+	verifyKey := ResilienceKey{Harness: "codex", Model: reasoningVerifyModel}
+	if err := resilience.Store.AppendAgentStatus(store.AgentStatusEvent{
+		AgentType: verifyKey.Harness,
+		Model:     verifyKey.Model,
+		EventType: "frozen",
+		Timestamp: now.Add(-6 * time.Hour).UTC().Format(time.RFC3339),
+		RelayID:   7,
+	}); err != nil {
+		t.Fatalf("AppendAgentStatus(frozen): %v", err)
+	}
+
+	scheduler := rt.schedulers["verify"]
+	if scheduler == nil {
+		t.Fatal("no scheduler for verify route")
+	}
+	entry := scheduler.EntryStates()[0]
+
+	rt.syncRecoverySignals(scheduler, resilience, "verify")
+	if entry.Benched || entry.Exhausted {
+		t.Fatalf("entry after first sync = benched:%v exhausted:%v, want selectable probation probe", entry.Benched, entry.Exhausted)
+	}
+
+	variantEvents, err := resilience.Store.GetAgentStatus(verifyKey.Harness, verifyKey.Model)
+	if err != nil {
+		t.Fatal(err)
+	}
+	probationFound := false
+	for _, event := range variantEvents {
+		if event.EventType == "probation" {
+			probationFound = true
+			break
+		}
+	}
+	if !probationFound {
+		t.Fatal("expected probation event on reasoning-resolved variant key")
+	}
+	baseEvents, err := resilience.Store.GetAgentStatus(baseKey.Harness, baseKey.Model)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, event := range baseEvents {
+		if event.EventType == "probation" {
+			t.Fatalf("unexpected probation event on base key: %+v", event)
+		}
+	}
+
+	rt.syncRecoverySignals(scheduler, resilience, "verify")
+	if !entry.Benched || !entry.Exhausted {
+		t.Fatalf("entry after second sync = benched:%v exhausted:%v, want one-shot probation re-bench", entry.Benched, entry.Exhausted)
 	}
 }
 
@@ -922,7 +1125,7 @@ func TestForceUnpauseAll_ClearsBenchOnSkip(t *testing.T) {
 		t.Fatalf("PauseAgent: %v", err)
 	}
 
-	cleared, err := rt.forceUnpauseAll(resilience, 1)
+	cleared, err := rt.forceUnpauseAll(resilience, 1, "", "")
 	if err != nil {
 		t.Fatalf("forceUnpauseAll: %v", err)
 	}

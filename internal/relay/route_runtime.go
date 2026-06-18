@@ -72,9 +72,11 @@ type routeSelection struct {
 }
 
 type routeSelectionError struct {
-	Wait      time.Duration
-	AllFrozen bool
-	message   string
+	Wait              time.Duration
+	AllFrozen         bool
+	RouteName         string
+	EffectiveAssignee string
+	message           string
 }
 
 func (e *routeSelectionError) Error() string {
@@ -238,12 +240,12 @@ func (r *routeRuntime) next(task runTask, resilience *Resilience) (routeSelectio
 		return routeSelection{}, fmt.Errorf("routing: no scheduler for route %q", route.Name)
 	}
 
-	r.syncRecoverySignals(scheduler, resilience)
+	r.syncRecoverySignals(scheduler, resilience, effectiveAssignee)
 
 	scheduled, err := scheduler.Next()
 	if err != nil {
 		if strings.Contains(err.Error(), "all entries exhausted") {
-			return routeSelection{}, r.selectionWaitError(scheduler, resilience)
+			return routeSelection{}, r.selectionWaitError(scheduler, resilience, route.Name, effectiveAssignee)
 		}
 		return routeSelection{}, err
 	}
@@ -257,11 +259,7 @@ func (r *routeRuntime) next(task runTask, resilience *Resilience) (routeSelectio
 		}
 	}
 
-	picked, err := resolveAgentSpec(selectedEntry.Spec, nil)
-	if err != nil {
-		return routeSelection{}, err
-	}
-	picked, err = routing.ApplyRoleReasoningFallback(picked, selectedEntry, effectiveAssignee, r.reasoning, r.reasoningResolver)
+	picked, err := r.resolvedEntryAgent(selectedEntry, effectiveAssignee)
 	if err != nil {
 		return routeSelection{}, fmt.Errorf("routing: route %q entry %q: %w", route.Name, selectedEntry.Raw, err)
 	}
@@ -319,14 +317,13 @@ func (r *routeRuntime) overrideRoute() *routing.Route {
 	return &route
 }
 
-func (r *routeRuntime) syncRecoverySignals(scheduler *routing.Scheduler, resilience *Resilience) {
+func (r *routeRuntime) syncRecoverySignals(scheduler *routing.Scheduler, resilience *Resilience, effectiveAssignee string) {
 	for _, state := range scheduler.EntryStates() {
-		resolved, err := resolveAgentSpec(state.Entry.Spec, nil)
+		key, err := r.resilienceKeyForEntry(state.Entry, effectiveAssignee)
 		if err != nil {
 			continue
 		}
 
-		key := KeyFromAgent(resolved)
 		status, since := resilience.GetState(key)
 		switch status {
 		case StateActive:
@@ -392,17 +389,16 @@ func (r *routeRuntime) hasProbationEventForCurrentFreeze(resilience *Resilience,
 	return false
 }
 
-func (r *routeRuntime) selectionWaitError(scheduler *routing.Scheduler, resilience *Resilience) error {
+func (r *routeRuntime) selectionWaitError(scheduler *routing.Scheduler, resilience *Resilience, routeName string, effectiveAssignee string) error {
 	var minWait time.Duration
 	waitSet := false
 	seenKeys := map[ResilienceKey]struct{}{}
 
 	for _, state := range scheduler.EntryStates() {
-		resolved, err := resolveAgentSpec(state.Entry.Spec, nil)
+		key, err := r.resilienceKeyForEntry(state.Entry, effectiveAssignee)
 		if err != nil {
 			continue
 		}
-		key := KeyFromAgent(resolved)
 		if _, ok := seenKeys[key]; ok {
 			continue
 		}
@@ -437,30 +433,34 @@ func (r *routeRuntime) selectionWaitError(scheduler *routing.Scheduler, resilien
 
 	if waitSet {
 		return &routeSelectionError{
-			Wait:    minWait,
-			message: "all agents paused or benched",
+			Wait:              minWait,
+			RouteName:         routeName,
+			EffectiveAssignee: effectiveAssignee,
+			message:           "all agents paused or benched",
 		}
 	}
 
 	return &routeSelectionError{
-		AllFrozen: true,
-		message:   "all agents frozen",
+		AllFrozen:         true,
+		RouteName:         routeName,
+		EffectiveAssignee: effectiveAssignee,
+		message:           "all agents frozen",
 	}
 }
 
 // forceUnpauseAll moves every paused harness across the runtime's schedulers
 // back to active state. Used when the user hits skip during a frozen-wait to
 // retry immediately rather than serving out the pause window.
-func (r *routeRuntime) forceUnpauseAll(resilience *Resilience, relayID int) (int, error) {
+func (r *routeRuntime) forceUnpauseAll(resilience *Resilience, relayID int, routeName string, effectiveAssignee string) (int, error) {
 	seen := map[ResilienceKey]struct{}{}
 	unpaused := 0
-	for _, scheduler := range r.schedulers {
+	for schedulerName, scheduler := range r.schedulers {
+		role := r.roleForScheduler(schedulerName, routeName, effectiveAssignee)
 		for _, state := range scheduler.EntryStates() {
-			resolved, err := resolveAgentSpec(state.Entry.Spec, nil)
+			key, err := r.resilienceKeyForEntry(state.Entry, role)
 			if err != nil {
 				continue
 			}
-			key := KeyFromAgent(resolved)
 			if _, ok := seen[key]; ok {
 				continue
 			}
@@ -489,16 +489,16 @@ func (r *routeRuntime) forceUnpauseAll(resilience *Resilience, relayID int) (int
 // All quota-scope fan-out is contained here; GetState, syncRecoverySignals, and
 // selectionWaitError stay per-key. Mirrors the iterate-all-schedulers pattern in
 // forceUnpauseAll. Returns the number of distinct keys benched.
-func (r *routeRuntime) benchQuotaScope(resilience *Resilience, scope string, resetAt time.Time, relayID int) (int, error) {
+func (r *routeRuntime) benchQuotaScope(resilience *Resilience, scope string, resetAt time.Time, relayID int, routeName string, effectiveAssignee string) (int, error) {
 	seen := map[ResilienceKey]struct{}{}
 	benched := 0
-	for _, scheduler := range r.schedulers {
+	for schedulerName, scheduler := range r.schedulers {
+		role := r.roleForScheduler(schedulerName, routeName, effectiveAssignee)
 		for _, state := range scheduler.EntryStates() {
-			resolved, err := resolveAgentSpec(state.Entry.Spec, nil)
+			key, err := r.resilienceKeyForEntry(state.Entry, role)
 			if err != nil {
 				continue
 			}
-			key := KeyFromAgent(resolved)
 			if _, ok := seen[key]; ok {
 				continue
 			}
@@ -513,6 +513,31 @@ func (r *routeRuntime) benchQuotaScope(resilience *Resilience, scope string, res
 		}
 	}
 	return benched, nil
+}
+
+func (r *routeRuntime) resilienceKeyForEntry(entry routing.ParsedEntry, role string) (ResilienceKey, error) {
+	resolved, err := r.resolvedEntryAgent(entry, role)
+	if err != nil {
+		return ResilienceKey{}, err
+	}
+	return KeyFromAgent(resolved), nil
+}
+
+func (r *routeRuntime) resolvedEntryAgent(entry routing.ParsedEntry, role string) (agent.ResolvedAgent, error) {
+	picked, err := resolveAgentSpec(entry.Spec, nil)
+	if err != nil {
+		return agent.ResolvedAgent{}, err
+	}
+	return routing.ApplyRoleReasoningFallback(picked, entry, role, r.reasoning, r.reasoningResolver)
+}
+
+func (r *routeRuntime) roleForScheduler(schedulerName string, selectedRouteName string, effectiveAssignee string) string {
+	if selectedRouteName != "" && strings.EqualFold(schedulerName, selectedRouteName) {
+		if role := strings.TrimSpace(effectiveAssignee); role != "" {
+			return role
+		}
+	}
+	return schedulerName
 }
 
 // benchResetAt returns the reset deadline of the key's in-force bench. It is

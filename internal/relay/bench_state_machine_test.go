@@ -197,7 +197,7 @@ func TestBenchMatrix_D_RepeatUsageLimitReBenchesFreshWindow(t *testing.T) {
 
 	claudeKey := ResilienceKey{Harness: "claude", Model: "opus-4.7"}
 	firstReset := now.Add(3 * time.Hour)
-	if benched, err := rt.benchQuotaScope(resilience, "claude", firstReset, 1); err != nil || benched != 1 {
+	if benched, err := rt.benchQuotaScope(resilience, "claude", firstReset, 1, "", ""); err != nil || benched != 1 {
 		t.Fatalf("first benchQuotaScope = (%d, %v), want (1, nil)", benched, err)
 	}
 
@@ -209,7 +209,7 @@ func TestBenchMatrix_D_RepeatUsageLimitReBenchesFreshWindow(t *testing.T) {
 
 	// The re-probe hits usage_limit again -> bench a fresh window.
 	secondReset := clock.Add(5 * time.Hour)
-	if benched, err := rt.benchQuotaScope(resilience, "claude", secondReset, 2); err != nil || benched != 1 {
+	if benched, err := rt.benchQuotaScope(resilience, "claude", secondReset, 2, "", ""); err != nil || benched != 1 {
 		t.Fatalf("re-bench benchQuotaScope = (%d, %v), want (1, nil)", benched, err)
 	}
 
@@ -308,7 +308,7 @@ func TestBenchMatrix_E_BenchedDoesNotInterfereWithOtherStates(t *testing.T) {
 
 	// An operator skip clears the recoverable states (paused + benched) and
 	// leaves the held states (frozen + probation) exactly as they were.
-	cleared, err := rt.forceUnpauseAll(resilience, 1)
+	cleared, err := rt.forceUnpauseAll(resilience, 1, "", "")
 	if err != nil {
 		t.Fatalf("forceUnpauseAll: %v", err)
 	}

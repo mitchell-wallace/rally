@@ -149,11 +149,11 @@
       "title": "Fix reasoning-resolved resilience keys",
       "description": "Phase 4 verify found that routeRuntime applies [reasoning] after route selection, but several resilience helpers still derive keys from state.Entry.Spec before role reasoning is applied. This breaks harness-scoped model aliases such as verify=g55-xh: bench/pause/probation and quota fan-out consult codex:\u003cbase-model\u003e while runOne records state for codex:\u003cresolved-variant-model\u003e. Update routeRuntime syncRecoverySignals, selectionWaitError, forceUnpauseAll, and benchQuotaScope to derive keys from the role-resolved selection for the relevant lane/assignee, then add regression coverage proving a reasoning-selected model stays benched/paused until its real resilience key clears.",
       "assignee": "SENIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 786432,
       "createdAt": "2026-06-18T11:54:47.305497293Z",
-      "updatedAt": "2026-06-18T11:54:47.305497293Z",
-      "completedAt": null
+      "updatedAt": "2026-06-18T12:04:02.255322821Z",
+      "completedAt": "2026-06-18T12:04:02.255322821Z"
     },
     {
       "id": "rall-13c6",
