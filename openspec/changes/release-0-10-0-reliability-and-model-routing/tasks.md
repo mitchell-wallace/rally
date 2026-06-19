@@ -152,4 +152,4 @@
 - [x] 10.5 Add timeout and handoff-timeout telemetry context: timeout kind/budget, session capture, resume support, handoff-only attempt state, blocker reason, and last-output age where available.
 - [x] 10.6 Prefer compact provider error evidence over transcript-shaped raw fallback text while keeping bounded scrubbed raw evidence for parser normalization.
 - [x] 10.7 Add focused telemetry tests for fallback trigger fields, non-limit evidence, lap ids, timeout context, and provider evidence shaping.
-- [ ] 10.8 Bump `internal/buildinfo/VERSION` to `0.10.1`, validate, run local gates, and release through the standard workflow.
+- [x] 10.8 Bump `internal/buildinfo/VERSION` to `0.10.1`, validate, run local gates, and release through the standard workflow.
