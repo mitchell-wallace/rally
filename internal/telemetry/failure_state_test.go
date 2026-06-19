@@ -238,7 +238,7 @@ func TestFailureEvidenceContext_ScrubsRealisticProviderPayload(t *testing.T) {
 		}
 	}
 
-	allowed := map[string]struct{}{"raw_signal": {}, "message": {}}
+	allowed := map[string]struct{}{"raw_signal": {}, "message": {}, "evidence_shape": {}, "provider_signal": {}}
 	for k := range ctx {
 		if _, ok := allowed[k]; !ok {
 			t.Errorf("unexpected key %q in failure_evidence context", k)
@@ -322,6 +322,44 @@ func TestFailureEvidenceContext_NonLimitCategory_WithEvidenceFields(t *testing.T
 	}
 }
 
+func TestFailureEvidenceContext_NonLimitExplicitEvidence(t *testing.T) {
+	ctx := FailureEvidenceContext(FailureState{
+		Category:          "agent_error",
+		EvidenceRawSignal: `{"type":"error","error":{"message":"provider failed"}}`,
+		EvidenceMessage:   "provider failed",
+		EvidenceSource:    "executor_evidence",
+	})
+	if ctx == nil {
+		t.Fatal("expected non-limit explicit evidence context")
+	}
+	if ctx["raw_signal"] == "" {
+		t.Fatalf("raw_signal missing from %#v", ctx)
+	}
+	if ctx["message"] != "provider failed" {
+		t.Fatalf("message = %#v", ctx["message"])
+	}
+	if ctx["source"] != "executor_evidence" {
+		t.Fatalf("source = %#v", ctx["source"])
+	}
+	if ctx["evidence_shape"] != "provider_object" {
+		t.Fatalf("evidence_shape = %#v", ctx["evidence_shape"])
+	}
+	if ctx["provider_signal"] == "" {
+		t.Fatalf("provider_signal missing from %#v", ctx)
+	}
+}
+
+func TestFailureEvidenceContext_StripsTranscriptSections(t *testing.T) {
+	ctx := FailureEvidenceContext(FailureState{
+		Category:          "agent_error",
+		EvidenceRawSignal: "safe summary\nstderr: full transcript with prompt",
+		EvidenceSource:    "safe_exec_error",
+	})
+	if ctx["raw_signal"] != "safe summary" {
+		t.Fatalf("raw_signal = %#v, want stripped safe summary", ctx["raw_signal"])
+	}
+}
+
 func TestFailureEvidenceContext_NoPromptOrTranscriptFields(t *testing.T) {
 	ctx := FailureEvidenceContext(FailureState{
 		Category:  categoryUsageLimit,
@@ -329,7 +367,7 @@ func TestFailureEvidenceContext_NoPromptOrTranscriptFields(t *testing.T) {
 		Message:   "quota exhausted",
 	})
 	// Only raw_signal and message are ever attached; no sensitive payload keys.
-	allowed := map[string]struct{}{"raw_signal": {}, "message": {}}
+	allowed := map[string]struct{}{"raw_signal": {}, "message": {}, "evidence_shape": {}, "provider_signal": {}}
 	for k := range ctx {
 		if _, ok := allowed[k]; !ok {
 			t.Errorf("unexpected key %q in failure_evidence context", k)

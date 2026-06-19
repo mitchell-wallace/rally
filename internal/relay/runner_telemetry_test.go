@@ -167,13 +167,16 @@ func TestLapPinMismatchDiagnosticEventCarriesReasonWithoutFailureCategory(t *tes
 				Outcome:     "failed",
 				Category:    "agent_error",
 				AgentState:  "active",
-			}, tt.reason)
+			}, tt.reason, "lap-1", []string{"lap-2", "lap-3"})
 
 			if evt.Level != telemetry.LevelWarning {
 				t.Fatalf("event level = %q, want %q", evt.Level, telemetry.LevelWarning)
 			}
 			wantTag(t, evt.Tags, "event_kind", "lap_pin_mismatch")
 			wantTag(t, evt.Tags, "mismatch_reason", tt.reason)
+			wantTag(t, evt.Tags, "expected_lap_id", "lap-1")
+			wantTag(t, evt.Tags, "consumed_lap_count", "2")
+			wantTag(t, evt.Tags, "consumed_lap_ids", "lap-2,lap-3")
 			wantTag(t, evt.Tags, "outcome", "failed")
 			wantTag(t, evt.Tags, "attempt", "1")
 			wantTag(t, evt.Tags, "max_attempts", "2")

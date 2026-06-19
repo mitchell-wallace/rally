@@ -209,6 +209,9 @@ func failureStateEvent(baseTags map[string]string, rc telemetry.RallyContext, fs
 }
 
 func limitSignalEvent(baseTags map[string]string, rc telemetry.RallyContext, fs telemetry.FailureState) (telemetry.Event, bool) {
+	if !runnerLimitCategory(fs.Category) {
+		return telemetry.Event{}, false
+	}
 	evt := failureStateEvent(baseTags, rc, fs)
 	if _, ok := evt.Contexts["failure_evidence"]; !ok {
 		return telemetry.Event{}, false
@@ -221,11 +224,59 @@ func limitSignalEvent(baseTags map[string]string, rc telemetry.RallyContext, fs 
 	}, true
 }
 
-func lapPinMismatchDiagnosticEvent(baseTags map[string]string, rc telemetry.RallyContext, fs telemetry.FailureState, reason string) telemetry.Event {
+func runnerLimitCategory(category string) bool {
+	switch reliability.FailureCategory(category) {
+	case reliability.CategoryUsageLimit, reliability.CategoryShortRateLimit, reliability.CategoryProviderOverloaded:
+		return true
+	default:
+		return false
+	}
+}
+
+func applyEvidenceToFailureState(fs *telemetry.FailureState, ev *reliability.FailureEvidence, source string) {
+	if fs == nil || ev == nil {
+		return
+	}
+	if ev.QuotaScope != "" {
+		fs.QuotaScope = ev.QuotaScope
+	}
+	fs.ResetAt = ev.ResetAt
+	fs.ResetAfter = ev.ResetAfter
+	if runnerLimitCategory(string(ev.Category)) {
+		fs.RawSignal = ev.RawSignal
+		fs.Message = ev.Message
+		return
+	}
+	fs.EvidenceRawSignal = ev.RawSignal
+	fs.EvidenceMessage = ev.Message
+	fs.EvidenceSource = source
+}
+
+func addFailureEvidenceTelemetry(span telemetry.Span, fields map[string]interface{}, fs telemetry.FailureState) {
+	evidence := telemetry.FailureEvidenceContext(fs)
+	if len(evidence) == 0 {
+		return
+	}
+	if span != nil {
+		span.SetData("failure_evidence", evidence)
+	}
+	for k, v := range telemetry.FailureEvidenceFields(fs) {
+		fields[k] = v
+	}
+}
+
+func lapPinMismatchDiagnosticEvent(baseTags map[string]string, rc telemetry.RallyContext, fs telemetry.FailureState, reason string, expectedLapID string, consumedLapIDs []string) telemetry.Event {
 	evt := failureStateEvent(baseTags, rc, fs)
 	delete(evt.Tags, "failure_category")
 	evt.Tags["event_kind"] = "lap_pin_mismatch"
 	evt.Tags["mismatch_reason"] = reason
+	if expectedLapID != "" {
+		evt.Tags["expected_lap_id"] = expectedLapID
+	}
+	evt.Tags["consumed_lap_count"] = fmt.Sprintf("%d", len(consumedLapIDs))
+	if len(consumedLapIDs) > 0 {
+		evt.Tags["consumed_lap_ids"] = strings.Join(consumedLapIDs, ",")
+	}
 	return telemetry.Event{
 		Level:    telemetry.LevelWarning,
 		Tags:     evt.Tags,
@@ -602,6 +653,7 @@ func (r *Runner) Run(ctx context.Context) error {
 	}
 
 	runIndex := relay.CompletedIterations
+	var fallbackCause *routeFallbackCause
 	for relay.CompletedIterations < relay.TargetIterations {
 		if ctx.Err() != nil {
 			return ctx.Err()
@@ -700,7 +752,11 @@ func (r *Runner) Run(ctx context.Context) error {
 			from := telemetry.RunnerLabel(selection.PreviousAgent.Harness, selection.PreviousAgent.Model)
 			to := telemetry.RunnerLabel(selection.Agent.Harness, selection.Agent.Model)
 			fmt.Fprintf(log, "relay %d run %d route fallback: rotated %s -> %s\n", relay.ID, runID, from, to)
-			r.tel().EmitTryLog(runCtx, map[string]interface{}{
+			runSpan.SetTag("route_fallback", "true")
+			runSpan.SetData("route_fallback", true)
+			runSpan.SetTag("from_runner", from)
+			runSpan.SetTag("to_runner", to)
+			fields := map[string]interface{}{
 				"event":       "route_fallback",
 				"relay_id":    relay.ID,
 				"run_id":      runID,
@@ -711,7 +767,14 @@ func (r *Runner) Run(ctx context.Context) error {
 				"repo":        rc.Repo,
 				"repo_name":   rc.RepoName,
 				"lap_id":      task.LapID,
-			})
+			}
+			if fallbackCause != nil && fallbackCause.fromRunner == from {
+				fallbackCause.addTo(fields, runSpan)
+			}
+			fallbackCause = nil
+			r.tel().EmitTryLog(runCtx, fields)
+		} else if fallbackCause != nil {
+			fallbackCause = nil
 		}
 		if selection.RecoveryCapHit {
 			r.tel().CaptureFailure(ctx, fmt.Sprintf("relay %d lap %s recovery cap reached: needs_user", relay.ID, task.LapID),
@@ -767,6 +830,31 @@ func (r *Runner) Run(ctx context.Context) error {
 		if res.Interrupted {
 			fmt.Fprintf(log, "relay %d stop requested, halting\n", relay.ID)
 			break
+		}
+		if !res.Success {
+			reason := "retry-budget-exhausted"
+			switch {
+			case res.Category != "":
+				reason = "category:" + string(res.Category)
+			case r.skipFlag.Load():
+				reason = "skip"
+			case res.Outcome != "":
+				reason = "outcome:" + string(res.Outcome)
+			}
+			fallbackCause = &routeFallbackCause{
+				fromRunner:           telemetry.RunnerLabel(selection.Agent.Harness, selection.Agent.Model),
+				triggerRunID:         runID,
+				triggerTryID:         r.store.NextTryID() - 1,
+				triggerOutcome:       string(res.Outcome),
+				triggerFailReason:    res.FailReason,
+				triggerFailureClass:  string(res.FailureClass),
+				triggerFailureCat:    string(res.Category),
+				triggerLapID:         res.LapID,
+				routeName:            selection.Route.Name,
+				entryExhaustedReason: reason,
+			}
+		} else {
+			fallbackCause = nil
 		}
 
 		// If skipped, don't pause the agent — just advance rotation
@@ -1312,6 +1400,50 @@ type runOutcome struct {
 	ResetEvidence *reliability.FailureEvidence
 	// InfraFailures counts attempts classified infra-class within this run.
 	InfraFailures int
+}
+
+type routeFallbackCause struct {
+	fromRunner           string
+	triggerRunID         int
+	triggerTryID         int
+	triggerOutcome       string
+	triggerFailReason    string
+	triggerFailureClass  string
+	triggerFailureCat    string
+	triggerLapID         string
+	routeName            string
+	entryExhaustedReason string
+}
+
+func (c *routeFallbackCause) addTo(fields map[string]interface{}, span telemetry.Span) {
+	if c == nil {
+		return
+	}
+	values := map[string]interface{}{
+		"trigger_run_id":               c.triggerRunID,
+		"trigger_try_id":               c.triggerTryID,
+		"trigger_outcome":              c.triggerOutcome,
+		"trigger_fail_reason":          c.triggerFailReason,
+		"trigger_failure_class":        c.triggerFailureClass,
+		"trigger_failure_category":     c.triggerFailureCat,
+		"trigger_lap_id":               c.triggerLapID,
+		"route_name":                   c.routeName,
+		"route_entry_exhausted_reason": c.entryExhaustedReason,
+	}
+	for k, v := range values {
+		if v == "" || v == 0 {
+			continue
+		}
+		fields[k] = v
+		if span != nil {
+			switch x := v.(type) {
+			case string:
+				span.SetTag(k, x)
+			default:
+				span.SetData(k, x)
+			}
+		}
+	}
 }
 
 func (r *Runner) runOne(
@@ -2183,11 +2315,61 @@ attemptLoop:
 		if task.ResolvedRoute == "recovery" && recoveryClassification != "" {
 			tryLogFields["recovery_classification"] = recoveryClassification
 		}
+		evidenceState := telemetry.FailureState{
+			Attempt:                attempt,
+			MaxAttempts:            maxAttempts,
+			Outcome:                string(attemptOutcome),
+			Category:               string(failureCategory),
+			RecoveryClassification: recoveryClassification,
+			AgentState:             r.agentStateName(picked),
+		}
+		applyEvidenceToFailureState(&evidenceState, resetEvidence, "executor_evidence")
+		if failed {
+			addFailureEvidenceTelemetry(trySpan, tryLogFields, evidenceState)
+		}
+		if timedOut {
+			timeoutKind := "try_cap"
+			timeoutBudget := tryTimeout
+			if runBudgetExhausted {
+				timeoutKind = "run_budget"
+				timeoutBudget = r.cfg.RunTimeout
+			}
+			trySpan.SetTag("timeout_kind", timeoutKind)
+			trySpan.SetData("timeout_kind", timeoutKind)
+			tryLogFields["timeout_kind"] = timeoutKind
+			if timeoutBudget > 0 {
+				trySpan.SetData("timeout_budget_ms", timeoutBudget.Milliseconds())
+				tryLogFields["timeout_budget_ms"] = timeoutBudget.Milliseconds()
+			}
+			if age, ok := lastOutputAge(tryLogPath, endedAt); ok {
+				trySpan.SetData("last_output_age_ms", age.Milliseconds())
+				tryLogFields["last_output_age_ms"] = age.Milliseconds()
+			}
+			sessionCaptured := sessionID != ""
+			resumeSupported := exec != nil && exec.ResumeSupported()
+			handoffOnlyAttempted := runBudgetExhausted && canHandoffResume
+			trySpan.SetData("session_captured", sessionCaptured)
+			trySpan.SetData("resume_supported", resumeSupported)
+			trySpan.SetData("handoff_only_attempted", handoffOnlyAttempted)
+			tryLogFields["session_captured"] = sessionCaptured
+			tryLogFields["resume_supported"] = resumeSupported
+			tryLogFields["handoff_only_attempted"] = handoffOnlyAttempted
+			if runBudgetExhausted && !canHandoffResume {
+				blocker := noHandoffResumeReason(exec, sessionID)
+				trySpan.SetData("handoff_resume_blocker", blocker)
+				tryLogFields["handoff_resume_blocker"] = blocker
+			}
+		}
 		if lapPinMismatch {
 			trySpan.SetTag("event_kind", "lap_pin_mismatch")
 			trySpan.SetData("mismatch_reason", failReason)
 			tryLogFields["event_kind"] = "lap_pin_mismatch"
 			tryLogFields["mismatch_reason"] = failReason
+			tryLogFields["expected_lap_id"] = task.LapID
+			tryLogFields["consumed_lap_count"] = len(recordedLaps)
+			if len(recordedLaps) > 0 {
+				tryLogFields["consumed_lap_ids"] = strings.Join(recordedLaps, ",")
+			}
 			fs := telemetry.FailureState{
 				Attempt:     attempt,
 				MaxAttempts: maxAttempts,
@@ -2195,7 +2377,7 @@ attemptLoop:
 				AgentState:  r.agentStateName(picked),
 			}
 			r.tel().CaptureEvent(tryCtx, fmt.Sprintf("relay %d run %d try %d lap pin mismatch: %s", relay.ID, runIndex+1, tryRecord.ID, failReason),
-				lapPinMismatchDiagnosticEvent(tryTags, rc, fs, failReason))
+				lapPinMismatchDiagnosticEvent(tryTags, rc, fs, failReason, task.LapID, recordedLaps))
 		}
 		// Capture provider-limit evidence as low-severity diagnostic telemetry
 		// regardless of whether the failure is operator-worthy enough to become an
@@ -2211,11 +2393,7 @@ attemptLoop:
 				AgentState:             r.agentStateName(picked),
 			}
 			if resetEvidence != nil {
-				fs.QuotaScope = resetEvidence.QuotaScope
-				fs.ResetAt = resetEvidence.ResetAt
-				fs.ResetAfter = resetEvidence.ResetAfter
-				fs.RawSignal = resetEvidence.RawSignal
-				fs.Message = resetEvidence.Message
+				applyEvidenceToFailureState(&fs, resetEvidence, "executor_evidence")
 			}
 			if evt, ok := limitSignalEvent(tryTags, rc, fs); ok {
 				r.tel().CaptureEvent(tryCtx, fmt.Sprintf("relay %d run %d try %d provider limit signal: %s", relay.ID, runIndex+1, tryRecord.ID, failReason), evt)
@@ -2661,27 +2839,50 @@ func (r *Runner) runBoundedHandoffOnly(
 	trySpan.SetData("completed", succeeded)
 	trySpan.SetData("outcome", string(outcome))
 	trySpan.SetData("handoff_only", true)
+	trySpan.SetTag("timeout_kind", "handoff")
+	trySpan.SetData("timeout_kind", "handoff")
+	if r.cfg.HandoffTimeout > 0 {
+		trySpan.SetData("timeout_budget_ms", r.cfg.HandoffTimeout.Milliseconds())
+	}
+	trySpan.SetData("session_captured", sessionID != "")
+	trySpan.SetData("resume_supported", true)
+	trySpan.SetData("handoff_only_attempted", true)
 	if task.ResolvedRoute == "recovery" && recoveryClassification != "" {
 		trySpan.SetTag("recovery_classification", recoveryClassification)
 		trySpan.SetData("recovery_classification", recoveryClassification)
 	}
 	trySpan.SetData("fail_reason", failReason)
 	tryLogFields := map[string]interface{}{
-		"event":        "try",
-		"relay_id":     relay.ID,
-		"run_id":       runIndex + 1,
-		"try_id":       tryID,
-		"attempt":      attemptNumber,
-		"role":         task.promptAssignee(),
-		"runner":       telemetry.RunnerLabel(picked.Harness, picked.Model),
-		"repo":         rc.Repo,
-		"repo_name":    rc.RepoName,
-		"lap_id":       task.LapID,
-		"completed":    succeeded,
-		"outcome":      string(outcome),
-		"handoff_only": true,
-		"fail_reason":  failReason,
-		"runtime_ms":   runtime.Milliseconds(),
+		"event":                  "try",
+		"relay_id":               relay.ID,
+		"run_id":                 runIndex + 1,
+		"try_id":                 tryID,
+		"attempt":                attemptNumber,
+		"role":                   task.promptAssignee(),
+		"runner":                 telemetry.RunnerLabel(picked.Harness, picked.Model),
+		"repo":                   rc.Repo,
+		"repo_name":              rc.RepoName,
+		"lap_id":                 task.LapID,
+		"completed":              succeeded,
+		"outcome":                string(outcome),
+		"handoff_only":           true,
+		"fail_reason":            failReason,
+		"runtime_ms":             runtime.Milliseconds(),
+		"timeout_kind":           "handoff",
+		"session_captured":       sessionID != "",
+		"resume_supported":       true,
+		"handoff_only_attempted": true,
+	}
+	if r.cfg.HandoffTimeout > 0 {
+		tryLogFields["timeout_budget_ms"] = r.cfg.HandoffTimeout.Milliseconds()
+	}
+	if age, ok := lastOutputAge(tryLogPath, endedAt); ok {
+		trySpan.SetData("last_output_age_ms", age.Milliseconds())
+		tryLogFields["last_output_age_ms"] = age.Milliseconds()
+	}
+	if outcome == reliability.OutcomeHandoffTimeout {
+		trySpan.SetData("handoff_resume_blocker", "handoff timeout")
+		tryLogFields["handoff_resume_blocker"] = "handoff timeout"
 	}
 	if task.ResolvedRoute == "recovery" && recoveryClassification != "" {
 		tryLogFields["recovery_classification"] = recoveryClassification
@@ -2710,6 +2911,21 @@ func (r *Runner) runBoundedHandoffOnly(
 	r.tel().EmitTryLog(tryCtx, tryLogFields)
 
 	return outcome, result, succeeded, dirtyHandoff, nil
+}
+
+func lastOutputAge(path string, at time.Time) (time.Duration, bool) {
+	if path == "" || at.IsZero() {
+		return 0, false
+	}
+	info, err := os.Stat(path)
+	if err != nil || info.IsDir() || info.Size() == 0 {
+		return 0, false
+	}
+	age := at.Sub(info.ModTime())
+	if age < 0 {
+		age = 0
+	}
+	return age, true
 }
 
 func (r *Runner) newStallController(tryLogPath string, exec agent.Executor) reliability.StallController {

@@ -206,6 +206,9 @@ func TestRunOne_LapPinMismatchTelemetryIsWarningDiagnostic(t *testing.T) {
 			wantTag(t, evt.Tags, "event_kind", "lap_pin_mismatch")
 			wantTag(t, evt.Tags, "mismatch_reason", tt.wantReason)
 			wantTag(t, evt.Tags, "lap_id", "lap-1")
+			wantTag(t, evt.Tags, "expected_lap_id", "lap-1")
+			wantTag(t, evt.Tags, "consumed_lap_count", fmt.Sprintf("%d", len(tt.recordedLaps)))
+			wantTag(t, evt.Tags, "consumed_lap_ids", strings.Join(tt.recordedLaps, ","))
 			wantNoTag(t, evt.Tags, "failure_category")
 			if evt.Level == telemetry.LevelError {
 				t.Fatal("lap mismatch diagnostic must not be error-level")
@@ -217,6 +220,15 @@ func TestRunOne_LapPinMismatchTelemetryIsWarningDiagnostic(t *testing.T) {
 			}
 			if got := log["mismatch_reason"]; got != tt.wantReason {
 				t.Fatalf("try log mismatch_reason = %#v, want %q", got, tt.wantReason)
+			}
+			if got := log["expected_lap_id"]; got != "lap-1" {
+				t.Fatalf("try log expected_lap_id = %#v, want lap-1", got)
+			}
+			if got := log["consumed_lap_count"]; got != len(tt.recordedLaps) {
+				t.Fatalf("try log consumed_lap_count = %#v, want %d", got, len(tt.recordedLaps))
+			}
+			if got := log["consumed_lap_ids"]; got != strings.Join(tt.recordedLaps, ",") {
+				t.Fatalf("try log consumed_lap_ids = %#v, want %q", got, strings.Join(tt.recordedLaps, ","))
 			}
 			if _, found := log["failure_category"]; found {
 				t.Fatalf("lap mismatch try log must not carry failure_category: %#v", log)
@@ -237,6 +249,82 @@ func TestRunOne_LapPinMismatchTelemetryIsWarningDiagnostic(t *testing.T) {
 				t.Fatalf("FailReason = %q, want %q", tries[0].FailReason, tt.wantReason)
 			}
 		})
+	}
+}
+
+func TestRunOne_OrdinaryAgentErrorEvidenceStaysTryTelemetryOnly(t *testing.T) {
+	workspaceDir := t.TempDir()
+	rallyDir := store.RallyDir(workspaceDir)
+	os.MkdirAll(rallyDir, 0o755)
+	initRepo(t, workspaceDir)
+	runGit(t, workspaceDir, "commit", "--allow-empty", "-m", "initial", "--no-verify")
+
+	s := newTestStore(t, rallyDir)
+	exec := &funcExecutor{
+		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+			return &agent.TryResult{
+				Completed: false,
+				Summary:   "provider object failure",
+				Evidence: &reliability.FailureEvidence{
+					Category:  reliability.CategoryAgentError,
+					RawSignal: `{"type":"error","error":{"message":"model refused"}}`,
+					Message:   "model refused",
+				},
+			}, nil
+		},
+	}
+
+	sink := &capturingSink{}
+	r := NewRunner(s, Config{
+		WorkspaceDir:     workspaceDir,
+		DataDir:          t.TempDir(),
+		AgentMixSpecs:    []string{"op:dsf"},
+		TargetIterations: 1,
+		RetryBudget:      1,
+		LapsEnabled:      true,
+		Resolver:         cheapTestResolver,
+	}, map[string]agent.Executor{"opencode": exec})
+	r.SetTelemetry(sink)
+
+	res, err := r.runOne(
+		context.Background(),
+		&store.RelayRecord{ID: 1, TargetIterations: 1},
+		0,
+		agent.ResolvedAgent{Harness: "opencode", Model: cheapTestModel},
+		runTask{Name: "task", Prompt: "do work", Assignee: "senior", IsLapsBacked: true, LapID: "lap-1"},
+		nil, nil, false, false, nil, nil, io.Discard,
+	)
+	if err != nil {
+		t.Fatalf("runOne error = %v", err)
+	}
+	if res.Success {
+		t.Fatal("expected ordinary agent error to fail the run")
+	}
+	if got := findFailureCount(sink, "failed:"); got != 0 {
+		t.Fatalf("ordinary agent_error emitted RallyFailure captures = %d, want 0", got)
+	}
+
+	log := findTryLogByOutcome(t, sink, string(reliability.OutcomeFailed))
+	if log["failure_evidence.message"] != "model refused" {
+		t.Fatalf("try log failure_evidence.message = %#v", log["failure_evidence.message"])
+	}
+	if log["failure_evidence.source"] != "executor_evidence" {
+		t.Fatalf("try log failure_evidence.source = %#v", log["failure_evidence.source"])
+	}
+	if log["failure_evidence.evidence_shape"] != "provider_object" {
+		t.Fatalf("try log evidence_shape = %#v", log["failure_evidence.evidence_shape"])
+	}
+	if log["failure_evidence.provider_signal"] == "" {
+		t.Fatalf("try log provider_signal missing: %#v", log)
+	}
+
+	span := findTrySpanByOutcome(t, sink, string(reliability.OutcomeFailed))
+	evidence, ok := span.data["failure_evidence"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("try span failure_evidence context missing: %#v", span.data)
+	}
+	if evidence["source"] != "executor_evidence" || evidence["evidence_shape"] != "provider_object" {
+		t.Fatalf("try span failure_evidence = %#v", evidence)
 	}
 }
 
@@ -658,6 +746,17 @@ func findTryLogByOutcome(t *testing.T, sink *capturingSink, outcome string) map[
 	return nil
 }
 
+func findLogByEvent(t *testing.T, sink *capturingSink, event string) map[string]interface{} {
+	t.Helper()
+	for _, fields := range sink.logs {
+		if fields["event"] == event {
+			return fields
+		}
+	}
+	t.Fatalf("no log with event %q found in %#v", event, sink.logs)
+	return nil
+}
+
 func findTrySpanByOutcome(t *testing.T, sink *capturingSink, outcome string) *capturedSpan {
 	t.Helper()
 	for _, span := range sink.spans {
@@ -667,6 +766,93 @@ func findTrySpanByOutcome(t *testing.T, sink *capturingSink, outcome string) *ca
 	}
 	t.Fatalf("no try span with outcome %q found in %#v", outcome, sink.spans)
 	return nil
+}
+
+func TestRun_RouteFallbackTelemetryIncludesTriggerCause(t *testing.T) {
+	workspaceDir := t.TempDir()
+	rallyDir := store.RallyDir(workspaceDir)
+	os.MkdirAll(rallyDir, 0o755)
+	initRepo(t, workspaceDir)
+	runGit(t, workspaceDir, "commit", "--allow-empty", "-m", "initial", "--no-verify")
+
+	s := newTestStore(t, rallyDir)
+	var executedModels []string
+	exec := &funcExecutor{
+		rotateSupported: true,
+		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+			executedModels = append(executedModels, opts.Model)
+			if opts.Model == "model-a" {
+				return &agent.TryResult{
+					Completed: false,
+					Summary:   "bad model",
+					Evidence: &reliability.FailureEvidence{
+						Category:  reliability.CategoryInvalidModel,
+						RawSignal: "model-a is unavailable",
+						Message:   "invalid model",
+					},
+				}, nil
+			}
+			if err := os.WriteFile(filepath.Join(workspaceDir, "done.txt"), []byte("done\n"), 0o644); err != nil {
+				return nil, err
+			}
+			return &agent.TryResult{Completed: true, Summary: "done"}, nil
+		},
+	}
+
+	sink := &capturingSink{}
+	r := NewRunner(s, Config{
+		WorkspaceDir: workspaceDir,
+		DataDir:      t.TempDir(),
+		RouteSpecs: map[string][]string{
+			"default": {"op:model-a:1", "op:model-b:1"},
+		},
+		TargetIterations: 1,
+		RetryBudget:      1,
+		Resolver:         testResolver,
+		TaskPrompt:       "route fallback",
+	}, map[string]agent.Executor{"opencode": exec})
+	r.SetTelemetry(sink)
+
+	if err := r.Run(context.Background()); err != nil {
+		t.Fatalf("Run error = %v", err)
+	}
+	if got, want := executedModels, []string{"model-a", "model-b"}; len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
+		t.Fatalf("executed models = %v, want %v", got, want)
+	}
+
+	log := findLogByEvent(t, sink, "route_fallback")
+	if log["from_runner"] != "opencode:model-a" || log["to_runner"] != "opencode:model-b" {
+		t.Fatalf("route_fallback runners = from %#v to %#v", log["from_runner"], log["to_runner"])
+	}
+	if log["trigger_run_id"] != 1 || log["trigger_try_id"] != 1 {
+		t.Fatalf("route_fallback trigger ids = run %#v try %#v", log["trigger_run_id"], log["trigger_try_id"])
+	}
+	if log["trigger_outcome"] != string(reliability.OutcomeFailed) {
+		t.Fatalf("trigger_outcome = %#v", log["trigger_outcome"])
+	}
+	if log["trigger_failure_class"] != string(reliability.FailureAgent) {
+		t.Fatalf("trigger_failure_class = %#v", log["trigger_failure_class"])
+	}
+	if log["trigger_failure_category"] != string(reliability.CategoryInvalidModel) {
+		t.Fatalf("trigger_failure_category = %#v", log["trigger_failure_category"])
+	}
+	if log["route_name"] != "default" || log["route_entry_exhausted_reason"] != "category:invalid_model" {
+		t.Fatalf("route cause = route %#v exhausted %#v", log["route_name"], log["route_entry_exhausted_reason"])
+	}
+
+	var fallbackSpan *capturedSpan
+	for _, span := range sink.spans {
+		if span.operation == "run" && span.tags["route_fallback"] == "true" {
+			fallbackSpan = span
+			break
+		}
+	}
+	if fallbackSpan == nil {
+		t.Fatalf("run span with route_fallback tag not found in %#v", sink.spans)
+	}
+	if fallbackSpan.data["trigger_try_id"] != 1 || fallbackSpan.tags["trigger_failure_category"] != string(reliability.CategoryInvalidModel) {
+		t.Fatalf("fallback span trigger fields = tags %#v data %#v", fallbackSpan.tags, fallbackSpan.data)
+	}
 }
 
 func TestRunOneTimeoutHandoffOutcomesStaySpanLogOnly(t *testing.T) {
@@ -715,13 +901,35 @@ func TestRunOneTimeoutHandoffOutcomesStaySpanLogOnly(t *testing.T) {
 	if _, found := runTimeoutLog["failure_category"]; found {
 		t.Fatalf("run_timeout log must not carry failure_category: %#v", runTimeoutLog)
 	}
+	if runTimeoutLog["timeout_kind"] != "run_budget" {
+		t.Fatalf("run_timeout timeout_kind = %#v, want run_budget", runTimeoutLog["timeout_kind"])
+	}
+	if runTimeoutLog["timeout_budget_ms"] != time.Hour.Milliseconds() {
+		t.Fatalf("run_timeout timeout_budget_ms = %#v, want %d", runTimeoutLog["timeout_budget_ms"], time.Hour.Milliseconds())
+	}
+	if runTimeoutLog["session_captured"] != true || runTimeoutLog["resume_supported"] != true || runTimeoutLog["handoff_only_attempted"] != true {
+		t.Fatalf("run_timeout context fields missing: %#v", runTimeoutLog)
+	}
+	runTimeoutSpan := findTrySpanByOutcome(t, sink, string(reliability.OutcomeRunTimeout))
+	if runTimeoutSpan.tags["timeout_kind"] != "run_budget" || runTimeoutSpan.data["session_captured"] != true || runTimeoutSpan.data["handoff_only_attempted"] != true {
+		t.Fatalf("run_timeout span context = tags %#v data %#v", runTimeoutSpan.tags, runTimeoutSpan.data)
+	}
 	handoffLog := findTryLogByOutcome(t, sink, string(reliability.OutcomeHandoffRequested))
 	if handoffLog["handoff_only"] != true {
 		t.Fatalf("handoff continuation log handoff_only = %#v, want true", handoffLog["handoff_only"])
 	}
+	if handoffLog["timeout_kind"] != "handoff" || handoffLog["timeout_budget_ms"] != time.Hour.Milliseconds() {
+		t.Fatalf("handoff continuation timeout fields = %#v", handoffLog)
+	}
+	if handoffLog["session_captured"] != true || handoffLog["resume_supported"] != true || handoffLog["handoff_only_attempted"] != true {
+		t.Fatalf("handoff continuation context fields missing: %#v", handoffLog)
+	}
 	handoffSpan := findTrySpanByOutcome(t, sink, string(reliability.OutcomeHandoffRequested))
 	if handoffSpan.tags["handoff_only"] != "true" || handoffSpan.data["handoff_only"] != true {
 		t.Fatalf("handoff continuation span not identifiable as handoff-only: tags=%#v data=%#v", handoffSpan.tags, handoffSpan.data)
+	}
+	if handoffSpan.tags["timeout_kind"] != "handoff" || handoffSpan.data["session_captured"] != true {
+		t.Fatalf("handoff continuation span timeout context = tags %#v data %#v", handoffSpan.tags, handoffSpan.data)
 	}
 }
 
@@ -753,7 +961,47 @@ func TestRunOneHandoffTimeoutOutcomeStaysSpanLogOnly(t *testing.T) {
 	if _, found := log["failure_category"]; found {
 		t.Fatalf("handoff_timeout log must not carry failure_category: %#v", log)
 	}
-	findTrySpanByOutcome(t, sink, string(reliability.OutcomeHandoffTimeout))
+	if log["timeout_kind"] != "run_budget" || log["timeout_budget_ms"] != time.Hour.Milliseconds() {
+		t.Fatalf("handoff_timeout timeout fields = %#v", log)
+	}
+	if log["session_captured"] != false || log["resume_supported"] != true || log["handoff_only_attempted"] != false {
+		t.Fatalf("handoff_timeout context fields missing: %#v", log)
+	}
+	if got := log["handoff_resume_blocker"]; got != "run timeout; no session captured for handoff" {
+		t.Fatalf("handoff_resume_blocker = %#v", got)
+	}
+	span := findTrySpanByOutcome(t, sink, string(reliability.OutcomeHandoffTimeout))
+	if span.tags["timeout_kind"] != "run_budget" || span.data["handoff_resume_blocker"] != "run timeout; no session captured for handoff" {
+		t.Fatalf("handoff_timeout span timeout context = tags %#v data %#v", span.tags, span.data)
+	}
+}
+
+func TestLastOutputAgeUsesTryLogMtimeWhenAvailable(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "try.log")
+	if err := os.WriteFile(path, []byte("last output\n"), 0o644); err != nil {
+		t.Fatalf("write try log: %v", err)
+	}
+	modTime := time.Now().Add(-7 * time.Second).Truncate(time.Second)
+	if err := os.Chtimes(path, modTime, modTime); err != nil {
+		t.Fatalf("chtimes try log: %v", err)
+	}
+
+	age, ok := lastOutputAge(path, modTime.Add(9*time.Second))
+	if !ok {
+		t.Fatal("lastOutputAge ok = false, want true")
+	}
+	if age != 9*time.Second {
+		t.Fatalf("age = %v, want 9s", age)
+	}
+
+	empty := filepath.Join(dir, "empty.log")
+	if err := os.WriteFile(empty, nil, 0o644); err != nil {
+		t.Fatalf("write empty log: %v", err)
+	}
+	if _, ok := lastOutputAge(empty, time.Now()); ok {
+		t.Fatal("lastOutputAge(empty) ok = true, want false")
+	}
 }
 
 func TestRunOneRecoveryClassificationTelemetryAndNeedsUserIssue(t *testing.T) {
@@ -1258,11 +1506,10 @@ func TestRunOne_LimitSignalDiagnostic_EmittedWithoutIssue(t *testing.T) {
 	}
 }
 
-// TestRunOne_TerminalTryFailure_NonLimitCategory_NoEvidenceContext verifies
-// that a terminal try failure classified as a non-limit category (e.g.
-// invalid_model) does NOT attach the failure_evidence context, even when the
-// TryResult carries a FailureEvidence with RawSignal and Message.
-func TestRunOne_TerminalTryFailure_NonLimitCategory_NoEvidenceContext(t *testing.T) {
+// TestRunOne_TerminalTryFailure_NonLimitCategory_BoundedEvidenceContext verifies
+// that an issue-worthy terminal try failure classified as a non-limit category
+// can carry bounded explicit failure_evidence without quota/reset fields.
+func TestRunOne_TerminalTryFailure_NonLimitCategory_BoundedEvidenceContext(t *testing.T) {
 	s, workspaceDir, sink := setupRunnerForFailureTest(t)
 
 	exec := &funcExecutor{
@@ -1297,13 +1544,16 @@ func TestRunOne_TerminalTryFailure_NonLimitCategory_NoEvidenceContext(t *testing
 	for _, k := range []string{"quota_scope", "reset_at", "reset_after"} {
 		wantNoTag(t, evt.Tags, k)
 	}
-	wantNoContext(t, evt, "failure_evidence")
+	wantContextKey(t, evt, "failure_evidence", "raw_signal", "model not found: gpt-6-turbo-preview")
+	wantContextKey(t, evt, "failure_evidence", "message", "invalid model requested")
+	wantContextKey(t, evt, "failure_evidence", "source", "executor_evidence")
+	wantContextKey(t, evt, "failure_evidence", "evidence_shape", "plain_text")
 }
 
 // TestRunOne_TerminalTryFailure_ScrubsHomePathInRawSignal drives a usage-limit
 // failure whose raw_signal and message contain real home-directory paths and
 // prompt/transcript-looking content, and asserts the scrubber collapses paths
-// and the evidence context contains only raw_signal and message keys.
+// and the evidence context contains only the bounded evidence-shape keys.
 func TestRunOne_TerminalTryFailure_ScrubsHomePathInRawSignal(t *testing.T) {
 	prev := telemetry.HomeDir()
 	telemetry.SetHomeDir("/home/engineer")
@@ -1362,7 +1612,7 @@ func TestRunOne_TerminalTryFailure_ScrubsHomePathInRawSignal(t *testing.T) {
 		}
 	}
 
-	allowed := map[string]struct{}{"raw_signal": {}, "message": {}}
+	allowed := map[string]struct{}{"raw_signal": {}, "message": {}, "evidence_shape": {}, "provider_signal": {}}
 	for k := range ev {
 		if _, ok := allowed[k]; !ok {
 			t.Errorf("unexpected key %q in failure_evidence context", k)

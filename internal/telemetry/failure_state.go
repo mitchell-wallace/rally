@@ -2,6 +2,7 @@ package telemetry
 
 import (
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -81,6 +82,20 @@ type FailureState struct {
 	// Message is the bounded human-readable failure message. Attached only for
 	// limit categories, in the failure_evidence context, scrubbed.
 	Message string
+
+	// EvidenceMessage is bounded non-limit failure evidence supplied by the
+	// caller. Unlike Message, it may be attached for ordinary non-limit
+	// categories when emitted on non-alerting try/span telemetry.
+	EvidenceMessage string
+
+	// EvidenceRawSignal is bounded non-limit raw evidence supplied by the
+	// caller. Callers must pass only scrub-safe excerpts; this layer still
+	// strips transcript-shaped sections and applies normal scrub/truncation.
+	EvidenceRawSignal string
+
+	// EvidenceSource describes where the evidence came from, e.g.
+	// "executor_evidence" or "safe_exec_error".
+	EvidenceSource string
 }
 
 // FailureStateTags builds the scalar tags for a failure-state snapshot:
@@ -136,18 +151,121 @@ func FailureStateTags(fs FailureState) map[string]string {
 // raw-signal context at all. It also returns nil when neither raw_signal nor
 // message is present, so an empty block is never attached.
 func FailureEvidenceContext(fs FailureState) map[string]interface{} {
+	rawSignal := fs.RawSignal
+	message := fs.Message
 	if !isLimitCategory(fs.Category) {
+		rawSignal = fs.EvidenceRawSignal
+		message = fs.EvidenceMessage
+	}
+	if !isLimitCategory(fs.Category) && rawSignal == "" && message == "" && fs.EvidenceSource == "" {
 		return nil
 	}
-	ctx := make(map[string]interface{}, 2)
-	if fs.RawSignal != "" {
-		ctx["raw_signal"] = truncateValue(collapseHomePaths(fs.RawSignal))
+	ctx := make(map[string]interface{}, 5)
+	if rawSignal != "" {
+		ctx["raw_signal"] = sanitizeEvidenceValue(rawSignal)
 	}
-	if fs.Message != "" {
-		ctx["message"] = truncateValue(collapseHomePaths(fs.Message))
+	if message != "" {
+		ctx["message"] = sanitizeEvidenceValue(message)
+	}
+	if fs.EvidenceSource != "" {
+		ctx["source"] = truncateValue(collapseHomePaths(fs.EvidenceSource))
+	}
+	shape := evidenceShape(rawSignal, message)
+	if shape != "" {
+		ctx["evidence_shape"] = shape
+	}
+	if providerSignal := providerSignal(rawSignal, message); providerSignal != "" {
+		ctx["provider_signal"] = sanitizeEvidenceValue(providerSignal)
 	}
 	if len(ctx) == 0 {
 		return nil
 	}
 	return ctx
+}
+
+// FailureEvidenceFields returns the failure_evidence context flattened with a
+// failure_evidence. prefix, for sinks/events that do not support nested
+// contexts. It intentionally reuses FailureEvidenceContext so filtering,
+// scrubbing, shape detection, and key policy stay in one place.
+func FailureEvidenceFields(fs FailureState) map[string]interface{} {
+	ctx := FailureEvidenceContext(fs)
+	if len(ctx) == 0 {
+		return nil
+	}
+	fields := make(map[string]interface{}, len(ctx))
+	for k, v := range ctx {
+		fields["failure_evidence."+k] = v
+	}
+	return fields
+}
+
+func sanitizeEvidenceValue(value string) string {
+	value = stripTranscriptSections(value)
+	return truncateValue(collapseHomePaths(value))
+}
+
+func stripTranscriptSections(value string) string {
+	lower := strings.ToLower(value)
+	cut := len(value)
+	for _, marker := range []string{"\noutput:", "\nstderr:", " output:", " stderr:"} {
+		if idx := strings.Index(lower, marker); idx >= 0 && idx < cut {
+			cut = idx
+		}
+	}
+	return strings.TrimSpace(value[:cut])
+}
+
+func evidenceShape(rawSignal, message string) string {
+	rawSignal = strings.TrimSpace(rawSignal)
+	message = strings.TrimSpace(message)
+	if rawSignal == "" && message == "" {
+		return ""
+	}
+	for _, value := range []string{message, rawSignal} {
+		if isProviderObjectEvidence(value) {
+			return "provider_object"
+		}
+	}
+	combined := firstNonEmpty(message, rawSignal)
+	lower := strings.ToLower(combined)
+	if strings.Contains(lower, "reading additional input from stdin") ||
+		strings.Contains(lower, `"item.completed"`) ||
+		strings.Contains(lower, `"command_execution"`) ||
+		strings.Contains(lower, "transcript=") ||
+		strings.Contains(lower, "\noutput:") ||
+		strings.Contains(lower, "\nstderr:") {
+		return "transcript_tail"
+	}
+	return "plain_text"
+}
+
+func isProviderObjectEvidence(value string) bool {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return false
+	}
+	lower := strings.ToLower(value)
+	return strings.HasPrefix(value, "{") || strings.HasPrefix(value, "[") ||
+		strings.Contains(lower, `"type":"error"`) ||
+		strings.Contains(lower, `"error"`) ||
+		strings.Contains(lower, "ai_apicallerror") ||
+		strings.Contains(lower, "ai_retryerror")
+}
+
+func providerSignal(rawSignal, message string) string {
+	for _, value := range []string{message, rawSignal} {
+		if isProviderObjectEvidence(value) {
+			return value
+		}
+	}
+	return ""
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return value
+		}
+	}
+	return ""
 }

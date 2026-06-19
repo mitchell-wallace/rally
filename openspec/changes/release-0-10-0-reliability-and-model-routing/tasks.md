@@ -146,10 +146,10 @@
 ## 10. 0.10.1 New Relic telemetry follow-up
 
 - [x] 10.1 Document the New Relic-derived telemetry follow-up plan in `telemetry-followup-plan.md` and commit it before implementation.
-- [ ] 10.2 Enrich `route_fallback` events with trigger try/run, outcome, fail reason, failure class/category, lap id, route name, and route-entry exhausted reason; clear stale trigger snapshots when the next selection does not match the previous runner/run.
-- [ ] 10.3 Attach bounded non-limit failure evidence for generic `agent_error` / launcher / parser failures without changing retry or freeze semantics; ordinary `agent_error` evidence stays on `RallyTry`/spans, not `RallyFailure`.
-- [ ] 10.4 Extend lap-pin mismatch diagnostics with expected lap id, consumed lap count, and consumed lap ids; lap ids are safe to emit.
-- [ ] 10.5 Add timeout and handoff-timeout telemetry context: timeout kind/budget, session capture, resume support, handoff-only attempt state, blocker reason, and last-output age where available.
-- [ ] 10.6 Prefer compact provider error evidence over transcript-shaped raw fallback text while keeping bounded scrubbed raw evidence for parser normalization.
-- [ ] 10.7 Add focused telemetry tests for fallback trigger fields, non-limit evidence, lap ids, timeout context, and provider evidence shaping.
+- [x] 10.2 Enrich `route_fallback` events with trigger try/run, outcome, fail reason, failure class/category, lap id, route name, and route-entry exhausted reason; clear stale trigger snapshots when the next selection does not match the previous runner/run.
+- [x] 10.3 Attach bounded non-limit failure evidence for generic `agent_error` / launcher / parser failures without changing retry or freeze semantics; ordinary `agent_error` evidence stays on `RallyTry`/spans, not `RallyFailure`.
+- [x] 10.4 Extend lap-pin mismatch diagnostics with expected lap id, consumed lap count, and consumed lap ids; lap ids are safe to emit.
+- [x] 10.5 Add timeout and handoff-timeout telemetry context: timeout kind/budget, session capture, resume support, handoff-only attempt state, blocker reason, and last-output age where available.
+- [x] 10.6 Prefer compact provider error evidence over transcript-shaped raw fallback text while keeping bounded scrubbed raw evidence for parser normalization.
+- [x] 10.7 Add focused telemetry tests for fallback trigger fields, non-limit evidence, lap ids, timeout context, and provider evidence shaping.
 - [ ] 10.8 Bump `internal/buildinfo/VERSION` to `0.10.1`, validate, run local gates, and release through the standard workflow.
