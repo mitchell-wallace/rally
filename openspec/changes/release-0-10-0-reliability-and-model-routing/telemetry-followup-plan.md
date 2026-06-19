@@ -32,7 +32,9 @@ Implementation:
 
 - Add a small run-loop-local `fallbackCause` snapshot updated after each
   unsuccessful `runOne` result and cleared after it is consumed by the next
-  fallback event.
+  fallback event. Key the snapshot to the previous selected runner/run and clear
+  it on any next selection that does not emit a fallback for that exact previous
+  runner, so stale causes cannot attach to unrelated later rotations.
 - Capture from the failed run result/store:
   - `trigger_run_id`
   - `trigger_try_id` from `relay.LastTryID` / `store.NextTryID()-1`
@@ -63,32 +65,36 @@ generic failures become triageable.
 
 Implementation:
 
-- Add optional fields to `telemetry.FailureState` for non-limit evidence:
+- Add optional fields to `telemetry.FailureState` for bounded evidence already
+  derivable from `reliability.FailureEvidence`:
   - `EvidenceMessage`
   - `EvidenceRawSignal`
   - `EvidenceSource`
-  - `ExitCode`
-  - `ParserError`
 - Replace the current limit-only `FailureEvidenceContext` behavior with:
   - limit categories keep `failure_evidence.message` and compact provider
     signal fields, plus reset/quota tags.
   - non-limit categories may attach `failure_evidence.message`,
     `failure_evidence.raw_signal`, and `failure_evidence.source` when the caller
-    supplies them.
+    supplies them, but ordinary agent-class failures emit that evidence only on
+    `RallyTry`/spans. `RallyFailure` receives non-limit evidence only for paths
+    that are already operator-worthy today, such as infra-class failures,
+    `execErr`, marker-as-text, panic, or `needs_user`.
   - no prompt/transcript-looking keys are ever emitted; content remains bounded
     and scrubbed.
 - Populate from `agent.TryResult.Evidence` in `runOne` for all categories, not
   only provider limits. Use existing `reliability.FailureEvidence` as the source
-  of truth.
+  of truth; do not add exit-code/parser-error fields in 0.10.1 unless the
+  executor result model already exposes them.
 - For launcher/parser errors where no `FailureEvidence` exists, capture a bounded
-  message/raw tail from the already-observed `execErr` or parsed result error
-  path, but do not attach full prompt/current_task/transcript content.
+  safe summary from the already-observed `execErr` or parsed result error path,
+  after stripping transcript-shaped `output:`/`stderr:` sections. Do not attach
+  full prompt/current_task/transcript content, even bounded.
 - Tests:
   - `internal/telemetry/failure_state_test.go` for non-limit evidence context,
     scrubbing, truncation, and no prompt/transcript keys.
-  - runner telemetry tests proving an `agent_error` with evidence emits bounded
-    fields on `RallyFailure`/`RallyTry` without changing retry/freezing
-    semantics.
+  - runner telemetry tests proving an ordinary `agent_error` with evidence emits
+    bounded fields on `RallyTry`/spans but not `RallyFailure`, while existing
+    issue-worthy failures still carry bounded evidence when captured.
 
 Acceptance:
 

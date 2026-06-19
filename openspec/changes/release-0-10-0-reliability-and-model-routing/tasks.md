@@ -146,8 +146,8 @@
 ## 10. 0.10.1 New Relic telemetry follow-up
 
 - [x] 10.1 Document the New Relic-derived telemetry follow-up plan in `telemetry-followup-plan.md` and commit it before implementation.
-- [ ] 10.2 Enrich `route_fallback` events with trigger try/run, outcome, fail reason, failure class/category, lap id, route name, and route-entry exhausted reason.
-- [ ] 10.3 Attach bounded non-limit failure evidence for generic `agent_error` / launcher / parser failures without changing retry or freeze semantics.
+- [ ] 10.2 Enrich `route_fallback` events with trigger try/run, outcome, fail reason, failure class/category, lap id, route name, and route-entry exhausted reason; clear stale trigger snapshots when the next selection does not match the previous runner/run.
+- [ ] 10.3 Attach bounded non-limit failure evidence for generic `agent_error` / launcher / parser failures without changing retry or freeze semantics; ordinary `agent_error` evidence stays on `RallyTry`/spans, not `RallyFailure`.
 - [ ] 10.4 Extend lap-pin mismatch diagnostics with expected lap id, consumed lap count, and consumed lap ids; lap ids are safe to emit.
 - [ ] 10.5 Add timeout and handoff-timeout telemetry context: timeout kind/budget, session capture, resume support, handoff-only attempt state, blocker reason, and last-output age where available.
 - [ ] 10.6 Prefer compact provider error evidence over transcript-shaped raw fallback text while keeping bounded scrubbed raw evidence for parser normalization.
