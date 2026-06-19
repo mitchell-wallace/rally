@@ -732,10 +732,10 @@ func TestParseOpenCodeOutput_PlainText(t *testing.T) {
 	}
 }
 
-// TestParseOpenCodeOutput_TrimsWhitespace guards against the minimax-m2.5-free
-// behaviour where the model emits multiple "\n\n\n" text steps before the
-// final answer. The streamed parts get joined verbatim, so the fallback
-// summary used to start with ~11 newlines. We trim them.
+// TestParseOpenCodeOutput_TrimsWhitespace guards against OpenCode streams where
+// the model emits multiple "\n\n\n" text steps before the final answer. The
+// streamed parts get joined verbatim, so the fallback summary used to start with
+// ~11 newlines. We trim them.
 func TestParseOpenCodeOutput_TrimsWhitespace(t *testing.T) {
 	out := []byte(`{"type":"text","part":{"type":"text","text":"\n\n\n"}}
 {"type":"text","part":{"type":"text","text":"\n\n\n"}}

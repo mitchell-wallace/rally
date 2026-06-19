@@ -14,7 +14,7 @@ These slugs are copied from rally's current real-backend testing guidance. If th
 | `ge` | `gemini-3.1-pro-preview` | Verified working. Slower, useful for broad design, UI/component direction, alternative architectures, and divergent thinking. |
 | `ge` | `gemini-3-flash-preview` | Verified working. Fast lighter Gemini option for quick critiques and small alternatives. |
 | `op` | `opencode-go/kimi-k2.6` | Verified working when not rate-limited. Free tier can rate-limit after a few runs, roughly a 12h window. |
-| `op` | `opencode/minimax-m2.5-free` | Verified working. Use exactly this prefix, not `opencode-zen/...`. |
+| `op` | `opencode/big-pickle` | Ongoing free smoke-test model. Use exactly this prefix, not `opencode-zen/...`. |
 | `op` | `zai-coding-plan/glm-5.1` | Verified working. Fast OpenCode option via the `zai-coding-plan` provider. |
 
 Alias note: Antigravity is `ag` or `agy`; Gemini is `ge`, not `gm`. Rally rejects `gm` with `unknown agent alias`.

@@ -69,7 +69,7 @@ The order matters: CI is configured to run on push to `main` only. Pushing to `d
 8. **Install latest binary and smoke test** — after CI passes and the release is published:
    - Run `rally update` locally to fetch the latest published binary.
    - Create a throwaway git repo in `/tmp/rally-smoke-<tag>/` with a trivial prompt (e.g. "Create a file called smoke-test.txt").
-   - Run a single-iteration relay with a cheap/free model (e.g. `opencode/minimax-m2.5-free` or `zai-coding-plan/glm-5.1`).
+   - Run a single-iteration relay with an ongoing free smoke-test model (prefer `op:opencode/big-pickle`; `zai-coding-plan/glm-5.1` is a fallback).
    - Verify: exit 0, file created, try record in `.rally/state/tries.jsonl` shows `"completed": true`.
    - This confirms the published binary actually works end-to-end before declaring the release done.
 8. **Report** — final SHAs for `main`/`dev`/`branch>`, CI outcomes, the new release tag (if auto-tag fired), and smoke-test result.
@@ -99,7 +99,7 @@ If VERSION was bumped on the feature branch, the main push will fire `auto-tag` 
 - Use `gh run watch <id> --exit-status` for CI; do not poll manually.
 - Report SHAs (`git rev-parse origin/main origin/dev <branch>`) and CI run IDs at the end so the outcome is auditable.
 - Do not delete or rewrite the feature branch or any commits during a successful run. Leave history intact.
-- For the smoke test, prefer free-tier models (`opencode/minimax-m2.5-free`, `zai-coding-plan/glm-5.1`) to avoid cost. Use `--iterations 1` for speed. Clean up `/tmp/rally-smoke-*` after confirmation.
+- For the smoke test, prefer the ongoing free OpenCode model `op:opencode/big-pickle` to avoid cost. Use `--iterations 1` for speed. Clean up `/tmp/rally-smoke-*` after confirmation.
 
 ## Evolution
 

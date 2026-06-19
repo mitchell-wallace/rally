@@ -100,10 +100,10 @@ Always use these slugs in tests. They are the only slugs known to be available i
 | `ge` (gemini) | `gemini-3.1-pro-preview` | Previously verified, but unavailable on 2026-06-19: gemini-cli 0.40.1 returns `IneligibleTierError` / `UNSUPPORTED_CLIENT` for Gemini Code Assist individuals. Prefer Antigravity or other harnesses until account/client eligibility changes. |
 | `ge` (gemini) | `gemini-3-flash-preview` | Previously verified, but unavailable on 2026-06-19 for the same Gemini Code Assist `IneligibleTierError`; Rally should classify this as `auth_or_proxy`. |
 | `op` (opencode) | `opencode-go/kimi-k2.6` | Monthly usage-limited on 2026-06-19. Live Rally probe classified `usage_limit`, parsed a ~96h reset, and benched quota scope `opencode:opencode-go` after the connected-idle path fired at ~5m. |
-| `op` (opencode) | `opencode/minimax-m2.5-free` | Verified 2026-05-11: ~14s. NOT `opencode-zen/...` — the zen prefix is wrong. |
+| `op` (opencode) | `opencode/big-pickle` | Ongoing free smoke-test model. NOT `opencode-zen/...` — the zen prefix is wrong. |
 | `op` (opencode) | `zai-coding-plan/glm-5.1` | Verified 2026-05-11: ~10s. The `zai-coding-plan` provider with `glm-5.1` suffix. |
 
-Current note (2026-06-19): opencode-go models are at monthly usage limit in this environment. Prefer non-opencode-go providers (`opencode/minimax-m2.5-free`, `zai-coding-plan/glm-5.1`) for OpenCode success-path smoke tests until the monthly limit resets.
+Current note (2026-06-19): opencode-go models are at monthly usage limit in this environment. Prefer non-opencode-go providers (`opencode/big-pickle`, `zai-coding-plan/glm-5.1`) for OpenCode success-path smoke tests until the monthly limit resets.
 
 Alias note: Antigravity is `ag` or `agy`; gemini is `ge`, NOT `gm`. Rally rejects `gm` with `unknown agent alias`.
 
@@ -215,7 +215,7 @@ tail_stream = "stdout"
 
 [harness.mycode.models]
 kimi = "opencode-go/kimi-k2.6"
-mini = "opencode/minimax-m2.5-free"  # NOT opencode-zen
+mini = "opencode/big-pickle"  # NOT opencode-zen
 zai  = "zai-coding-plan/glm-5.1"
 ```
 
