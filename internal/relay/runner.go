@@ -642,8 +642,13 @@ func (r *Runner) Run(ctx context.Context) error {
 					_ = CompleteRelay(r.store, relay.ID)
 					return fmt.Errorf("relay failed: all agents frozen")
 				}
+				if routeErr.Wait <= 0 {
+					fmt.Fprintf(log, "relay %d failed: %s\n", relay.ID, routeErr.Error())
+					_ = CompleteRelay(r.store, relay.ID)
+					return fmt.Errorf("relay failed: %s", routeErr.Error())
+				}
 				fmt.Fprintf(log, "relay %d all agents paused, waiting %v\n", relay.ID, routeErr.Wait)
-				outcome, waitErr := waitWithCountdown(ctx, routeErr.Wait, "agents frozen, waiting %s...")
+				outcome, waitErr := waitWithCountdown(ctx, routeErr.Wait, "agents paused, waiting %s...")
 				if waitErr != nil {
 					return waitErr
 				}
@@ -1521,8 +1526,12 @@ attemptLoop:
 		// line (see mon.SetRetry below) rather than re-announcing the run with a
 		// fresh header block per attempt.
 		if attempt == 1 {
+			displayRunIndex := runIndex
+			if !task.IsLapsBacked && relay.CompletedIterations < relay.TargetIterations {
+				displayRunIndex = relay.CompletedIterations
+			}
 			header := style.RenderHeader(style.HeaderOptions{
-				RunIndex:     runIndex,
+				RunIndex:     displayRunIndex,
 				TotalRuns:    relay.TargetIterations,
 				AgentName:    picked.Harness,
 				Attempt:      attempt,
@@ -1534,7 +1543,7 @@ attemptLoop:
 				Model:        picked.Model,
 				RoleLabel:    task.Assignee,
 			})
-			fmt.Println(header)
+			fmt.Fprintln(r.outWriter(), header)
 		}
 
 		if err := progress.SetActiveTry(r.cfg.WorkspaceDir, progress.ActiveTryMetadata{
@@ -2364,7 +2373,10 @@ attemptLoop:
 	if lastResult != nil {
 		stubSummary = lastResult.Summary
 	}
-	wroteUnfinalized, _ := r.maybeWriteStubAndClearState(stubSummary)
+	wroteUnfinalized := false
+	if resolvingOutcome != reliability.OutcomeCancelled {
+		wroteUnfinalized, _ = r.maybeWriteStubAndClearState(stubSummary)
+	}
 	designedHandoffOutcome := resolvingOutcome == reliability.OutcomeRunTimeout ||
 		resolvingOutcome == reliability.OutcomeHandoffTimeout ||
 		resolvingOutcome == reliability.OutcomeHandoffRequested ||

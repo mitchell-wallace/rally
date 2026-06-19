@@ -90,6 +90,12 @@ func TestParseGeminiError(t *testing.T) {
 			expectNil: true,
 		},
 		{
+			name:             "Gemini Code Assist unsupported client",
+			stderr:           "Error authenticating: IneligibleTierError: This client is no longer supported for Gemini Code Assist for individuals. reasonCode: 'UNSUPPORTED_CLIENT'",
+			expectedCategory: CategoryAuthOrProxy,
+			expectedProvider: ProviderGemini,
+		},
+		{
 			name:             "case insensitive resource_exhausted",
 			stderr:           "resource_exhausted: quota exceeded",
 			expectedCategory: CategoryUsageLimit,

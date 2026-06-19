@@ -547,6 +547,28 @@ func TestClassifyError_HarnessScoping(t *testing.T) {
 	}
 }
 
+func TestClassifyError_GeminiUnsupportedClientIsAuthOrProxy(t *testing.T) {
+	lines := []string{
+		"Error authenticating: IneligibleTierError: This client is no longer supported for Gemini Code Assist for individuals.",
+		"reasonCode: 'UNSUPPORTED_CLIENT'",
+	}
+
+	for _, harness := range []string{"gemini", "antigravity"} {
+		t.Run(harness, func(t *testing.T) {
+			decision := ClassifyError(lines, harness, nil, nil)
+			if decision.Category != CategoryAuthOrProxy {
+				t.Fatalf("category = %q, want %q", decision.Category, CategoryAuthOrProxy)
+			}
+			if decision.FailureClass != FailureAgent {
+				t.Fatalf("failure class = %q, want %q", decision.FailureClass, FailureAgent)
+			}
+			if decision.Strategy != StrategyRotate {
+				t.Fatalf("strategy = %q, want %q", decision.Strategy, StrategyRotate)
+			}
+		})
+	}
+}
+
 func TestClassifyError_EvidencePriority(t *testing.T) {
 	// When evidence is provided with a category, it takes priority over
 	// text-based classification.

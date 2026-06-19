@@ -445,6 +445,23 @@ func TestRunOne_CancelledLapsAttemptDoesNotCaptureIncompleteFinalization(t *test
 	if try.Category != "" {
 		t.Fatalf("try category = %q, want empty for cancelled laps attempt", try.Category)
 	}
+	entries, err := progress.LoadSummaryEntries(workspaceDir)
+	if err != nil {
+		t.Fatalf("LoadSummaryEntries error: %v", err)
+	}
+	if len(entries) != 0 {
+		t.Fatalf("cancelled laps attempt wrote %d synthetic summary entries, want 0", len(entries))
+	}
+	rs, err := progress.LoadRunState(workspaceDir)
+	if err != nil {
+		t.Fatalf("LoadRunState error: %v", err)
+	}
+	if rs.RunID != "relay-1-run-1" || rs.PinnedLapID != "lap-1" {
+		t.Fatalf("run-state after cancellation = run_id %q pinned %q, want relay-1-run-1/lap-1", rs.RunID, rs.PinnedLapID)
+	}
+	if rs.ActiveRelayID != 0 || rs.ActiveRunID != 0 || rs.ActiveTryID != 0 || rs.ActiveLogPath != "" || rs.ActiveStartedAt != "" {
+		t.Fatalf("active try metadata not cleared after cancellation: %+v", rs)
+	}
 	if got := findFailureCount(sink, "without finalizing"); got != 0 {
 		t.Fatalf("cancelled laps attempt emitted %d incomplete_finalization capture(s), want 0", got)
 	}
@@ -533,7 +550,7 @@ func TestRun_AllFrozen_CapturesFrozenState(t *testing.T) {
 
 	s := newTestStore(t, rallyDir)
 	resilience := NewResilience(s)
-	if err := resilience.FreezeAgent(ResilienceKey{Harness: "claude"}, 1, "test freeze"); err != nil {
+	if err := resilience.FreezeAgent(ResilienceKey{Harness: "claude", Model: "test"}, 1, "test freeze"); err != nil {
 		t.Fatalf("FreezeAgent: %v", err)
 	}
 
@@ -546,12 +563,13 @@ func TestRun_AllFrozen_CapturesFrozenState(t *testing.T) {
 	r := NewRunner(s, Config{
 		WorkspaceDir:     workspaceDir,
 		DataDir:          t.TempDir(),
-		AgentMixSpecs:    []string{"cc:1"},
+		AgentMixSpecs:    []string{"cc:test"},
 		TargetIterations: 1,
 		RetryBudget:      1,
 		Resolver:         testResolver,
 	}, map[string]agent.Executor{"claude": exec})
 	r.SetTelemetry(sink)
+	r.resilience = resilience
 
 	err := r.Run(context.Background())
 	if err == nil || !strings.Contains(err.Error(), "all agents frozen") {
@@ -1405,7 +1423,7 @@ func TestRun_AllFrozen_CarriesRallyContext(t *testing.T) {
 
 	s := newTestStore(t, rallyDir)
 	resilience := NewResilience(s)
-	if err := resilience.FreezeAgent(ResilienceKey{Harness: "claude"}, 1, "test freeze"); err != nil {
+	if err := resilience.FreezeAgent(ResilienceKey{Harness: "claude", Model: "test"}, 1, "test freeze"); err != nil {
 		t.Fatalf("FreezeAgent: %v", err)
 	}
 
@@ -1418,12 +1436,13 @@ func TestRun_AllFrozen_CarriesRallyContext(t *testing.T) {
 	r := NewRunner(s, Config{
 		WorkspaceDir:     workspaceDir,
 		DataDir:          t.TempDir(),
-		AgentMixSpecs:    []string{"cc:1"},
+		AgentMixSpecs:    []string{"cc:test"},
 		TargetIterations: 1,
 		RetryBudget:      1,
 		Resolver:         testResolver,
 	}, map[string]agent.Executor{"claude": exec})
 	r.SetTelemetry(sink)
+	r.resilience = resilience
 
 	err := r.Run(context.Background())
 	if err == nil || !strings.Contains(err.Error(), "all agents frozen") {

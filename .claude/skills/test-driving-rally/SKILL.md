@@ -97,11 +97,13 @@ Always use these slugs in tests. They are the only slugs known to be available i
 | `ag`/`agy` (antigravity) | `Gemini 3.5 Flash (High)` | Verified 2026-05-21 via `agy --print`; `agy` 1.0.0 has no CLI model flag, so Rally sets `~/.gemini/antigravity-cli/settings.json` for the run and restores it. |
 | `cc` (claude) | `claude-haiku-4-5` | Cheapest/fastest; default for smoke tests. |
 | `cx` (codex) | `gpt-5.4-mini` | Verified working (see `TestRealBackend_CodexRelay`). |
-| `ge` (gemini) | `gemini-3.1-pro-preview` | Verified 2026-05-11: simple task in ~2min. Authenticated. `GEMINI_CLI_TRUST_WORKSPACE=true` is set by rally so headless mode works. |
-| `ge` (gemini) | `gemini-3-flash-preview` | Verified 2026-05-11: simple task in ~15s. Lighter/faster flash variant. |
-| `op` (opencode) | `opencode-go/kimi-k2.6` | Verified 2026-05-11: ~18s when not rate-limited. Free tier; rate-limits after a few runs (~12h window). |
+| `ge` (gemini) | `gemini-3.1-pro-preview` | Previously verified, but unavailable on 2026-06-19: gemini-cli 0.40.1 returns `IneligibleTierError` / `UNSUPPORTED_CLIENT` for Gemini Code Assist individuals. Prefer Antigravity or other harnesses until account/client eligibility changes. |
+| `ge` (gemini) | `gemini-3-flash-preview` | Previously verified, but unavailable on 2026-06-19 for the same Gemini Code Assist `IneligibleTierError`; Rally should classify this as `auth_or_proxy`. |
+| `op` (opencode) | `opencode-go/kimi-k2.6` | Monthly usage-limited on 2026-06-19. Live Rally probe classified `usage_limit`, parsed a ~96h reset, and benched quota scope `opencode:opencode-go` after the connected-idle path fired at ~5m. |
 | `op` (opencode) | `opencode/minimax-m2.5-free` | Verified 2026-05-11: ~14s. NOT `opencode-zen/...` — the zen prefix is wrong. |
 | `op` (opencode) | `zai-coding-plan/glm-5.1` | Verified 2026-05-11: ~10s. The `zai-coding-plan` provider with `glm-5.1` suffix. |
+
+Current note (2026-06-19): opencode-go models are at monthly usage limit in this environment. Prefer non-opencode-go providers (`opencode/minimax-m2.5-free`, `zai-coding-plan/glm-5.1`) for OpenCode success-path smoke tests until the monthly limit resets.
 
 Alias note: Antigravity is `ag` or `agy`; gemini is `ge`, NOT `gm`. Rally rejects `gm` with `unknown agent alias`.
 
@@ -134,12 +136,12 @@ Observed during any claude run. Look for:
 - `⏱ Xs │ 📁 N files │ last activity: Xs` status line updating
 - `~Nk tok` token estimate appearing after first activity
 - `⚠ slowing` indicator if liveness probe fires
-- Keyboard hint line: `[Ctrl+S skip] [Ctrl+P pause] [Ctrl+X stop] [Ctrl+C quit]`
+- Keyboard hint line: `[Ctrl+S skip] [Ctrl+P pause] [Ctrl+X graceful stop] [Ctrl+C quit now]`
 
 ### 2c. Config validation
 
 ```bash
-# Valid schema version warning
+# Schema version warning
 cat > .rally/config.toml << 'EOF'
 schema_version = 99
 [defaults]
@@ -311,7 +313,7 @@ rally progress --summary "test done"
 rally progress --complete --summary "all done" --followup "check results"
 ```
 
-**Check**: `.rally/state/summary.jsonl` updated with new entries.
+**Check**: `.rally/summary.jsonl` updated with new entries.
 
 ### 2m. Instructions command
 
@@ -351,9 +353,9 @@ Check `~/.local/share/rally/relays/<repo>/relay-N.log` for "freeze detected" vs 
 
 These are agent-CLI behaviours that affect how tests appear. None are rally bugs.
 
-- **Gemini**: Authenticated and working in this environment. `GEMINI_CLI_TRUST_WORKSPACE=true` is set by rally (commit `ee86a21`) so headless mode no longer fails with exit 41/55. **Gemini never writes to its log file** — `last activity` counts from t=0 for the entire run, so on Linux `classicFrozen` fires purely by elapsed time. For simple tasks gemini exits cleanly in ~3-4 min; for complex tasks use `freeze_threshold_secs = 600`. The freeze-recovery-for-committed-work fix (`3f87af4`) lets rally treat a freeze-killed try as success when files were committed.
+- **Gemini**: Not currently usable in this environment. On 2026-06-19, gemini-cli 0.40.1 returned `IneligibleTierError` / `UNSUPPORTED_CLIENT`: the client is no longer supported for Gemini Code Assist individuals and suggests migrating to Antigravity. Rally should classify this as `auth_or_proxy`, not `agent_error`, and should end with `all agents unavailable` rather than frozen state when no fallback exists.
 - **Codex**: `--full-auto` / `--dangerously-bypass-approvals-and-sandbox` conflict resolved (commit history) — only the bypass flag is passed now. `TestRealBackend_CodexRelay` guards this.
-- **OpenCode**: Model availability varies by provider. Use the built-in `op` alias — NOT a custom harness with `command = ["opencode"]` (which starts TUI mode). Rally warns on this at startup. When rate-limited (`opencode-go` free tier in particular), opencode maintains TCP connections silently for ~2 minutes then disconnects; `classicFrozen` fires ~130s after start regardless of freeze threshold (provided threshold < 130s). After freeze, rally marks the agent paused and retries later. Free tier resets roughly every 12h.
+- **OpenCode**: Model availability varies by provider. Use the built-in `op` alias — NOT a custom harness with `command = ["opencode"]` (which starts TUI mode). Rally warns on this at startup. For the current opencode-go monthly limit, opencode maintained a silent connected process until Rally's connected-idle path fired at ~5m; Rally then surfaced server-log-tail evidence as `usage_limit`, displayed `usage limit, resets in 96h0m`, and benched quota scope `opencode:opencode-go`.
 
 ### Session resume per harness (verified 2026-06-09)
 
@@ -394,7 +396,7 @@ is unaffected (Go connects the child's stdin to /dev/null → immediate EOF), bu
 probe launched under a shell/agent that holds stdin open will hang. Redirect `< /dev/null`
 to faithfully mimic rally.
 
-**Linux freeze behavior**: Two paths — `classicFrozen` (log silent + no connections) fires once connections drop (either after task completion or after rate-limit timeout). `connectedFrozen` (log silent + connections open + no syscall I/O for 5 min) catches agents holding a connection open indefinitely (e.g., different rate-limit behavior). The `TestRealBackend_OpenCodeRelay` test takes ~3 minutes when opencode-go is rate-limited (2m10s for freeze + 50s for ctx expiry); this is expected and the test passes.
+**Linux freeze behavior**: Two paths — `classicFrozen` (log silent + no connections) fires once connections drop (either after task completion or after rate-limit timeout). `connectedFrozen` (log silent + connections open + no syscall I/O for 5 min) catches agents holding a connection open indefinitely (e.g., current opencode-go monthly-limit behavior). Expect opencode-go limit probes to take about 5 minutes before Rally can classify and bench from server-log evidence.
 
 When an agent CLI is broken/unauthed, verify that rally's retry and resilience handling works correctly (pause recorded, relay continues or ends gracefully) rather than treating it as a rally failure.
 

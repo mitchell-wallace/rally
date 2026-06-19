@@ -11,9 +11,8 @@ import (
 )
 
 type highlightWriter struct {
-	w       io.Writer
-	mode    string
-	buf     []byte
+	w    io.Writer
+	mode string
 }
 
 func newHighlightWriter(w io.Writer, mode string) io.Writer {
@@ -28,28 +27,33 @@ func (h *highlightWriter) Write(p []byte) (n int, err error) {
 	for len(p) > 0 {
 		idx := bytes.IndexByte(p, '\n')
 		if idx == -1 {
-			h.buf = append(h.buf, p...)
+			outLine := h.applyLine(p)
+			if _, err := h.w.Write(outLine); err != nil {
+				return 0, err
+			}
 			break
 		}
 
-		line := append(h.buf, p[:idx+1]...)
-		h.buf = h.buf[:0]
+		line := p[:idx+1]
 		p = p[idx+1:]
 
-		var outLine []byte
-		if h.mode == "heuristic" {
-			outLine = h.applyHeuristic(line)
-		} else if h.mode == "chroma" {
-			outLine = h.applyChroma(line)
-		} else {
-			outLine = line
-		}
-
+		outLine := h.applyLine(line)
 		if _, err := h.w.Write(outLine); err != nil {
 			return 0, err
 		}
 	}
 	return n, nil
+}
+
+func (h *highlightWriter) applyLine(line []byte) []byte {
+	switch h.mode {
+	case "heuristic":
+		return h.applyHeuristic(line)
+	case "chroma":
+		return h.applyChroma(line)
+	default:
+		return line
+	}
 }
 
 var (

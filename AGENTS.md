@@ -134,7 +134,7 @@ Tags are created automatically by `.github/workflows/auto-tag.yml` when
 `vX.Y.Z` tags by hand** — push a VERSION bump and let CI tag for you.
 
 Before bumping the version, verify that the release secret gate is in place:
-- Check that `RALLY_NEW_RELIC_LICENSE_KEY` (secret) and `RALLY_NEW_RELIC_APP_NAME` (variable) are still configured in GitHub before cutting 0.9.1.
+- Check that `RALLY_NEW_RELIC_LICENSE_KEY` (secret) and `RALLY_NEW_RELIC_APP_NAME` (variable) are still configured in GitHub before cutting a release.
 - Keep the license key secret.
 - Do not push tags manually.
 

@@ -679,7 +679,7 @@ Default data directory (override with `data_dir` in config):
 | `.rally/state/tries.jsonl`                            | Try records (read by `rally tail`)      |
 | `.rally/state/messages.jsonl`                         | Inbox messages                          |
 | `.rally/state/agent_status.jsonl`                     | Agent status events                     |
-| `.rally/state/summary.jsonl`                          | Run summaries and lap completions       |
+| `.rally/summary.jsonl`                                | Run summaries and lap completions       |
 | `.rally/instructions.md`                              | Project instructions                    |
 | `.rally/agents/{ROLE}.md`                             | Role-specific instructions              |
 
@@ -892,13 +892,6 @@ This configures:
 - **pre-push**: Runs `just test` before pushing to remote.
 
 These hooks automatically delegate to `just` if it is installed, falling back to raw `go` commands otherwise.
-
-## Release Checklist
-
-- [ ] No alert regression for routine rate-limit categories.
-- [ ] Corrected run header text.
-- [ ] Muted cancelled output.
-- [ ] `rally tail` defaults to active output.
 
 ## Release notes
 

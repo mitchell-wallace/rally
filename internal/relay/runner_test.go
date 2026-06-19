@@ -784,7 +784,7 @@ func TestRunFooterCadenceExhausted(t *testing.T) {
 	r.out = &buf
 
 	if err := r.Run(context.Background()); err != nil {
-		if !strings.Contains(err.Error(), "all agents frozen") {
+		if !strings.Contains(err.Error(), "all agents unavailable") {
 			t.Fatalf("run failed with unexpected error: %v", err)
 		}
 	}
@@ -856,6 +856,60 @@ func TestRunFooterCadenceRecovery(t *testing.T) {
 	}
 }
 
+func TestRunHeaderDoesNotExceedTargetAfterFailedRun(t *testing.T) {
+	workspaceDir := t.TempDir()
+	rallyDir := store.RallyDir(workspaceDir)
+	os.MkdirAll(rallyDir, 0o755)
+	initRepo(t, workspaceDir)
+
+	s := newTestStore(t, rallyDir)
+	attempt := 0
+	exec := &funcExecutor{
+		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+			attempt++
+			if attempt == 1 {
+				return &agent.TryResult{Completed: false, Summary: "first runner failed"}, nil
+			}
+			f, _ := os.Create(filepath.Join(workspaceDir, fmt.Sprintf("ok-%d.txt", attempt)))
+			f.WriteString("changed")
+			f.Close()
+			return &agent.TryResult{Completed: true, Summary: "success"}, nil
+		},
+	}
+	executors := map[string]agent.Executor{
+		"claude": exec,
+		"codex":  exec,
+		"gemini": exec,
+	}
+
+	var buf bytes.Buffer
+	r := NewRunner(s, Config{
+		WorkspaceDir:     workspaceDir,
+		DataDir:          t.TempDir(),
+		AgentMixSpecs:    []string{"cc", "cx", "ge"},
+		UseOverrideRoute: true,
+		TargetIterations: 2,
+		RetryBudget:      1,
+		Resolver:         cheapTestResolver,
+	}, executors)
+	r.out = &buf
+
+	if err := r.Run(context.Background()); err != nil {
+		t.Fatalf("run failed: %v", err)
+	}
+
+	plain := stripFooterAnsi(buf.String())
+	if strings.Contains(plain, "run: 3/2") {
+		t.Fatalf("header exceeded target after failed run:\n%s", plain)
+	}
+	if n := strings.Count(plain, "run: 1/2"); n != 2 {
+		t.Fatalf("expected failed first target slot and replacement to both render as run: 1/2, got %d\n%s", n, plain)
+	}
+	if n := strings.Count(plain, "run: 2/2"); n != 1 {
+		t.Fatalf("expected final target slot to render once as run: 2/2, got %d\n%s", n, plain)
+	}
+}
+
 // TestRunFooterSingleAttemptColoursImmediately asserts a single-attempt run
 // (RetryBudget 1) colours its first failure red with no interim retry line.
 func TestRunFooterSingleAttemptColoursImmediately(t *testing.T) {
@@ -883,7 +937,7 @@ func TestRunFooterSingleAttemptColoursImmediately(t *testing.T) {
 	r.out = &buf
 
 	if err := r.Run(context.Background()); err != nil {
-		if !strings.Contains(err.Error(), "all agents frozen") {
+		if !strings.Contains(err.Error(), "all agents unavailable") {
 			t.Fatalf("run failed with unexpected error: %v", err)
 		}
 	}

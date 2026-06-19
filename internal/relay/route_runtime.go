@@ -331,7 +331,7 @@ func (r *routeRuntime) syncRecoverySignals(scheduler *routing.Scheduler, resilie
 				scheduler.OnAgentRecovered(state)
 			}
 		case StatePaused:
-			if !resilience.NowFunc().Before(since.Add(resilience.PauseDuration)) && (state.Benched || state.Exhausted) {
+			if !resilience.NowFunc().Before(since.Add(resilience.PauseDuration)) {
 				scheduler.ResetEntry(state)
 			} else if !(state.Benched && state.Exhausted) {
 				scheduler.OnAgentFailed(state, "paused", true)
@@ -393,6 +393,8 @@ func (r *routeRuntime) selectionWaitError(scheduler *routing.Scheduler, resilien
 	var minWait time.Duration
 	waitSet := false
 	seenKeys := map[ResilienceKey]struct{}{}
+	totalKeys := 0
+	frozenKeys := 0
 
 	for _, state := range scheduler.EntryStates() {
 		key, err := r.resilienceKeyForEntry(state.Entry, effectiveAssignee)
@@ -403,6 +405,7 @@ func (r *routeRuntime) selectionWaitError(scheduler *routing.Scheduler, resilien
 			continue
 		}
 		seenKeys[key] = struct{}{}
+		totalKeys++
 
 		status, since := resilience.GetState(key)
 		var wait time.Duration
@@ -418,6 +421,9 @@ func (r *routeRuntime) selectionWaitError(scheduler *routing.Scheduler, resilien
 				continue
 			}
 			wait = resetAt.Sub(resilience.NowFunc())
+		case StateFrozen:
+			frozenKeys++
+			continue
 		default:
 			continue
 		}
@@ -431,6 +437,15 @@ func (r *routeRuntime) selectionWaitError(scheduler *routing.Scheduler, resilien
 		}
 	}
 
+	if totalKeys > 0 && frozenKeys == totalKeys {
+		return &routeSelectionError{
+			AllFrozen:         true,
+			RouteName:         routeName,
+			EffectiveAssignee: effectiveAssignee,
+			message:           "all agents frozen",
+		}
+	}
+
 	if waitSet {
 		return &routeSelectionError{
 			Wait:              minWait,
@@ -441,10 +456,9 @@ func (r *routeRuntime) selectionWaitError(scheduler *routing.Scheduler, resilien
 	}
 
 	return &routeSelectionError{
-		AllFrozen:         true,
 		RouteName:         routeName,
 		EffectiveAssignee: effectiveAssignee,
-		message:           "all agents frozen",
+		message:           "all agents unavailable",
 	}
 }
 

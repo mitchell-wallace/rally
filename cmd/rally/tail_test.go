@@ -348,6 +348,17 @@ func TestTailHighlight(t *testing.T) {
 			t.Fatalf("chroma output missing ANSI escapes: %q", got)
 		}
 	})
+
+	t.Run("partial line flushes", func(t *testing.T) {
+		var buf bytes.Buffer
+		w := newHighlightWriter(&buf, "heuristic")
+		if _, err := w.Write([]byte("error without newline")); err != nil {
+			t.Fatalf("Write error: %v", err)
+		}
+		if got := ansiRe.ReplaceAllString(buf.String(), ""); !strings.Contains(got, "error without newline") {
+			t.Fatalf("partial highlighted output = %q, want visible final line", got)
+		}
+	})
 }
 
 func TestTailActiveMetadata(t *testing.T) {

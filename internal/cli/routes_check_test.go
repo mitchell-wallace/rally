@@ -61,6 +61,23 @@ default = ["cc", "cx"]
 	}
 }
 
+func TestRoutesCheckPrintsSchemaWarning(t *testing.T) {
+	workspaceDir := t.TempDir()
+	writeRoutesConfig(t, workspaceDir, `schema_version = 99
+
+[routes]
+default = ["cc"]
+`)
+
+	output, err := executeRoutesCheck(t, workspaceDir)
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if !strings.Contains(output, "warning: config: schema_version is 99, expected 2") {
+		t.Fatalf("output = %q, want schema warning", output)
+	}
+}
+
 func TestRoutesCheckParseError(t *testing.T) {
 	workspaceDir := t.TempDir()
 	writeRoutesConfig(t, workspaceDir, `schema_version = 2

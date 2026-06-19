@@ -14,6 +14,7 @@ var (
 	geminiQuotaRe             = regexp.MustCompile(`(?i)Individual quota reached`)
 	geminiResetsInRe          = regexp.MustCompile(`(?i)Resets\s+in\s+(\S+)`)
 	geminiHTTP429Re           = regexp.MustCompile(`(?i)\b429\b`)
+	geminiAuthOrEligibilityRe = regexp.MustCompile(`(?i)IneligibleTierError|UNSUPPORTED_CLIENT|no longer supported for Gemini Code Assist|Error authenticating`)
 )
 
 // ParseGeminiError examines raw error output from Antigravity/Gemini for
@@ -47,6 +48,13 @@ func ParseGeminiError(stderr string) *FailureEvidence {
 		ev.Category = CategoryShortRateLimit
 		ev.StatusCode = 429
 		ev.Message = "HTTP 429"
+		ev.RawSignal = truncateSignal(stderr, 256)
+		return &ev
+	}
+
+	if geminiAuthOrEligibilityRe.MatchString(stderr) {
+		ev.Category = CategoryAuthOrProxy
+		ev.Message = firstLineMatch(stderr, geminiAuthOrEligibilityRe)
 		ev.RawSignal = truncateSignal(stderr, 256)
 		return &ev
 	}
