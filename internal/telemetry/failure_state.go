@@ -139,17 +139,11 @@ func FailureStateTags(fs FailureState) map[string]string {
 	return tags
 }
 
-// FailureEvidenceContext builds the bounded `failure_evidence` context block for
-// provider-limit categories (usage_limit, short_rate_limit, provider_overloaded),
-// so the exact raw limit-response shapes accumulate for the harness parser
-// normalization pass. It carries only raw_signal and message — never any
-// prompt/transcript-looking field — and runs both through the scrubber (home
-// path collapse + truncation) so a username embedded in provider text never
-// leaves the machine.
-//
-// It returns nil for any non-limit category, so non-limit failures attach no
-// raw-signal context at all. It also returns nil when neither raw_signal nor
-// message is present, so an empty block is never attached.
+// FailureEvidenceContext builds the bounded `failure_evidence` context block.
+// Limit categories use RawSignal/Message from provider evidence. Non-limit
+// categories only attach explicit Evidence* fields supplied by the caller, so
+// ordinary failures do not accidentally ship transcript/log payloads. Values run
+// through home-path collapse, transcript-section stripping, and truncation.
 func FailureEvidenceContext(fs FailureState) map[string]interface{} {
 	rawSignal := fs.RawSignal
 	message := fs.Message
@@ -221,22 +215,26 @@ func evidenceShape(rawSignal, message string) string {
 	if rawSignal == "" && message == "" {
 		return ""
 	}
+	combined := firstNonEmpty(message, rawSignal)
+	lower := strings.ToLower(combined)
+	if isTranscriptTailEvidence(lower) {
+		return "transcript_tail"
+	}
 	for _, value := range []string{message, rawSignal} {
 		if isProviderObjectEvidence(value) {
 			return "provider_object"
 		}
 	}
-	combined := firstNonEmpty(message, rawSignal)
-	lower := strings.ToLower(combined)
-	if strings.Contains(lower, "reading additional input from stdin") ||
+	return "plain_text"
+}
+
+func isTranscriptTailEvidence(lower string) bool {
+	return strings.Contains(lower, "reading additional input from stdin") ||
 		strings.Contains(lower, `"item.completed"`) ||
 		strings.Contains(lower, `"command_execution"`) ||
 		strings.Contains(lower, "transcript=") ||
 		strings.Contains(lower, "\noutput:") ||
-		strings.Contains(lower, "\nstderr:") {
-		return "transcript_tail"
-	}
-	return "plain_text"
+		strings.Contains(lower, "\nstderr:")
 }
 
 func isProviderObjectEvidence(value string) bool {
@@ -245,8 +243,10 @@ func isProviderObjectEvidence(value string) bool {
 		return false
 	}
 	lower := strings.ToLower(value)
-	return strings.HasPrefix(value, "{") || strings.HasPrefix(value, "[") ||
-		strings.Contains(lower, `"type":"error"`) ||
+	if isTranscriptTailEvidence(lower) {
+		return false
+	}
+	return strings.Contains(lower, `"type":"error"`) ||
 		strings.Contains(lower, `"error"`) ||
 		strings.Contains(lower, "ai_apicallerror") ||
 		strings.Contains(lower, "ai_retryerror")

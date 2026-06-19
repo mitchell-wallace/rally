@@ -252,6 +252,17 @@ func applyEvidenceToFailureState(fs *telemetry.FailureState, ev *reliability.Fai
 	fs.EvidenceSource = source
 }
 
+func applySafeExecErrorEvidence(fs *telemetry.FailureState, err error) {
+	if fs == nil || err == nil {
+		return
+	}
+	if fs.RawSignal != "" || fs.Message != "" || fs.EvidenceRawSignal != "" || fs.EvidenceMessage != "" {
+		return
+	}
+	fs.EvidenceRawSignal = err.Error()
+	fs.EvidenceSource = "safe_exec_error"
+}
+
 func addFailureEvidenceTelemetry(span telemetry.Span, fields map[string]interface{}, fs telemetry.FailureState) {
 	evidence := telemetry.FailureEvidenceContext(fs)
 	if len(evidence) == 0 {
@@ -2324,6 +2335,7 @@ attemptLoop:
 			AgentState:             r.agentStateName(picked),
 		}
 		applyEvidenceToFailureState(&evidenceState, resetEvidence, "executor_evidence")
+		applySafeExecErrorEvidence(&evidenceState, execErr)
 		if failed {
 			addFailureEvidenceTelemetry(trySpan, tryLogFields, evidenceState)
 		}
@@ -2354,6 +2366,11 @@ attemptLoop:
 			tryLogFields["session_captured"] = sessionCaptured
 			tryLogFields["resume_supported"] = resumeSupported
 			tryLogFields["handoff_only_attempted"] = handoffOnlyAttempted
+			if handoffOnlyAttempted {
+				handoffOnlyTryID := tryRecord.ID + 1
+				trySpan.SetData("handoff_only_try_id", handoffOnlyTryID)
+				tryLogFields["handoff_only_try_id"] = handoffOnlyTryID
+			}
 			if runBudgetExhausted && !canHandoffResume {
 				blocker := noHandoffResumeReason(exec, sessionID)
 				trySpan.SetData("handoff_resume_blocker", blocker)
@@ -2395,6 +2412,7 @@ attemptLoop:
 			if resetEvidence != nil {
 				applyEvidenceToFailureState(&fs, resetEvidence, "executor_evidence")
 			}
+			applySafeExecErrorEvidence(&fs, execErr)
 			if evt, ok := limitSignalEvent(tryTags, rc, fs); ok {
 				r.tel().CaptureEvent(tryCtx, fmt.Sprintf("relay %d run %d try %d provider limit signal: %s", relay.ID, runIndex+1, tryRecord.ID, failReason), evt)
 			}

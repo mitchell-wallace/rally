@@ -360,6 +360,20 @@ func TestFailureEvidenceContext_StripsTranscriptSections(t *testing.T) {
 	}
 }
 
+func TestFailureEvidenceContext_TranscriptJSONDoesNotBecomeProviderSignal(t *testing.T) {
+	ctx := FailureEvidenceContext(FailureState{
+		Category:          "agent_error",
+		EvidenceRawSignal: `{"type":"item.completed","item":{"type":"command_execution","output":"full transcript"}}`,
+		EvidenceSource:    "safe_exec_error",
+	})
+	if ctx["evidence_shape"] != "transcript_tail" {
+		t.Fatalf("evidence_shape = %#v, want transcript_tail", ctx["evidence_shape"])
+	}
+	if _, found := ctx["provider_signal"]; found {
+		t.Fatalf("provider_signal must be omitted for transcript JSON: %#v", ctx)
+	}
+}
+
 func TestFailureEvidenceContext_NoPromptOrTranscriptFields(t *testing.T) {
 	ctx := FailureEvidenceContext(FailureState{
 		Category:  categoryUsageLimit,

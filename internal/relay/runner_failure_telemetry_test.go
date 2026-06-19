@@ -676,6 +676,65 @@ func TestRun_AllFrozen_CapturesFrozenState(t *testing.T) {
 	}
 }
 
+func TestRunOne_ExecErrorWithoutEvidenceAddsSafeFailureEvidence(t *testing.T) {
+	workspaceDir := t.TempDir()
+	rallyDir := store.RallyDir(workspaceDir)
+	os.MkdirAll(rallyDir, 0o755)
+	initRepo(t, workspaceDir)
+	runGit(t, workspaceDir, "commit", "--allow-empty", "-m", "initial", "--no-verify")
+
+	s := newTestStore(t, rallyDir)
+	exec := &funcExecutor{
+		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+			return &agent.TryResult{Completed: false, Summary: "launcher failed"}, fmt.Errorf("launcher failed\nstderr: full command transcript")
+		},
+	}
+
+	sink := &capturingSink{}
+	r := NewRunner(s, Config{
+		WorkspaceDir:     workspaceDir,
+		DataDir:          t.TempDir(),
+		AgentMixSpecs:    []string{"op:dsf"},
+		TargetIterations: 1,
+		RetryBudget:      1,
+		LapsEnabled:      true,
+		Resolver:         cheapTestResolver,
+	}, map[string]agent.Executor{"opencode": exec})
+	r.SetTelemetry(sink)
+
+	res, err := r.runOne(
+		context.Background(),
+		&store.RelayRecord{ID: 1, TargetIterations: 1},
+		0,
+		agent.ResolvedAgent{Harness: "opencode", Model: cheapTestModel},
+		runTask{Name: "task", Prompt: "do work", Assignee: "senior", IsLapsBacked: true, LapID: "lap-1"},
+		nil, nil, false, false, nil, nil, io.Discard,
+	)
+	if err != nil {
+		t.Fatalf("runOne error = %v", err)
+	}
+	if res.Success {
+		t.Fatal("expected exec error to fail the run")
+	}
+
+	log := findTryLogByOutcome(t, sink, string(reliability.OutcomeFailed))
+	if log["failure_evidence.raw_signal"] != "launcher failed" {
+		t.Fatalf("try log raw_signal = %#v, want stripped launcher message", log["failure_evidence.raw_signal"])
+	}
+	if log["failure_evidence.source"] != "safe_exec_error" {
+		t.Fatalf("try log source = %#v", log["failure_evidence.source"])
+	}
+
+	evt := findFailure(t, sink, "failed:")
+	ev, ok := evt.Contexts["failure_evidence"]
+	if !ok {
+		t.Fatal("failure_evidence context missing on exec error capture")
+	}
+	if ev["raw_signal"] != "launcher failed" || ev["source"] != "safe_exec_error" {
+		t.Fatalf("failure evidence = %#v", ev)
+	}
+}
+
 func findFailureCount(sink *capturingSink, substr string) int {
 	n := 0
 	for _, f := range sink.failures {
@@ -915,6 +974,12 @@ func TestRunOneTimeoutHandoffOutcomesStaySpanLogOnly(t *testing.T) {
 		t.Fatalf("run_timeout span context = tags %#v data %#v", runTimeoutSpan.tags, runTimeoutSpan.data)
 	}
 	handoffLog := findTryLogByOutcome(t, sink, string(reliability.OutcomeHandoffRequested))
+	if runTimeoutLog["handoff_only_try_id"] != handoffLog["try_id"] {
+		t.Fatalf("run_timeout handoff_only_try_id = %#v, continuation try_id %#v", runTimeoutLog["handoff_only_try_id"], handoffLog["try_id"])
+	}
+	if runTimeoutSpan.data["handoff_only_try_id"] != handoffLog["try_id"] {
+		t.Fatalf("run_timeout span handoff_only_try_id = %#v, continuation try_id %#v", runTimeoutSpan.data["handoff_only_try_id"], handoffLog["try_id"])
+	}
 	if handoffLog["handoff_only"] != true {
 		t.Fatalf("handoff continuation log handoff_only = %#v, want true", handoffLog["handoff_only"])
 	}
