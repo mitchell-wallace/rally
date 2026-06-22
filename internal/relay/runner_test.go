@@ -3883,6 +3883,7 @@ func TestBuildRecentContext_OverallTruncation(t *testing.T) {
 }
 
 func TestE2E_FullConfig_NamedModelsAndFallback(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	workspaceDir := t.TempDir()
 	rallyDir := store.RallyDir(workspaceDir)
 	os.MkdirAll(rallyDir, 0o755)
@@ -4174,6 +4175,7 @@ func TestE2E_UserDefinedHarness_ModelFlagUnset_InfoNote(t *testing.T) {
 }
 
 func TestE2E_BackwardsCompat_RootModelFields(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	workspaceDir := t.TempDir()
 	rallyDir := store.RallyDir(workspaceDir)
 	os.MkdirAll(rallyDir, 0o755)
@@ -4244,6 +4246,7 @@ run_hooks_on_autocommit = true
 }
 
 func TestE2E_DefaultsSection_NoDeprecation(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	workspaceDir := t.TempDir()
 	rallyDir := store.RallyDir(workspaceDir)
 	os.MkdirAll(rallyDir, 0o755)
