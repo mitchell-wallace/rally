@@ -10,10 +10,11 @@ import (
 )
 
 // ProviderConfig is a user-defined quota group: a set of runners (named model
-// shortcuts or harness:model specs) that share a single usage-limit budget, plus
-// an operator switch to disable them all at once. When any member of a provider
-// hits a usage limit, every sibling is benched until the reset so Rally does not
-// burn retries on models that draw from the same exhausted account.
+// shortcuts, harness:model specs, or wildcard specs) that share a single
+// usage-limit budget, plus an operator switch to disable them all at once. When
+// any member of a provider hits a usage limit, every sibling is benched until
+// the reset so Rally does not burn retries on models that draw from the same
+// exhausted account.
 //
 // It decodes from either the concise array form:
 //
@@ -157,41 +158,57 @@ func (c V2Config) resolveProviders() ([]resolvedProvider, error) {
 		rp := resolvedProvider{Name: name, Disabled: pc.Disabled}
 		localSeen := map[providerRunnerKey]bool{}
 		for _, spec := range pc.Models {
-			resolved, err := c.resolveProviderSpec(spec)
+			resolvedList, err := c.resolveProviderSpec(spec)
 			if err != nil {
 				return nil, fmt.Errorf("config: provider %q: %w", name, err)
 			}
-			// A member must name a concrete model. A bare harness alias with no
-			// default model resolves to an empty model and would key the provider
-			// as {harness, ""} — a key no model-specific route runner (e.g.
-			// cc:opus) ever matches, silently splitting the group. Reject it so
-			// the misconfiguration surfaces instead of mis-bucketing at runtime.
-			if resolved.Model == "" {
-				return nil, fmt.Errorf("config: provider %q member %q resolves to no concrete model; name a specific model (e.g. cx:g55) rather than a bare harness alias", name, spec)
+			for _, resolved := range resolvedList {
+				// A member must name a concrete model. A bare harness alias with no
+				// default model resolves to an empty model and would key the provider
+				// as {harness, ""} — a key no model-specific route runner (e.g.
+				// cc:opus) ever matches, silently splitting the group. Reject it so
+				// the misconfiguration surfaces instead of mis-bucketing at runtime.
+				if resolved.Model == "" {
+					return nil, fmt.Errorf("config: provider %q member %q resolves to no concrete model; name a specific model (e.g. cx:g55) rather than a bare harness alias", name, spec)
+				}
+				key := providerRunnerKey{Harness: resolved.Harness, Model: resolved.Model}
+				if existing, ok := owner[key]; ok && existing != name {
+					return nil, fmt.Errorf("config: runner %s is claimed by providers %q and %q; a runner may belong to only one provider", runnerLabel(resolved), existing, name)
+				}
+				owner[key] = name
+				if localSeen[key] {
+					continue
+				}
+				localSeen[key] = true
+				rp.Runners = append(rp.Runners, resolved)
 			}
-			key := providerRunnerKey{Harness: resolved.Harness, Model: resolved.Model}
-			if existing, ok := owner[key]; ok && existing != name {
-				return nil, fmt.Errorf("config: runner %s is claimed by providers %q and %q; a runner may belong to only one provider", runnerLabel(resolved), existing, name)
-			}
-			owner[key] = name
-			if localSeen[key] {
-				continue
-			}
-			localSeen[key] = true
-			rp.Runners = append(rp.Runners, resolved)
 		}
 		out = append(out, rp)
 	}
 	return out, nil
 }
 
-// resolveProviderSpec resolves one provider model entry to a concrete runner. It
+// resolveProviderSpec resolves one provider model entry to concrete runners. It
 // accepts the same forms as a route entry — a harness alias (resolves to that
 // harness's default model), alias:model, or harness:model — and additionally a
 // bare model alias (e.g. "g55") when that alias is defined under exactly one
-// harness's [harness.<h>.models] table. A bare alias that is ambiguous or
-// undefined is a hard error so quota groups never silently mis-bucket a runner.
-func (c V2Config) resolveProviderSpec(spec string) (agent.ResolvedAgent, error) {
+// harness's [harness.<h>.models] table. Wildcards expand over configured
+// concrete models: harness:* matches a harness's configured/default models, and
+// prefix/* matches configured model strings with that prefix. Ambiguous,
+// undefined, or empty matches are hard errors so quota groups never silently
+// mis-bucket a runner.
+func (c V2Config) resolveProviderSpec(spec string) ([]agent.ResolvedAgent, error) {
+	if strings.Contains(spec, "*") {
+		return c.resolveProviderWildcardSpec(spec)
+	}
+	resolved, err := c.resolveProviderConcreteSpec(spec)
+	if err != nil {
+		return nil, err
+	}
+	return []agent.ResolvedAgent{resolved}, nil
+}
+
+func (c V2Config) resolveProviderConcreteSpec(spec string) (agent.ResolvedAgent, error) {
 	if strings.Contains(spec, ":") {
 		return c.ResolveAgent(spec)
 	}
@@ -219,6 +236,176 @@ func (c V2Config) resolveProviderSpec(spec string) (agent.ResolvedAgent, error) 
 		sort.Strings(labels)
 		return agent.ResolvedAgent{}, fmt.Errorf("ambiguous model alias %q matches %s; qualify it as harness:alias", spec, strings.Join(labels, ", "))
 	}
+}
+
+func (c V2Config) resolveProviderWildcardSpec(spec string) ([]agent.ResolvedAgent, error) {
+	if strings.Count(spec, "*") != 1 || !strings.HasSuffix(spec, "*") {
+		return nil, fmt.Errorf("unsupported wildcard %q; use harness:*, harness:prefix/*, or prefix/*", spec)
+	}
+
+	if strings.HasSuffix(spec, ":*") {
+		harnessSpec := strings.TrimSuffix(spec, ":*")
+		harness, preferred, err := c.resolveProviderWildcardHarness(spec, harnessSpec)
+		if err != nil {
+			return nil, err
+		}
+		return c.expandProviderHarnessModels(spec, harness, preferred, "")
+	}
+
+	if scopedHarness, pattern, scoped := strings.Cut(spec, ":"); scoped {
+		prefix, ok := providerPrefixWildcard(pattern)
+		if !ok {
+			return nil, fmt.Errorf("unsupported wildcard %q; use harness:*, harness:prefix/*, or prefix/*", spec)
+		}
+		harness, preferred, err := c.resolveProviderWildcardHarness(spec, scopedHarness)
+		if err != nil {
+			return nil, err
+		}
+		return c.expandProviderHarnessModels(spec, harness, preferred, prefix)
+	}
+
+	prefix, ok := providerPrefixWildcard(spec)
+	if !ok {
+		return nil, fmt.Errorf("unsupported wildcard %q; use harness:*, harness:prefix/*, or prefix/*", spec)
+	}
+	return c.expandProviderModelsByPrefix(spec, prefix)
+}
+
+func providerPrefixWildcard(pattern string) (string, bool) {
+	if !strings.HasSuffix(pattern, "/*") {
+		return "", false
+	}
+	prefix := strings.TrimSuffix(pattern, "*")
+	if strings.TrimSuffix(prefix, "/") == "" {
+		return "", false
+	}
+	return prefix, true
+}
+
+func (c V2Config) resolveProviderWildcardHarness(spec, harnessSpec string) (string, string, error) {
+	harnessSpec = strings.TrimSpace(harnessSpec)
+	if harnessSpec == "" {
+		return "", "", fmt.Errorf("provider wildcard %q has an empty harness", spec)
+	}
+	if harness, ok := builtInAliases[harnessSpec]; ok {
+		return harness, harnessSpec, nil
+	}
+	if c.Harnesses != nil {
+		if _, ok := c.Harnesses[harnessSpec]; ok {
+			return canonicalHarnessName(harnessSpec), harnessSpec, nil
+		}
+	}
+	return "", "", fmt.Errorf("provider wildcard %q references unknown harness %q", spec, harnessSpec)
+}
+
+func (c V2Config) expandProviderHarnessModels(spec, harness, preferredAlias, modelPrefix string) ([]agent.ResolvedAgent, error) {
+	seen := map[providerRunnerKey]bool{}
+	var matches []agent.ResolvedAgent
+	add := func(model string) {
+		model = strings.TrimSpace(model)
+		if model == "" {
+			return
+		}
+		if modelPrefix != "" && !strings.HasPrefix(model, modelPrefix) {
+			return
+		}
+		key := providerRunnerKey{Harness: harness, Model: model}
+		if seen[key] {
+			return
+		}
+		seen[key] = true
+		matches = append(matches, agent.ResolvedAgent{Harness: harness, Model: model})
+	}
+
+	add(c.defaultModelForHarness(harness))
+
+	for _, key := range harnessLookupKeys(harness, preferredAlias) {
+		hc := c.Harnesses[key]
+		if hc == nil || hc.Models == nil {
+			continue
+		}
+		modelAliases := sortedMapKeys(hc.Models)
+		for _, alias := range modelAliases {
+			add(hc.Models[alias])
+		}
+	}
+
+	sortResolvedAgents(matches)
+	if len(matches) == 0 {
+		return nil, fmt.Errorf("provider wildcard %q matched no configured models", spec)
+	}
+	return matches, nil
+}
+
+func (c V2Config) expandProviderModelsByPrefix(spec, modelPrefix string) ([]agent.ResolvedAgent, error) {
+	seen := map[providerRunnerKey]bool{}
+	var matches []agent.ResolvedAgent
+	add := func(harness, model string) {
+		model = strings.TrimSpace(model)
+		if model == "" || !strings.HasPrefix(model, modelPrefix) {
+			return
+		}
+		key := providerRunnerKey{Harness: harness, Model: model}
+		if seen[key] {
+			return
+		}
+		seen[key] = true
+		matches = append(matches, agent.ResolvedAgent{Harness: harness, Model: model})
+	}
+
+	for _, harness := range builtInHarnessNames() {
+		add(harness, c.defaultModelForHarness(harness))
+	}
+
+	harnessKeys := sortedHarnessKeys(c.Harnesses)
+	for _, key := range harnessKeys {
+		hc := c.Harnesses[key]
+		if hc == nil || hc.Models == nil {
+			continue
+		}
+		harness := canonicalHarnessName(key)
+		modelAliases := sortedMapKeys(hc.Models)
+		for _, alias := range modelAliases {
+			add(harness, hc.Models[alias])
+		}
+	}
+
+	sortResolvedAgents(matches)
+	if len(matches) == 0 {
+		return nil, fmt.Errorf("provider wildcard %q matched no configured models", spec)
+	}
+	return matches, nil
+}
+
+func sortedHarnessKeys(harnesses map[string]*HarnessConfig) []string {
+	keys := make([]string, 0, len(harnesses))
+	for key := range harnesses {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	return keys
+}
+
+func sortedMapKeys(m map[string]string) []string {
+	keys := make([]string, 0, len(m))
+	for key := range m {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	return keys
+}
+
+func sortResolvedAgents(agents []agent.ResolvedAgent) {
+	sort.Slice(agents, func(i, j int) bool {
+		if agents[i].Harness == agents[j].Harness {
+			return agents[i].Model < agents[j].Model
+		}
+		return agents[i].Harness < agents[j].Harness
+	})
+}
+
+func builtInHarnessNames() []string {
+	return []string{"antigravity", "claude", "codex", "gemini", "opencode"}
 }
 
 // lookupBareModelAlias returns every distinct runner whose harness defines a
@@ -266,6 +453,20 @@ func (c V2Config) BuildProviderIndex() (*routing.ProviderIndex, error) {
 		}
 	}
 	return idx, nil
+}
+
+// ProviderMemberCounts returns each provider's concrete runner count after
+// wildcard expansion and de-duplication.
+func (c V2Config) ProviderMemberCounts() (map[string]int, error) {
+	resolved, err := c.resolveProviders()
+	if err != nil {
+		return nil, err
+	}
+	counts := make(map[string]int, len(resolved))
+	for _, rp := range resolved {
+		counts[rp.Name] = len(rp.Runners)
+	}
+	return counts, nil
 }
 
 // providersToRaw renders typed providers back to the generic map form used for

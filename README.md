@@ -443,14 +443,27 @@ burning retries on siblings that are already exhausted.
 
 Each provider key is a user-defined name; its value is a list of model specs.
 A spec is a named model shortcut (`g55`), a harness-qualified alias (`op:ds`),
-or a full `harness:model` (`opencode:openai/gpt-5.5`). A bare shortcut must be
-defined under exactly one harness's `[harness.<h>.models]` table, otherwise
-qualify it (`cx:g55`). A given runner may belong to at most one provider.
+a full `harness:model` (`opencode:openai/gpt-5.5`), a whole-harness wildcard
+(`codex:*`), or a configured model-prefix wildcard (`opencode-go/*` or
+`op:opencode-go/*`). Wildcards expand from your local config only: they include
+configured model aliases and matching default models, not an external catalog
+of every model a provider could offer. A bare shortcut must be defined under
+exactly one harness's `[harness.<h>.models]` table, otherwise qualify it
+(`cx:g55`). A given runner may belong to at most one provider.
 
 ```toml
 [providers]
 # Concise array form — enabled, models only.
 codex = ["g55", "g54", "opencode:openai/gpt-5.5"]
+```
+
+```toml
+[providers]
+# Cleaner when you want every configured codex model.
+codex_all = ["codex:*"]
+
+# Cleaner when your opencode aliases all point at one provider prefix.
+opencode_go = ["opencode-go/*"]
 ```
 
 To **disable** a whole provider — sidelining every member for the relay — use

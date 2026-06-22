@@ -136,6 +136,31 @@ disabled = true
 	}
 }
 
+func TestRoutesCheckProvidersSummaryCountsWildcardMembers(t *testing.T) {
+	workspaceDir := t.TempDir()
+	writeRoutesConfig(t, workspaceDir, `schema_version = 2
+
+[harness.op.models]
+ds = "opencode-go/deepseek-v4"
+glm = "opencode-go/glm-5.1"
+zai = "zai-coding-plan/glm-5.2"
+
+[routes]
+default = ["op:ds"]
+
+[providers]
+opencode_go = ["opencode-go/*"]
+`)
+
+	output, err := executeRoutesCheck(t, workspaceDir)
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if !strings.Contains(output, "- opencode_go: 2 models") {
+		t.Fatalf("output = %q, want wildcard-expanded provider count", output)
+	}
+}
+
 func TestRoutesCheckProvidersResolutionError(t *testing.T) {
 	workspaceDir := t.TempDir()
 	writeRoutesConfig(t, workspaceDir, `schema_version = 2

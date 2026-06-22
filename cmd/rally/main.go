@@ -59,7 +59,8 @@ const repoConfigTemplate = `# Rally repo-level config — OVERRIDES ONLY.
 # # Group runners that share one usage-limit budget. When any member hits a
 # # usage limit, every member is benched until the reset — so rally stops
 # # retrying models that draw from the same exhausted account, even across
-# # harnesses. Entries are model aliases or harness:model specs.
+# # harnesses. Entries are model aliases, harness:model specs, or wildcards
+# # such as codex:* and opencode-go/*.
 # codex = ["g55", "g54", "opencode:openai/gpt-5.5"]
 # # Use the table form to disable a whole provider (e.g. a known monthly cap,
 # # or to conserve usage while another session runs a big task):

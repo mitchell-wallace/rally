@@ -110,6 +110,11 @@ func CheckRoutes(workspaceDir string, cfg config.V2Config) (RouteCheckResult, er
 		})
 	}
 
+	providerCounts, err := cfg.ProviderMemberCounts()
+	if err != nil {
+		return result, fmt.Errorf("routes check: %w", err)
+	}
+
 	providerNames := make([]string, 0, len(cfg.Providers))
 	for name := range cfg.Providers {
 		providerNames = append(providerNames, name)
@@ -119,7 +124,7 @@ func CheckRoutes(workspaceDir string, cfg config.V2Config) (RouteCheckResult, er
 		pc := cfg.Providers[name]
 		result.ProviderSummary = append(result.ProviderSummary, ProviderSummary{
 			Name:        name,
-			MemberCount: len(pc.Models),
+			MemberCount: providerCounts[name],
 			Disabled:    pc.Disabled,
 		})
 		if pc.Disabled {

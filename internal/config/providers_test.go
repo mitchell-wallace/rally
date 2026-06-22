@@ -87,6 +87,111 @@ disabled = true
 	}
 }
 
+func TestLoadV2_Providers_HarnessWildcard(t *testing.T) {
+	dir := t.TempDir()
+	writeConfig(t, dir, `schema_version = 2
+
+[defaults]
+codex_model = 'gpt-5.3'
+
+[harness.cx.models]
+g55 = 'gpt-5.5'
+g54 = 'gpt-5.4'
+
+[providers]
+codex = ['codex:*']
+`)
+
+	cfg, err := LoadV2(dir)
+	if err != nil {
+		t.Fatalf("LoadV2 failed: %v", err)
+	}
+
+	counts, err := cfg.ProviderMemberCounts()
+	if err != nil {
+		t.Fatalf("ProviderMemberCounts: %v", err)
+	}
+	if got, want := counts["codex"], 3; got != want {
+		t.Fatalf("codex member count = %d, want %d", got, want)
+	}
+
+	idx, err := cfg.BuildProviderIndex()
+	if err != nil {
+		t.Fatalf("BuildProviderIndex: %v", err)
+	}
+	for _, model := range []string{"gpt-5.3", "gpt-5.4", "gpt-5.5"} {
+		if got, want := idx.QuotaScope("codex", model), "provider:codex"; got != want {
+			t.Errorf("QuotaScope(codex,%s) = %q, want %q", model, got, want)
+		}
+	}
+}
+
+func TestLoadV2_Providers_ModelPrefixWildcard(t *testing.T) {
+	dir := t.TempDir()
+	writeConfig(t, dir, `schema_version = 2
+
+[defaults]
+opencode_model = 'opencode-go/default'
+
+[harness.op.models]
+ds = 'opencode-go/deepseek-v4'
+glm = 'opencode-go/glm-5.1'
+zai = 'zai-coding-plan/glm-5.2'
+
+[providers]
+opencode_go = ['opencode-go/*']
+`)
+
+	cfg, err := LoadV2(dir)
+	if err != nil {
+		t.Fatalf("LoadV2 failed: %v", err)
+	}
+
+	counts, err := cfg.ProviderMemberCounts()
+	if err != nil {
+		t.Fatalf("ProviderMemberCounts: %v", err)
+	}
+	if got, want := counts["opencode_go"], 3; got != want {
+		t.Fatalf("opencode_go member count = %d, want %d", got, want)
+	}
+
+	idx, err := cfg.BuildProviderIndex()
+	if err != nil {
+		t.Fatalf("BuildProviderIndex: %v", err)
+	}
+	for _, model := range []string{"opencode-go/default", "opencode-go/deepseek-v4", "opencode-go/glm-5.1"} {
+		if got, want := idx.QuotaScope("opencode", model), "provider:opencode_go"; got != want {
+			t.Errorf("QuotaScope(opencode,%s) = %q, want %q", model, got, want)
+		}
+	}
+	if got, want := idx.QuotaScope("opencode", "zai-coding-plan/glm-5.2"), "opencode:zai-coding-plan"; got != want {
+		t.Errorf("QuotaScope(non-matching prefix) = %q, want %q", got, want)
+	}
+}
+
+func TestLoadV2_Providers_ScopedModelPrefixWildcard(t *testing.T) {
+	dir := t.TempDir()
+	writeConfig(t, dir, providerHarnessTables+`
+[providers]
+opencode_go = ['op:opencode-go/*']
+`)
+
+	cfg, err := LoadV2(dir)
+	if err != nil {
+		t.Fatalf("LoadV2 failed: %v", err)
+	}
+	idx, err := cfg.BuildProviderIndex()
+	if err != nil {
+		t.Fatalf("BuildProviderIndex: %v", err)
+	}
+	if got, want := idx.QuotaScope("opencode", "opencode-go/deepseek-v4"), "provider:opencode_go"; got != want {
+		t.Errorf("QuotaScope(scoped wildcard match) = %q, want %q", got, want)
+	}
+	if got, want := idx.QuotaScope("opencode", "zai-coding-plan/glm-5.2"), "opencode:zai-coding-plan"; got != want {
+		t.Errorf("QuotaScope(scoped wildcard non-match) = %q, want %q", got, want)
+	}
+}
+
 func TestLoadV2_Providers_BareAliasAmbiguous(t *testing.T) {
 	dir := t.TempDir()
 	writeConfig(t, dir, `schema_version = 2
@@ -142,6 +247,44 @@ b = ['cx:g55']
 	_, err := LoadV2(dir)
 	if err == nil || !strings.Contains(err.Error(), "only one provider") {
 		t.Fatalf("expected cross-provider conflict error, got %v", err)
+	}
+}
+
+func TestLoadV2_Providers_WildcardConflictAcrossProviders(t *testing.T) {
+	dir := t.TempDir()
+	writeConfig(t, dir, providerHarnessTables+`
+[providers]
+a = ['opencode-go/*']
+b = ['op:ds']
+`)
+	_, err := LoadV2(dir)
+	if err == nil || !strings.Contains(err.Error(), "only one provider") {
+		t.Fatalf("expected wildcard conflict error, got %v", err)
+	}
+}
+
+func TestLoadV2_Providers_WildcardNoMatches(t *testing.T) {
+	dir := t.TempDir()
+	writeConfig(t, dir, `schema_version = 2
+
+[providers]
+opencode_go = ['opencode-go/*']
+`)
+	_, err := LoadV2(dir)
+	if err == nil || !strings.Contains(err.Error(), "matched no configured models") {
+		t.Fatalf("expected no-match wildcard error, got %v", err)
+	}
+}
+
+func TestLoadV2_Providers_UnsupportedWildcard(t *testing.T) {
+	dir := t.TempDir()
+	writeConfig(t, dir, providerHarnessTables+`
+[providers]
+bad = ['opencode-go*']
+`)
+	_, err := LoadV2(dir)
+	if err == nil || !strings.Contains(err.Error(), "unsupported wildcard") {
+		t.Fatalf("expected unsupported wildcard error, got %v", err)
 	}
 }
 
