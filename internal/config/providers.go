@@ -161,6 +161,14 @@ func (c V2Config) resolveProviders() ([]resolvedProvider, error) {
 			if err != nil {
 				return nil, fmt.Errorf("config: provider %q: %w", name, err)
 			}
+			// A member must name a concrete model. A bare harness alias with no
+			// default model resolves to an empty model and would key the provider
+			// as {harness, ""} — a key no model-specific route runner (e.g.
+			// cc:opus) ever matches, silently splitting the group. Reject it so
+			// the misconfiguration surfaces instead of mis-bucketing at runtime.
+			if resolved.Model == "" {
+				return nil, fmt.Errorf("config: provider %q member %q resolves to no concrete model; name a specific model (e.g. cx:g55) rather than a bare harness alias", name, spec)
+			}
 			key := providerRunnerKey{Harness: resolved.Harness, Model: resolved.Model}
 			if existing, ok := owner[key]; ok && existing != name {
 				return nil, fmt.Errorf("config: runner %s is claimed by providers %q and %q; a runner may belong to only one provider", runnerLabel(resolved), existing, name)

@@ -249,8 +249,9 @@ func (r *Resilience) FreezeAgent(key ResilienceKey, relayID int, reason string) 
 }
 
 // BenchAgent persists a benched event sidelining the agent until resetAt, the
-// usage-limit reset deadline. scope identifies the exhausted quota bucket (see
-// routing.QuotaScope). Unlike FreezeAgent it always appends: a re-probe after
+// usage-limit reset deadline. scope identifies the exhausted quota bucket — the
+// harness-default routing.QuotaScope, or "provider:<name>" when a [providers]
+// group overrides it. Unlike FreezeAgent it always appends: a re-probe after
 // the deadline that hits the limit again records a fresh deadline. GetState
 // replays these events, so the bench survives across relays without a separate
 // restoration scanner.

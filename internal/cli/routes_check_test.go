@@ -104,14 +104,17 @@ func TestRoutesCheckProvidersSummary(t *testing.T) {
 g55 = "gpt-5.5"
 g54 = "gpt-5.4"
 
+[harness.cc.models]
+opus = "claude-opus-4-8"
+
 [routes]
-default = ["cc", "cx"]
+default = ["cc:opus", "cx"]
 
 [providers]
 codex = ["g55", "g54"]
 
 [providers.claude]
-models   = ["cc"]
+models   = ["cc:opus"]
 disabled = true
 `)
 

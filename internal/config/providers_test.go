@@ -118,6 +118,20 @@ codex = ['nope']
 	}
 }
 
+func TestLoadV2_Providers_BareHarnessAliasNoModelRejected(t *testing.T) {
+	dir := t.TempDir()
+	// 'cc' resolves to claude with no default model -> empty model, which can
+	// never match a model-specific route runner. Must be rejected.
+	writeConfig(t, dir, providerHarnessTables+`
+[providers]
+anthropic = ['cc']
+`)
+	_, err := LoadV2(dir)
+	if err == nil || !strings.Contains(err.Error(), "no concrete model") {
+		t.Fatalf("expected empty-model rejection, got %v", err)
+	}
+}
+
 func TestLoadV2_Providers_ConflictAcrossProviders(t *testing.T) {
 	dir := t.TempDir()
 	writeConfig(t, dir, providerHarnessTables+`

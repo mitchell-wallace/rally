@@ -131,6 +131,33 @@ func TestApplyProviders_WarnsOnDisabledProvider(t *testing.T) {
 	}
 }
 
+// TestProviderDisabled_StaysDisabledAfterForceUnpause verifies that an operator
+// skip during a wait (forceUnpauseAll writes active events) does not re-enable a
+// disabled provider: the next syncRecoverySignals re-benches its members.
+func TestProviderDisabled_StaysDisabledAfterForceUnpause(t *testing.T) {
+	rt, resilience := newResolvedRouteRuntimeOrDie(t, map[string][]string{
+		"default": {"claude:opus-4.7", "codex:gpt-5.5"},
+	}, false)
+
+	idx := routing.NewProviderIndex()
+	idx.Add("anthropic", "claude", "opus-4.7", true)
+	rt.providers = idx
+
+	// Prime the scheduler so the disabled entry is benched.
+	scheduler := rt.schedulers["default"]
+	rt.syncRecoverySignals(scheduler, resilience, "")
+
+	if _, err := rt.forceUnpauseAll(resilience, 1, "", ""); err != nil {
+		t.Fatalf("forceUnpauseAll: %v", err)
+	}
+
+	// After a skip, selection must still avoid the disabled claude runner.
+	sel := mustNextRouteSelection(t, rt, resilience, "")
+	if got := agentRouteSpec(sel.Agent); got != "codex:gpt-5.5" {
+		t.Fatalf("post-skip pick = %q, want codex:gpt-5.5 (claude still disabled)", got)
+	}
+}
+
 // TestProviderDisabled_NotUnbenchedBySync guards the ordering in
 // syncRecoverySignals: a disabled entry whose resilience state is Active must
 // stay sidelined and never be un-benched by the StateActive arm.
