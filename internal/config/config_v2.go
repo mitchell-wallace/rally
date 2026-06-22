@@ -206,6 +206,7 @@ type V2Config struct {
 	Harnesses   map[string]*HarnessConfig
 	Routes      map[string][]string
 	Reasoning   map[string]string
+	Providers   map[string]ProviderConfig
 	Telemetry   TelemetryConfig
 
 	DeprecationNotes []string
@@ -235,6 +236,7 @@ type rawConfig struct {
 	Harnesses   map[string]*HarnessConfig `toml:"harness"`
 	Routes      map[string][]string       `toml:"routes"`
 	Reasoning   map[string]string         `toml:"reasoning"`
+	Providers   map[string]interface{}    `toml:"providers,omitempty"`
 	Telemetry   TelemetryConfig           `toml:"telemetry,omitempty"`
 }
 
@@ -473,6 +475,15 @@ func decodeV2(data []byte) (V2Config, error) {
 	}
 
 	if err := validateRoutes(cfg.Routes); err != nil {
+		return V2Config{}, err
+	}
+
+	providers, err := parseProviders(raw.Providers)
+	if err != nil {
+		return V2Config{}, err
+	}
+	cfg.Providers = providers
+	if _, err := cfg.resolveProviders(); err != nil {
 		return V2Config{}, err
 	}
 
@@ -895,6 +906,9 @@ func SaveV2File(path string, cfg V2Config) error {
 	if err != nil {
 		return err
 	}
+	if _, err := cfg.resolveProviders(); err != nil {
+		return err
+	}
 
 	raw := rawConfig{
 		SchemaVersion:        ExpectedSchemaVersion,
@@ -916,6 +930,7 @@ func SaveV2File(path string, cfg V2Config) error {
 		Harnesses:   cfg.Harnesses,
 		Routes:      cfg.Routes,
 		Reasoning:   reasoning,
+		Providers:   providersToRaw(cfg.Providers),
 		Telemetry:   cfg.Telemetry,
 	}
 

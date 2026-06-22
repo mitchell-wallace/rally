@@ -37,6 +37,7 @@ type Config struct {
 	AgentMixSpecs    []string
 	RouteSpecs       map[string][]string
 	Reasoning        map[string]string
+	Providers        *routing.ProviderIndex
 	UseOverrideRoute bool
 	TargetIterations int
 	StallThreshold   time.Duration
@@ -919,7 +920,7 @@ func (r *Runner) Run(ctx context.Context) error {
 			// path and are not benched here.
 			if res.Category == reliability.CategoryUsageLimit {
 				resetAt := benchResetDeadline(res.ResetEvidence, time.Now())
-				scope := routing.QuotaScope(selection.Agent.Harness, selection.Agent.Model)
+				scope := routeRuntime.quotaScope(selection.Agent.Harness, selection.Agent.Model)
 				benched, benchErr := routeRuntime.benchQuotaScope(resilience, scope, resetAt, relay.ID, selection.Route.Name, selection.EffectiveAssignee)
 				if benchErr != nil {
 					return benchErr

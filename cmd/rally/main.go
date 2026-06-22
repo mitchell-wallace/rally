@@ -314,6 +314,11 @@ func runRelay(cmd *cobra.Command, args []string) error {
 	activeMachineID = telemetryResult.MachineID
 	defer telemetryResult.Cleanup()
 
+	providerIndex, err := cfg.BuildProviderIndex()
+	if err != nil {
+		return fmt.Errorf("resolve providers: %w", err)
+	}
+
 	runnerCfg := relay.Config{
 		WorkspaceDir:           workspaceDir,
 		DataDir:                dataDir,
@@ -322,6 +327,7 @@ func runRelay(cmd *cobra.Command, args []string) error {
 		RouteSpecs:             cfg.Routes,
 		Reasoning:              cfg.Reasoning,
 		ReasoningResolver:      cfg.ResolveRoleReasoning,
+		Providers:              providerIndex,
 		UseOverrideRoute:       usedOverride,
 		TargetIterations:       iterations,
 		StallThreshold:         cfg.Reliability.StallThreshold(),

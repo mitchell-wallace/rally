@@ -2,6 +2,7 @@ package relay
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -43,9 +44,49 @@ type routeRuntime struct {
 	resolver          Resolver
 	reasoning         map[string]string
 	reasoningResolver routing.RoleReasoningResolver
+	providers         *routing.ProviderIndex
 	store             *store.Store
 	lastAgent         map[string]agent.ResolvedAgent
 	warnings          []string
+}
+
+// quotaScope resolves the provider-aware quota bucket for a runner. A nil
+// provider index falls back to the harness-default routing.QuotaScope.
+func (r *routeRuntime) quotaScope(harness, model string) string {
+	return r.providers.QuotaScope(harness, model)
+}
+
+// applyProviders attaches the resolved provider index and warns once per
+// disabled provider that has entries in the configured routes, so operators see
+// at relay start that a lane has been intentionally narrowed.
+func (r *routeRuntime) applyProviders(idx *routing.ProviderIndex) {
+	r.providers = idx
+	if idx == nil {
+		return
+	}
+
+	schedulerNames := make([]string, 0, len(r.schedulers))
+	for name := range r.schedulers {
+		schedulerNames = append(schedulerNames, name)
+	}
+	sort.Strings(schedulerNames)
+
+	warned := map[string]bool{}
+	for _, schedulerName := range schedulerNames {
+		scheduler := r.schedulers[schedulerName]
+		for _, state := range scheduler.EntryStates() {
+			resolved, err := r.resolvedEntryAgent(state.Entry, schedulerName)
+			if err != nil {
+				continue
+			}
+			name, ok := idx.ProviderFor(resolved.Harness, resolved.Model)
+			if !ok || !idx.Disabled(resolved.Harness, resolved.Model) || warned[name] {
+				continue
+			}
+			warned[name] = true
+			r.warnings = append(r.warnings, fmt.Sprintf("warning: provider %q is disabled; its runners are sidelined for this relay", name))
+		}
+	}
 }
 
 func (r *routeRuntime) Warnings() []string {
@@ -84,31 +125,49 @@ func (e *routeSelectionError) Error() string {
 }
 
 func newRouteRuntimeFromConfig(cfg Config) (*routeRuntime, string, error) {
+	var (
+		rt    *routeRuntime
+		label string
+		err   error
+	)
 	switch {
 	case cfg.UseOverrideRoute:
-		return newOverrideRouteRuntimeWithReasoning(cfg.AgentMixSpecs, cfg.RouteSpecs, cfg.Resolver, cfg.Reasoning, cfg.ReasoningResolver, !cfg.LapsEnabled)
+		rt, label, err = newOverrideRouteRuntimeWithReasoning(cfg.AgentMixSpecs, cfg.RouteSpecs, cfg.Resolver, cfg.Reasoning, cfg.ReasoningResolver, !cfg.LapsEnabled)
 	case len(cfg.RouteSpecs) > 0:
-		rt, err := newResolvedRouteRuntimeWithReasoning(cfg.RouteSpecs, cfg.Resolver, cfg.Reasoning, cfg.ReasoningResolver, !cfg.LapsEnabled, nil)
-		return rt, relaySelectionModeRoutes, err
+		rt, err = newResolvedRouteRuntimeWithReasoning(cfg.RouteSpecs, cfg.Resolver, cfg.Reasoning, cfg.ReasoningResolver, !cfg.LapsEnabled, nil)
+		label = relaySelectionModeRoutes
 	default:
-		return newLegacyMixRouteRuntime(cfg.AgentMixSpecs, cfg.Resolver, !cfg.LapsEnabled)
+		rt, label, err = newLegacyMixRouteRuntime(cfg.AgentMixSpecs, cfg.Resolver, !cfg.LapsEnabled)
 	}
+	if err == nil && rt != nil {
+		rt.applyProviders(cfg.Providers)
+	}
+	return rt, label, err
 }
 
 func newRouteRuntimeFromStoredLabel(cfg Config, stored string) (*routeRuntime, string, error) {
+	var (
+		rt    *routeRuntime
+		label string
+		err   error
+	)
 	switch {
 	case stored == relaySelectionModeRoutes:
 		if len(cfg.RouteSpecs) == 0 {
 			return nil, "", fmt.Errorf("resume relay: stored route-based relay requires configured routes")
 		}
-		rt, err := newResolvedRouteRuntimeWithReasoning(cfg.RouteSpecs, cfg.Resolver, cfg.Reasoning, cfg.ReasoningResolver, !cfg.LapsEnabled, nil)
-		return rt, relaySelectionModeRoutes, err
+		rt, err = newResolvedRouteRuntimeWithReasoning(cfg.RouteSpecs, cfg.Resolver, cfg.Reasoning, cfg.ReasoningResolver, !cfg.LapsEnabled, nil)
+		label = relaySelectionModeRoutes
 	case strings.HasPrefix(stored, relaySelectionModeOverridePrefix):
 		specs := strings.Fields(strings.TrimSpace(strings.TrimPrefix(stored, relaySelectionModeOverridePrefix)))
-		return newOverrideRouteRuntimeWithReasoning(specs, cfg.RouteSpecs, cfg.Resolver, cfg.Reasoning, cfg.ReasoningResolver, !cfg.LapsEnabled)
+		rt, label, err = newOverrideRouteRuntimeWithReasoning(specs, cfg.RouteSpecs, cfg.Resolver, cfg.Reasoning, cfg.ReasoningResolver, !cfg.LapsEnabled)
 	default:
-		return newLegacyMixRouteRuntime(strings.Fields(stored), cfg.Resolver, !cfg.LapsEnabled)
+		rt, label, err = newLegacyMixRouteRuntime(strings.Fields(stored), cfg.Resolver, !cfg.LapsEnabled)
 	}
+	if err == nil && rt != nil {
+		rt.applyProviders(cfg.Providers)
+	}
+	return rt, label, err
 }
 
 func newLegacyMixRouteRuntime(specs []string, resolver Resolver, noBackend bool) (*routeRuntime, string, error) {
@@ -324,6 +383,14 @@ func (r *routeRuntime) syncRecoverySignals(scheduler *routing.Scheduler, resilie
 			continue
 		}
 
+		// An operator-disabled provider sidelines its members for the whole
+		// relay. Sideline before consulting resilience state so the StateActive
+		// arm below cannot un-bench a disabled entry on a later sync.
+		if r.providers.Disabled(key.Harness, key.Model) {
+			scheduler.OnAgentFailed(state, "provider disabled", true)
+			continue
+		}
+
 		status, since := resilience.GetState(key)
 		switch status {
 		case StateActive:
@@ -395,6 +462,7 @@ func (r *routeRuntime) selectionWaitError(scheduler *routing.Scheduler, resilien
 	seenKeys := map[ResilienceKey]struct{}{}
 	totalKeys := 0
 	frozenKeys := 0
+	disabledKeys := 0
 
 	for _, state := range scheduler.EntryStates() {
 		key, err := r.resilienceKeyForEntry(state.Entry, effectiveAssignee)
@@ -406,6 +474,14 @@ func (r *routeRuntime) selectionWaitError(scheduler *routing.Scheduler, resilien
 		}
 		seenKeys[key] = struct{}{}
 		totalKeys++
+
+		// Disabled providers have no reset deadline — they are off until the
+		// operator re-enables them — so they contribute no wait, only a distinct
+		// terminal message when an entire lane is disabled.
+		if r.providers.Disabled(key.Harness, key.Model) {
+			disabledKeys++
+			continue
+		}
 
 		status, since := resilience.GetState(key)
 		var wait time.Duration
@@ -452,6 +528,14 @@ func (r *routeRuntime) selectionWaitError(scheduler *routing.Scheduler, resilien
 			RouteName:         routeName,
 			EffectiveAssignee: effectiveAssignee,
 			message:           "all agents paused or benched",
+		}
+	}
+
+	if totalKeys > 0 && disabledKeys == totalKeys {
+		return &routeSelectionError{
+			RouteName:         routeName,
+			EffectiveAssignee: effectiveAssignee,
+			message:           "all agents disabled (check [providers] disabled flags)",
 		}
 	}
 
@@ -517,7 +601,7 @@ func (r *routeRuntime) benchQuotaScope(resilience *Resilience, scope string, res
 				continue
 			}
 			seen[key] = struct{}{}
-			if routing.QuotaScope(key.Harness, key.Model) != scope {
+			if r.quotaScope(key.Harness, key.Model) != scope {
 				continue
 			}
 			if err := resilience.BenchAgent(key, resetAt, scope, relayID); err != nil {
