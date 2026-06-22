@@ -48,6 +48,8 @@ telemetry fields. Lap IDs are not sensitive and MAY be emitted.
 - **WHEN** a laps-backed try is cancelled before finalizing with `laps done` or `laps handoff`
 - **THEN** telemetry SHALL NOT capture an `incomplete_finalization` operator-worthy failure for that cancelled try
 
+## ADDED Requirements
+
 ### Requirement: Warning-level telemetry
 The system SHALL support a warning telemetry level for diagnostic events that should be more visible than info events but should not automatically create operator-worthy failures. After the 0.9.1 telemetry migration, the New Relic Go APM sink SHALL emit `level=warning` on the resulting `RallyDiagnostic` custom event.
 

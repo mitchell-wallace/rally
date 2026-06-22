@@ -114,7 +114,7 @@ The system SHALL flush pending telemetry before the CLI process exits, using a b
 - **WHEN** flushing cannot complete because the network is unreachable
 - **THEN** the system SHALL stop waiting after the bounded timeout and exit
 
-### Requirement: Product telemetry license-key activation
+### Requirement: Product telemetry DSN activation
 The system SHALL support a baked default New Relic license key for release binaries while preserving user/operator overrides. The system SHALL resolve telemetry in this order: `RALLY_TELEMETRY=0` disables telemetry regardless of any configured credentials; `[telemetry] enabled=false` disables telemetry; `NEW_RELIC_LICENSE_KEY`; baked `DefaultNewRelicLicenseKey`; no license disables telemetry. The system SHALL initialize telemetry only for commands that run relays, so mechanical commands do not create telemetry side-effect files or open a telemetry client solely because baked credentials exist. The system SHALL NOT activate Sentry from legacy DSN config.
 
 #### Scenario: Baked New Relic license activates release telemetry

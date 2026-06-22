@@ -1,6 +1,6 @@
 ## Proposal: 0.10.0 — Reasoning Levels, Run Semantics, and Relay Visibility
 
-## Problem statement
+## Why
 
 Rally currently conflates some run/lap signals:
 
@@ -13,7 +13,7 @@ Rally currently conflates some run/lap signals:
 
 This release introduces warning-first mismatch handling, first-class cancelled outcomes, role-aware variant selection, and cleaner visibility with run-oriented output and active-tailing.
 
-## Target outcomes
+## What Changes
 
 1. **Release-ready behavior and diagnostics**
    - Lap pin mismatch remains observable but is **not** a hard failure.
