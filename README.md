@@ -274,6 +274,15 @@ SENIOR  = ["cx:1", "cc:opus:1"]
 JUNIOR  = ["op:z:4", "op:gk:2", "ge:1"]
 recovery = ["claude"]
 
+[providers]
+# Runners that share one usage-limit budget. A usage limit on any member
+# benches the whole group until the reset.
+codex = ["g55", "g54", "opencode:openai/gpt-5.5"]
+
+[providers.opencode-go]
+models   = ["op:gk", "opencode:opencode-go/glm-5.1"]
+disabled = true
+
 [reliability]
 stall_threshold_secs  = 900
 liveness_probe        = false
@@ -421,6 +430,44 @@ parsing stays unambiguous.
 Built-in harnesses (`ag`/`cc`/`cx`/`ge`/`op`) can declare named models but
 **cannot** declare `command`, `model_flag`, `output_strategy`, or
 `tail_stream`.
+
+### `[providers]` — shared-quota groups
+
+`[providers]` groups runners that draw from the same usage-limit budget. By
+default Rally infers a quota bucket per harness (and per opencode provider /
+antigravity model family). When several runners actually share one account —
+e.g. multiple codex models behind one ChatGPT plan, or a codex model exposed
+both directly and through opencode — list them under a provider so a usage
+limit on **any** member benches **every** member until the reset. This avoids
+burning retries on siblings that are already exhausted.
+
+Each provider key is a user-defined name; its value is a list of model specs.
+A spec is a named model shortcut (`g55`), a harness-qualified alias (`op:ds`),
+or a full `harness:model` (`opencode:openai/gpt-5.5`). A bare shortcut must be
+defined under exactly one harness's `[harness.<h>.models]` table, otherwise
+qualify it (`cx:g55`). A given runner may belong to at most one provider.
+
+```toml
+[providers]
+# Concise array form — enabled, models only.
+codex = ["g55", "g54", "opencode:openai/gpt-5.5"]
+```
+
+To **disable** a whole provider — sidelining every member for the relay — use
+the table form with `disabled = true` (TOML cannot attach a flag to a bare
+array). Disable to conserve a known long usage limit (e.g. a monthly cap), or
+to keep a harness free while another session runs a large task:
+
+```toml
+[providers.claude]
+models   = ["cc:opus", "cc:sonnet"]
+disabled = true
+```
+
+A disabled provider's runners are skipped during selection; if a lane has no
+other runner it fails fast with a clear message rather than waiting. `rally
+routes check` lists every provider, its member count, and whether it is
+disabled.
 
 ### `[reasoning]` — role-level variant preferences
 

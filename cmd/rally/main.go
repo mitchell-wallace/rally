@@ -55,6 +55,18 @@ const repoConfigTemplate = `# Rally repo-level config — OVERRIDES ONLY.
 # junior = ["op:zai", "cc:sonnet"]
 # senior = ["cc:opus", "cx:g55"]
 #
+# [providers]
+# # Group runners that share one usage-limit budget. When any member hits a
+# # usage limit, every member is benched until the reset — so rally stops
+# # retrying models that draw from the same exhausted account, even across
+# # harnesses. Entries are model aliases or harness:model specs.
+# codex = ["g55", "g54", "opencode:openai/gpt-5.5"]
+# # Use the table form to disable a whole provider (e.g. a known monthly cap,
+# # or to conserve usage while another session runs a big task):
+# # [providers.claude]
+# # models   = ["cc:opus", "cc:sonnet"]
+# # disabled = true
+#
 # [reliability]
 # retry_budget = 5
 #

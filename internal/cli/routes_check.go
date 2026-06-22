@@ -26,10 +26,18 @@ var loadConfig = config.LoadV2
 
 type RouteCheckResult struct {
 	Summaries       []RouteSummary
+	ProviderSummary []ProviderSummary
 	RoleDiagnostics []RoleDiagnostic
 	Overlaps        []RoleOverlap
 	Warnings        []string
 	Infos           []string
+}
+
+// ProviderSummary describes one [providers] quota group for `rally routes check`.
+type ProviderSummary struct {
+	Name        string
+	MemberCount int
+	Disabled    bool
 }
 
 type RoleDiagnostic struct {
@@ -100,6 +108,24 @@ func CheckRoutes(workspaceDir string, cfg config.V2Config) (RouteCheckResult, er
 			Name:       name,
 			EntryCount: len(route.Entries),
 		})
+	}
+
+	providerNames := make([]string, 0, len(cfg.Providers))
+	for name := range cfg.Providers {
+		providerNames = append(providerNames, name)
+	}
+	sort.Strings(providerNames)
+	for _, name := range providerNames {
+		pc := cfg.Providers[name]
+		result.ProviderSummary = append(result.ProviderSummary, ProviderSummary{
+			Name:        name,
+			MemberCount: len(pc.Models),
+			Disabled:    pc.Disabled,
+		})
+		if pc.Disabled {
+			result.Infos = append(result.Infos,
+				fmt.Sprintf("info: provider %q is disabled; its runners are sidelined until you re-enable it", name))
+		}
 	}
 
 	reasoningWarnings, err := validateReasoning(cfg)
@@ -233,6 +259,17 @@ func renderRouteCheckResult(w io.Writer, result RouteCheckResult) {
 	} else {
 		for _, summary := range result.Summaries {
 			fmt.Fprintf(w, "- %s: %d %s\n", summary.Name, summary.EntryCount, pluralize(summary.EntryCount, "entry", "entries"))
+		}
+	}
+
+	if len(result.ProviderSummary) > 0 {
+		fmt.Fprintln(w, "\nproviders (shared-quota groups):")
+		for _, p := range result.ProviderSummary {
+			status := ""
+			if p.Disabled {
+				status = " [disabled]"
+			}
+			fmt.Fprintf(w, "- %s: %d %s%s\n", p.Name, p.MemberCount, pluralize(p.MemberCount, "model", "models"), status)
 		}
 	}
 

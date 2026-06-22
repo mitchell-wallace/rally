@@ -96,6 +96,63 @@ default = ["claude:opus:4.7"]
 	}
 }
 
+func TestRoutesCheckProvidersSummary(t *testing.T) {
+	workspaceDir := t.TempDir()
+	writeRoutesConfig(t, workspaceDir, `schema_version = 2
+
+[harness.cx.models]
+g55 = "gpt-5.5"
+g54 = "gpt-5.4"
+
+[routes]
+default = ["cc", "cx"]
+
+[providers]
+codex = ["g55", "g54"]
+
+[providers.claude]
+models   = ["cc"]
+disabled = true
+`)
+
+	output, err := executeRoutesCheck(t, workspaceDir)
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if !strings.Contains(output, "providers (shared-quota groups):") {
+		t.Fatalf("output = %q, want providers header", output)
+	}
+	if !strings.Contains(output, "- codex: 2 models") {
+		t.Fatalf("output = %q, want codex provider summary", output)
+	}
+	if !strings.Contains(output, "- claude: 1 model [disabled]") {
+		t.Fatalf("output = %q, want disabled claude provider summary", output)
+	}
+	if !strings.Contains(output, `info: provider "claude" is disabled`) {
+		t.Fatalf("output = %q, want disabled info note", output)
+	}
+}
+
+func TestRoutesCheckProvidersResolutionError(t *testing.T) {
+	workspaceDir := t.TempDir()
+	writeRoutesConfig(t, workspaceDir, `schema_version = 2
+
+[routes]
+default = ["cc"]
+
+[providers]
+codex = ["nope"]
+`)
+
+	_, err := executeRoutesCheck(t, workspaceDir)
+	if err == nil {
+		t.Fatal("Execute() error = nil, want provider resolution failure")
+	}
+	if !strings.Contains(err.Error(), "unknown model alias") {
+		t.Fatalf("error = %q, want unknown model alias message", err.Error())
+	}
+}
+
 func TestRoutesCheckQuotaError(t *testing.T) {
 	workspaceDir := t.TempDir()
 	writeRoutesConfig(t, workspaceDir, `schema_version = 2
