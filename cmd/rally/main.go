@@ -29,6 +29,65 @@ import (
 
 var Version = "dev"
 
+// repoConfigTemplate is the comments-only repo-level config written by
+// `rally init`. The active configuration lives in the user-level file; this file
+// documents the knobs and carries per-repo overrides only.
+const repoConfigTemplate = `# Rally repo-level config — OVERRIDES ONLY.
+#
+# Your main rally configuration lives in the user-level file:
+#   ~/.config/rally/config.toml   (or $XDG_CONFIG_HOME/rally/config.toml)
+#
+# Rally loads that user file first, then applies anything set HERE on top of it
+# (per key: a value here wins over the same key in the user file). Leave a
+# setting commented out to inherit it from the user file. Use this file only for
+# settings that should differ in THIS repository.
+#
+# Uncomment and edit any of the examples below to override them for this repo:
+#
+# schema_version = 2
+#
+# [defaults]
+# iterations = 5
+# mix = "cc cx"
+#
+# [routes]
+# # Map a role to an ordered runner fallback list (first that works wins).
+# junior = ["op:zai", "cc:sonnet"]
+# senior = ["cc:opus", "cx:g55"]
+#
+# [reliability]
+# retry_budget = 5
+#
+# [telemetry]
+# new_relic_app_name = ""
+`
+
+// userConfigSeed is the active base config written to ~/.config/rally/config.toml
+// when it does not yet exist. This is the main source of truth; repo-level files
+// override individual keys.
+const userConfigSeed = `# Rally user-level config — the base for every repo on this machine.
+# Repo-level .rally/config.toml files override individual keys set here.
+# Run ` + "`rally init roles`" + ` to add default role routing.
+schema_version = 2
+laps_instructions = ""
+run_hooks_on_autocommit = false
+data_dir = ""
+
+[defaults]
+iterations = 5
+mix = "cc cx"
+claude_model = ""
+codex_model = ""
+gemini_model = ""
+opencode_model = ""
+antigravity_model = ""
+
+[telemetry]
+# enabled = false
+new_relic_app_name = ""
+new_relic_host_display_name = ""
+`
+
 // DefaultNewRelicLicenseKey is the baked-in New Relic license key for release
 // binaries. GoReleaser injects it via -X main.DefaultNewRelicLicenseKey=... at
 // build time.
@@ -188,6 +247,15 @@ func runRelay(cmd *cobra.Command, args []string) error {
 
 	if _, err := os.Stat(rallyDir); os.IsNotExist(err) {
 		return fmt.Errorf("rally not initialized; run `rally init` first")
+	}
+
+	// Migrate/auto-update role instruction folders for repos that use roles.
+	// Skipped when the repo never set up .rally/agents/ so roles are never
+	// created implicitly for repos that don't use them.
+	if _, err := os.Stat(store.AgentsDir(workspaceDir)); err == nil {
+		if err := syncRoleFolders(workspaceDir); err != nil {
+			fmt.Fprintf(os.Stderr, "warning: sync role folders: %v\n", err)
+		}
 	}
 
 	s, err := store.NewStore(rallyDir)
@@ -523,27 +591,22 @@ func runInit(cmd *cobra.Command, args []string) error {
 		}
 	}
 	if _, err := os.Stat(configPath); os.IsNotExist(err) {
-		content := `schema_version = 2
-laps_instructions = ""
-run_hooks_on_autocommit = false
-data_dir = ""
-
-[defaults]
-iterations = 5
-mix = "cc cx"
-claude_model = ""
-codex_model = ""
-gemini_model = ""
-opencode_model = ""
-antigravity_model = ""
-
-[telemetry]
-# enabled = false
-new_relic_app_name = ""
-new_relic_host_display_name = ""
-`
-		if err := os.WriteFile(configPath, []byte(content), 0o644); err != nil {
+		if err := os.WriteFile(configPath, []byte(repoConfigTemplate), 0o644); err != nil {
 			return err
+		}
+	}
+
+	// Ensure the user-level config (the base / main source of truth) exists.
+	// Created only when absent — never overwrite a user's existing config.
+	if userPath := store.UserConfigPath(); userPath != "" {
+		if _, err := os.Stat(userPath); os.IsNotExist(err) {
+			if err := os.MkdirAll(filepath.Dir(userPath), 0o755); err != nil {
+				return err
+			}
+			if err := os.WriteFile(userPath, []byte(userConfigSeed), 0o644); err != nil {
+				return err
+			}
+			fmt.Printf("Created user-level config at %s\n", userPath)
 		}
 	}
 
@@ -555,8 +618,9 @@ new_relic_host_display_name = ""
 This directory contains rally's workspace configuration and local runtime data.
 
 ## Tracked Files
-- ` + "`config.toml`" + ` — Agent model configuration and runtime settings
-- ` + "`agents/`" + ` — Role instruction files
+- ` + "`config.toml`" + ` — Repo-level config overrides (base config lives in ` + "`~/.config/rally/config.toml`" + `)
+- ` + "`agents/builtin/`" + ` — Rally-managed role instructions (auto-updated by rally; do not edit)
+- ` + "`agents/user/`" + ` — Your role instruction overrides (win over ` + "`builtin/`" + `)
 - ` + "`README.md`" + ` — This guide
 - ` + "`summary.jsonl`" + ` — Append-only run summary digest, when enabled by the current workflow
 

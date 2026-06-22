@@ -217,12 +217,24 @@ project never write to the same file.
 
 ## Configuration
 
-Rally reads `.rally/config.toml` from the workspace. `rally init` writes a
-starter config with sensible defaults; you can edit it any time.
-`rally init roles` extends that starter setup with role routes for
-`junior`, `senior`, `ui`, `verify`, and `recovery`, plus matching markdown files under
-`.rally/agents/`. The example below is illustrative; generated defaults may be
-more compact when unset values can fall back to harness defaults.
+Rally config is layered. The **user-level** file at
+`~/.config/rally/config.toml` (honouring `$XDG_CONFIG_HOME`) is the base — the
+main source of truth shared across every repo. The **repo-level**
+`.rally/config.toml` holds per-repo **overrides** only: Rally loads the user
+file first, then applies anything set in the repo file on top of it (per key, a
+repo value wins; a sub-table such as `[harness.cc.models]` merges per entry, and
+a `[routes]` entry replaces just that role's list). `rally init` seeds the user
+file with sensible defaults (only if it doesn't exist) and writes a
+**comments-only** repo file that documents the knobs and points at the user
+file. Edit the user base with `rally config`; edit repo overrides with
+`rally config --repo`.
+
+`rally init roles` adds role routes for `junior`, `senior`, `ui`, `verify`, and
+`recovery` to the **user** config, plus role instruction files under
+`.rally/agents/` (see [Role instruction files](#role-instruction-files)). The
+example below shows the active config shape (as written to the user file);
+generated defaults may be more compact when unset values can fall back to
+harness defaults.
 
 ```toml
 schema_version = 2
@@ -364,11 +376,23 @@ lane so the scheduler can rotate past a failing harness.
 
 #### Role instruction files
 
-When a lap has an `assignee`, Rally looks for
-`.rally/agents/{ASSIGNEE}.md` using a case-insensitive directory scan. If a
-file is found, its contents are inserted between Rally's base instructions
-and the lap body. Missing files are silent. Rally treats the file contents
-as opaque text — no front-matter parsing, no template.
+When a lap has an `assignee`, Rally looks for a `{ASSIGNEE}.md` role file under
+`.rally/agents/`, resolving (case-insensitively), highest priority first:
+
+1. `.rally/agents/user/{ASSIGNEE}.md` — your overrides
+2. `.rally/agents/builtin/{ASSIGNEE}.md` — Rally-managed defaults
+3. the role default embedded in the binary
+
+`builtin/` files are **managed by Rally**: they are regenerated from the binary
+on each run, so they auto-update when you update Rally — don't hand-edit them.
+Put customizations in `user/`, which always win over `builtin/` and are never
+touched. When Rally first runs after the upgrade that introduced this layout, it
+migrates any legacy flat `.rally/agents/{ROLE}.md` files: files matching content
+Rally has shipped move to `builtin/` (and auto-update), and anything you
+customized moves to `user/` (preserved), with a one-line notice. If a file is
+found, its contents are inserted between Rally's base instructions and the lap
+body. Missing files are silent. Rally treats the file contents as opaque text —
+no front-matter parsing, no template.
 
 ### `[harness.<name>.models]` — named models
 
@@ -675,13 +699,15 @@ Default data directory (override with `data_dir` in config):
 |-------------------------------------------------------|-----------------------------------------|
 | `~/.local/share/rally/relays/<repo>/relay-N.log`      | Full relay log per repo                 |
 | `~/.local/share/rally/tries/<repo>/try-N.log`         | Per-try transcript                      |
-| `.rally/config.toml`                                  | Workspace config                        |
+| `~/.config/rally/config.toml`                         | User-level config (base for every repo) |
+| `.rally/config.toml`                                  | Repo-level config overrides             |
 | `.rally/state/tries.jsonl`                            | Try records (read by `rally tail`)      |
 | `.rally/state/messages.jsonl`                         | Inbox messages                          |
 | `.rally/state/agent_status.jsonl`                     | Agent status events                     |
 | `.rally/summary.jsonl`                                | Run summaries and lap completions       |
 | `.rally/instructions.md`                              | Project instructions                    |
-| `.rally/agents/{ROLE}.md`                             | Role-specific instructions              |
+| `.rally/agents/builtin/{ROLE}.md`                     | Rally-managed role instructions         |
+| `.rally/agents/user/{ROLE}.md`                        | Your role instruction overrides         |
 
 The `<repo>` segment is `<basenamePrefix>-<hash>`, derived from the
 workspace path so multiple checkouts under one data dir never collide.
@@ -691,7 +717,7 @@ workspace path so multiple checkouts under one data dir never collide.
 ```sh
 rally start              # start or resume a relay
 rally init               # initialise .rally/ in the current repo (workspace only)
-rally init roles         # add default role routes and .rally/agents/*.md (no workspace scaffold)
+rally init roles         # add default role routes (user config) + .rally/agents/{builtin,user}/ (no workspace scaffold)
 rally init all           # full setup: workspace scaffold + roles
 rally tail [--try N]     # follow a try's log
 rally routes check       # validate [routes]
@@ -705,8 +731,8 @@ rally version            # print version (vX.Y.Z, vX.Y.Z-dev for source builds)
 
 | Command | What it does |
 |---|---|
-| `rally init` | Creates `.rally/config.toml`, scaffolds `.rally/state/`, and writes `.rally/instructions.md` + `.gitignore` entries. Idempotent — safe to re-run. |
-| `rally init roles` | Adds `[routes]` entries for `junior`, `senior`, `ui`, `verify`, and `recovery` to the existing config and writes `.rally/agents/*.md` role instruction files. Does **not** touch workspace scaffold files (README, .gitignore, etc.). Idempotent. |
+| `rally init` | Writes a comments-only repo `.rally/config.toml`, seeds the user-level `~/.config/rally/config.toml` if absent, scaffolds `.rally/state/`, and writes `.rally/.gitignore` entries. Idempotent — safe to re-run. |
+| `rally init roles` | Adds `[routes]` entries for `junior`, `senior`, `ui`, `verify`, and `recovery` to the **user** config and sets up role instruction files under `.rally/agents/builtin/` (managed) and `.rally/agents/user/` (overrides). Does **not** touch workspace scaffold files (README, .gitignore, etc.). Idempotent. |
 | `rally init all` | Runs `rally init` followed by `rally init roles` — full workspace + role setup in one step. The hidden alias `rally init-roles` also maps here for backward compatibility. Idempotent. |
 
 For a fresh repo, `rally init all` is the quickest path to a fully configured workspace.

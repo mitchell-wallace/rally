@@ -12,14 +12,17 @@ import (
 	"golang.org/x/term"
 
 	"github.com/mitchell-wallace/rally/internal/config"
+	"github.com/mitchell-wallace/rally/internal/store"
 )
 
 // NewConfigCmd returns the `rally config` command group.
 func NewConfigCmd() *cobra.Command {
-	return &cobra.Command{
+	cmd := &cobra.Command{
 		Use:   "config",
 		Short: "Configure rally interactively",
-		Long: `Interactively edit .rally/config.toml.
+		Long: `Interactively edit the user-level rally config
+(~/.config/rally/config.toml) — the base used by every repo. Pass --repo to edit
+this repository's override file (.rally/config.toml) instead.
 
 Walks through defaults (mix, iterations), default models per harness,
 paths (data dir, instructions files), role routing fallbacks, reliability
@@ -27,17 +30,24 @@ tuning, and any custom harness aliases. Existing values are pre-filled in
 each form; leave them as-is to keep, or edit in place.`,
 		RunE: runConfig,
 	}
+	cmd.Flags().Bool("repo", false, "Edit this repo's override config (.rally/config.toml) instead of the user-level base")
+	return cmd
 }
 
 func runConfig(cmd *cobra.Command, _ []string) error {
 	if !term.IsTerminal(int(os.Stdin.Fd())) {
-		return fmt.Errorf("rally config is interactive and requires a terminal; edit .rally/config.toml directly for non-interactive use")
+		return fmt.Errorf("rally config is interactive and requires a terminal; edit the config file directly for non-interactive use")
 	}
 	workspaceDir, err := resolveWorkspaceDir()
 	if err != nil {
 		return err
 	}
-	cfg, err := loadConfig(workspaceDir)
+	repoScope, _ := cmd.Flags().GetBool("repo")
+	targetPath := store.UserConfigPath()
+	if repoScope || targetPath == "" {
+		targetPath = store.ConfigPath(workspaceDir)
+	}
+	cfg, err := config.LoadV2File(targetPath)
 	if err != nil {
 		return fmt.Errorf("load config: %w", err)
 	}
@@ -186,10 +196,10 @@ func runConfig(cmd *cobra.Command, _ []string) error {
 		}
 	}
 
-	if err := config.SaveV2(workspaceDir, cfg); err != nil {
+	if err := config.SaveV2File(targetPath, cfg); err != nil {
 		return fmt.Errorf("save config: %w", err)
 	}
-	fmt.Fprintln(cmd.OutOrStdout(), "Wrote .rally/config.toml.")
+	fmt.Fprintf(cmd.OutOrStdout(), "Wrote %s.\n", targetPath)
 	return nil
 }
 

@@ -638,6 +638,13 @@ func (r *Runner) Run(ctx context.Context) error {
 	applyRallyContext(relaySpan, relayTags, rc)
 	defer relaySpan.Finish()
 
+	// Failover: on every relay exit path, make sure summary.jsonl is not left as
+	// an uncommitted change. The per-run amend normally folds it into the run's
+	// commit, so this should be a no-op; when it fires it is recorded to New
+	// Relic so the leftover is visible. Registered after relaySpan so it runs
+	// before the span finishes (LIFO), keeping the event inside the transaction.
+	defer r.commitLeftoverSummary(ctx, relay, rc)
+
 	resilience := r.resilience
 	if resilience == nil {
 		resilience = NewResilience(r.store)
@@ -1007,6 +1014,57 @@ func (r *Runner) Run(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+// commitLeftoverSummary is the end-of-relay failover for summary.jsonl: if the
+// tracked .rally/summary.jsonl is still dirty when the relay exits, it commits
+// just that file and records a RallyDiagnostic so the leftover is visible in
+// New Relic. With the per-run amend fold in place this should rarely fire; a
+// firing means a run finished without folding its summary, which is the signal
+// worth surfacing. Best-effort: git/telemetry failures are logged, not fatal.
+func (r *Runner) commitLeftoverSummary(ctx context.Context, relay *store.RelayRecord, rc telemetry.RallyContext) {
+	if relay == nil {
+		return
+	}
+	dir := r.cfg.WorkspaceDir
+	if _, inGit, err := gitx.GitRepoRoot(dir); err != nil || !inGit {
+		return
+	}
+
+	const rel = ".rally/summary.jsonl"
+	out, err := gitx.GitOutput(dir, "status", "--porcelain", "--", rel)
+	if err != nil || strings.TrimSpace(string(out)) == "" {
+		return // clean — nothing left over
+	}
+
+	if _, err := gitx.GitOutput(dir, "add", "--", rel); err != nil {
+		r.logf("relay %d leftover summary stage warning: %v\n", relay.ID, err)
+		return
+	}
+	// Confirm something is actually staged (the add can be a no-op if the path
+	// is operator-ignored).
+	if _, err := gitx.GitOutput(dir, "diff", "--cached", "--quiet", "--", rel); err == nil {
+		return
+	}
+
+	args := append(gitx.GitUserFallbackConfig(dir), "commit", "--no-verify", "-m", "rally: commit leftover summary", "--", rel)
+	if _, err := gitx.GitOutput(dir, args...); err != nil {
+		r.logf("relay %d leftover summary commit warning: %v\n", relay.ID, err)
+		return
+	}
+	r.logf("relay %d committed leftover summary.jsonl via end-of-relay failover\n", relay.ID)
+
+	r.tel().CaptureEvent(ctx, "relay left summary.jsonl uncommitted; committed via failover", telemetry.Event{
+		Level: telemetry.LevelWarning,
+		Tags:  telemetry.Tags(telemetry.EventInfo{RelayID: relay.ID, Repo: rc.Repo, RepoName: rc.RepoName}),
+	})
+}
+
+// logf writes to the relay log when one is open; it is a no-op otherwise.
+func (r *Runner) logf(format string, args ...interface{}) {
+	if r.log != nil {
+		fmt.Fprintf(r.log, format, args...)
+	}
 }
 
 // tallyRuns aggregates try records into run-level pass/fail/cancelled counts
@@ -1852,6 +1910,27 @@ attemptLoop:
 			filesChangedList = r.filesChangedList(result, headBefore, headAfter, commitHash)
 		}
 		filesChangedCount := len(filesChangedList)
+
+		// Fold Rally's own bookkeeping (state + the summary.jsonl append) into
+		// this attempt's commit when it produced one, so the summary lands inside
+		// that commit rather than trailing it as a separate `rally: update state`
+		// commit or a leftover working-tree change. With no commit, fall back to
+		// the no-commit insurance path. Done here — after filesChangedList is
+		// computed but before the footer/try record — so reported hashes are the
+		// amended hash while filesChanged still excludes folded rally state.
+		if commitHash != "" {
+			if newHash, foldErr := gitx.FoldRallyStateIntoHead(r.cfg.WorkspaceDir); foldErr != nil {
+				fmt.Fprintf(log, "relay %d run %d attempt %d rally state fold warning: %v\n", relay.ID, runIndex+1, attempt, foldErr)
+			} else if newHash != "" && newHash != commitHash {
+				if len(commitHistory) > 0 && commitHistory[len(commitHistory)-1] == commitHash {
+					commitHistory[len(commitHistory)-1] = newHash
+				}
+				commitHash = newHash
+			}
+		} else if foldErr := gitx.FoldRallyState(r.cfg.WorkspaceDir); foldErr != nil {
+			fmt.Fprintf(log, "relay %d run %d attempt %d rally state fold warning: %v\n", relay.ID, runIndex+1, attempt, foldErr)
+		}
+
 		shortHash := ""
 		commitTitle := ""
 		if len(commitHash) >= 7 {
@@ -1900,11 +1979,6 @@ attemptLoop:
 				Attempt:            attempt,
 				MaxAttempts:        maxAttempts,
 			})
-
-			// Fold rally state (same as the normal path).
-			if err := gitx.FoldRallyState(r.cfg.WorkspaceDir); err != nil {
-				fmt.Fprintf(log, "relay %d run %d attempt %d rally state fold warning: %v\n", relay.ID, runIndex+1, attempt, err)
-			}
 
 			tryRecord := store.TryRecord{
 				ID:                     tryID,
@@ -2218,14 +2292,6 @@ attemptLoop:
 			Attempt:      attempt,
 			MaxAttempts:  maxAttempts,
 		})
-
-		// Fold any remaining Rally state churn into history. The work commit
-		// above already staged summary.jsonl via `git add -A`; this only fires
-		// for no-code runs, amending a rally-authored HEAD or creating a single
-		// `rally: update state` commit. User code is never staged here.
-		if err := gitx.FoldRallyState(r.cfg.WorkspaceDir); err != nil {
-			fmt.Fprintf(log, "relay %d run %d attempt %d rally state fold warning: %v\n", relay.ID, runIndex+1, attempt, err)
-		}
 
 		tryRecord := store.TryRecord{
 			ID:                     tryID,

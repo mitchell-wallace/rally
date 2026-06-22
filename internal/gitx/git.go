@@ -4,9 +4,24 @@ package gitx
 import (
 	"errors"
 	"fmt"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 )
+
+// rallyStatePathspecs returns the subset of {.rally, .laps} that exist in dir.
+// Naming a nonexistent pathspec to `git add` errors, so callers stage only the
+// paths that are present (a workspace without laps has no .laps directory).
+func rallyStatePathspecs(dir string) []string {
+	var paths []string
+	for _, p := range []string{".rally", ".laps"} {
+		if _, err := os.Stat(filepath.Join(dir, p)); err == nil {
+			paths = append(paths, p)
+		}
+	}
+	return paths
+}
 
 func GitRepoRoot(dir string) (string, bool, error) {
 	output, err := GitOutput(dir, "rev-parse", "--show-toplevel")
@@ -156,7 +171,11 @@ func FoldRallyState(dir string) error {
 	// .rally operational paths do not error here, and user code is never staged
 	// — preserving any intentionally-uncommitted work tree from an incomplete
 	// run.
-	if _, err := GitOutput(dir, "add", "--", ".rally", ".laps"); err != nil {
+	paths := rallyStatePathspecs(dir)
+	if len(paths) == 0 {
+		return nil
+	}
+	if _, err := GitOutput(dir, append([]string{"add", "--"}, paths...)...); err != nil {
 		return err
 	}
 
@@ -198,4 +217,51 @@ func FoldRallyState(dir string) error {
 		return err
 	}
 	return nil
+}
+
+// FoldRallyStateIntoHead folds Rally's own bookkeeping (state under .rally/ and
+// the .laps/ queue, including the summary.jsonl append) into the existing HEAD
+// commit via --amend, preserving HEAD's message and author. It is used when the
+// current run already produced its own commit (the agent's `<lap>: done` work
+// commit or rally's autocommit), so the summary update lands inside that commit
+// instead of trailing it as a separate `rally: update state` commit or a
+// leftover working-tree change.
+//
+// Only Rally's own paths are staged — never user code — so any intentionally
+// uncommitted work (an incomplete/dirty handoff) is preserved. It returns the
+// resulting HEAD hash (the amended hash when a fold happened, otherwise the
+// unchanged HEAD), so callers can refresh the commit hash they report.
+func FoldRallyStateIntoHead(dir string) (string, error) {
+	_, inGit, err := GitRepoRoot(dir)
+	if err != nil || !inGit {
+		return "", nil
+	}
+
+	if paths := rallyStatePathspecs(dir); len(paths) > 0 {
+		if _, err := GitOutput(dir, append([]string{"add", "--"}, paths...)...); err != nil {
+			return "", err
+		}
+	}
+
+	staged := false
+	if _, err := GitOutput(dir, "diff", "--cached", "--quiet"); err != nil {
+		var exitErr *exec.ExitError
+		if !errors.As(err, &exitErr) || exitErr.ExitCode() != 1 {
+			return "", err
+		}
+		staged = true
+	}
+
+	if staged {
+		args := append(GitUserFallbackConfig(dir), "commit", "--amend", "--no-edit", "--no-verify")
+		if _, err := GitOutput(dir, args...); err != nil {
+			return "", err
+		}
+	}
+
+	out, err := GitOutput(dir, "rev-parse", "HEAD")
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(out)), nil
 }

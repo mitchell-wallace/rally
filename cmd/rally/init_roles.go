@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/mitchell-wallace/rally/internal/agent"
 	"github.com/mitchell-wallace/rally/internal/agent_prompt"
@@ -115,7 +116,14 @@ func runInitAll(cmd *cobra.Command, args []string) error {
 }
 
 func runRolesSetup(workspaceDir string) error {
-	cfg, err := config.LoadV2(workspaceDir)
+	// Role routing + model defaults are written to the user-level config (the
+	// base / main source of truth) so they apply across every repo. The repo
+	// file stays for per-repo overrides only.
+	cfgPath := store.UserConfigPath()
+	if cfgPath == "" {
+		cfgPath = store.ConfigPath(workspaceDir) // no home dir — fall back to repo
+	}
+	cfg, err := config.LoadV2File(cfgPath)
 	if err != nil {
 		return fmt.Errorf("load config: %w", err)
 	}
@@ -158,44 +166,128 @@ func runRolesSetup(workspaceDir string) error {
 	}
 
 	if changedConfig {
-		if err := config.SaveV2(workspaceDir, cfg); err != nil {
+		if err := config.SaveV2File(cfgPath, cfg); err != nil {
 			return fmt.Errorf("write config: %w", err)
 		}
-		fmt.Println("Updated .rally/config.toml with default role routing.")
+		fmt.Printf("Updated %s with default role routing.\n", cfgPath)
 	} else {
-		fmt.Println(".rally/config.toml already has role routing defaults.")
+		fmt.Printf("%s already has role routing defaults.\n", cfgPath)
 	}
 
-	agentsDir := store.AgentsDir(workspaceDir)
-	if err := os.MkdirAll(agentsDir, 0o755); err != nil {
+	if err := syncRoleFolders(workspaceDir); err != nil {
+		return err
+	}
+	fmt.Println("Role instructions are set up under .rally/agents/builtin/ (rally-managed) and .rally/agents/user/ (your overrides).")
+
+	return nil
+}
+
+// syncRoleFolders ensures the .rally/agents/builtin (rally-managed) and
+// .rally/agents/user (user overrides) folders exist, migrates any legacy flat
+// .rally/agents/<role>.md files into them, and regenerates the builtin files
+// from the binary's embedded defaults so managed roles auto-update when rally is
+// updated. It is safe to call on every relay start and from the init commands.
+func syncRoleFolders(workspaceDir string) error {
+	builtinDir := store.AgentsBuiltinDir(workspaceDir)
+	userDir := store.AgentsUserDir(workspaceDir)
+	if err := os.MkdirAll(builtinDir, 0o755); err != nil {
+		return err
+	}
+	if err := os.MkdirAll(userDir, 0o755); err != nil {
 		return err
 	}
 
-	created := 0
-	for _, role := range defaultRoleBootstraps {
-		path := filepath.Join(agentsDir, role.Name+".md")
-		if _, err := os.Stat(path); err == nil {
+	movedBuiltin, movedUser, err := migrateLegacyRoleFiles(workspaceDir, builtinDir, userDir)
+	if err != nil {
+		return err
+	}
+
+	// (Re)write builtin/<role>.md from the embedded defaults for every embedded
+	// role — the auto-update step. Idempotent when content is unchanged.
+	for _, role := range agent_prompt.Roles() {
+		body, ok := agent_prompt.Role(role)
+		if !ok {
 			continue
-		} else if !os.IsNotExist(err) {
+		}
+		content := body + "\n"
+		path := filepath.Join(builtinDir, role+".md")
+		if existing, err := os.ReadFile(path); err == nil && string(existing) == content {
+			continue
+		}
+		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 			return err
 		}
-		instructions := role.Instructions
-		if embedded, ok := agent_prompt.Role(role.Name); ok {
-			instructions = embedded + "\n"
-		}
-		if err := os.WriteFile(path, []byte(instructions), 0o644); err != nil {
-			return err
-		}
-		created++
 	}
 
-	if created > 0 {
-		fmt.Printf("Created %d role instruction files in .rally/agents/.\n", created)
-	} else {
-		fmt.Println(".rally/agents role instruction files already exist.")
+	if movedBuiltin > 0 || movedUser > 0 {
+		fmt.Printf("Migrated %d role file(s) to the new layout: %d managed -> .rally/agents/builtin/ (auto-updating), %d customized -> .rally/agents/user/ (preserved).\n",
+			movedBuiltin+movedUser, movedBuiltin, movedUser)
 	}
-
 	return nil
+}
+
+// migrateLegacyRoleFiles moves legacy flat .rally/agents/<role>.md files into the
+// builtin/ or user/ folders: files whose content rally has shipped go to
+// builtin/ (where they will be regenerated to the current version), and
+// unrecognized (user-customized) files are preserved in user/. The builtin/ and
+// user/ subdirectories themselves are skipped.
+func migrateLegacyRoleFiles(workspaceDir, builtinDir, userDir string) (movedBuiltin, movedUser int, err error) {
+	agentsDir := store.AgentsDir(workspaceDir)
+	entries, err := os.ReadDir(agentsDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return 0, 0, nil
+		}
+		return 0, 0, err
+	}
+
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue // builtin/ and user/ live here; never recurse into them
+		}
+		name := entry.Name()
+		if !strings.HasSuffix(strings.ToLower(name), ".md") {
+			continue
+		}
+		role := strings.ToLower(strings.TrimSuffix(name, filepath.Ext(name)))
+		src := filepath.Join(agentsDir, name)
+		data, readErr := os.ReadFile(src)
+		if readErr != nil {
+			return movedBuiltin, movedUser, readErr
+		}
+
+		if agent_prompt.IsManagedRoleContent(role, string(data), bootstrapInstructionsFor(role)) {
+			// Managed: builtin/ is regenerated below, so just drop the legacy copy.
+			if err := os.Remove(src); err != nil {
+				return movedBuiltin, movedUser, err
+			}
+			movedBuiltin++
+			continue
+		}
+
+		// Customized: preserve in user/ without clobbering an existing override.
+		dest := filepath.Join(userDir, name)
+		if _, statErr := os.Stat(dest); statErr == nil {
+			continue // a user override already exists; leave the legacy file in place
+		}
+		if err := os.Rename(src, dest); err != nil {
+			return movedBuiltin, movedUser, err
+		}
+		movedUser++
+	}
+	return movedBuiltin, movedUser, nil
+}
+
+// bootstrapInstructionsFor returns the hard-coded bootstrap body for a role, used
+// as additional canonical content when classifying legacy role files (the flat
+// verify.md predates the embedded default and matches this text).
+func bootstrapInstructionsFor(role string) string {
+	for _, rb := range defaultRoleBootstraps {
+		if strings.EqualFold(rb.Name, role) {
+			return rb.Instructions
+		}
+	}
+	return ""
 }
 
 func init() {

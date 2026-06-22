@@ -23,8 +23,10 @@ from a **role**, which is a semantic label for what the runner does.
 - **Laps** owns the work queue. A lap's `assignee` is a routing label such as
   `junior`, `senior`, `ui`, or `verify`; Rally maps that role to a configured
   runner via `.rally/config.toml`.
-- **Role instructions** in `.rally/agents/<role>.md` tell the already-assigned
-  runner how to perform that kind of work. They should not redefine routing or
+- **Role instructions** under `.rally/agents/` tell the already-assigned runner
+  how to perform that kind of work. They resolve `user/<role>.md` (your
+  overrides) over `builtin/<role>.md` (Rally-managed, regenerated from the binary
+  each run) over the embedded default. They should not redefine routing or
   encourage agents to create laps directly. New work is normally created
   indirectly through the handoff flow.
 - **Laps hooks** in `.laps/hooks.json` bridge the agent-facing commands back

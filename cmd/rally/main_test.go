@@ -17,6 +17,28 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// TestMain isolates the user-level rally config from the developer's real home
+// for the whole package, so tests that run `rally init` never read or write the
+// machine's ~/.config/rally. Individual tests that assert user-config behaviour
+// further isolate per-test via isolateUserConfig.
+func TestMain(m *testing.M) {
+	dir, err := os.MkdirTemp("", "rally-xdg-*")
+	if err != nil {
+		panic(err)
+	}
+	_ = os.Setenv("XDG_CONFIG_HOME", dir)
+	code := m.Run()
+	_ = os.RemoveAll(dir)
+	os.Exit(code)
+}
+
+// isolateUserConfig points the user-level config at a fresh per-test directory so
+// init/roles tests neither read a prior test's user config nor pollute it.
+func isolateUserConfig(t *testing.T) {
+	t.Helper()
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(t.TempDir(), "xdg"))
+}
+
 func writeTestConfig(t *testing.T, dir, content string) {
 	t.Helper()
 	rallyDir := store.RallyDir(dir)
@@ -137,6 +159,7 @@ func TestHelpCommandDoesNotInitializeTelemetryWithBakedNewRelicLicense(t *testin
 func TestRunInit_WritesNewShapeConfig(t *testing.T) {
 	tmp := t.TempDir()
 	t.Chdir(tmp)
+	isolateUserConfig(t)
 
 	if err := os.MkdirAll(filepath.Join(tmp, ".git"), 0o755); err != nil {
 		t.Fatal(err)
@@ -148,30 +171,36 @@ func TestRunInit_WritesNewShapeConfig(t *testing.T) {
 		t.Fatalf("runInit failed: %v", err)
 	}
 
+	// The repo-level config is comments-only and points at the user file.
 	configPath := store.ConfigPath(tmp)
 	data, err := os.ReadFile(configPath)
 	if err != nil {
-		t.Fatalf("failed to read config: %v", err)
+		t.Fatalf("failed to read repo config: %v", err)
 	}
-	content := string(data)
+	repoContent := string(data)
+	if !strings.Contains(repoContent, "OVERRIDES ONLY") {
+		t.Error("repo config missing the overrides-only header")
+	}
+	if !strings.Contains(repoContent, "~/.config/rally/config.toml") {
+		t.Error("repo config missing pointer to the user-level config")
+	}
+	for _, line := range strings.Split(repoContent, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if trimmed != "" && !strings.HasPrefix(trimmed, "#") {
+			t.Errorf("repo config should be comments-only, found active line: %q", line)
+		}
+	}
 
-	if !strings.Contains(content, "schema_version = 2") {
-		t.Error("init config missing schema_version = 2")
+	// The active base config lives in the user-level file.
+	userData, err := os.ReadFile(store.UserConfigPath())
+	if err != nil {
+		t.Fatalf("failed to read user config: %v", err)
 	}
-	if !strings.Contains(content, "[defaults]") {
-		t.Error("init config missing [defaults] section")
-	}
-	if !strings.Contains(content, "iterations") {
-		t.Error("init config missing iterations in [defaults]")
-	}
-	if !strings.Contains(content, "mix") {
-		t.Error("init config missing mix in [defaults]")
-	}
-	if !strings.Contains(content, "claude_model") {
-		t.Error("init config missing claude_model in [defaults]")
-	}
-	if !strings.Contains(content, "antigravity_model") {
-		t.Error("init config missing antigravity_model in [defaults]")
+	userContent := string(userData)
+	for _, want := range []string{"schema_version = 2", "[defaults]", "iterations", "mix", "claude_model", "antigravity_model"} {
+		if !strings.Contains(userContent, want) {
+			t.Errorf("user config missing %q", want)
+		}
 	}
 
 	cfg, err := config.LoadV2(tmp)
@@ -223,6 +252,7 @@ func TestRunInit_WritesNewShapeConfig(t *testing.T) {
 func TestRunInit_DoesNotOverwriteExistingConfig(t *testing.T) {
 	tmp := t.TempDir()
 	t.Chdir(tmp)
+	isolateUserConfig(t)
 
 	if err := os.MkdirAll(filepath.Join(tmp, ".git"), 0o755); err != nil {
 		t.Fatal(err)
@@ -320,6 +350,7 @@ func TestRunInit_UpdatesExistingGitignoreNoTrailingNewline(t *testing.T) {
 func TestRunInitRoles_InstallsRoutesAndRoleInstructions(t *testing.T) {
 	tmp := t.TempDir()
 	t.Chdir(tmp)
+	isolateUserConfig(t)
 
 	if err := os.MkdirAll(filepath.Join(tmp, ".git"), 0o755); err != nil {
 		t.Fatal(err)
@@ -366,7 +397,7 @@ func TestRunInitRoles_InstallsRoutesAndRoleInstructions(t *testing.T) {
 	}
 
 	for _, role := range []string{"junior", "senior", "ui", "verify"} {
-		path := filepath.Join(store.AgentsDir(tmp), role+".md")
+		path := filepath.Join(store.AgentsBuiltinDir(tmp), role+".md")
 		data, err := os.ReadFile(path)
 		if err != nil {
 			t.Fatalf("read %s instructions: %v", role, err)
@@ -380,6 +411,7 @@ func TestRunInitRoles_InstallsRoutesAndRoleInstructions(t *testing.T) {
 func TestRunInitAll_RunsBothInSequence(t *testing.T) {
 	tmp := t.TempDir()
 	t.Chdir(tmp)
+	isolateUserConfig(t)
 
 	if err := os.MkdirAll(filepath.Join(tmp, ".git"), 0o755); err != nil {
 		t.Fatal(err)
@@ -418,7 +450,7 @@ func TestRunInitAll_RunsBothInSequence(t *testing.T) {
 	}
 
 	for _, role := range []string{"junior", "senior", "ui", "verify"} {
-		path := filepath.Join(store.AgentsDir(tmp), role+".md")
+		path := filepath.Join(store.AgentsBuiltinDir(tmp), role+".md")
 		if _, err := os.Stat(path); err != nil {
 			t.Errorf("role instructions for %s not created: %v", role, err)
 		}
@@ -428,6 +460,7 @@ func TestRunInitAll_RunsBothInSequence(t *testing.T) {
 func TestRunInitRoles_OnlyTouchesRoleConfig(t *testing.T) {
 	tmp := t.TempDir()
 	t.Chdir(tmp)
+	isolateUserConfig(t)
 
 	if err := os.MkdirAll(filepath.Join(tmp, ".git"), 0o755); err != nil {
 		t.Fatal(err)
@@ -485,7 +518,7 @@ func TestRunInitRoles_OnlyTouchesRoleConfig(t *testing.T) {
 	}
 
 	for _, role := range []string{"junior", "senior", "ui", "verify", "recovery"} {
-		path := filepath.Join(store.AgentsDir(tmp), role+".md")
+		path := filepath.Join(store.AgentsBuiltinDir(tmp), role+".md")
 		if _, err := os.Stat(path); err != nil {
 			t.Errorf("role instructions for %s not created: %v", role, err)
 		}
@@ -495,6 +528,7 @@ func TestRunInitRoles_OnlyTouchesRoleConfig(t *testing.T) {
 func TestRunInitAll_IdempotentRerun(t *testing.T) {
 	tmp := t.TempDir()
 	t.Chdir(tmp)
+	isolateUserConfig(t)
 
 	if err := os.MkdirAll(filepath.Join(tmp, ".git"), 0o755); err != nil {
 		t.Fatal(err)
@@ -530,6 +564,7 @@ func TestRunInitAll_IdempotentRerun(t *testing.T) {
 func TestRunInitRoles_IdempotentRerun(t *testing.T) {
 	tmp := t.TempDir()
 	t.Chdir(tmp)
+	isolateUserConfig(t)
 
 	if err := os.MkdirAll(filepath.Join(tmp, ".git"), 0o755); err != nil {
 		t.Fatal(err)
