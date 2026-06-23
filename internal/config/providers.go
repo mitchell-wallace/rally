@@ -16,19 +16,26 @@ import (
 // the reset so Rally does not burn retries on models that draw from the same
 // exhausted account.
 //
-// It decodes from either the concise array form:
+// Exclude optionally removes runners from the group after the Models specs
+// expand. It uses the same spec forms as Models, so a wildcard like codex:* can
+// pull in every configured codex model while an Exclude entry like codex:*spark
+// carves a separately metered model back out into its own provider.
+//
+// ProviderConfig decodes from either the concise array form:
 //
 //	[providers]
 //	codex = ['g55', 'g54', 'opencode:openai/gpt-5.5']
 //
-// or the table form, used when a disable switch is needed (TOML cannot attach a
-// `disabled` key to an array value):
+// or the table form, used when a disable switch or exclusions are needed (TOML
+// cannot attach extra keys to an array value):
 //
 //	[providers.codex]
-//	models   = ['g55', 'g54']
+//	models   = ['codex:*']
+//	exclude  = ['codex:*spark']
 //	disabled = true
 type ProviderConfig struct {
 	Models   []string
+	Exclude  []string
 	Disabled bool
 }
 
@@ -88,9 +95,9 @@ func parseProviderValue(name string, val interface{}) (ProviderConfig, error) {
 		pc := ProviderConfig{}
 		for key := range v {
 			switch key {
-			case "models", "disabled":
+			case "models", "exclude", "disabled":
 			default:
-				return ProviderConfig{}, fmt.Errorf("config: provider %q has unknown key %q (expected \"models\" or \"disabled\")", name, key)
+				return ProviderConfig{}, fmt.Errorf("config: provider %q has unknown key %q (expected \"models\", \"exclude\", or \"disabled\")", name, key)
 			}
 		}
 		if rawModels, ok := v["models"]; ok {
@@ -103,6 +110,17 @@ func parseProviderValue(name string, val interface{}) (ProviderConfig, error) {
 				return ProviderConfig{}, err
 			}
 			pc.Models = models
+		}
+		if rawExclude, ok := v["exclude"]; ok {
+			arr, ok := rawExclude.([]interface{})
+			if !ok {
+				return ProviderConfig{}, fmt.Errorf("config: provider %q exclude must be an array of strings", name)
+			}
+			exclude, err := toModelList(name, arr)
+			if err != nil {
+				return ProviderConfig{}, err
+			}
+			pc.Exclude = exclude
 		}
 		if rawDisabled, ok := v["disabled"]; ok {
 			b, ok := rawDisabled.(bool)
@@ -134,9 +152,12 @@ func toModelList(name string, arr []interface{}) ([]string, error) {
 }
 
 // resolveProviders resolves every provider's model specs to concrete runners,
-// validating that each spec resolves, that each provider has at least one model,
-// and that no runner belongs to two providers. Results are sorted by provider
-// name for deterministic ordering and error messages.
+// validates that each spec resolves, that each provider has at least one model,
+// and that no runner belongs to two providers. Excludes are applied to a
+// provider's expanded members before the cross-provider ownership check, so an
+// excluded runner never triggers a conflict with the provider that legitimately
+// owns it. Results are sorted by provider name for deterministic ordering and
+// error messages.
 func (c V2Config) resolveProviders() ([]resolvedProvider, error) {
 	if len(c.Providers) == 0 {
 		return nil, nil
@@ -156,34 +177,83 @@ func (c V2Config) resolveProviders() ([]resolvedProvider, error) {
 			return nil, fmt.Errorf("config: provider %q has no models", name)
 		}
 		rp := resolvedProvider{Name: name, Disabled: pc.Disabled}
-		localSeen := map[providerRunnerKey]bool{}
-		for _, spec := range pc.Models {
-			resolvedList, err := c.resolveProviderSpec(spec)
+
+		// Expand membership specs first. Models require a concrete model and a
+		// non-empty wildcard match so a typo can never silently empty a group.
+		members, err := c.resolveProviderMembers(name, pc.Models, true, true)
+		if err != nil {
+			return nil, err
+		}
+
+		// Expand exclusions leniently: a filter that matches nothing (e.g. a
+		// suffix wildcard for a model not yet configured) is a no-op, not an
+		// error. Structural errors — an unknown harness, an unsupported
+		// wildcard form — still surface so typos are caught.
+		excluded := map[providerRunnerKey]bool{}
+		if len(pc.Exclude) > 0 {
+			exAgents, err := c.resolveProviderMembers(name, pc.Exclude, false, false)
 			if err != nil {
-				return nil, fmt.Errorf("config: provider %q: %w", name, err)
+				return nil, err
 			}
-			for _, resolved := range resolvedList {
-				// A member must name a concrete model. A bare harness alias with no
-				// default model resolves to an empty model and would key the provider
-				// as {harness, ""} — a key no model-specific route runner (e.g.
-				// cc:opus) ever matches, silently splitting the group. Reject it so
-				// the misconfiguration surfaces instead of mis-bucketing at runtime.
-				if resolved.Model == "" {
-					return nil, fmt.Errorf("config: provider %q member %q resolves to no concrete model; name a specific model (e.g. cx:g55) rather than a bare harness alias", name, spec)
-				}
-				key := providerRunnerKey{Harness: resolved.Harness, Model: resolved.Model}
-				if existing, ok := owner[key]; ok && existing != name {
-					return nil, fmt.Errorf("config: runner %s is claimed by providers %q and %q; a runner may belong to only one provider", runnerLabel(resolved), existing, name)
-				}
-				owner[key] = name
-				if localSeen[key] {
-					continue
-				}
-				localSeen[key] = true
-				rp.Runners = append(rp.Runners, resolved)
+			for _, r := range exAgents {
+				excluded[providerRunnerKey{Harness: r.Harness, Model: r.Model}] = true
 			}
 		}
+
+		localSeen := map[providerRunnerKey]bool{}
+		for _, resolved := range members {
+			key := providerRunnerKey{Harness: resolved.Harness, Model: resolved.Model}
+			if excluded[key] {
+				continue
+			}
+			if existing, ok := owner[key]; ok && existing != name {
+				return nil, fmt.Errorf("config: runner %s is claimed by providers %q and %q; a runner may belong to only one provider", runnerLabel(resolved), existing, name)
+			}
+			owner[key] = name
+			if localSeen[key] {
+				continue
+			}
+			localSeen[key] = true
+			rp.Runners = append(rp.Runners, resolved)
+		}
+		if len(rp.Runners) == 0 {
+			return nil, fmt.Errorf("config: provider %q has no models remaining after exclusions", name)
+		}
 		out = append(out, rp)
+	}
+	return out, nil
+}
+
+// resolveProviderMembers expands a list of specs (models or excludes) into a
+// deduplicated set of concrete runners. requireConcrete rejects specs that
+// resolve to a bare harness with no model — wanted for Models so the group keys
+// against a real runner, skipped for Excludes where such a spec simply matches
+// nothing. requireWildcardMatch controls whether a wildcard that expands to zero
+// models is an error (Models) or a harmless no-op (Excludes).
+func (c V2Config) resolveProviderMembers(providerName string, specs []string, requireConcrete, requireWildcardMatch bool) ([]agent.ResolvedAgent, error) {
+	seen := map[providerRunnerKey]bool{}
+	out := make([]agent.ResolvedAgent, 0, len(specs))
+	for _, spec := range specs {
+		resolvedList, err := c.resolveProviderSpec(spec, requireWildcardMatch)
+		if err != nil {
+			return nil, fmt.Errorf("config: provider %q: %w", providerName, err)
+		}
+		for _, resolved := range resolvedList {
+			// A member must name a concrete model. A bare harness alias with no
+			// default model resolves to an empty model and would key the provider
+			// as {harness, ""} — a key no model-specific route runner (e.g.
+			// cc:opus) ever matches, silently splitting the group. Reject it so
+			// the misconfiguration surfaces instead of mis-bucketing at runtime.
+			if requireConcrete && resolved.Model == "" {
+				return nil, fmt.Errorf("config: provider %q member %q resolves to no concrete model; name a specific model (e.g. cx:g55) rather than a bare harness alias", providerName, spec)
+			}
+			key := providerRunnerKey{Harness: resolved.Harness, Model: resolved.Model}
+			if seen[key] {
+				continue
+			}
+			seen[key] = true
+			out = append(out, resolved)
+		}
 	}
 	return out, nil
 }
@@ -193,13 +263,14 @@ func (c V2Config) resolveProviders() ([]resolvedProvider, error) {
 // harness's default model), alias:model, or harness:model — and additionally a
 // bare model alias (e.g. "g55") when that alias is defined under exactly one
 // harness's [harness.<h>.models] table. Wildcards expand over configured
-// concrete models: harness:* matches a harness's configured/default models, and
-// prefix/* matches configured model strings with that prefix. Ambiguous,
-// undefined, or empty matches are hard errors so quota groups never silently
+// concrete models: harness:* matches a harness's configured/default models,
+// prefix/* matches configured model strings with that prefix, and *suffix
+// matches configured model strings with that suffix. Ambiguous, undefined, or
+// (for Models) empty matches are hard errors so quota groups never silently
 // mis-bucket a runner.
-func (c V2Config) resolveProviderSpec(spec string) ([]agent.ResolvedAgent, error) {
+func (c V2Config) resolveProviderSpec(spec string, requireWildcardMatch bool) ([]agent.ResolvedAgent, error) {
 	if strings.Contains(spec, "*") {
-		return c.resolveProviderWildcardSpec(spec)
+		return c.resolveProviderWildcardSpec(spec, requireWildcardMatch)
 	}
 	resolved, err := c.resolveProviderConcreteSpec(spec)
 	if err != nil {
@@ -238,9 +309,9 @@ func (c V2Config) resolveProviderConcreteSpec(spec string) (agent.ResolvedAgent,
 	}
 }
 
-func (c V2Config) resolveProviderWildcardSpec(spec string) ([]agent.ResolvedAgent, error) {
-	if strings.Count(spec, "*") != 1 || !strings.HasSuffix(spec, "*") {
-		return nil, fmt.Errorf("unsupported wildcard %q; use harness:*, harness:prefix/*, or prefix/*", spec)
+func (c V2Config) resolveProviderWildcardSpec(spec string, requireMatch bool) ([]agent.ResolvedAgent, error) {
+	if strings.Count(spec, "*") != 1 {
+		return nil, fmt.Errorf("unsupported wildcard %q; use harness:*, harness:prefix/*, harness:*suffix, prefix/*, or *suffix", spec)
 	}
 
 	if strings.HasSuffix(spec, ":*") {
@@ -249,26 +320,34 @@ func (c V2Config) resolveProviderWildcardSpec(spec string) ([]agent.ResolvedAgen
 		if err != nil {
 			return nil, err
 		}
-		return c.expandProviderHarnessModels(spec, harness, preferred, "")
+		return c.expandProviderHarnessModels(spec, harness, preferred, matchAll, requireMatch)
 	}
 
 	if scopedHarness, pattern, scoped := strings.Cut(spec, ":"); scoped {
-		prefix, ok := providerPrefixWildcard(pattern)
-		if !ok {
-			return nil, fmt.Errorf("unsupported wildcard %q; use harness:*, harness:prefix/*, or prefix/*", spec)
+		if prefix, ok := providerPrefixWildcard(pattern); ok {
+			harness, preferred, err := c.resolveProviderWildcardHarness(spec, scopedHarness)
+			if err != nil {
+				return nil, err
+			}
+			return c.expandProviderHarnessModels(spec, harness, preferred, matchPrefix(prefix), requireMatch)
 		}
-		harness, preferred, err := c.resolveProviderWildcardHarness(spec, scopedHarness)
-		if err != nil {
-			return nil, err
+		if suffix, ok := providerSuffixWildcard(pattern); ok {
+			harness, preferred, err := c.resolveProviderWildcardHarness(spec, scopedHarness)
+			if err != nil {
+				return nil, err
+			}
+			return c.expandProviderHarnessModels(spec, harness, preferred, matchSuffix(suffix), requireMatch)
 		}
-		return c.expandProviderHarnessModels(spec, harness, preferred, prefix)
+		return nil, fmt.Errorf("unsupported wildcard %q; use harness:*, harness:prefix/*, harness:*suffix, prefix/*, or *suffix", spec)
 	}
 
-	prefix, ok := providerPrefixWildcard(spec)
-	if !ok {
-		return nil, fmt.Errorf("unsupported wildcard %q; use harness:*, harness:prefix/*, or prefix/*", spec)
+	if prefix, ok := providerPrefixWildcard(spec); ok {
+		return c.expandProviderModels(spec, matchPrefix(prefix), requireMatch)
 	}
-	return c.expandProviderModelsByPrefix(spec, prefix)
+	if suffix, ok := providerSuffixWildcard(spec); ok {
+		return c.expandProviderModels(spec, matchSuffix(suffix), requireMatch)
+	}
+	return nil, fmt.Errorf("unsupported wildcard %q; use harness:*, harness:prefix/*, harness:*suffix, prefix/*, or *suffix", spec)
 }
 
 func providerPrefixWildcard(pattern string) (string, bool) {
@@ -280,6 +359,33 @@ func providerPrefixWildcard(pattern string) (string, bool) {
 		return "", false
 	}
 	return prefix, true
+}
+
+// providerSuffixWildcard recognizes a leading-star pattern like "*spark" and
+// returns the suffix a model must end with. A bare "*" is intentionally not a
+// suffix wildcard; the all-models case is handled by the harness:* / * form.
+func providerSuffixWildcard(pattern string) (string, bool) {
+	if !strings.HasPrefix(pattern, "*") {
+		return "", false
+	}
+	suffix := strings.TrimPrefix(pattern, "*")
+	if suffix == "" {
+		return "", false
+	}
+	return suffix, true
+}
+
+// modelFilter decides whether an expanded model string belongs in the result.
+type modelFilter func(string) bool
+
+func matchAll(string) bool { return true }
+
+func matchPrefix(prefix string) modelFilter {
+	return func(model string) bool { return strings.HasPrefix(model, prefix) }
+}
+
+func matchSuffix(suffix string) modelFilter {
+	return func(model string) bool { return strings.HasSuffix(model, suffix) }
 }
 
 func (c V2Config) resolveProviderWildcardHarness(spec, harnessSpec string) (string, string, error) {
@@ -298,15 +404,12 @@ func (c V2Config) resolveProviderWildcardHarness(spec, harnessSpec string) (stri
 	return "", "", fmt.Errorf("provider wildcard %q references unknown harness %q", spec, harnessSpec)
 }
 
-func (c V2Config) expandProviderHarnessModels(spec, harness, preferredAlias, modelPrefix string) ([]agent.ResolvedAgent, error) {
+func (c V2Config) expandProviderHarnessModels(spec, harness, preferredAlias string, filter modelFilter, requireMatch bool) ([]agent.ResolvedAgent, error) {
 	seen := map[providerRunnerKey]bool{}
 	var matches []agent.ResolvedAgent
 	add := func(model string) {
 		model = strings.TrimSpace(model)
-		if model == "" {
-			return
-		}
-		if modelPrefix != "" && !strings.HasPrefix(model, modelPrefix) {
+		if model == "" || !filter(model) {
 			return
 		}
 		key := providerRunnerKey{Harness: harness, Model: model}
@@ -331,18 +434,18 @@ func (c V2Config) expandProviderHarnessModels(spec, harness, preferredAlias, mod
 	}
 
 	sortResolvedAgents(matches)
-	if len(matches) == 0 {
+	if len(matches) == 0 && requireMatch {
 		return nil, fmt.Errorf("provider wildcard %q matched no configured models", spec)
 	}
 	return matches, nil
 }
 
-func (c V2Config) expandProviderModelsByPrefix(spec, modelPrefix string) ([]agent.ResolvedAgent, error) {
+func (c V2Config) expandProviderModels(spec string, filter modelFilter, requireMatch bool) ([]agent.ResolvedAgent, error) {
 	seen := map[providerRunnerKey]bool{}
 	var matches []agent.ResolvedAgent
 	add := func(harness, model string) {
 		model = strings.TrimSpace(model)
-		if model == "" || !strings.HasPrefix(model, modelPrefix) {
+		if model == "" || !filter(model) {
 			return
 		}
 		key := providerRunnerKey{Harness: harness, Model: model}
@@ -371,7 +474,7 @@ func (c V2Config) expandProviderModelsByPrefix(spec, modelPrefix string) ([]agen
 	}
 
 	sortResolvedAgents(matches)
-	if len(matches) == 0 {
+	if len(matches) == 0 && requireMatch {
 		return nil, fmt.Errorf("provider wildcard %q matched no configured models", spec)
 	}
 	return matches, nil
@@ -470,8 +573,9 @@ func (c V2Config) ProviderMemberCounts() (map[string]int, error) {
 }
 
 // providersToRaw renders typed providers back to the generic map form used for
-// TOML marshaling: the concise array form when a provider is enabled, and the
-// table form when it is disabled (so the disabled flag round-trips).
+// TOML marshaling: the concise array form when a provider has only models and is
+// enabled, and the table form when it carries an exclude list or a disabled
+// flag (so those round-trip).
 func providersToRaw(providers map[string]ProviderConfig) map[string]interface{} {
 	if len(providers) == 0 {
 		return nil
@@ -479,11 +583,15 @@ func providersToRaw(providers map[string]ProviderConfig) map[string]interface{} 
 	out := make(map[string]interface{}, len(providers))
 	for name, pc := range providers {
 		models := toAnySlice(pc.Models)
-		if pc.Disabled {
-			out[name] = map[string]interface{}{
-				"models":   models,
-				"disabled": true,
+		if len(pc.Exclude) > 0 || pc.Disabled {
+			table := map[string]interface{}{"models": models}
+			if len(pc.Exclude) > 0 {
+				table["exclude"] = toAnySlice(pc.Exclude)
 			}
+			if pc.Disabled {
+				table["disabled"] = true
+			}
+			out[name] = table
 		} else {
 			out[name] = models
 		}

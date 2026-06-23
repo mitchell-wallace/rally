@@ -444,12 +444,13 @@ burning retries on siblings that are already exhausted.
 Each provider key is a user-defined name; its value is a list of model specs.
 A spec is a named model shortcut (`g55`), a harness-qualified alias (`op:ds`),
 a full `harness:model` (`opencode:openai/gpt-5.5`), a whole-harness wildcard
-(`codex:*`), or a configured model-prefix wildcard (`opencode-go/*` or
-`op:opencode-go/*`). Wildcards expand from your local config only: they include
-configured model aliases and matching default models, not an external catalog
-of every model a provider could offer. A bare shortcut must be defined under
-exactly one harness's `[harness.<h>.models]` table, otherwise qualify it
-(`cx:g55`). A given runner may belong to at most one provider.
+(`codex:*`), a configured model-prefix wildcard (`opencode-go/*` or
+`op:opencode-go/*`), or a model-suffix wildcard (`codex:*spark` or `*spark`).
+Wildcards expand from your local config only: they include configured model
+aliases and matching default models, not an external catalog of every model a
+provider could offer. A bare shortcut must be defined under exactly one
+harness's `[harness.<h>.models]` table, otherwise qualify it (`cx:g55`). A given
+runner may belong to at most one provider.
 
 ```toml
 [providers]
@@ -464,6 +465,9 @@ codex_all = ["codex:*"]
 
 # Cleaner when your opencode aliases all point at one provider prefix.
 opencode_go = ["opencode-go/*"]
+
+# A suffix wildcard — every codex model whose slug ends in "-spark".
+codex_spark = ["codex:*spark"]
 ```
 
 To **disable** a whole provider — sidelining every member for the relay — use
@@ -481,6 +485,24 @@ A disabled provider's runners are skipped during selection; if a lane has no
 other runner it fails fast with a clear message rather than waiting. `rally
 routes check` lists every provider, its member count, and whether it is
 disabled.
+
+To **carve a model out of a wildcard group** — for example when one model shares
+a harness but draws from a separate quota — pair `exclude` with the wildcard. An
+exclude uses the same spec forms as `models`; matching members are removed from
+the provider *before* the one-runner-one-provider rule is checked, so the carved
+out model can form its own provider without a conflict. An exclude that matches
+nothing is a no-op (handy for forward-looking filters), but a `models` wildcard
+that matches nothing is still a hard error.
+
+```toml
+# codex shares one quota; codex-spark is metered separately, so pull it out.
+[providers.codex]
+models  = ["codex:*"]
+exclude = ["codex:*spark"]
+
+[providers.codex-spark]
+models = ["codex:*spark"]
+```
 
 ### `[reasoning]` — role-level variant preferences
 
