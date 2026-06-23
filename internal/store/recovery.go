@@ -31,6 +31,8 @@ type RecoveryPendingStatus struct {
 // try, or a dirty handoff try from an original lap that created this lap as a
 // head followup.
 func (s *Store) RecoveryPendingForLap(lapID string) RecoveryPendingStatus {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	lapID = strings.TrimSpace(lapID)
 	if lapID == "" {
 		return RecoveryPendingStatus{}

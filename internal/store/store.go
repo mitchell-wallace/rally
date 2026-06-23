@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"sync"
 )
 
 const (
@@ -13,10 +14,17 @@ const (
 )
 
 // Store provides unified read/write access to Rally's JSONL-backed storage.
+//
+// In production a Store is driven by a single relay goroutine, but tests (and
+// any future live readers) observe it concurrently while the relay writes. mu
+// guards every access to cache so those reads/writes can't race. Public methods
+// take the lock; the private truncate/recovery helpers run under a caller that
+// already holds it and must not re-lock.
 type Store struct {
 	dir      string
 	stateDir string
 	cache    *Cache
+	mu       sync.Mutex
 }
 
 // NewStore creates a Store and loads all JSONL data into memory.
@@ -38,6 +46,8 @@ func NewStore(dir string) (*Store, error) {
 
 // AppendTry appends a try record to JSONL and the cache.
 func (s *Store) AppendTry(t TryRecord) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	if len(t.CommitHistory) > 0 {
 		t.CommitHash = t.CommitHistory[len(t.CommitHistory)-1]
 	} else if t.CommitHash != "" {
@@ -60,6 +70,8 @@ func (s *Store) AppendTry(t TryRecord) error {
 
 // AppendRelay appends a relay record to JSONL and the cache.
 func (s *Store) AppendRelay(r RelayRecord) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	if err := os.MkdirAll(s.stateDir, 0o755); err != nil {
 		return err
 	}
@@ -74,6 +86,8 @@ func (s *Store) AppendRelay(r RelayRecord) error {
 
 // ResetAgentStatus removes all agent status history to start fresh.
 func (s *Store) ResetAgentStatus() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	path := filepath.Join(s.stateDir, "agent_status.jsonl")
 	s.cache.AgentStatus = nil
 	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
@@ -84,6 +98,8 @@ func (s *Store) ResetAgentStatus() error {
 
 // AppendAgentStatus appends an agent status event to JSONL and the cache.
 func (s *Store) AppendAgentStatus(e AgentStatusEvent) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	if err := os.MkdirAll(s.stateDir, 0o755); err != nil {
 		return err
 	}
@@ -168,6 +184,8 @@ func (s *Store) truncateAgentStatus(path string) error {
 // AddMessage appends a new message. It assigns the next position automatically
 // if the caller left Position at 0.
 func (s *Store) AddMessage(m MessageRecord) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	if m.Position == 0 {
 		maxPos := 0
 		for _, msg := range s.cache.Messages {
@@ -192,6 +210,8 @@ func (s *Store) AddMessage(m MessageRecord) error {
 
 // UpdateMessage rewrites messages.jsonl with the updated record.
 func (s *Store) UpdateMessage(m MessageRecord) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	idx, ok := s.cache.MessageIndex[m.ID]
 	if !ok {
 		return fmt.Errorf("message %d not found", m.ID)
@@ -276,6 +296,8 @@ func (s *Store) maybeTruncateMessages() error {
 
 // GetTry returns a try by ID or nil if not found.
 func (s *Store) GetTry(id int) *TryRecord {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	if idx, ok := s.cache.TryIndex[id]; ok {
 		return &s.cache.Tries[idx]
 	}
@@ -284,6 +306,8 @@ func (s *Store) GetTry(id int) *TryRecord {
 
 // GetRelay returns a relay by ID or nil if not found.
 func (s *Store) GetRelay(id int) *RelayRecord {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	if idx, ok := s.cache.RelayIndex[id]; ok {
 		return &s.cache.Relays[idx]
 	}
@@ -292,6 +316,8 @@ func (s *Store) GetRelay(id int) *RelayRecord {
 
 // GetMessages returns all messages.
 func (s *Store) GetMessages() []MessageRecord {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	out := make([]MessageRecord, len(s.cache.Messages))
 	copy(out, s.cache.Messages)
 	return out
@@ -299,6 +325,8 @@ func (s *Store) GetMessages() []MessageRecord {
 
 // PendingMessages returns pending messages sorted by position (FIFO).
 func (s *Store) PendingMessages() []MessageRecord {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	var out []MessageRecord
 	for _, m := range s.cache.Messages {
 		if m.Status == "pending" {
@@ -313,6 +341,8 @@ func (s *Store) PendingMessages() []MessageRecord {
 
 // RelayScopedMessages returns pending messages with Scope == "relay" sorted by position.
 func (s *Store) RelayScopedMessages() []MessageRecord {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	var out []MessageRecord
 	for _, m := range s.cache.Messages {
 		if m.Status == "pending" && m.Scope == "relay" {
@@ -329,6 +359,8 @@ func (s *Store) RelayScopedMessages() []MessageRecord {
 // not been consumed by a different relay. Messages already consumed by the
 // given relayID are included (for resume).
 func (s *Store) EligibleRelayScopedMessages(relayID int) []MessageRecord {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	var out []MessageRecord
 	for _, m := range s.cache.Messages {
 		if m.Status == "pending" && m.Scope == "relay" {
@@ -347,6 +379,8 @@ func (s *Store) EligibleRelayScopedMessages(relayID int) []MessageRecord {
 // ConsumedRunScopedMessageForRun returns a run-scoped message that was already
 // consumed by the given runID but not addressed (i.e., from a failed run).
 func (s *Store) ConsumedRunScopedMessageForRun(runID int) *MessageRecord {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	for _, m := range s.cache.Messages {
 		if m.Status == "pending" && m.Scope != "relay" && m.ConsumedByRunID != nil && *m.ConsumedByRunID == runID {
 			cp := m
@@ -358,6 +392,8 @@ func (s *Store) ConsumedRunScopedMessageForRun(runID int) *MessageRecord {
 
 // GetAgentStatus returns all status events for a given agent type and model.
 func (s *Store) GetAgentStatus(agentType string, model string) ([]AgentStatusEvent, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	if model == "" {
 		return nil, fmt.Errorf("GetAgentStatus: model is required")
 	}
@@ -377,6 +413,8 @@ func (s *Store) GetAgentStatus(agentType string, model string) ([]AgentStatusEve
 // RecentTries returns the last n tries. If a relayID is provided and > 0, only tries
 // matching that relay are returned.
 func (s *Store) RecentTries(n int, relayID ...int) []TryRecord {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	if n <= 0 {
 		return nil
 	}
@@ -404,6 +442,8 @@ func (s *Store) RecentTries(n int, relayID ...int) []TryRecord {
 
 // RecentRelays returns the last n relays.
 func (s *Store) RecentRelays(n int) []RelayRecord {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	if n <= 0 {
 		return nil
 	}
@@ -418,6 +458,8 @@ func (s *Store) RecentRelays(n int) []RelayRecord {
 
 // AllRelays returns all relays.
 func (s *Store) AllRelays() []RelayRecord {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	out := make([]RelayRecord, len(s.cache.Relays))
 	copy(out, s.cache.Relays)
 	return out
@@ -425,6 +467,8 @@ func (s *Store) AllRelays() []RelayRecord {
 
 // AllTries returns all tries.
 func (s *Store) AllTries() []TryRecord {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	out := make([]TryRecord, len(s.cache.Tries))
 	copy(out, s.cache.Tries)
 	return out
@@ -432,6 +476,8 @@ func (s *Store) AllTries() []TryRecord {
 
 // AllAgentStatus returns all agent status events.
 func (s *Store) AllAgentStatus() []AgentStatusEvent {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	out := make([]AgentStatusEvent, len(s.cache.AgentStatus))
 	copy(out, s.cache.AgentStatus)
 	return out
@@ -439,6 +485,8 @@ func (s *Store) AllAgentStatus() []AgentStatusEvent {
 
 // UpdateRelay rewrites relays.jsonl with the updated record.
 func (s *Store) UpdateRelay(r RelayRecord) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	idx, ok := s.cache.RelayIndex[r.ID]
 	if !ok {
 		return fmt.Errorf("relay %d not found", r.ID)
@@ -455,6 +503,8 @@ func (s *Store) UpdateRelay(r RelayRecord) error {
 
 // NextRelayID returns the next available relay ID.
 func (s *Store) NextRelayID() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	max := 0
 	for _, r := range s.cache.Relays {
 		if r.ID > max {
@@ -466,6 +516,8 @@ func (s *Store) NextRelayID() int {
 
 // NextTryID returns the next available try ID.
 func (s *Store) NextTryID() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	max := 0
 	for _, t := range s.cache.Tries {
 		if t.ID > max {
@@ -477,6 +529,8 @@ func (s *Store) NextTryID() int {
 
 // NextMessageID returns the next available message ID.
 func (s *Store) NextMessageID() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	max := 0
 	for _, m := range s.cache.Messages {
 		if m.ID > max {
