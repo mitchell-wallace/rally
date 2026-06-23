@@ -21,6 +21,11 @@ const TickInterval = 1 * time.Second
 type Indicators struct {
 	Reliability string // e.g. "❄ stalled", "⚠ slowing", "↻ recovered"
 	Retry       string // e.g. "retry 2/5"; empty on the first attempt
+	// Action is a transient operator-shortcut hint: the "press X again…" prompt
+	// after a first press, or the "skipping…/pausing…" echo once a shortcut
+	// fires. It rides the in-place status line so feedback never spills onto a
+	// new line.
+	Action string
 }
 
 // RenderStatus formats a status line.
@@ -52,6 +57,9 @@ func RenderStatusExt(elapsed time.Duration, dirtyCount int, lastActivity time.Du
 	}
 	if ind.Reliability != "" {
 		line += "  │  " + ind.Reliability
+	}
+	if ind.Action != "" {
+		line += "  │  " + ind.Action
 	}
 	return line
 }
@@ -368,6 +376,13 @@ type Monitor struct {
 	// Retry state: rendered inline as "retry N/M" when set.
 	retry string
 
+	// Operator-shortcut feedback. armedMsg is the transient "press X again…"
+	// hint shown until armedUntil; actingMsg is the "skipping…/pausing…" echo
+	// shown once a shortcut fires (and outranks any armed hint).
+	armedMsg   string
+	armedUntil time.Time
+	actingMsg  string
+
 	ticker *time.Ticker
 	stopCh chan struct{}
 	mu     sync.Mutex
@@ -451,6 +466,18 @@ func (m *Monitor) computeIndicators(lastActivity time.Duration) Indicators {
 	var ind Indicators
 
 	ind.Retry = m.retry
+
+	// Operator-shortcut feedback: a fired action ("skipping…") outranks a
+	// pending "press X again…" hint, which is cleared once its window lapses.
+	if m.actingMsg != "" {
+		ind.Action = "■ " + m.actingMsg
+	} else if m.armedMsg != "" {
+		if time.Now().Before(m.armedUntil) {
+			ind.Action = "⌨ " + m.armedMsg
+		} else {
+			m.armedMsg = ""
+		}
+	}
 
 	// Reliability indicator priority: stopping > stalled > recovered > slowing.
 	// "stopping…" wins so a quit-now cancel drain never looks frozen, even if
@@ -550,10 +577,33 @@ func (m *Monitor) SetStalled(v bool) {
 
 // SetStopping marks the active try as being cancelled by a quit-now shortcut,
 // surfacing a "stopping…" indicator so the cancel drain never looks frozen. It
-// takes priority over the stalled indicator.
+// takes priority over the stalled indicator. Stopping is a fired action, so it
+// also clears any pending "press X again…" hint.
 func (m *Monitor) SetStopping(v bool) {
 	m.mu.Lock()
 	m.stopping = v
+	if v {
+		m.armedMsg = ""
+	}
+	m.mu.Unlock()
+}
+
+// SetArmed shows a transient "press X again…" hint for ttl, registering that a
+// double-press shortcut's first press landed. A later SetActing/SetStopping
+// (the shortcut firing) or the ttl lapsing clears it.
+func (m *Monitor) SetArmed(msg string, ttl time.Duration) {
+	m.mu.Lock()
+	m.armedMsg = msg
+	m.armedUntil = time.Now().Add(ttl)
+	m.mu.Unlock()
+}
+
+// SetActing shows the "skipping…/pausing…" echo once a shortcut fires, so the
+// operator sees exactly which action was taken. It clears any armed hint.
+func (m *Monitor) SetActing(msg string) {
+	m.mu.Lock()
+	m.actingMsg = msg
+	m.armedMsg = ""
 	m.mu.Unlock()
 }
 

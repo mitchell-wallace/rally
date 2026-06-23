@@ -132,18 +132,22 @@ func cheapTestResolver(spec string) (agent.ResolvedAgent, error) {
 	return testResolver(spec)
 }
 
-func TestFormatRemainingRoundsToSeconds(t *testing.T) {
+func TestFormatRemaining(t *testing.T) {
 	cases := []struct {
 		in   time.Duration
 		want string
 	}{
+		// Under a minute: seconds, rounded.
 		{500 * time.Millisecond, "1s"},
 		{1*time.Second + 400*time.Millisecond, "1s"},
 		{1*time.Second + 600*time.Millisecond, "2s"},
 		{30 * time.Second, "30s"},
-		{90 * time.Second, "1m 30s"},
-		{2*time.Hour + 5*time.Minute + 7*time.Second, "2h 5m 7s"},
 		{-time.Second, "0s"},
+		// A minute and up: whole minutes only, so the line repaints once a
+		// minute instead of every second during a long wait.
+		{90 * time.Second, "1m"},
+		{2*time.Minute + 59*time.Second, "2m"},
+		{2*time.Hour + 5*time.Minute + 7*time.Second, "2h 5m"},
 	}
 	for _, tc := range cases {
 		if got := formatRemaining(tc.in); got != tc.want {
@@ -184,8 +188,8 @@ func TestWaitWithCountdownCancellable(t *testing.T) {
 }
 
 func TestWaitLoopSkipOnAction(t *testing.T) {
-	actionCh := make(chan keyboard.Action, 1)
-	actionCh <- keyboard.ActionSkip
+	actionCh := make(chan keyboard.Press, 1)
+	actionCh <- keyboard.Press{Action: keyboard.ActionSkip, Confirmed: true}
 	start := time.Now()
 	outcome := waitLoop(context.Background(), 10*time.Second, "test %s", actionCh, io.Discard, 50*time.Millisecond)
 	elapsed := time.Since(start)
@@ -198,8 +202,8 @@ func TestWaitLoopSkipOnAction(t *testing.T) {
 }
 
 func TestWaitLoopStopOnQuit(t *testing.T) {
-	actionCh := make(chan keyboard.Action, 1)
-	actionCh <- keyboard.ActionQuit
+	actionCh := make(chan keyboard.Press, 1)
+	actionCh <- keyboard.Press{Action: keyboard.ActionQuit, Confirmed: true}
 	outcome := waitLoop(context.Background(), 10*time.Second, "test %s", actionCh, io.Discard, 50*time.Millisecond)
 	if outcome != waitStopped {
 		t.Errorf("outcome = %v, want waitStopped", outcome)
@@ -207,7 +211,7 @@ func TestWaitLoopStopOnQuit(t *testing.T) {
 }
 
 func TestWaitLoopElapses(t *testing.T) {
-	actionCh := make(chan keyboard.Action)
+	actionCh := make(chan keyboard.Press)
 	start := time.Now()
 	outcome := waitLoop(context.Background(), 200*time.Millisecond, "test %s", actionCh, io.Discard, 30*time.Millisecond)
 	elapsed := time.Since(start)
@@ -220,8 +224,8 @@ func TestWaitLoopElapses(t *testing.T) {
 }
 
 func TestWaitLoopRendersHintAndCountdown(t *testing.T) {
-	actionCh := make(chan keyboard.Action, 1)
-	actionCh <- keyboard.ActionSkip
+	actionCh := make(chan keyboard.Press, 1)
+	actionCh <- keyboard.Press{Action: keyboard.ActionSkip, Confirmed: true}
 	var buf bytes.Buffer
 	_ = waitLoop(context.Background(), 5*time.Second, "agents frozen, waiting %s...", actionCh, &buf, 50*time.Millisecond)
 	got := buf.String()
@@ -230,6 +234,41 @@ func TestWaitLoopRendersHintAndCountdown(t *testing.T) {
 	}
 	if !strings.Contains(got, "Ctrl+S skip") {
 		t.Errorf("output missing shortcut hint: %q", got)
+	}
+}
+
+// TestWaitLoopArmedPressShowsHint pins that a first (unconfirmed) press during a
+// wait surfaces the "press X again" hint instead of acting.
+func TestWaitLoopArmedPressShowsHint(t *testing.T) {
+	actionCh := make(chan keyboard.Press, 2)
+	// Arm a quit, then confirm a skip so the loop ends deterministically.
+	actionCh <- keyboard.Press{Action: keyboard.ActionQuit, Confirmed: false}
+	actionCh <- keyboard.Press{Action: keyboard.ActionSkip, Confirmed: true}
+	var buf bytes.Buffer
+	outcome := waitLoop(context.Background(), 5*time.Second, "agents paused, waiting %s...", actionCh, &buf, 50*time.Millisecond)
+	if outcome != waitSkipped {
+		t.Errorf("outcome = %v, want waitSkipped", outcome)
+	}
+	got := buf.String()
+	if !strings.Contains(got, "press Ctrl+C again to quit now") {
+		t.Errorf("armed press did not render the press-again hint: %q", got)
+	}
+}
+
+// TestWaitLoopRendersOnNewLineSafely pins the raw-mode fix: the two rendered
+// lines are separated by a carriage-return + line-feed, not a bare line feed
+// (which stair-stepped the hint onto fresh lines in raw mode).
+func TestWaitLoopRendersOnNewLineSafely(t *testing.T) {
+	actionCh := make(chan keyboard.Press, 1)
+	actionCh <- keyboard.Press{Action: keyboard.ActionSkip, Confirmed: true}
+	var buf bytes.Buffer
+	_ = waitLoop(context.Background(), 5*time.Second, "agents paused, waiting %s...", actionCh, &buf, 50*time.Millisecond)
+	got := buf.String()
+	if strings.Contains(got, "...\n") && !strings.Contains(got, "...\r\n") {
+		t.Errorf("countdown line followed by bare LF (raw-mode unsafe): %q", got)
+	}
+	if !strings.Contains(got, "\r\n") {
+		t.Errorf("expected a CR+LF between countdown and hint, got %q", got)
 	}
 }
 

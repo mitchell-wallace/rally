@@ -442,10 +442,14 @@ func waitWithCountdown(ctx context.Context, total time.Duration, msgFmt string) 
 // `tickInterval`, renders the countdown + shortcut hint to `out`, and returns
 // when the timer elapses, ctx is cancelled, or an action arrives on actionCh.
 // Split out from waitWithCountdown for testability.
-func waitLoop(ctx context.Context, total time.Duration, msgFmt string, actionCh <-chan keyboard.Action, out io.Writer, tickInterval time.Duration) waitOutcome {
+func waitLoop(ctx context.Context, total time.Duration, msgFmt string, actionCh <-chan keyboard.Press, out io.Writer, tickInterval time.Duration) waitOutcome {
 	deadline := time.Now().Add(total)
 	ticker := time.NewTicker(tickInterval)
 	defer ticker.Stop()
+
+	var armedAction keyboard.Action
+	var armedUntil time.Time
+	lastFrame := ""
 
 	render := func(remaining time.Duration) {
 		if remaining < 0 {
@@ -453,12 +457,33 @@ func waitLoop(ctx context.Context, total time.Duration, msgFmt string, actionCh 
 		}
 		remaining = remaining.Round(time.Second)
 		line := style.DimStyle.Render(fmt.Sprintf(msgFmt, formatRemaining(remaining)))
+		// The second line is normally the dim shortcut legend; while a shortcut
+		// is armed it becomes a highlighted "press X again…" hint so the
+		// operator sees the first press registered.
 		hint := style.ShortcutHint()
+		if armedAction != keyboard.ActionNone {
+			if time.Now().Before(armedUntil) {
+				hint = style.WarningStyle.Render("⌨ " + keyboard.ArmMessage(armedAction))
+			} else {
+				armedAction = keyboard.ActionNone
+			}
+		}
+		// Only repaint when the visible frame actually changes. With a
+		// minute-granularity countdown (see formatRemaining) this collapses a
+		// long wait from one repaint per second to one per minute, killing the
+		// scroll/noise the operator was seeing.
+		frame := line + "\x00" + hint
+		if frame == lastFrame {
+			return
+		}
+		lastFrame = frame
 		// \r\x1b[J clears from cursor to end of screen so a shorter countdown
-		// can't leave stale characters; the trailing \x1b[1A\r parks the
-		// cursor back at the start of the countdown line ready for the next
-		// tick. We always print the same two lines so the layout is stable.
-		fmt.Fprintf(out, "\r\x1b[J%s\n%s\x1b[1A\r", line, hint)
+		// can't leave stale characters. The \r\n (carriage return + line feed)
+		// between the two lines matters in raw mode: a bare \n there only feeds
+		// the line without returning the column, which is what made the hint
+		// stair-step onto fresh lines. The trailing \x1b[1A\r parks the cursor
+		// back at the start of the countdown line ready for the next repaint.
+		fmt.Fprintf(out, "\r\x1b[J%s\r\n%s\x1b[1A\r", line, hint)
 	}
 	clear := func() {
 		// Erase both lines and leave the cursor at the top one so subsequent
@@ -472,8 +497,18 @@ func waitLoop(ctx context.Context, total time.Duration, msgFmt string, actionCh 
 		case <-ctx.Done():
 			clear()
 			return waitCancelled
-		case action := <-actionCh:
-			switch action {
+		case press := <-actionCh:
+			if !press.Confirmed {
+				// Ignore pause arming entirely — there is no try to pause —
+				// otherwise show the "press again" hint for this shortcut.
+				if press.Action != keyboard.ActionPause {
+					armedAction = press.Action
+					armedUntil = time.Now().Add(keyboard.ConfirmWindow)
+					render(time.Until(deadline))
+				}
+				continue
+			}
+			switch press.Action {
 			case keyboard.ActionSkip:
 				clear()
 				return waitSkipped
@@ -481,8 +516,7 @@ func waitLoop(ctx context.Context, total time.Duration, msgFmt string, actionCh 
 				clear()
 				return waitStopped
 			}
-			// Ignore pause and any other actions during a wait — there is no
-			// active try to pause.
+			// Ignore a confirmed pause during a wait — there is no active try.
 		case now := <-ticker.C:
 			remaining := time.Until(deadline)
 			if remaining <= 0 || !now.Before(deadline) {
@@ -494,23 +528,25 @@ func waitLoop(ctx context.Context, total time.Duration, msgFmt string, actionCh 
 	}
 }
 
-// formatRemaining renders d as `Hh Mm Ss`, `Mm Ss`, or `Ss`, dropping
-// zero-valued higher units so the countdown stays compact.
+// formatRemaining renders d for the wait countdown. Below a minute it shows
+// seconds (`Ss`); from a minute up it shows only whole minutes (`Mm` / `Hh Mm`)
+// and drops the seconds component. Coarsening above a minute means the rendered
+// string only changes once per minute, so the countdown repaints once a minute
+// during a long wait instead of every second — the dominant noise reduction.
 func formatRemaining(d time.Duration) string {
 	if d < 0 {
 		d = 0
 	}
 	total := int(d.Round(time.Second).Seconds())
+	if total < 60 {
+		return fmt.Sprintf("%ds", total)
+	}
 	h := total / 3600
 	m := (total % 3600) / 60
-	s := total % 60
 	if h > 0 {
-		return fmt.Sprintf("%dh %dm %ds", h, m, s)
+		return fmt.Sprintf("%dh %dm", h, m)
 	}
-	if m > 0 {
-		return fmt.Sprintf("%dm %ds", m, s)
-	}
-	return fmt.Sprintf("%ds", s)
+	return fmt.Sprintf("%dm", m)
 }
 
 type runTask struct {
@@ -1198,6 +1234,8 @@ type actionMonitor interface {
 	SetProcessGroupID(pgid int)
 	SetStalled(v bool)
 	SetStopping(v bool)
+	SetArmed(msg string, ttl time.Duration)
+	SetActing(msg string)
 }
 
 // actionLoopDeps bundles the channels and collaborators the in-try action loop
@@ -1206,7 +1244,7 @@ type actionMonitor interface {
 type actionLoopDeps struct {
 	tryCh     <-chan tryResult
 	pidCh     <-chan int
-	actionCh  <-chan keyboard.Action
+	actionCh  <-chan keyboard.Press
 	stallTick <-chan time.Time
 	// runBudgetCh fires when the per-run wall-clock budget is exhausted. It is
 	// constructed ONCE before the attempt loop and the same channel is passed
@@ -1337,9 +1375,17 @@ actionLoop:
 				d.onStall()
 			}
 			fmt.Fprintf(d.log, "relay %d run %d attempt %d stall detected for %s\n", d.relayID, d.runIndex+1, d.attempt, d.harness)
-		case action := <-d.actionCh:
-			switch action {
+		case press := <-d.actionCh:
+			if !press.Confirmed {
+				// First press only arms the action: surface a "press X again"
+				// hint on the live status line so the operator sees it
+				// registered and what a second press will do.
+				d.mon.SetArmed(keyboard.ArmMessage(press.Action), keyboard.ConfirmWindow)
+				continue
+			}
+			switch press.Action {
 			case keyboard.ActionSkip:
+				d.mon.SetActing(keyboard.ActMessage(press.Action))
 				d.cancelAttempt()
 				r.skipFlag.Store(true)
 				out.actionTaken = true
@@ -1347,6 +1393,7 @@ actionLoop:
 				r.drainOperatorCancellation(d, &out)
 				break actionLoop
 			case keyboard.ActionPause:
+				d.mon.SetActing(keyboard.ActMessage(press.Action))
 				d.cancelAttempt()
 				out.actionTaken = true
 				res := <-d.tryCh
@@ -1405,8 +1452,11 @@ drainLoop:
 			// A late OnStart can land here if the try hadn't reported its pid
 			// yet; capture it so a quit escalation can target the right group.
 			out.attemptPGID = pid
-		case action := <-d.actionCh:
-			if action != keyboard.ActionQuit {
+		case press := <-d.actionCh:
+			// Only a confirmed (double-press) quit escalates the drain to an
+			// immediate force-kill; a lone arming press is ignored here since the
+			// drain is already cancelling.
+			if press.Action != keyboard.ActionQuit || !press.Confirmed {
 				continue
 			}
 			r.stopFlag.Store(true)

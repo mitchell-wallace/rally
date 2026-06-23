@@ -17,6 +17,8 @@ type fakeMonitor struct {
 	onPGID     func(int)
 	onStalled  func(bool)
 	onStopping func(bool)
+	onArmed    func(string)
+	onActing   func(string)
 }
 
 func (m *fakeMonitor) SetProcessGroupID(pgid int) {
@@ -34,6 +36,16 @@ func (m *fakeMonitor) SetStopping(v bool) {
 		m.onStopping(v)
 	}
 }
+func (m *fakeMonitor) SetArmed(msg string, _ time.Duration) {
+	if m.onArmed != nil {
+		m.onArmed(msg)
+	}
+}
+func (m *fakeMonitor) SetActing(msg string) {
+	if m.onActing != nil {
+		m.onActing(msg)
+	}
+}
 
 // runLoopAsync starts runActionLoop in a goroutine and returns a channel that
 // delivers its result. Tests assert promptness by selecting on this channel
@@ -47,6 +59,66 @@ func runLoopAsync(r *Runner, d actionLoopDeps) <-chan actionLoopResult {
 // neverTick is a stall ticker channel that never fires.
 func neverTick() <-chan time.Time { return make(chan time.Time) }
 
+// TestActionLoopArmsFirstPressThenConfirms pins the double-press feedback: a
+// first (unconfirmed) Ctrl+C only arms the action — it surfaces a "press again"
+// hint on the monitor and does NOT cancel the attempt — while the second
+// (confirmed) press fires the quit.
+func TestActionLoopArmsFirstPressThenConfirms(t *testing.T) {
+	r := &Runner{}
+	tryCh := make(chan tryResult, 1)
+	actionCh := make(chan keyboard.Press, 2)
+	armedCh := make(chan string, 1)
+	attemptCtx, cancelAttempt := context.WithCancel(context.Background())
+	defer cancelAttempt()
+
+	go func() {
+		<-attemptCtx.Done()
+		tryCh <- tryResult{result: &agent.TryResult{Completed: false}, err: attemptCtx.Err()}
+	}()
+
+	done := runLoopAsync(r, actionLoopDeps{
+		tryCh:         tryCh,
+		pidCh:         make(chan int, 1),
+		actionCh:      actionCh,
+		stallTick:     neverTick(),
+		attemptCtx:    attemptCtx,
+		cancelAttempt: cancelAttempt,
+		mon:           &fakeMonitor{onArmed: func(msg string) { armedCh <- msg }},
+		log:           io.Discard,
+	})
+
+	// First press: arms only.
+	actionCh <- keyboard.Press{Action: keyboard.ActionQuit, Confirmed: false}
+	select {
+	case msg := <-armedCh:
+		if msg != "press Ctrl+C again to quit now" {
+			t.Fatalf("armed hint = %q, want the quit hint", msg)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("first press did not arm a hint")
+	}
+	// The attempt must still be running — arming alone must not cancel it.
+	if attemptCtx.Err() != nil {
+		t.Fatal("first press must not cancel the attempt")
+	}
+	select {
+	case <-done:
+		t.Fatal("loop returned on a lone arming press")
+	case <-time.After(100 * time.Millisecond):
+	}
+
+	// Second press: confirms and fires the quit.
+	actionCh <- keyboard.Press{Action: keyboard.ActionQuit, Confirmed: true}
+	select {
+	case out := <-done:
+		if !out.actionTaken || out.cancellationSource != CancellationSourceQuitNow {
+			t.Fatalf("confirmed quit not honored: %+v", out)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("confirmed press did not fire the quit")
+	}
+}
+
 // TestActionLoopQuitCancelsAndAbortsWithoutWaiting pins acceptance (1): Ctrl+C
 // cancels the running attempt and aborts the relay without waiting for the try
 // to finish on its own. The fake try blocks until its context is cancelled, so
@@ -54,7 +126,7 @@ func neverTick() <-chan time.Time { return make(chan time.Time) }
 func TestActionLoopQuitCancelsAndAbortsWithoutWaiting(t *testing.T) {
 	r := &Runner{}
 	tryCh := make(chan tryResult, 1)
-	actionCh := make(chan keyboard.Action, 1)
+	actionCh := make(chan keyboard.Press, 1)
 	attemptCtx, cancelAttempt := context.WithCancel(context.Background())
 	defer cancelAttempt()
 
@@ -65,7 +137,7 @@ func TestActionLoopQuitCancelsAndAbortsWithoutWaiting(t *testing.T) {
 		tryCh <- tryResult{result: &agent.TryResult{Completed: false}, err: attemptCtx.Err()}
 	}()
 
-	actionCh <- keyboard.ActionQuit
+	actionCh <- keyboard.Press{Action: keyboard.ActionQuit, Confirmed: true}
 	done := runLoopAsync(r, actionLoopDeps{
 		tryCh:         tryCh,
 		pidCh:         make(chan int, 1),
@@ -104,7 +176,7 @@ func TestActionLoopQuitCancelsAndAbortsWithoutWaiting(t *testing.T) {
 func TestActionLoopStopCancelsAndDrains(t *testing.T) {
 	r := &Runner{}
 	tryCh := make(chan tryResult, 1)
-	actionCh := make(chan keyboard.Action, 1)
+	actionCh := make(chan keyboard.Press, 1)
 	stoppingCh := make(chan bool, 1)
 	attemptCtx, cancelAttempt := context.WithCancel(context.Background())
 	defer cancelAttempt()
@@ -114,7 +186,7 @@ func TestActionLoopStopCancelsAndDrains(t *testing.T) {
 		tryCh <- tryResult{result: &agent.TryResult{Completed: false, Summary: "cancelled"}, err: attemptCtx.Err()}
 	}()
 
-	actionCh <- keyboard.ActionStop
+	actionCh <- keyboard.Press{Action: keyboard.ActionStop, Confirmed: true}
 	done := runLoopAsync(r, actionLoopDeps{
 		tryCh:         tryCh,
 		pidCh:         make(chan int, 1),
@@ -164,7 +236,7 @@ func TestActionLoopStopCancelsAndDrains(t *testing.T) {
 func TestActionLoopStalledAttemptQuitsPromptly(t *testing.T) {
 	r := &Runner{}
 	tryCh := make(chan tryResult, 1)
-	actionCh := make(chan keyboard.Action, 1)
+	actionCh := make(chan keyboard.Press, 1)
 	stallTick := make(chan time.Time, 1)
 	stalledCh := make(chan struct{}, 1)
 	attemptCtx, cancelAttempt := context.WithCancel(context.Background())
@@ -204,7 +276,7 @@ func TestActionLoopStalledAttemptQuitsPromptly(t *testing.T) {
 
 	// Ctrl+C should end the stalled attempt without waiting on any threshold.
 	start := time.Now()
-	actionCh <- keyboard.ActionQuit
+	actionCh <- keyboard.Press{Action: keyboard.ActionQuit, Confirmed: true}
 	var out actionLoopResult
 	select {
 	case out = <-done:
@@ -242,7 +314,7 @@ func TestActionLoopSecondQuitForceKills(t *testing.T) {
 	}}
 
 	tryCh := make(chan tryResult) // unbuffered: try stays alive through the drain
-	actionCh := make(chan keyboard.Action)
+	actionCh := make(chan keyboard.Press)
 	pidCh := make(chan int, 1)
 	pgidKnown := make(chan struct{}, 1)
 	attemptCtx, cancelAttempt := context.WithCancel(context.Background())
@@ -270,8 +342,8 @@ func TestActionLoopSecondQuitForceKills(t *testing.T) {
 	}
 
 	// First quit-now enters the drain; the second escalates to force-kill.
-	actionCh <- keyboard.ActionQuit
-	actionCh <- keyboard.ActionQuit
+	actionCh <- keyboard.Press{Action: keyboard.ActionQuit, Confirmed: true}
+	actionCh <- keyboard.Press{Action: keyboard.ActionQuit, Confirmed: true}
 	select {
 	case p := <-killedCh:
 		if p != pgid {
@@ -299,7 +371,7 @@ func TestActionLoopSecondQuitForceKills(t *testing.T) {
 func TestActionLoopPauseCapturesSessionID(t *testing.T) {
 	r := &Runner{}
 	tryCh := make(chan tryResult, 1)
-	actionCh := make(chan keyboard.Action, 1)
+	actionCh := make(chan keyboard.Press, 1)
 	attemptCtx, cancelAttempt := context.WithCancel(context.Background())
 	defer cancelAttempt()
 
@@ -315,7 +387,7 @@ func TestActionLoopPauseCapturesSessionID(t *testing.T) {
 		}
 	}()
 
-	actionCh <- keyboard.ActionPause
+	actionCh <- keyboard.Press{Action: keyboard.ActionPause, Confirmed: true}
 	done := runLoopAsync(r, actionLoopDeps{
 		tryCh:         tryCh,
 		pidCh:         make(chan int, 1),
@@ -355,7 +427,7 @@ func TestActionLoopPauseCapturesSessionID(t *testing.T) {
 func TestActionLoopSkipReturnsResultAndSetsFlag(t *testing.T) {
 	r := &Runner{}
 	tryCh := make(chan tryResult, 1)
-	actionCh := make(chan keyboard.Action, 1)
+	actionCh := make(chan keyboard.Press, 1)
 	attemptCtx, cancelAttempt := context.WithCancel(context.Background())
 	defer cancelAttempt()
 
@@ -371,7 +443,7 @@ func TestActionLoopSkipReturnsResultAndSetsFlag(t *testing.T) {
 		}
 	}()
 
-	actionCh <- keyboard.ActionSkip
+	actionCh <- keyboard.Press{Action: keyboard.ActionSkip, Confirmed: true}
 	done := runLoopAsync(r, actionLoopDeps{
 		tryCh:         tryCh,
 		pidCh:         make(chan int, 1),

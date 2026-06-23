@@ -307,6 +307,65 @@ func TestMonitorStoppingIndicator(t *testing.T) {
 	}
 }
 
+func TestMonitorArmedHint(t *testing.T) {
+	dir := t.TempDir()
+	initGitRepo(t, dir)
+	logPath := filepath.Join(dir, "try.log")
+	os.WriteFile(logPath, []byte("data"), 0o644)
+
+	m := NewMonitor(dir, logPath, 0)
+	m.SetArmed("press Ctrl+C again to quit now", time.Minute)
+
+	line, err := m.Tick()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !containsString(line, "⌨ press Ctrl+C again to quit now") {
+		t.Errorf("expected armed hint, got %q", line)
+	}
+}
+
+func TestMonitorArmedHintExpires(t *testing.T) {
+	dir := t.TempDir()
+	initGitRepo(t, dir)
+	logPath := filepath.Join(dir, "try.log")
+	os.WriteFile(logPath, []byte("data"), 0o644)
+
+	m := NewMonitor(dir, logPath, 0)
+	// A non-positive TTL is already lapsed, so the hint must not render.
+	m.SetArmed("press Ctrl+C again to quit now", -time.Second)
+
+	line, err := m.Tick()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if containsString(line, "press Ctrl+C again") {
+		t.Errorf("expired armed hint should not render, got %q", line)
+	}
+}
+
+func TestMonitorActingEchoOutranksArmed(t *testing.T) {
+	dir := t.TempDir()
+	initGitRepo(t, dir)
+	logPath := filepath.Join(dir, "try.log")
+	os.WriteFile(logPath, []byte("data"), 0o644)
+
+	m := NewMonitor(dir, logPath, 0)
+	m.SetArmed("press Ctrl+S again to skip", time.Minute)
+	m.SetActing("skipping…")
+
+	line, err := m.Tick()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !containsString(line, "■ skipping…") {
+		t.Errorf("expected acting echo, got %q", line)
+	}
+	if containsString(line, "press Ctrl+S again") {
+		t.Errorf("acting echo should clear the armed hint, got %q", line)
+	}
+}
+
 func TestMonitorRecoveredIndicator(t *testing.T) {
 	dir := t.TempDir()
 	initGitRepo(t, dir)
