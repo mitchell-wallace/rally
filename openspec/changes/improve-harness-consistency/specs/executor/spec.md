@@ -34,7 +34,7 @@ The system SHALL define an `Executor` interface with a single method `Execute(ct
 ## MODIFIED Requirements
 
 ### Requirement: CodexExecutor
-The system SHALL provide a `CodexExecutor` that invokes `codex exec` as a subprocess with appropriate flags and returns a `TryResult`. When a resolved reasoning effort is specified for Codex, the executor SHALL inject it as a config override with `-c model_reasoning_effort=<value>`, not as a nonexistent CLI reasoning flag. The executor SHALL capture subprocess stderr through a dedicated channel that cannot be lost to a stdout-pipe-close race. When the subprocess exits non-zero with no in-band parser-matchable signal, the executor SHALL enrich `FailureEvidence` from codex's own session log under `$CODEX_HOME/sessions/` (default `~/.codex/sessions/`) when a matching session exists.
+The system SHALL provide a `CodexExecutor` that invokes `codex exec` as a subprocess with appropriate flags and returns a `TryResult`. When a resolved reasoning effort is specified for Codex, the executor SHALL inject it as a config override with `-c model_reasoning_effort=<value>`, not as a nonexistent CLI reasoning flag. The executor SHALL merge subprocess stderr into stdout via the standard Go `cmd.StdoutPipe()` + `cmd.Stderr = cmd.Stdout` (before `cmd.Start()`) idiom — this is the library-recommended merge pattern and is not a race. When the subprocess exits non-zero with no in-band parser-matchable signal, the executor SHALL enrich `FailureEvidence` from codex's own session log under `$CODEX_HOME/sessions/` (default `~/.codex/sessions/`) when a matching session exists.
 
 #### Scenario: Codex run with approval bypass mode
 - **WHEN** a codex run is executed
@@ -48,26 +48,28 @@ The system SHALL provide a `CodexExecutor` that invokes `codex exec` as a subpro
 - **WHEN** structured output is requested
 - **THEN** the executor SHALL pass `--output-schema ./schema.json -o ./report.json` and parse the output file
 
-#### Scenario: Codex stderr is captured regardless of pipe-close timing
-- **WHEN** codex writes to its stderr file descriptor near process exit (potentially racing the merged stdout pipe close)
-- **THEN** the executor SHALL capture that stderr into the buffer passed to `ParseCodexError`
-- **AND** the capture SHALL NOT depend on the merged-stdout pipe staying open
+#### Scenario: Codex stderr is merged into the parser buffer
+- **WHEN** codex writes to its stderr file descriptor
+- **THEN** the executor SHALL merge stderr into the same buffer passed to `ParseCodexError` via the standard `cmd.Stderr = cmd.Stdout` (post-`StdoutPipe`, pre-`Start()`) idiom
+- **AND** no separate stderr-capture goroutine or `io.Pipe` SHALL be required for this change (the existing merge idiom, shared with `runLoggedCommand`, is sufficient)
 
 #### Scenario: Codex silent exit enriched from session log
 - **WHEN** codex exits non-zero and the in-band stdout/stderr buffer contains no parser-matchable signal
 - **AND** a `rollout-*.jsonl` file exists under `$CODEX_HOME/sessions/YYYY/MM/DD/` whose first-line `session_meta.cwd` matches the run's `WorkspaceDir` and whose `session_meta.timestamp` is within the try window
 - **THEN** the executor SHALL populate `FailureEvidence` with `Source = "codex_session_log"`, `Message` derived from the last `event_msg` subtype, and a bounded `RawSignal` built from the `session_meta` line plus the last `event_msg` line
-- **AND** it SHALL explicitly skip `token_count`, `response_item`, and any payload field named `base_instructions` to avoid the verbosity hazard
+- **AND** it SHALL explicitly skip `token_count`, `response_item`, `turn_context`, and any payload field named `base_instructions` to avoid the verbosity hazard
+- **AND** it SHALL NOT rely on `session_meta` for the resolved model name — `session_meta` carries only `model_provider` (e.g. `openai`); the resolved model name lives in `turn_context.payload.model`. The executor's own `model` local is the authoritative source for `TryResult.ResolvedModel`, not the session log
 
 #### Scenario: Codex silent exit with no matching session log
 - **WHEN** codex exits non-zero, the in-band buffer has no parser-matchable signal, and no session-log file matches the run's `WorkspaceDir` within the try window
-- **THEN** the executor SHALL mark the failure with `failure_evidence.source = "codex_no_session_log"`
-- **AND** the runner SHALL classify the failure as `harness_launch` (rotate immediately, no same-runner retry) rather than consuming the retry budget as `agent_error`
+- **THEN** the executor SHALL populate `FailureEvidence` with `Category = harness_launch`, `Source = "codex_no_session_log"`, and `Message = "codex launched but wrote no session log"`
+- **AND** because the executor supplies typed Evidence with a Category, `ClassifyError` Priority 1 SHALL resolve the failure directly as `harness_launch`, yielding the existing `StrategyFreshRestart` + `FailureInfra` semantics (retry within budget with a fresh session; infra-class freeze pressure after 2+ failures caps a runner that repeatedly fails to launch)
+- **AND** the intent is to label the failure correctly and surface the `codex_no_session_log` repro marker so the launch issue can be reproduced and fixed, NOT to skip retrying — the runner keeps retrying codex launch failures up to the budget
 
 ## ADDED Requirements
 
 ### Requirement: OpenCode try-budget exhaustion evidence
-The system SHALL surface a bounded diagnostic signal from the opencode server log when an opencode try times out without producing a parseable result, so try-budget exhaustion is distinguishable from a real opencode crash in telemetry. When the opencode subprocess is killed by the runner-side try or run budget without ever emitting a usable `--format json` result, the executor SHALL locate the relevant lines in `$XDG_DATA_HOME/opencode/log/opencode.log` (default `~/.local/share/opencode/log/opencode.log`) by correlating the opencode session id (extracted at startup from the `message=created id=… directory=<WorkspaceDir>` line, with `providerID=<provider>` plus try-window fallback per the existing opencode usage-limit requirement) and SHALL keep only `level=WARN` and `level=ERROR` lines plus the structural `message=created` / `message="loop session.id=…"` / `message=stream` markers, bounded to at most sixteen lines. The resulting `FailureEvidence` SHALL set `Source = "opencode_disk_log"`, `Message` from the last error line (or `"try budget exhausted; no parseable output"` when no error line is present), and `RawSignal` from the bounded filtered tail. The executor SHALL explicitly skip per-token and per-permission log lines, which are the verbosity hazard in the opencode log.
+The system SHALL surface a bounded diagnostic signal from the opencode server log when an opencode try times out without producing a parseable result, so try-budget exhaustion is distinguishable from a real opencode crash in telemetry. This requirement EXTENDS the existing opencode disk-log fallback machinery (`attachOpenCodeFailureEvidence` / `openCodeServerLogFailureEvidence` / `readOpenCodeServerLogTail` / `openCodeEvidenceFromServerLog` in `internal/agent/opencode.go`) — it does not introduce a parallel session-id correlation mechanism, since the existing locator already correlates by opencode session id (from the `message=created id=… directory=<WorkspaceDir>` line via `openCodeCreatedSessionID`) with a `providerID=<provider>` + try-window fallback (`openCodeLogLineInWindow`). When the opencode subprocess is killed by the runner-side try or run budget without ever emitting a usable `--format json` result, the executor SHALL additionally keep `level=WARN` and `level=ERROR` lines plus the structural `message=created` / `message="loop session.id=…"` / `message=stream` markers from `$XDG_DATA_HOME/opencode/log/opencode.log` (default `~/.local/share/opencode/log/opencode.log`), bounded to at most sixteen lines, alongside the existing usage-limit extraction path. The resulting `FailureEvidence` SHALL set `Source = "opencode_disk_log"`, `Message` from the last error line (or `"try budget exhausted; no parseable output"` when no error line is present), and `RawSignal` from the bounded filtered tail. The executor SHALL explicitly skip per-token and per-permission log lines, which are the verbosity hazard in the opencode log.
 
 #### Scenario: Budget-exhausted opencode try carries disk-log tail
 - **WHEN** an opencode try is killed by the runner-side try or run budget without producing a parseable `--format json` result
@@ -86,13 +88,18 @@ The system SHALL surface a bounded diagnostic signal from the opencode server lo
 - **AND** the resulting evidence SHALL NOT exceed the standard 256-rune signal bound
 
 ### Requirement: Antigravity-named reliability parser
-The system SHALL name the antigravity reliability parser `ParseAntigravityError` (renamed from the inherited `ParseGeminiError`), reflecting that antigravity is the only Google-owned harness after the gemini CLI removal. The parser's matching behaviour (RESOURCE_EXHAUSTED, Individual quota reached, Resets in, HTTP 429, IneligibleTierError, UNSUPPORTED_CLIENT, no longer supported for Gemini Code Assist) SHALL be unchanged. The `gemini-cli exit 1` and `gemini auth or unsupported client` text-pattern entries in `ErrorPatterns` SHALL be removed, because they scoped to the removed harness; antigravity's eligibility-text pattern remains and SHALL apply to antigravity only.
+The system SHALL name the antigravity reliability parser `ParseAntigravityError` (renamed from the inherited `ParseGeminiError`), reflecting that antigravity is the only Google-owned harness after the gemini CLI removal. The parser's matching behaviour (RESOURCE_EXHAUSTED, Individual quota reached, Resets in, HTTP 429, IneligibleTierError, UNSUPPORTED_CLIENT, no longer supported for Gemini Code Assist) SHALL be unchanged. Only the `gemini auth or unsupported client` text-pattern entry in `ErrorPatterns` (scoped `Harness: "gemini"`) SHALL be removed, because it scoped to the removed harness and the antigravity-scoped eligibility duplicate already covers the same text. The `gemini-cli exit 1` pattern (currently scoped `Harness: "antigravity"` because antigravity shells out to the `gemini-cli` binary) SHALL be RETAINED but RENAMED to `antigravity gemini-cli exit 1` — it is a real classification path for antigravity's exit-1-with-no-other-signal cases.
 
 #### Scenario: Parser name reflects the surviving harness
 - **WHEN** the antigravity executor captures an error buffer for reliability classification
 - **THEN** it SHALL invoke `ParseAntigravityError` (not `ParseGeminiError`)
 
-#### Scenario: Removed gemini-only text patterns do not match
+#### Scenario: Removed gemini-only text pattern does not match
 - **WHEN** the harness-scoped text-pattern table is consulted for a failure
-- **THEN** no `gemini-cli exit 1` or `gemini auth or unsupported client` pattern SHALL exist
+- **THEN** no pattern scoped to the removed `gemini` harness SHALL exist
+- **AND** no pattern with `Harness: "gemini"` SHALL exist (the `gemini auth or unsupported client` pattern is removed)
+
+#### Scenario: Antigravity-scoped exit-1 pattern is retained
+- **WHEN** an antigravity try exits 1 with no other parser-matchable signal in the log tail
+- **THEN** the renamed `antigravity gemini-cli exit 1` pattern (scoped `Harness: "antigravity"`) SHALL still match and classify the failure as `agent_error`
 - **AND** antigravity eligibility errors (`IneligibleTierError`, `UNSUPPORTED_CLIENT`, `no longer supported for Gemini Code Assist`) SHALL continue to classify as `auth_or_proxy` for the antigravity harness

@@ -2,7 +2,7 @@
 
 Rally classifies harness failures via `reliability.ClassifyError`
 (`internal/reliability/patterns.go:299`), invoked once per failed try at
-`internal/relay/runner.go:2204`. The function returns a `StrategyDecision`
+`internal/relay/runner.go:2254`. The function returns a `StrategyDecision`
 and uses a strict priority order:
 
 1. Typed executor `Evidence` (Priority 1, line 302)
@@ -11,14 +11,20 @@ and uses a strict priority order:
 4. Harness-scoped text patterns from `ErrorPatterns` (Priority 4, line 357)
 5. Default `agent_error` (Priority 5, line 387)
 
-Two `applyEvidenceToFailureState` helpers in `runner.go` populate the
-`failure_evidence` context block on the emitted `RallyFailure` event:
-`applyEvidenceToFailureState` (line 237, executor path) and
-`applySafeExecErrorEvidence` (line 256, last-resort fallback when
-`execErr != nil`). Priority 3, 4, and most of 5 leave the context block
-empty — the decision struct carries `Category` / `Reason` / `Strategy` /
-`FailureClass` / `DisplayLabel` / `Cooldown` but **not** the matching log
-tail.
+Two helpers in `runner.go` populate the `failure_evidence` context block on
+the emitted `RallyFailure` event: `applyEvidenceToFailureState` (line 237,
+executor path) and `applySafeExecErrorEvidence` (line 256, last-resort
+fallback when `execErr != nil`). The runner threads evidence into both
+calls via `resetEvidence = result.Evidence` (`runner.go:2258`); both
+`applyEvidenceToFailureState` call sites (`runner.go:2454` for the try-log
+span/fields, `runner.go:2530` inside the operator-worthy
+`ShouldCaptureIssue()` capture path) hard-code the source string
+`"executor_evidence"`, so the emitted `failure_evidence.source` tag is
+always `executor_evidence` or `safe_exec_error` regardless of which
+classifier priority actually produced the category. Priority 3, 4, and most
+of 5 leave the context block empty — the decision struct carries
+`Category` / `Reason` / `Strategy` / `FailureClass` / `DisplayLabel` /
+`Cooldown` but **not** the matching log tail.
 
 Per-harness parsers (`internal/reliability/{claude,codex,antigravity,
 opencode}.go`) are correct for the shapes they recognise. New Relic
@@ -32,20 +38,23 @@ collapses to bare `harness` when `model == ""`. The model is resolved
 inside each executor (`CodexExecutor.Model` falls back to `cfg.CodexModel`,
 etc.) but never reported back to the runner.
 
-Routing-fallback events are emitted at `runner.go:794` via `EmitTryLog`,
+Routing-fallback events are emitted at `runner.go:830` via `EmitTryLog`,
 producing `RallyTry` custom events with `from_runner`/`to_runner` populated
 but no `outcome`, `attempt`, or `try_id`. 39 such events over 30 days
 inflate any `RallyTry`-based failure-rate query.
 
 Codex keeps session logs at `~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl`
-(verified on a host running codex 0.141.0): one JSONL file per session,
+(verified on a host running codex 0.142.0): one JSONL file per session,
 newline-delimited structured events. First line is always `session_meta`
 (carrying `cli_version`, `cwd`, `git.commit_hash`, `git.branch`,
-`git.repository_url`, resolved `model`, full base instructions). Subsequent
-events: `event_msg` subtypes `task_started`, `task_complete`, `turn_aborted`,
-`token_count` (~45/file in a 50-file sample — the verbosity hazard),
-`response_item` (full messages), `turn_context` (per-turn model + reasoning
-effort). Also present: `~/.codex/logs_2.sqlite` (SQLite database),
+`git.repository_url`, `model_provider`, full `base_instructions` — note
+`model_provider` is the provider slug like `openai`, NOT the resolved model
+name; the resolved model lives in later `turn_context` events' `payload.model`
+field). Subsequent event types: `event_msg` (subtypes `task_started`,
+`task_complete`, `turn_aborted`), `token_count` (~45/file in a 50-file sample
+— the verbosity hazard), `response_item` (full messages), `turn_context`
+(per-turn model + reasoning effort + the authoritative `payload.model`).
+Also present: `~/.codex/logs_2.sqlite` (SQLite database),
 `~/.codex/auth.json` (credentials — must never enter telemetry),
 `~/.codex/config.toml`.
 
@@ -65,8 +74,14 @@ per-tool-call and per-permission log lines.
   which `ClassifyError` priority produced the category, the
   `failure_evidence` context block is populated.
 - Codex silent-exit failures carry diagnostic context read from codex's
-  own session log, and are categorised as `harness_launch` when codex
-  never wrote a session log at all.
+  own session log, and are categorised as `harness_launch` (with the
+  `codex_no_session_log` source marker when no session log exists) so the
+  failure carries the right category label and repro data instead of
+  burning retries as an uncategorised `agent_error`. The existing
+  `harness_launch` retry semantics (FreshRestart within budget, infra-class
+  freeze pressure after 2+ failures) apply unchanged — the runner keeps
+  retrying codex launch failures up to the budget, and the freeze cascade
+  caps it when codex repeatedly fails to launch.
 - OpenCode try-budget-exhaustion failures carry a bounded disk-log tail
   and are distinguishable from real opencode crashes in NRQL.
 - The `runner` telemetry tag always carries the resolved model.
@@ -104,46 +119,71 @@ signal, locate the latest `rollout-*.jsonl` under
 matches `opts.WorkspaceDir` and whose `session_meta.timestamp` is within
 the try window. Read **only**:
 
-- The first line (`session_meta`) for resolved `model`, `git.branch`,
-  `git.commit_hash`, `cli_version`.
+- The first line (`session_meta`) for `cwd`, `git.branch`,
+  `git.commit_hash`, `cli_version`, and `model_provider`. (The resolved
+  `model` is NOT in `session_meta` — only the provider slug is. It lives
+  in `turn_context.payload.model`; the executor's own `model` local at
+  `codex.go:170-173` remains the authoritative source for `ResolvedModel`
+  per Decision 6, so the session log does not need to provide it.)
 - The last `event_msg` line of any subtype (`task_started`,
   `task_complete`, `turn_aborted`) — its subtype is the diagnostic.
 
-Explicitly skip `token_count`, `response_item`, and the
-`base_instructions` payload. Bound the resulting `RawSignal` to 256 runes
-using the existing `truncateSignal` helper. Populate `FailureEvidence`
-with `Source = "codex_session_log"`, `Message` from the last event's
-subtype, `RawSignal` from the bounded structural tail.
+Explicitly skip `token_count`, `response_item`, `turn_context` (except as
+noted above), and the `base_instructions` payload. Bound the resulting
+`RawSignal` to 256 runes using the existing `truncateSignal` helper.
+Populate `FailureEvidence` with `Source = "codex_session_log"`, `Message`
+from the last event's subtype, `RawSignal` from the bounded structural tail.
 
 If no session-log file exists with a matching `cwd`, codex never got far
-enough to do real work: classify as `harness_launch` (StrategyRotate,
-agent-class so no freeze increment) and emit a
-`failure_evidence.source = "codex_no_session_log"` marker. This is the
-distinct signal that today's `agent_error`-and-burn-retry-budget pattern
-in the 0.11.2 burst was missing. Alternative considered: spawn a
-diagnostic `codex doctor` subprocess — rejected because it doubles process
-overhead on a failure path; the session log is already authoritative.
+enough to do real work: populate `FailureEvidence{Category:
+CategoryHarnessLaunch, Source: "codex_no_session_log", Message: "codex
+launched but wrote no session log"}` at the executor level, so
+`ClassifyError` Priority 1 (typed executor Evidence) picks it up directly
+— no runner-side classification change is needed for this case. The
+existing `CategoryHarnessLaunch` mapping applies as-is:
+`StrategyFreshRestart` (retry within budget with a fresh session) +
+`FailureInfra` (after 2+ infra failures the resilience cascade freezes
+the runner, which is the right "up to a limit" cap for a harness that
+keeps failing to launch). This is the distinct signal that today's
+uncategorised `agent_error`-and-burn-retry-budget pattern in the 0.11.2
+burst was missing: the win is the correct category label and the
+`codex_no_session_log` repro marker in `failure_evidence.source` (and the
+session-log tail when available), not a change to the retry/freeze
+behaviour. Alternative considered: spawn a diagnostic `codex doctor`
+subprocess — rejected because it doubles process overhead on a failure
+path; the session log is already authoritative. Alternative considered:
+use `CategoryAuthOrProxy` to get `StrategyRotate` + `FailureAgent` —
+rejected because the user wants the runner to keep retrying codex launch
+failures within budget (FreshRestart), not rotate away on the first
+failure.
 
-Also tighten `runCodexCommand` (`internal/agent/codex.go:223`): the
-current `cmd.Stderr = cmd.Stdout` assignment runs *after* `StdoutPipe()`,
-so a stderr write that races the pipe close bypasses the override. Switch
-to an explicit `io.Pipe` for stderr drained by a dedicated goroutine, so
-stderr is captured regardless of timing. This is in-band only; the
-session-log fallback is the authoritative safety net.
+Note on stderr: `runCodexCommand` (`internal/agent/codex.go:223`) uses the
+standard Go merge pattern (`cmd.StdoutPipe()` then
+`cmd.Stderr = cmd.Stdout` before `cmd.Start()`), which is the
+library-recommended way to merge both streams into one pipe and is shared
+by `runLoggedCommand` (`internal/agent/log.go:44`). It is not a race — the
+assignment precedes `Start()`, so the child inherits the merged fd. The
+real silent-exit-1 problem is that codex writes nothing to *either* stream
+before dying on some failure modes; the session-log fallback above is the
+authoritative safety net for that case. No `runCodexCommand` refactor is
+required for this change.
 
 **3. `failure_evidence` on every classification priority via
 `StrategyDecision.Evidence`.** Add an optional
 `Evidence *FailureEvidence` field to `StrategyDecision` in
-`internal/reliability/patterns.go`. Populate it inside `ClassifyError`
-for every branch:
+`internal/reliability/patterns.go`. `FailureEvidence` (in
+`internal/reliability/category.go`) gains a new `Source string` field so
+the runner can emit the correct `failure_evidence.source` tag per priority
+without a parallel sidecar. Populate both inside `ClassifyError` for every
+branch:
 
 - Priority 1 (executor Evidence, line 302): pass through the executor's
   `Evidence` unchanged; set `Source = "executor_evidence"` if unset.
 - Priority 3 (dirty-tree incomplete, line 346): build an Evidence with
   `Category = CategoryIncompleteFinalization`, `Message =
-  "agent exited without finalization"`, `Source = "dirty_tree"`, and
+  "agent exited without finalizing"`, `Source = "dirty_tree"`, and
   `RawSignal` from the changed-paths list (the runner already computes
-  this via `filesChangedList` at `runner.go:3189`).
+  this via `filesChangedList` at `runner.go:3239`).
 - Priority 4 (text patterns, line 357): capture the matching log line at
   match time inside `Pattern.Match` (extend `Match` to optionally return
   the matched line, or have `ClassifyError` re-scan after a match to
@@ -153,22 +193,38 @@ for every branch:
   `Message = "no recognised provider signal"`, `RawSignal` from a bounded
   log tail so we always have something.
 
-The runner's existing `applyEvidenceToFailureState` then handles all
-four sources uniformly; `applySafeExecErrorEvidence` becomes the
-lowest-priority fallback that fires only when both `result.Evidence` and
-`decision.Evidence` are nil. Alternative considered: re-parse inside the
-runner for each priority — rejected because it duplicates the matching
-logic and re-reads the log; carrying Evidence through the decision struct
-is a single source of truth.
+The runner plumbs `decision.Evidence` into the existing `resetEvidence`
+local at `runner.go:2258` (`if resetEvidence == nil { resetEvidence =
+decision.Evidence }`), so both `applyEvidenceToFailureState` call sites
+(`runner.go:2454` for the try-log span/fields, `runner.go:2530` inside the
+operator-worthy `ShouldCaptureIssue()` capture path) pick it up
+automatically. `applyEvidenceToFailureState` is updated to read its
+`source` argument from `ev.Source` when non-empty (falling back to the
+hard-coded `"executor_evidence"` literal only when the caller is passing
+genuine executor evidence with no Source set, preserving backward
+compat for existing executor-evidence callers). `applySafeExecErrorEvidence`
+becomes the lowest-priority fallback that fires only when both
+`result.Evidence` and `decision.Evidence` are nil. Alternative considered:
+re-parse inside the runner for each priority — rejected because it
+duplicates the matching logic and re-reads the log; carrying Evidence
+through the decision struct is a single source of truth.
 
 **4. Try-budget-exhaustion classification, distinct labels, no cascade
-change.** When `loopOut.timedOut` is true (`runner.go:1849`) and no
-Evidence was produced (neither executor Evidence nor the new session-log
-/ disk-log fallbacks), set `failureCategory = transient_infra` and
-`failReason = "try budget exhausted; no output"`. This maps to
-`FailureInfra` which **does** feed the freeze counter today — and that
-is wrong for budget exhaustion (the harness did not fail, we killed it).
-Override the mapping at the runner call site for this single case: set
+change.** The runner already distinguishes per-try-cap timeouts from
+run-budget timeouts: `loopOut.timedOut && !loopOut.runBudgetExhausted`
+identifies the try-cap-only case, and the existing block at
+`runner.go:2311` (`if failed && runBudgetExhausted`) already handles the
+run-budget case by clearing `failureCategory`, setting
+`failReason = "run timeout"`, and forcing `attemptFailureClass =
+FailureAgent`. We add the new classification for the **try-cap-only** case
+so the two budget kinds stay separately reportable: when
+`loopOut.timedOut && !loopOut.runBudgetExhausted` and no Evidence was
+produced (neither executor Evidence nor the new session-log / disk-log
+fallbacks), set `failureCategory = transient_infra` and `failReason =
+"try budget exhausted; no output"`. This maps to `FailureInfra` which
+**does** feed the freeze counter today — and that is wrong for budget
+exhaustion (the harness did not fail, we killed it). Override the mapping
+at the runner call site for this single case: set
 `failureClass = FailureAgent` directly so the freeze counter does not
 increment, while leaving the category as `transient_infra` for NRQL
 filtering. Alternative considered: add a new
@@ -177,9 +233,24 @@ telemetry tag value and a new branch in every consumer; reusing
 `transient_infra` with a distinct `fail_reason` is enough signal for
 NRQL and requires no schema change.
 
+The run-budget path at `runner.go:2311` is left unchanged. NRQL separates
+the two cases by combining `fail_reason` with the existing `timeout_kind`
+tag on the try log (`runner.go:2468`, which already emits
+`timeout_kind = "try_cap" | "run_budget" | "handoff"`) plus the
+diagnostic signals `runtime_ms`, `tool_calls`, `files_changed`, and
+`last_output_age_ms` that the try log already carries. The "slow model
+getting the job done → revise time budget" vs "underqualified model →
+review routing" question is answerable today by filtering on those tags
+(e.g. high `tool_calls` + small `last_output_age_ms` near the kill =
+active work in progress; low `tool_calls` + large `last_output_age_ms` =
+stalled or underqualified); the new `transient_infra` +
+`"try budget exhausted; no output"` labels add a clean category/reason
+filter on top of those signals without duplicating them into
+`failure_evidence`.
+
 **5. `RallyRoute` event for routing decisions.** Add
 `Sink.EmitRouteEvent(ctx, fields)` and a `RallyRoute` custom event type.
-Move the route-fallback emission at `runner.go:794` from `EmitTryLog` to
+Move the route-fallback emission at `runner.go:830` from `EmitTryLog` to
 `EmitRouteEvent`. The event carries `relay_id`, `run_id`, `lap_id`,
 `role`, `from_runner`, `to_runner`, `repo`, `repo_name`, and any fallback
 cause fields. This keeps `RallyTry` pure (every event is a real try
@@ -189,18 +260,30 @@ always set `outcome = "routed"` and document the filter — rejected
 because it leaves a confusing dual-purpose event type and forces every
 reporting query to remember the filter.
 
-After this change, audit every `EmitTryLog` site (`runner.go:794, 2057,
-2524, 2996`) and assert at the telemetry boundary that `outcome` is
-non-empty for `RallyTry`. The audit is the close-the-gap guarantee.
+The recovery-cap-hit path at `runner.go:834` already emits a `RallyFailure`
+event (operator-worthy `needs_user`) via `CaptureFailure`, NOT a polluted
+`RallyTry` — so it is NOT one of the NULL-outcome `RallyTry` polluters.
+For parity with the route-fallback shape, the runner SHALL ALSO emit a
+`RallyRoute` event carrying the cap-hit context, while keeping the existing
+`RallyFailure` capture intact. The two events serve different audiences:
+`RallyFailure` is the operator-worthy alert; `RallyRoute` is the routing
+audit trail.
+
+After this change, audit every `EmitTryLog` site (`runner.go:830, 2100,
+2574, 3046`) and assert at the telemetry boundary that `outcome` is
+non-empty for `RallyTry`. Only the route-fallback site at `runner.go:830`
+currently lacks `outcome`; the other three already set it from a non-empty
+`TryOutcome`. The audit is the close-the-gap guarantee.
 
 **6. `ResolvedModel` on `TryResult`, runner-tag fallback.** Add
-`ResolvedModel string` to `agent.TryResult` (`internal/agent/agent.go`).
-Each executor sets it to the model actually passed to the CLI: codex
-sets it from the `model` local at `codex.go:170-173` after the
-`opts.Model` fallback; claude / opencode / antigravity likewise. At the
-three telemetry sites that build the `runner` tag
-(`runner.go:2057, 2370, 2947`), pass `result.ResolvedModel` to
-`telemetry.RunnerLabel` when non-empty, falling back to `picked.Model`
+`ResolvedModel string` to `agent.TryResult` (`internal/agent/executor.go`,
+where `TryResult` is defined at line 48 — NOT `internal/agent/agent.go`,
+which is an empty package file). Each executor sets it to the model
+actually passed to the CLI: codex sets it from the `model` local at
+`codex.go:170-173` after the `opts.Model` fallback; claude / opencode /
+antigravity likewise. At the three telemetry sites that build the
+`runner` tag (`runner.go:2107, 2420, 2997`), pass `result.ResolvedModel`
+to `telemetry.RunnerLabel` when non-empty, falling back to `picked.Model`
 otherwise. The route-resolved model stays authoritative when set; this
 is a fallback for the bare-alias case only. Alternative considered:
 resolve the default model at route-selection time — rejected because the
@@ -210,11 +293,30 @@ single, accurate source.
 
 **7. Parser rename: `ParseGeminiError` → `ParseAntigravityError`.** With
 gemini gone, the function serves antigravity only; the shared name is a
-leftover. Rename the function and its tests, and remove the
-`gemini-cli exit 1` and `gemini auth or unsupported client` patterns
-from `ErrorPatterns` (`patterns.go:224-248`). The eligibility regex
-(`IneligibleTierError`, `UNSUPPORTED_CLIENT`, `no longer supported for
-Gemini Code Assist`) stays — it now applies only to antigravity.
+leftover. Rename the function (in `internal/reliability/antigravity.go:23`)
+and its tests, and update the caller at
+`internal/agent/antigravity.go:106` (the only surviving caller after
+`internal/agent/gemini.go` is deleted in Decision 1).
+
+The `ErrorPatterns` table needs a finer touch than a flat "remove both
+gemini patterns" — the two patterns have different harness scopes today:
+
+- `gemini auth or unsupported client` (`patterns.go:237-248`,
+  `Harness: "gemini"`) is genuinely dead after the cut (no failures will
+  carry harness=`"gemini"`). Remove it. The antigravity-scoped duplicate
+  at `patterns.go:249-260` (`Harness: "antigravity"`) already covers the
+  eligibility-text path and stays.
+- `gemini-cli exit 1` (`patterns.go:223-236`) is currently scoped to
+  `Harness: "antigravity"` (line 235), NOT `"gemini"` — antigravity
+  shells out to the `gemini-cli` binary under the hood, so the pattern
+  matches antigravity's exit-1-with-no-other-signal cases and is covered
+  by `runner_test.go`'s "gemini exit status 1 resumes retry" assertion.
+  Keep this pattern, but rename it (`antigravity gemini-cli exit 1`) so
+  the name no longer implies a `gemini`-harness scope. Do NOT delete it.
+
+The eligibility regex (`IneligibleTierError`, `UNSUPPORTED_CLIENT`,
+`no longer supported for Gemini Code Assist`) stays unchanged and
+continues to apply only to antigravity.
 
 ## Risks / Trade-offs
 
@@ -229,10 +331,17 @@ Gemini Code Assist`) stays — it now applies only to antigravity.
   `base_instructions` into `RawSignal`. The 256-rune `truncateSignal`
   bound is defence-in-depth.
 - **OpenCode disk log is shared across concurrent opencode processes** →
-  mitigation: correlate by opencode session id (extracted from the
-  `message=created id=… directory=<WorkspaceDir>` line at executor
-  startup) and filter on that session's events. Without a session id
-  (opencode never started), fall through to `safe_exec_error`.
+  mitigation: this is already handled by the existing fallback. The
+  locator (`openCodeServerLogFailureEvidence` in `opencode.go:153`)
+  already correlates by opencode session id (extracted from the
+  `message=created id=… directory=<WorkspaceDir>` line via
+  `openCodeCreatedSessionID`) with a `providerID=<provider>` +
+  try-window fallback (`openCodeLogLineInWindow`). This change extends
+  that existing machinery to also keep WARN/ERROR lines and structural
+  loop/stream markers when no parseable result was produced; it does not
+  stand up a parallel correlation mechanism. Without a session id
+  (opencode never started), the existing fallback returns nil and the
+  runner falls through to `safe_exec_error`.
 - **`RallyRoute` is a new event type** → operators with existing NRQL
   dashboards that filter `RallyTry WHERE outcome IS NOT NULL` will see
   the 39 routing events disappear. This is the intended cleanup;
@@ -263,15 +372,20 @@ Gemini Code Assist`) stays — it now applies only to antigravity.
 
 ## Open Questions
 
-- Should `Pattern.Match` be extended to return the matched line (cleaner
-  extraction for Decision 3's text-pattern Evidence), or should
-  `ClassifyError` re-scan after a match to find it (no API change)?
-  Leaning towards re-scan: the patterns table is small and the re-scan
-  runs once per failure.
-- Should the codex no-session-log case emit a separate
-  `RallyDiagnostic` event (for visibility) in addition to classifying as
-  `harness_launch`? Likely yes, mirroring the existing
-  `event_kind=limit_signal` pattern.
-- Should `EmitRouteEvent` also cover the recovery-cap-hit path at
-  `runner.go:804`, or only the route-fallback path? Both are
-  routing-shaped and neither belongs in `RallyTry`.
+- **RESOLVED — Pattern.Match vs re-scan (was Q1).** Decision: re-scan
+  inside `ClassifyError` after a match to extract the matching line. The
+  patterns table is small, the re-scan runs once per failure, and the
+  alternative (extending `Match` to return the matched line) would change
+  the `Pattern` API and force every implementation to surface the match.
+  Task 3.5 reflects this.
+- **Open — codex no-session-log diagnostic event (was Q2).** Should the
+  codex no-session-log case emit a separate `RallyDiagnostic` event (for
+  visibility) in addition to classifying as `harness_launch`? Likely yes,
+  mirroring the existing `event_kind=limit_signal` pattern. Leaving open
+  until implementation; the spec already permits it without requiring it.
+- **RESOLVED — EmitRouteEvent coverage of recovery-cap-hit (was Q3).**
+  Decision: the recovery-cap-hit path at `runner.go:834` already emits a
+  `RallyFailure` (operator-worthy `needs_user`), NOT a polluted
+  `RallyTry`. Keep that `CaptureFailure` call intact AND additionally emit
+  a `RallyRoute` event so the routing audit trail is uniform. Task 7.5
+  reflects this.

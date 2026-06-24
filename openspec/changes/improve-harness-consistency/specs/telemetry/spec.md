@@ -107,10 +107,11 @@ SHALL receive a non-empty result for every row.
 - **WHEN** the raw limit signal is attached
 - **THEN** it SHALL be bounded in size, SHALL pass through the `before_send` scrubber, and SHALL NOT contain prompt or transcript content
 
-#### Scenario: Non-limit categories attach no raw signal
-- **WHEN** a captured failure has a category that is not a provider-limit signal
-- **THEN** the system SHALL NOT emit a limit-signal diagnostic event
-- **AND** it SHALL NOT attach a raw-signal context block
+#### Scenario: Non-limit categories emit no limit-signal diagnostic event
+- **WHEN** a captured failure has a category that is not a provider-limit signal (i.e. not `usage_limit`, `short_rate_limit`, or `provider_overloaded`)
+- **THEN** the system SHALL NOT emit a standalone `RallyDiagnostic` limit-signal event (the `event_kind=limit_signal` diagnostic)
+- **AND** it SHALL NOT attach a `provider_signal` field to that diagnostic event
+- **NOTE**: this scenario governs only the standalone limit-signal diagnostic. It does NOT govern the `failure_evidence` context block on `RallyFailure` events, which IS populated for non-limit categories per the next scenario (`failure_evidence.raw_signal` for non-limit categories comes from the classifier's bounded log tail, not from a provider-signal extraction).
 
 #### Scenario: Non-limit failure evidence is populated for every source
 - **WHEN** a `RallyFailure` event is captured for a non-limit category and the classification path was Priority 3, 4, or 5 (dirty-tree, text-pattern, or default)
@@ -132,10 +133,10 @@ The system SHALL emit a `RallyRoute` custom event for routing-decision moments t
 - **THEN** the sink SHALL emit a `RallyRoute` event with `event = "route_fallback"` and the routing context
 - **AND** no `RallyTry` event SHALL be emitted for the rotation
 
-#### Scenario: Recovery cap hit emits RallyRoute
+#### Scenario: Recovery cap hit emits RallyRoute alongside RallyFailure
 - **WHEN** a relay's recovery cap is reached and the lap is classified `needs_user`
-- **THEN** the sink SHALL emit a `RallyRoute` event carrying the cap-hit context
-- **AND** the operator-worthy `needs_user` `RallyFailure` (if emitted) SHALL remain a separate event
+- **THEN** the sink SHALL emit a `RallyRoute` event carrying the cap-hit context (for routing-audit parity with the route-fallback event)
+- **AND** the existing operator-worthy `needs_user` `RallyFailure` capture SHALL remain a separate, parallel event — the `RallyRoute` emission is ADDITIVE and SHALL NOT replace or suppress the `RallyFailure` capture that operators alert on today
 
 #### Scenario: RallyTry is never emitted without an outcome
 - **WHEN** the runner constructs the fields for a `RallyTry` event

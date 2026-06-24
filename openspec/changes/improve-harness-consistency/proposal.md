@@ -27,9 +27,15 @@ adapter contract around the gaps the data exposes.
   is enriched from `~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl`, reading
   only structural events (`session_meta`, the last `event_msg`) and
   skipping the verbose `token_count` / `response_item` / `base_instructions`
-  payloads. Codex silent-exit-with-no-session-log classifies as
-  `harness_launch` (rotate immediately, no retry) instead of burning the
-  full retry budget.
+  payloads. Codex silent-exit-with-no-session-log populates
+  `FailureEvidence{Category: harness_launch, Source: "codex_no_session_log"}`
+  at the executor level, so `ClassifyError` Priority 1 picks it up directly.
+  The win is the correct category label and repro marker (and the session-log
+  tail when available) instead of an uncategorised `agent_error` — the
+  existing `harness_launch` semantics (FreshRestart within budget, infra-class
+  freeze pressure after 2+ failures) apply unchanged, so the runner keeps
+  retrying codex launch failures up to the budget and the freeze cascade
+  caps it when codex repeatedly fails to launch.
 - Extend opencode's existing disk-log fallback so a try that hits the
   runner-side try-budget cap with no parseable stdout still surfaces a
   bounded `WARN|ERROR` plus structural `created`/`loop`/`stream` tail
