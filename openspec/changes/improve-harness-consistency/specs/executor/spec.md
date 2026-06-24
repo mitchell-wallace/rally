@@ -68,6 +68,25 @@ The system SHALL provide a `CodexExecutor` that invokes `codex exec` as a subpro
 
 ## ADDED Requirements
 
+### Requirement: Unified disk-log fallback for all harnesses
+The system SHALL provide a disk-log fallback for every harness (claude, codex, opencode, antigravity) so that when a try fails with no in-band parser-matchable signal, the executor reads the harness's native session or server log and populates `FailureEvidence` with a bounded diagnostic tail. Every fallback SHALL: produce a non-nil `FailureEvidence` with a non-empty `Category` — either a recognised category when the log shows a known error shape, or `unidentified_issue` when it does not; set a harness-specific `Source` marker (`codex_session_log`, `claude_session_log`, `opencode_disk_log`, `antigravity_glog`, `codex_no_session_log`); bound `RawSignal` to 256 runes; explicitly skip any payload containing prompts, credentials, or user content; and treat missing/unreadable log files as a non-error (the fallback produces no evidence and the runner falls through to the existing classification path). When the in-band output already produced usable evidence, the disk-log fallback SHALL NOT override it — the in-band evidence is authoritative. When the disk-log fallback produces evidence and the in-band output did not, the disk-log evidence SHALL populate `TryResult.Evidence`.
+
+#### Scenario: Disk log fallback does not override in-band evidence
+- **WHEN** an executor's in-band output already produced a non-nil `FailureEvidence` with a recognised `Category`
+- **THEN** the disk-log fallback SHALL NOT replace it
+- **AND** the in-band evidence SHALL be authoritative
+
+#### Scenario: Disk log fallback covers missing in-band signal
+- **WHEN** an executor's in-band output has no parser-matchable signal and the try failed
+- **AND** the harness's native session or server log exists and is readable
+- **THEN** the executor SHALL read the log, extract a bounded structural tail, and populate `FailureEvidence` with a non-empty `Category` and the harness-specific `Source` marker
+- **AND** the `Category` SHALL be `unidentified_issue` when no known error shape is recognised in the log tail
+
+#### Scenario: Missing disk log is not an error
+- **WHEN** the harness's native session or server log does not exist or is unreadable
+- **THEN** the executor SHALL NOT treat it as an error
+- **AND** the executor SHALL fall through to the existing classification path (runner-side `ClassifyError` or `safe_exec_error`)
+
 ### Requirement: OpenCode try-budget exhaustion evidence
 The system SHALL surface a bounded diagnostic signal from the opencode server log when an opencode try times out without producing a parseable result, so try-budget exhaustion is distinguishable from a real opencode crash in telemetry. This requirement EXTENDS the existing opencode disk-log fallback machinery (`attachOpenCodeFailureEvidence` / `openCodeServerLogFailureEvidence` / `readOpenCodeServerLogTail` / `openCodeEvidenceFromServerLog` in `internal/agent/opencode.go`) — it does not introduce a parallel session-id correlation mechanism, since the existing locator already correlates by opencode session id (from the `message=created id=… directory=<WorkspaceDir>` line via `openCodeCreatedSessionID`) with a `providerID=<provider>` + try-window fallback (`openCodeLogLineInWindow`). When the opencode subprocess is killed by the runner-side try or run budget without ever emitting a usable `--format json` result, the executor SHALL additionally keep `level=WARN` and `level=ERROR` lines plus the structural `message=created` / `message="loop session.id=…"` / `message=stream` markers from `$XDG_DATA_HOME/opencode/log/opencode.log` (default `~/.local/share/opencode/log/opencode.log`), bounded to at most sixteen lines, alongside the existing usage-limit extraction path. The resulting `FailureEvidence` SHALL set `Source = "opencode_disk_log"`, `Message` from the last error line (or `"try budget exhausted; no parseable output"` when no error line is present), and `RawSignal` from the bounded filtered tail. The executor SHALL explicitly skip per-token and per-permission log lines, which are the verbosity hazard in the opencode log.
 

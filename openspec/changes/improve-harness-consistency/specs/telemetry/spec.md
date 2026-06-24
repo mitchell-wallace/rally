@@ -88,11 +88,13 @@ SHALL NOT include prompt or transcript content.
 For non-limit categories, the system SHALL populate the `failure_evidence` context
 block on `RallyFailure` events regardless of which classification path produced the
 category: `executor_evidence`, `dirty_tree`, `text_pattern`, `unmatched`,
-`codex_session_log`, `codex_no_session_log`, `opencode_disk_log`, and the existing
-`safe_exec_error` source. Every categorised `RallyFailure` event SHALL be
-self-contained: an operator running `SELECT latest(failure_evidence.raw_signal),
+`codex_session_log`, `claude_session_log`, `opencode_disk_log`, `antigravity_glog`,
+`codex_no_session_log`, and the existing `safe_exec_error` source. Every categorised
+`RallyFailure` event SHALL be self-contained: an operator running
+`SELECT latest(failure_evidence.raw_signal),
 latest(failure_evidence.message), latest(failure_evidence.source) FROM RallyFailure`
-SHALL receive a non-empty result for every row.
+SHALL receive a non-empty result for every row. No `RallyFailure` event SHALL carry
+an empty `failure_category`.
 
 #### Scenario: Limit failure carries the raw provider signal
 - **WHEN** a failed try has a usage-limit, short-rate-limit, or provider-overload category with failure evidence present
@@ -119,8 +121,8 @@ SHALL receive a non-empty result for every row.
 - **AND** the `source` SHALL be `dirty_tree`, `text_pattern`, `unmatched`, or a session/disk-log source depending on which path produced the category
 
 #### Scenario: Session-log and disk-log sources are surfaced
-- **WHEN** a failure's evidence was populated from the codex session log or the opencode disk log
-- **THEN** the `failure_evidence.source` SHALL be `codex_session_log`, `codex_no_session_log`, or `opencode_disk_log`
+- **WHEN** a failure's evidence was populated from the codex session log, the claude session JSONL, the opencode disk log, or the antigravity glog
+- **THEN** the `failure_evidence.source` SHALL be `codex_session_log`, `codex_no_session_log`, `claude_session_log`, `opencode_disk_log`, or `antigravity_glog`
 - **AND** the source SHALL be distinguishable from the in-band `executor_evidence` and `safe_exec_error` sources in NRQL
 
 ## ADDED Requirements

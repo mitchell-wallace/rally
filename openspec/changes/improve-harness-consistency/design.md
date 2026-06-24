@@ -59,12 +59,30 @@ Also present: `~/.codex/logs_2.sqlite` (SQLite database),
 `~/.codex/config.toml`.
 
 OpenCode keeps a logfmt log at `~/.local/share/opencode/log/opencode.log`
-(~4.9 MB on a live host — verbose). Lines are
+(~5.8 MB on a live host — verbose). Lines are
 `timestamp=… level=INFO run=<run_id> message="…" <kv>`. Structural events:
 `message="creating instance"`, `message="created id=<session_id> …
 model.id=<id> model.providerID=<id>"`, `message="loop session.id=<id>
 step=<n>"`, `level=ERROR`. The `token_count`-equivalent verbosity lives in
 per-tool-call and per-permission log lines.
+
+Claude keeps session JSONL under `~/.claude/projects/<project>/<uuid>.jsonl`
+(verified on a live host). Event types include `user`, `assistant`,
+`tool_use`, `tool_result`, `system`, `thinking`, `mode`,
+`permission-mode`. The `user` event's `display` field contains the full
+user prompt — a content hazard that must never enter telemetry. The
+`assistant` events carry model responses with ample `tool_result` content
+that must be capped. Claude also keeps per-project session log files;
+Rally passes `--resume <sessionId>`, so the session UUID is already known.
+
+Antigravity keeps global history at `~/.gemini/antigravity-cli/history.jsonl`
+and CLI logs at `~/.gemini/antigravity-cli/log/cli-*.log` (glog format,
+`I0623`/`E0623`/`W0623` prefixes). Rally already passes `--log-file=<tmp>`
+to `agy` and reads the temp file — but does not read the persistent
+glog files. Antigravity also keeps per-conversation SQLite databases at
+`~/.gemini/antigravity-cli/conversations/<uuid>.db` and an OAuth
+credential file at `~/.gemini/antigravity-cli/oauth_creds.json` (must
+never be read).
 
 ## Goals / Non-Goals
 
@@ -72,18 +90,24 @@ per-tool-call and per-permission log lines.
 
 - Every categorised `RallyFailure` event is self-contained: regardless of
   which `ClassifyError` priority produced the category, the
-  `failure_evidence` context block is populated.
-- Codex silent-exit failures carry diagnostic context read from codex's
-  own session log, and are categorised as `harness_launch` (with the
-  `codex_no_session_log` source marker when no session log exists) so the
-  failure carries the right category label and repro data instead of
-  burning retries as an uncategorised `agent_error`. The existing
-  `harness_launch` retry semantics (FreshRestart within budget, infra-class
-  freeze pressure after 2+ failures) apply unchanged — the runner keeps
-  retrying codex launch failures up to the budget, and the freeze cascade
-  caps it when codex repeatedly fails to launch.
-- OpenCode try-budget-exhaustion failures carry a bounded disk-log tail
-  and are distinguishable from real opencode crashes in NRQL.
+  `failure_evidence` context block is populated. No failure SHALL carry
+  an empty `failure_category` — the `unidentified_issue` category is the
+  floor.
+- `CategoryAgentError` is reserved for failures where a specific agent-level
+  error was extracted (from stdout/stderr or from a harness disk log). The
+  default fallback category for unrecognised failures is `unidentified_issue`,
+  so operators can distinguish "we found a real agent error" from "we cannot
+  classify this yet" in NRQL.
+- Every harness gets a disk-log fallback that reads its native session or
+  server log when the in-band signal is empty. The fallback extracts a
+  bounded diagnostic tail (capped at 256 runes, structural events only,
+  no prompt/credential/user-content) and attaches it as `failure_evidence`
+  so every failure — even a silent budget-kill — carries bounded context
+  for later telemetry inspection.
+- Codex silent-exit failures carry diagnostic context from its session log,
+  or `harness_launch` with `codex_no_session_log` when no session log exists.
+- OpenCode / Claude / Antigravity silent failures carry a bounded disk-log
+  tail and are distinguishable via `failure_evidence.source`.
 - The `runner` telemetry tag always carries the resolved model.
 - Routing decisions stop polluting `RallyTry`.
 - `gemini` CLI harness is removed for 0.12.0.
@@ -189,9 +213,12 @@ branch:
   the matched line, or have `ClassifyError` re-scan after a match to
   extract it). Set `Source = "text_pattern"`, `Message = pattern.Name`,
   `RawSignal` from the bounded matching tail.
-- Priority 5 (default agent_error, line 387): set `Source = "unmatched"`,
+- Priority 5 (default, line 387): set `Source = "unmatched"`,
   `Message = "no recognised provider signal"`, `RawSignal` from a bounded
-  log tail so we always have something.
+  log tail, and `Category = CategoryUnidentifiedIssue`. This category
+  acknowledges that the failure could not be classified — it admits we
+  do not know, and it carries the bounded raw signal so later telemetry
+  inspection can discover new patterns.
 
 The runner plumbs `decision.Evidence` into the existing `resetEvidence`
 local at `runner.go:2258` (`if resetEvidence == nil { resetEvidence =
@@ -213,40 +240,42 @@ through the decision struct is a single source of truth.
 change.** The runner already distinguishes per-try-cap timeouts from
 run-budget timeouts: `loopOut.timedOut && !loopOut.runBudgetExhausted`
 identifies the try-cap-only case, and the existing block at
-`runner.go:2311` (`if failed && runBudgetExhausted`) already handles the
-run-budget case by clearing `failureCategory`, setting
-`failReason = "run timeout"`, and forcing `attemptFailureClass =
-FailureAgent`. We add the new classification for the **try-cap-only** case
-so the two budget kinds stay separately reportable: when
-`loopOut.timedOut && !loopOut.runBudgetExhausted` and no Evidence was
-produced (neither executor Evidence nor the new session-log / disk-log
-fallbacks), set `failureCategory = transient_infra` and `failReason =
-"try budget exhausted; no output"`. This maps to `FailureInfra` which
-**does** feed the freeze counter today — and that is wrong for budget
-exhaustion (the harness did not fail, we killed it). Override the mapping
-at the runner call site for this single case: set
-`failureClass = FailureAgent` directly so the freeze counter does not
-increment, while leaving the category as `transient_infra` for NRQL
-filtering. Alternative considered: add a new
-`CategoryTryBudgetExhausted` — rejected because it would force a new
-telemetry tag value and a new branch in every consumer; reusing
-`transient_infra` with a distinct `fail_reason` is enough signal for
-NRQL and requires no schema change.
+`runner.go:2311` (`if failed && runBudgetExhausted`) handles the
+run-budget case. We update both paths to carry a non-empty category:
 
-The run-budget path at `runner.go:2311` is left unchanged. NRQL separates
-the two cases by combining `fail_reason` with the existing `timeout_kind`
-tag on the try log (`runner.go:2468`, which already emits
-`timeout_kind = "try_cap" | "run_budget" | "handoff"`) plus the
-diagnostic signals `runtime_ms`, `tool_calls`, `files_changed`, and
+- **Try-cap-only kill** (per-try deadline fired, run budget remains): when
+  no `Category` was set by executor Evidence or the session/disk-log
+  fallback, set `failureCategory = unidentified_issue` and
+  `failReason = "try budget exhausted; no output"`. Override the
+  `FailureClass` to `FailureAgent` because the harness did not fail —
+  the runner killed it on the try cap. The existing `CategoryUnidentifiedIssue`
+  mapping (added in Decision 8) is to `FailureAgent`, so the freeze counter
+  does not increment.
+- **Run-budget kill**: update the existing block at `runner.go:2311` to
+  set `failureCategory = unidentified_issue` instead of the current
+  `failureCategory = ""` (empty = no signal in telemetry). The
+  `failReason = "run timeout"` and `FailureAgent` class are unchanged.
+- When executor Evidence (or session/disk-log evidence) DID produce a
+  Category for a budget-killed try (e.g. a real API timeout signal, or
+  a codex session log yielding `harness_launch`), the runner SHALL NOT
+  override — the evidence-owner's category is authoritative.
+
+NRQL separates the two budget-kill cases by combining `fail_reason` with
+the existing `timeout_kind` tag on the try log (`runner.go:2468`, which
+already emits `timeout_kind = "try_cap" | "run_budget" | "handoff"`) plus
+the diagnostic signals `runtime_ms`, `tool_calls`, `files_changed`, and
 `last_output_age_ms` that the try log already carries. The "slow model
 getting the job done → revise time budget" vs "underqualified model →
 review routing" question is answerable today by filtering on those tags
 (e.g. high `tool_calls` + small `last_output_age_ms` near the kill =
 active work in progress; low `tool_calls` + large `last_output_age_ms` =
-stalled or underqualified); the new `transient_infra` +
-`"try budget exhausted; no output"` labels add a clean category/reason
-filter on top of those signals without duplicating them into
-`failure_evidence`.
+stalled or underqualified).
+
+Alternative considered: add a new `CategoryTryBudgetExhausted` —
+rejected because `unidentified_issue` with distinct `fail_reason` and
+`timeout_kind` tags already gives operators enough signal to filter
+without forcing a new telemetry tag value and a new branch in every
+consumer.
 
 **5. `RallyRoute` event for routing decisions.** Add
 `Sink.EmitRouteEvent(ctx, fields)` and a `RallyRoute` custom event type.
@@ -318,18 +347,94 @@ The eligibility regex (`IneligibleTierError`, `UNSUPPORTED_CLIENT`,
 `no longer supported for Gemini Code Assist`) stays unchanged and
 continues to apply only to antigravity.
 
+**8. New `unidentified_issue` category; stricter `agent_error` semantics.**
+Today `CategoryAgentError` serves double duty: it is both "agent made a
+specific mistake" and "we could not classify the failure." This ambiguity
+makes it impossible for operators to know whether a failure has already
+been diagnosed or needs investigation. Split them:
+
+- Add `CategoryUnidentifiedIssue` (`"unidentified_issue"`) as the new
+  default for failures that cannot be matched to any known classification
+  (Priority 5 in `ClassifyError`, budget-kills with no evidence). Its
+  display label is `"unidentified issue"`.
+- `CategoryAgentError` is now reserved for failures where a **specific**
+  agent-level error was extracted — from stdout/stderr by one of the
+  per-harness text patterns (Priority 4), or from a harness disk log that
+  unambiguously shows an agent-internal fault. The "gemini-cli exit 1" and
+  "opencode API bad request" text patterns, which today use
+  `CategoryAgentError`, are the canonical examples.
+- Map `CategoryUnidentifiedIssue` to `FailureAgent` (the does-not-freeze
+  side), so an unrecognised failure never increments the freeze counter.
+- Add `CategoryUnidentifiedIssue` to `AllCategories` so tests assert
+  exhaustive coverage. Update the `categoryToClass` map, the
+  `categoryDisplayLabels` map, and `CategoryDisplayLabel`.
+
+This change tightens the semantics without adding new resilience paths —
+the existing `StrategyFreshRestart` (retry within budget) applies to both
+`unidentified_issue` and `agent_error` via their shared `FailureAgent` class.
+
+**9. Unified disk-log fallback for all harnesses.** The opencode disk-log
+fallback (`internal/agent/opencode.go:153-263`) is the reference
+implementation. Extend the same pattern — structural-event reading, session
+or workspace correlation, bounded tail, never capturing prompts/credentials
+— to the other three harnesses:
+
+- **Codex** (`internal/agent/codex.go`): read the last matching
+  `rollout-*.jsonl` under `$CODEX_HOME/sessions/YYYY/MM/DD/`. First line
+  (`session_meta`) gives git context; last `event_msg` gives the terminal
+  diagnostic. Skip `token_count`, `response_item`, `turn_context`, and
+  `base_instructions`. Source marker: `codex_session_log`.
+- **Claude** (`internal/agent/claude.go`): read
+  `~/.claude/projects/<project>/<sessionId>.jsonl`. Rally already knows
+  the session UUID (passed as `--resume`). Scan the last ~50 events for
+  error-shaped outcomes: `assistant` events with `stop_reason: "error"`,
+  `system` events with error indicators. Skip `user` events (contain the
+  full prompt), `thinking` events, and `tool_result` bodies beyond the
+  first line. Source marker: `claude_session_log`.
+- **Antigravity** (`internal/agent/antigravity.go`): read the latest
+  `cli-*.log` under `~/.gemini/antigravity-cli/log/`. The glog format
+  prefixes error lines with `E` (e.g. `E0623`). Keep only `E`-prefixed
+  lines plus the surrounding context lines. Rally also reads the agy
+  `--log-file` temp output; extend the existing temp-file reader to also
+  fall back to the persistent glog. Source marker: `antigravity_glog`.
+- **General contract**: when a disk-log fallback populates `FailureEvidence`,
+  the `Source` field SHALL be the harness-specific marker as above. The
+  `Category` SHALL be populated by the disk-log parser when it can
+  recognise a specific failure (e.g. `"Failed to poll ListExperiments:
+  error getting token source: You are not logged into Antigravity"` →
+  `auth_or_proxy`). When the disk log has parseable content but no
+  recognisable error shape, the evidence SHALL carry the content with
+  `Category = unidentified_issue`. This means every executor that reads its
+  disk log always produces a non-nil `FailureEvidence` with a non-empty
+  `Category` — either a recognised one or `unidentified_issue`. Never nil;
+  never empty. The 256-rune bound and PII scrub apply to every fallback.
+
+This replaces the prior Codex-only (Decision 2) and OpenCode-only
+(Decision 6's disk-log tail) approaches with a uniform contract. The
+existing opencode machinery is already conformant and requires only the
+filtering extension described in task 6.2. Codex, Claude, and Antigravity
+receive new fallback implementations following the same contract.
+
 ## Risks / Trade-offs
 
 - **Codex session-log path varies across hosts** (`CODEX_HOME` override,
   container layouts) → mitigation: read `$CODEX_HOME` first, fall back to
   `~/.codex`, and treat the session-log fallback as best-effort. Missing
-  or unreadable log is not an error; we fall through to the existing
-  `safe_exec_error` path.
+  or unreadable log is not an error; we set `Category = unidentified_issue`
+  and attach a bounded stdout/stderr tail instead.
 - **Codex `session_meta.payload` contains full base instructions**
   (potentially many KB) → mitigation: parse only the top-level scalar
   fields (`cwd`, `git.commit_hash`, `model`, `cli_version`); never copy
   `base_instructions` into `RawSignal`. The 256-rune `truncateSignal`
   bound is defence-in-depth.
+- **Claude session JSONL contains full user prompts** in `user` event
+  `display` fields → mitigation: scan only `assistant` and `system`
+  events; skip `user`, `thinking`, and `tool_result` bodies beyond the
+  first line. The 256-rune bound holds.
+- **Antigravity `oauth_creds.json` and conversation databases** contain
+  sensitive material → mitigation: read only `cli-*.log` (glog format);
+  NEVER read `oauth_creds.json`, `settings.json` (contains API keys), or
+  the per-conversation `.db` files.
 - **OpenCode disk log is shared across concurrent opencode processes** →
   mitigation: this is already handled by the existing fallback. The
   locator (`openCodeServerLogFailureEvidence` in `opencode.go:153`)
@@ -341,7 +446,8 @@ continues to apply only to antigravity.
   loop/stream markers when no parseable result was produced; it does not
   stand up a parallel correlation mechanism. Without a session id
   (opencode never started), the existing fallback returns nil and the
-  runner falls through to `safe_exec_error`.
+  executor sets `Category = unidentified_issue` with a bounded
+  stdout/stderr tail.
 - **`RallyRoute` is a new event type** → operators with existing NRQL
   dashboards that filter `RallyTry WHERE outcome IS NOT NULL` will see
   the 39 routing events disappear. This is the intended cleanup;
@@ -356,17 +462,21 @@ continues to apply only to antigravity.
 
 ## Migration Plan
 
-1. Ship codex session-log enrichment, `ResolvedModel`, `failure_evidence`
-   plumbing, try-budget classification, and `RallyRoute` first — these
-   are additive and independently shippable.
-2. Ship the `gemini` cut as the final lap of the change, paired with the
+1. Ship `unidentified_issue` category, `ResolvedModel`, `failure_evidence`
+   plumbing, try-budget `unidentified_issue` classification, and
+   `RallyRoute` first — these are additive and independently shippable.
+2. Ship the unified disk-log fallback for all four harnesses (replaces
+   the prior codex-only and opencode-only approach). The opencode fallback
+   is already conformant; codex, claude, and antigravity are new
+   implementations following the same contract.
+3. Ship the `gemini` cut as the final lap of the change, paired with the
    one-time route-resolution warning. This minimises the surface area
    that is simultaneously broken.
-3. Release notes call out: removed `gemini`/`ge` aliases; `runner` tag
-   now includes resolved model; `RallyRoute` event type replaces the
-   NULL-outcome entries in `RallyTry`; routing-events filter no longer
-   needed in dashboards.
-4. No rollback path is required for the gemini cut — restoring the
+4. Release notes call out: new `unidentified_issue` category; stricter
+   `agent_error` semantics; every harness has a disk-log fallback;
+   `runner` tag now includes resolved model; `RallyRoute` event type
+   replaces NULL-outcome `RallyTry` entries; removed `gemini`/`ge` aliases.
+5. No rollback path is required for the gemini cut — restoring the
    alias is a follow-up patch if it turns out an operator depended on
    it. The other workstreams are backward-compatible.
 
@@ -380,12 +490,30 @@ continues to apply only to antigravity.
   Task 3.5 reflects this.
 - **Open — codex no-session-log diagnostic event (was Q2).** Should the
   codex no-session-log case emit a separate `RallyDiagnostic` event (for
-  visibility) in addition to classifying as `harness_launch`? Likely yes,
-  mirroring the existing `event_kind=limit_signal` pattern. Leaving open
-  until implementation; the spec already permits it without requiring it.
+  visibility) in addition to carrying `harness_launch` with
+  `source = "codex_no_session_log"` in the `failure_evidence` block?
+  Likely yes, mirroring the existing `event_kind=limit_signal` pattern.
+  Leaving open until implementation; the `failure_evidence` block always
+  carries the repro marker regardless.
 - **RESOLVED — EmitRouteEvent coverage of recovery-cap-hit (was Q3).**
   Decision: the recovery-cap-hit path at `runner.go:834` already emits a
   `RallyFailure` (operator-worthy `needs_user`), NOT a polluted
   `RallyTry`. Keep that `CaptureFailure` call intact AND additionally emit
   a `RallyRoute` event so the routing audit trail is uniform. Task 7.5
   reflects this.
+- **RESOLVED — `unidentified_issue` vs `agent_error` semantics (was Q4,
+  added 2026-06-24 per plan-review).** Decision: `CategoryAgentError` is
+  now reserved for failures where a SPECIFIC agent-level error was
+  extracted (from stdout/stderr by a text pattern, or from a harness disk
+  log that shows an agent-internal fault). The default fallback is
+  `CategoryUnidentifiedIssue` for any failure that cannot be matched to a
+  known classification. Every failure SHALL carry a non-empty category.
+  Tasks 3.6, 5.1, 5.2, 8.3 reflect this.
+- **RESOLVED — Unified disk-log fallback for all harnesses (was Q5,
+  added 2026-06-24 per plan-review).** Decision: all four harnesses
+  (claude, codex, opencode, antigravity) get a disk-log fallback
+  following the opencode reference pattern. The prior codex-only and
+  opencode-only approaches are subsumed into a uniform contract: every
+  executor that reads its disk log produces a non-nil `FailureEvidence`
+  with a non-empty `Category` — either a recognised one or
+  `unidentified_issue`. Tasks 4, 6, 10, 11 reflect this.
