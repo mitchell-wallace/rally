@@ -83,11 +83,11 @@
       "title": "Runner-side try-budget / run-budget exhaustion classification",
       "description": "Context: tasks.md §5, design Decision 4. Budget-killed tries currently carry an empty failure_category (no telemetry signal). Depends on the §10 lap (category) and the §3 lap (evidence gates).\n\nOutcome: both try-cap-only kills and run-budget kills carry failure_category = unidentified_issue with distinct fail_reasons — UNLESS executor/disk-log evidence already produced a non-empty Category, in which case that is authoritative. FailureClass stays agent-class (does-not-freeze).\n\nFiles \u0026 scope: internal/relay/runner.go, two sites.\n- Try-cap-only kill (timedOut \u0026\u0026 !runBudgetExhausted): place the override AFTER the runBudgetExhausted reset block (~2311-2323) and OUTSIDE the `if failed \u0026\u0026 !lapPinMismatch \u0026\u0026 attemptOutcome.CarriesFailureCategory()` block — that block is SKIPPED here (attemptOutcome = OutcomeRunTimeout, whose CarriesFailureCategory() is false), so ClassifyError never ran and the `decision` local is NOT in scope — do not reference it. Gate: result.Evidence == nil || result.Evidence.Category == \"\". When it fires: failureCategory = unidentified_issue, failReason = \"try budget exhausted; no output\", failureClass = FailureAgent.\n- Run-budget kill (timedOut \u0026\u0026 runBudgetExhausted): in the existing block (~2311-2323), change failureCategory = \"\" to unidentified_issue, gated `if runBudgetExhausted \u0026\u0026 failureCategory == \"\" \u0026\u0026 (result.Evidence == nil || result.Evidence.Category == \"\")` so a classifier-produced category (e.g. a text-pattern agent_error) stays authoritative. failReason \"run timeout\" and FailureAgent unchanged.\n\nDesign: the result.Evidence == nil || .Category == \"\" check IS the \"real evidence produced\" gate. Do NOT duplicate the slow-vs-underqualified diagnostic tags into failure_evidence — they live on the try log already (timeout_kind, runtime_ms, tool_calls, last_output_age_ms).\n\nAcceptance: implementation compiles (go build ./...). Full matrix is the next lap.",
       "assignee": "SENIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 393216,
       "createdAt": "2026-06-26T00:55:47.987900874Z",
-      "updatedAt": "2026-06-26T00:55:47.987900874Z",
-      "completedAt": null
+      "updatedAt": "2026-06-26T02:37:41.996951095Z",
+      "completedAt": "2026-06-26T02:37:41.996951095Z"
     },
     {
       "id": "rall-0ea1",
