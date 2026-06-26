@@ -37,6 +37,7 @@ func TestCategoryToClass_MappingValues(t *testing.T) {
 		{CategoryHarnessLaunch, FailureInfra},
 		{CategoryIncompleteFinalization, FailureIncomplete},
 		{CategoryAgentError, FailureAgent},
+		{CategoryUnidentifiedIssue, FailureAgent},
 	}
 
 	for _, tt := range tests {
@@ -115,6 +116,7 @@ func TestCategoryDisplayLabel_ExpectedValues(t *testing.T) {
 		{CategoryHarnessLaunch, "harness launch error"},
 		{CategoryIncompleteFinalization, "incomplete: file changes without finalization"},
 		{CategoryAgentError, "agent error"},
+		{CategoryUnidentifiedIssue, "unidentified issue"},
 	}
 
 	for _, tt := range tests {
@@ -135,9 +137,9 @@ func TestCategoryDisplayLabel_UnknownFallback(t *testing.T) {
 }
 
 func TestAllCategories_Count(t *testing.T) {
-	// There must be exactly nine categories per design Decision 2.
-	if len(AllCategories) != 9 {
-		t.Errorf("AllCategories has %d entries, want 9", len(AllCategories))
+	// There must be exactly ten categories per design Decision 2 and Decision 8.
+	if len(AllCategories) != 10 {
+		t.Errorf("AllCategories has %d entries, want 10", len(AllCategories))
 	}
 }
 

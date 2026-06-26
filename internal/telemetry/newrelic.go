@@ -242,6 +242,8 @@ func newRelicErrorClass(msg string, evt FailureEvent) string {
 		return "RallyIncompleteFinalization"
 	case "agent_error":
 		return "RallyAgentError"
+	case "unidentified_issue":
+		return "RallyUnidentifiedIssue"
 	}
 
 	if evt.Tags["recovery_classification"] == "needs_user" {

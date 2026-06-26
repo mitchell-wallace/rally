@@ -309,21 +309,21 @@ func TestClassifyError(t *testing.T) {
 			},
 			expectedStrategy: StrategyFreshRestart,
 			expectedClass:    FailureAgent,
-			expectedCategory: CategoryAgentError,
+			expectedCategory: CategoryUnidentifiedIssue,
 		},
 		{
 			name:             "empty log defaults to agent class",
 			logLines:         []string{},
 			expectedStrategy: StrategyFreshRestart,
 			expectedClass:    FailureAgent,
-			expectedCategory: CategoryAgentError,
+			expectedCategory: CategoryUnidentifiedIssue,
 		},
 		{
 			name:             "nil log defaults to agent class",
 			logLines:         nil,
 			expectedStrategy: StrategyFreshRestart,
 			expectedClass:    FailureAgent,
-			expectedCategory: CategoryAgentError,
+			expectedCategory: CategoryUnidentifiedIssue,
 		},
 	}
 
@@ -482,7 +482,7 @@ func TestClassifyError_HarnessScoping(t *testing.T) {
 			harness:          "codex",
 			expectedReason:   "unknown error",
 			expectedClass:    FailureAgent,
-			expectedCategory: CategoryAgentError,
+			expectedCategory: CategoryUnidentifiedIssue,
 		},
 		{
 			// But the same log on claude harness DOES match.
@@ -509,7 +509,7 @@ func TestClassifyError_HarnessScoping(t *testing.T) {
 			harness:          "claude",
 			expectedReason:   "unknown error",
 			expectedClass:    FailureAgent,
-			expectedCategory: CategoryAgentError,
+			expectedCategory: CategoryUnidentifiedIssue,
 		},
 		{
 			// opencode-scoped pattern matches on opencode
@@ -527,7 +527,7 @@ func TestClassifyError_HarnessScoping(t *testing.T) {
 			harness:          "antigravity",
 			expectedReason:   "unknown error",
 			expectedClass:    FailureAgent,
-			expectedCategory: CategoryAgentError,
+			expectedCategory: CategoryUnidentifiedIssue,
 		},
 	}
 

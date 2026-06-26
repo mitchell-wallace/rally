@@ -122,7 +122,7 @@ func TestParseOpencodeError(t *testing.T) {
 			name:             "missing error payload",
 			stderr:           `{"type":"error"}`,
 			model:            "openai/gpt-5",
-			expectedCategory: CategoryAgentError,
+			expectedCategory: CategoryUnidentifiedIssue,
 			expectedProvider: "openai",
 		},
 		{

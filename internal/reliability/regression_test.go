@@ -68,8 +68,8 @@ func TestRegression_CodexVerifyRateLimitProse_NotClaudeRateLimit(t *testing.T) {
 	if decision.FailureClass != FailureAgent {
 		t.Errorf("class = %q, want %q (default for unmatched on codex)", decision.FailureClass, FailureAgent)
 	}
-	if decision.Category != CategoryAgentError {
-		t.Errorf("category = %q, want %q", decision.Category, CategoryAgentError)
+	if decision.Category != CategoryUnidentifiedIssue {
+		t.Errorf("category = %q, want %q", decision.Category, CategoryUnidentifiedIssue)
 	}
 }
 

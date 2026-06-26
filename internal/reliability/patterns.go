@@ -293,7 +293,7 @@ func containsSubstring(lines []string, sub string) bool {
 //  2. Provider/config/quota detection (future; placeholder for evidence parsers)
 //  3. Dirty-tree incomplete check (file changes without finalization)
 //  4. Harness-scoped text patterns from ErrorPatterns
-//  5. Default agent_error
+//  5. Default unidentified_issue
 //
 // Unknown/unmatched errors default to FailureAgent (the does-not-freeze side).
 func ClassifyError(logLines []string, harness string, ctx *ClassifyContext, evidence *FailureEvidence) StrategyDecision {
@@ -362,7 +362,7 @@ func ClassifyError(logLines []string, harness string, ctx *ClassifyContext, evid
 		if pattern.Match(logLines) {
 			cat := pattern.Category
 			if cat == "" {
-				cat = CategoryAgentError
+				cat = CategoryUnidentifiedIssue
 			}
 			// CategoryToClass is the authoritative failure-class derivation for
 			// categorized classifications (design Decision 3): the category's
@@ -384,12 +384,12 @@ func ClassifyError(logLines []string, harness string, ctx *ClassifyContext, evid
 		}
 	}
 
-	// ── Priority 5: Default agent_error ──
+	// ── Priority 5: Default unidentified_issue ──
 	return StrategyDecision{
 		Strategy:     StrategyFreshRestart,
 		Reason:       "unknown error",
 		FailureClass: FailureAgent,
-		Category:     CategoryAgentError,
-		DisplayLabel: CategoryDisplayLabel(CategoryAgentError),
+		Category:     CategoryUnidentifiedIssue,
+		DisplayLabel: CategoryDisplayLabel(CategoryUnidentifiedIssue),
 	}
 }
