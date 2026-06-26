@@ -50,10 +50,32 @@
       "title": "Verify foundation slice (category floor, ResolvedModel, evidence plumbing)",
       "description": "OpenSpec verification. Use the openspec-verify-change skill against improve-harness-consistency, focused on tasks.md §2, §3, §10.\n\nBefore diffing: identify the intended merge target from the user / PR metadata / repo docs / branch config / recent history — do NOT assume main — then use git diff \u003ctarget\u003e...HEAD. Identify the first lap/try of THIS batch and treat earlier branch work as pre-existing (flag, don't remove).\n\nReview with depth — \"tests green\" is not sufficient for classification semantics: trace CategoryUnidentifiedIssue through categoryToClass / AllCategories; trace the StrategyDecision.Evidence population in each ClassifyError priority and confirm the resetEvidence fallback at runner.go:2258 actually reaches BOTH applyEvidenceToFailureState call sites so the emitted failure_evidence.source genuinely differs per priority; trace ResolvedModel set in all four executors and consumed at the three tag sites (bare-alias case produces \"\u003charness\u003e:\u003cmodel\u003e\").\n\nCheck off the tasks.md boxes for §2/§3/§10 only for work verified correct AND thorough. For substantive gaps, add a focused head lap (laps add head) rather than fixing large issues inline. Do not rewrite git history; prefer additive/revert commits.",
       "assignee": "VERIFY",
-      "isDone": false,
+      "isDone": true,
       "order": 327680,
       "createdAt": "2026-06-26T00:55:47.987896325Z",
-      "updatedAt": "2026-06-26T00:55:47.987896325Z",
+      "updatedAt": "2026-06-26T02:14:50.183227714Z",
+      "completedAt": "2026-06-26T02:14:50.183227714Z"
+    },
+    {
+      "id": "work-2443",
+      "title": "Complete dirty_tree RallyFailure evidence",
+      "description": "Task 3.10 remains incomplete. The runner's unfinalized operator capture at internal/relay/runner.go:2716-2739 emits failure_category=incomplete_finalization but never applies the Priority-3 dirty_tree FailureEvidence, so RallyFailure lacks failure_evidence.source/raw_signal/message. Update the operator-worthy incomplete_finalization capture to reuse the classifier-produced evidence (or equivalent bounded changed-path evidence) and add end-to-end tests proving Priority 3 emits RallyFailure failure_evidence.source=dirty_tree with non-empty raw_signal/message.",
+      "assignee": "senior",
+      "isDone": false,
+      "order": 262144,
+      "createdAt": "2026-06-26T02:14:32.328465966Z",
+      "updatedAt": "2026-06-26T02:14:32.328465966Z",
+      "completedAt": null
+    },
+    {
+      "id": "work-e813",
+      "title": "Verify dirty_tree RallyFailure evidence",
+      "description": "Re-verify improve-harness-consistency tasks.md section 3.10 after work-2443. Confirm a Priority-3 dirty-tree incomplete_finalization path emits RallyFailure failure_evidence.source=dirty_tree with bounded raw_signal/message, and re-check the section 2/3/10 task boxes.",
+      "assignee": "verify",
+      "isDone": false,
+      "order": 294912,
+      "createdAt": "2026-06-26T02:14:37.380790578Z",
+      "updatedAt": "2026-06-26T02:14:37.380790578Z",
       "completedAt": null
     },
     {
