@@ -735,6 +735,85 @@ func TestRunOne_ExecErrorWithoutEvidenceUsesClassifierEvidence(t *testing.T) {
 	}
 }
 
+// TestRunOne_ExecErrorWithLogPatternUsesTextPatternEvidence drives a failing
+// try whose transcript carries a recognisable text pattern and no executor
+// Evidence. ClassifyError Priority 4 must produce text_pattern evidence whose
+// source / category / message / raw_signal flow onto the try-log telemetry.
+// (Tasks.md §3.10: Priority 4 -> source "text_pattern" + the pattern's category
+// + the matched line present in raw_signal.)
+func TestRunOne_ExecErrorWithLogPatternUsesTextPatternEvidence(t *testing.T) {
+	workspaceDir := t.TempDir()
+	rallyDir := store.RallyDir(workspaceDir)
+	os.MkdirAll(rallyDir, 0o755)
+	initRepo(t, workspaceDir)
+	runGit(t, workspaceDir, "commit", "--allow-empty", "-m", "initial", "--no-verify")
+
+	const matchedLine = "Error: 503 service unavailable from upstream provider"
+	s := newTestStore(t, rallyDir)
+	exec := &funcExecutor{
+		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+			if opts.LogPath != "" {
+				_ = os.WriteFile(opts.LogPath, []byte("starting agent\n"+matchedLine+"\nagent exited\n"), 0o644)
+			}
+			return &agent.TryResult{Completed: false, Summary: "upstream error"}, fmt.Errorf("agent failed")
+		},
+	}
+
+	sink := &capturingSink{}
+	r := NewRunner(s, Config{
+		WorkspaceDir:     workspaceDir,
+		DataDir:          t.TempDir(),
+		AgentMixSpecs:    []string{"op:dsf"},
+		TargetIterations: 1,
+		RetryBudget:      1,
+		LapsEnabled:      true,
+		Resolver:         cheapTestResolver,
+	}, map[string]agent.Executor{"opencode": exec})
+	r.SetTelemetry(sink)
+
+	res, err := r.runOne(
+		context.Background(),
+		&store.RelayRecord{ID: 1, TargetIterations: 1},
+		0,
+		agent.ResolvedAgent{Harness: "opencode", Model: cheapTestModel},
+		runTask{Name: "task", Prompt: "do work", Assignee: "senior", IsLapsBacked: true, LapID: "lap-1"},
+		nil, nil, false, false, nil, nil, io.Discard,
+	)
+	if err != nil {
+		t.Fatalf("runOne error = %v", err)
+	}
+	if res.Success {
+		t.Fatal("expected exec error to fail the run")
+	}
+
+	log := findTryLogByOutcome(t, sink, string(reliability.OutcomeFailed))
+	if log["failure_evidence.source"] != "text_pattern" {
+		t.Fatalf("try log source = %#v, want text_pattern", log["failure_evidence.source"])
+	}
+	if log["failure_evidence.message"] != "server error 5xx" {
+		t.Fatalf("try log message = %#v, want the pattern name", log["failure_evidence.message"])
+	}
+	raw, _ := log["failure_evidence.raw_signal"].(string)
+	if !strings.Contains(raw, "503 service unavailable") {
+		t.Fatalf("try log raw_signal = %#v, want the matched line present", log["failure_evidence.raw_signal"])
+	}
+
+	// transient_infra is an infra-class failure, so it also surfaces as an Issue
+	// carrying the pattern's category tag and the text_pattern evidence context.
+	evt := findFailure(t, sink, "failed:")
+	wantTag(t, evt.Tags, "failure_category", string(reliability.CategoryTransientInfra))
+	ev, ok := evt.Contexts["failure_evidence"]
+	if !ok {
+		t.Fatal("failure_evidence context missing on text-pattern capture")
+	}
+	if ev["source"] != "text_pattern" {
+		t.Fatalf("failure evidence source = %#v, want text_pattern", ev["source"])
+	}
+	if rawSig, _ := ev["raw_signal"].(string); !strings.Contains(rawSig, "503 service unavailable") {
+		t.Fatalf("failure evidence raw_signal = %#v, want the matched line present", ev["raw_signal"])
+	}
+}
+
 func findFailureCount(sink *capturingSink, substr string) int {
 	n := 0
 	for _, f := range sink.failures {

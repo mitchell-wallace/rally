@@ -39,11 +39,11 @@
       "title": "Tests: failure_evidence per classification priority",
       "description": "Context: tasks.md §3.10. This test lap doubles as the review of the high-risk classification plumbing from the previous lap (it touches every ClassifyError priority + both runner evidence sites).\n\nOutcome: each priority emits a RallyFailure whose failure_evidence.source / category / message / raw_signal match the path that produced it.\n\nFiles \u0026 scope: internal/reliability/*_test.go and the relay runner test files that exercise ClassifyError -\u003e RallyFailure emission. No production changes beyond tiny safe one-liners; anything larger becomes a new focused head lap.\n\nAcceptance: tasks.md §3.10 — Priority 1 -\u003e source \"executor_evidence\"; Priority 3 -\u003e \"dirty_tree\" + CategoryIncompleteFinalization; Priority 4 -\u003e \"text_pattern\" + the pattern's category + the matched line present in raw_signal; Priority 5 -\u003e \"unmatched\" + CategoryUnidentifiedIssue; raw_signal non-empty for every source; message matches each path's contract; 256-rune bound holds. go test ./internal/reliability/... ./internal/relay/... green.",
       "assignee": "SENIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 262144,
       "createdAt": "2026-06-26T00:55:47.987894917Z",
-      "updatedAt": "2026-06-26T00:55:47.987894917Z",
-      "completedAt": null
+      "updatedAt": "2026-06-26T02:10:19.846340243Z",
+      "completedAt": "2026-06-26T02:10:19.846340243Z"
     },
     {
       "id": "rall-5fd9",
