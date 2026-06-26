@@ -17,11 +17,11 @@
       "title": "ResolvedModel on TryResult + runner telemetry-tag fallback",
       "description": "Context: tasks.md §2, design Decision 6. The runner telemetry tag collapses to a bare harness (e.g. \"codex\") whenever a route uses a bare alias, because each executor resolves its default model internally and never reports it back — hiding per-model signal exactly when it matters.\n\nOutcome: agent.TryResult carries a ResolvedModel populated by every executor with the model actually passed to the CLI; the three runner-tag sites use it when non-empty, so bare-alias routes emit runner = \"\u003charness\u003e:\u003cresolved-model\u003e\".\n\nFiles \u0026 scope: add ResolvedModel string to TryResult in internal/agent/executor.go:48 (NOT internal/agent/agent.go, which is an empty package file). Set it in CodexExecutor (codex.go:170-173, the model local after the opts.Model fallback), ClaudeExecutor, OpenCodeExecutor, AntigravityExecutor from each one's resolved-model local. Update the three runner-tag sites internal/relay/runner.go:2107, 2420, 2997 to call telemetry.RunnerLabel(picked.Harness, firstNonEmpty(result.ResolvedModel, picked.Model)) via a small shared helper.\n\nDesign: the executor's own model local is authoritative (the session log does NOT carry the resolved model). The route-resolved model stays authoritative when set; ResolvedModel is the fallback for the bare-alias case only.\n\nAcceptance: tasks.md §2.5 — bare-alias route + executor that sets ResolvedModel emits runner = \"\u003charness\u003e:\u003cresolved-model\u003e\"; explicit-model route emits the same value as before; empty ResolvedModel falls back to picked.Model. Tests + go build ./... green.",
       "assignee": "JUNIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 131072,
       "createdAt": "2026-06-26T00:55:47.987890967Z",
-      "updatedAt": "2026-06-26T00:55:47.987890967Z",
-      "completedAt": null
+      "updatedAt": "2026-06-26T01:40:32.463334844Z",
+      "completedAt": "2026-06-26T01:40:32.463334844Z"
     },
     {
       "id": "rall-f0e9",
