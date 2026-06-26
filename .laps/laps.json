@@ -28,11 +28,11 @@
       "title": "Populate failure_evidence on every classification priority",
       "description": "Context: tasks.md §3, design Decision 3. Today only Priority-1 (executor evidence) failures carry a failure_evidence block; Priorities 3/4/5 leave it empty and the source tag is hard-coded \"executor_evidence\". New Relic shows 74/77 captured failures carry a category but no diagnostic context. Depends on the §10 lap (CategoryUnidentifiedIssue for Priority 5).\n\nOutcome: ClassifyError attaches a *FailureEvidence (with a Source) on every priority, plumbed through to BOTH applyEvidenceToFailureState call sites so the emitted failure_evidence.source reflects the path that produced the category.\n\nFiles \u0026 scope: internal/reliability/patterns.go — add Evidence *FailureEvidence to StrategyDecision; populate Priority 1 (source=\"executor_evidence\" if unset), Priority 3 (CategoryIncompleteFinalization / \"agent exited without finalizing\" / \"dirty_tree\", RawSignal from changed paths), Priority 4 (RE-SCAN logLines after a match to extract the matching line; source=\"text_pattern\", Message=pattern.Name), Priority 5 (CategoryUnidentifiedIssue / \"unmatched\" / \"no recognised provider signal\", RawSignal from a bounded log tail). internal/reliability/category.go — add Source string to FailureEvidence. ClassifyContext gains ChangedPaths []string. internal/relay/runner.go — populate ChangedPaths from filesChangedList (3239) / preCommitFilesChanged (1935); at line 2258 add `if resetEvidence == nil { resetEvidence = decision.Evidence }`; update applyEvidenceToFailureState (237) to read ev.Source when non-empty (else the caller default); demote applySafeExecErrorEvidence (256) to fire only when BOTH result.Evidence and decision.Evidence are nil.\n\nDesign: re-scan for Priority 4 (design Open Q1 resolved: re-scan, do NOT change the Pattern.Match API). All RawSignals bounded to 256 runes via the existing truncateSignal. The single resetEvidence fallback plumbs Priority 3/4/5 evidence into BOTH the try-log span (runner.go:2454) AND the operator-worthy capture path (runner.go:2530) automatically. Do NOT touch runner.go:2479 — that is handoffOnlyAttempted, not an evidence site.\n\nAcceptance: implementation compiles; reliability + relay packages build (go build ./...). Full evidence assertions are the next lap.",
       "assignee": "SENIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 196608,
       "createdAt": "2026-06-26T00:55:47.987893222Z",
-      "updatedAt": "2026-06-26T00:55:47.987893222Z",
-      "completedAt": null
+      "updatedAt": "2026-06-26T01:50:59.452057597Z",
+      "completedAt": "2026-06-26T01:50:59.452057597Z"
     },
     {
       "id": "rall-5ad0",
