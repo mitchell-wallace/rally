@@ -6,11 +6,11 @@
       "title": "Add unidentified_issue category + restrict agent_error semantics",
       "description": "Context: OpenSpec change improve-harness-consistency, tasks.md §10 and Decision 8 in design.md. This is the semantic floor the whole change builds on — later laps depend on CategoryUnidentifiedIssue existing. Today CategoryAgentError does double duty (\"agent made a specific mistake\" AND \"we couldn't classify\"); split them.\n\nOutcome: a new CategoryUnidentifiedIssue = \"unidentified_issue\" exists, wired into all category machinery and mapped to the does-not-freeze FailureAgent class. CategoryAgentError is now reserved for failures where a SPECIFIC agent-level error was extracted. Build + reliability/telemetry tests green.\n\nFiles \u0026 scope: internal/reliability/category.go (new category constant; categoryDisplayLabels \"unidentified issue\"; AllCategories; categoryToClass -\u003e FailureAgent; CategoryDisplayLabel; the \"nine categories\"-\u003e\"ten\" docstring at line 8). internal/reliability/patterns.go ONLY the Priority-5 comment at ~line 296 (// 5. Default agent_error -\u003e unidentified_issue); the Priority-5 return value itself is finalized in the §3 evidence lap. internal/telemetry/newrelic.go: add a defensive \"unidentified_issue\" case to the newRelicErrorClass switch (~225-245) returning a distinct class (\"RallyUnidentifiedIssue\"). Audit per 10.7: any existing code using CategoryAgentError as a DEFAULT/FALLBACK switches to CategoryUnidentifiedIssue; keep the text-pattern usages (gemini-cli/antigravity exit-1, opencode bad-request) on CategoryAgentError — those are specific extracted errors. Do NOT touch the runner budget-kill paths here (later lap).\n\nAcceptance: tasks.md §10.9 — AllCategories contains the new category mapping to FailureAgent; categoryDisplayLabels[\"unidentified_issue\"] == \"unidentified issue\"; Priority 5 comment updated; the telemetry error-class switch has the defensive case. go build ./... \u0026\u0026 go test ./internal/reliability/... ./internal/telemetry/... green.",
       "assignee": "SENIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 65536,
       "createdAt": "2026-06-26T00:55:47.98787323Z",
-      "updatedAt": "2026-06-26T00:55:47.98787323Z",
-      "completedAt": null
+      "updatedAt": "2026-06-26T01:22:58.392697972Z",
+      "completedAt": "2026-06-26T01:22:58.392697972Z"
     },
     {
       "id": "rall-bd1a",
