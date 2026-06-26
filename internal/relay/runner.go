@@ -838,11 +838,17 @@ func (r *Runner) Run(ctx context.Context) error {
 			fallbackCause = nil
 		}
 		if selection.RecoveryCapHit {
+			to := telemetry.RunnerLabel(selection.Agent.Harness, selection.Agent.Model)
+			from := to
+			if selection.PreviousAgent != nil {
+				from = telemetry.RunnerLabel(selection.PreviousAgent.Harness, selection.PreviousAgent.Model)
+			}
 			r.tel().EmitRouteEvent(runCtx, map[string]interface{}{
-				"event":                        "recovery_cap_hit",
+				"event":                        "route_fallback",
 				"relay_id":                     relay.ID,
 				"run_id":                       runID,
-				"to_runner":                    telemetry.RunnerLabel(selection.Agent.Harness, selection.Agent.Model),
+				"from_runner":                  from,
+				"to_runner":                    to,
 				"role":                         task.promptAssignee(),
 				"repo":                         rc.Repo,
 				"repo_name":                    rc.RepoName,

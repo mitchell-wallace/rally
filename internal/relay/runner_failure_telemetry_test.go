@@ -1451,9 +1451,12 @@ func TestRunRecoveryCapHitCapturesNeedsUserIssue(t *testing.T) {
 	wantNoTag(t, evt.Tags, "outcome")
 	wantFingerprintCategory(t, evt, "needs_user")
 
-	routeEvent := findRouteEventByEvent(t, sink, "recovery_cap_hit")
+	routeEvent := findRouteEventByEvent(t, sink, "route_fallback")
 	if routeEvent["lap_id"] != "lap-cap" || routeEvent["recovery_classification"] != "needs_user" {
 		t.Fatalf("recovery cap route event = %#v", routeEvent)
+	}
+	if routeEvent["from_runner"] != "opencode:opencode/big-pickle" || routeEvent["to_runner"] != "opencode:opencode/big-pickle" {
+		t.Fatalf("recovery cap route runners = from %#v to %#v", routeEvent["from_runner"], routeEvent["to_runner"])
 	}
 	if routeEvent["route_entry_exhausted_reason"] != "recovery_cap_hit" {
 		t.Fatalf("route_entry_exhausted_reason = %#v, want recovery_cap_hit", routeEvent["route_entry_exhausted_reason"])
