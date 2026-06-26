@@ -72,11 +72,11 @@
       "title": "Verify dirty_tree RallyFailure evidence",
       "description": "Re-verify improve-harness-consistency tasks.md section 3.10 after work-2443. Confirm a Priority-3 dirty-tree incomplete_finalization path emits RallyFailure failure_evidence.source=dirty_tree with bounded raw_signal/message, and re-check the section 2/3/10 task boxes.",
       "assignee": "verify",
-      "isDone": false,
+      "isDone": true,
       "order": 294912,
       "createdAt": "2026-06-26T02:14:37.380790578Z",
-      "updatedAt": "2026-06-26T02:14:37.380790578Z",
-      "completedAt": null
+      "updatedAt": "2026-06-26T02:30:17.945194442Z",
+      "completedAt": "2026-06-26T02:30:17.945194442Z"
     },
     {
       "id": "rall-fd04",
