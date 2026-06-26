@@ -1428,6 +1428,38 @@ func makeRunner(t *testing.T, s *store.Store, workspaceDir string, sink *capturi
 	return r
 }
 
+type failureTestContext struct {
+	store *store.Store
+	sink  *capturingSink
+}
+
+func setupRunnerForFailureTestDirty(t *testing.T) (failureTestContext, string) {
+	t.Helper()
+	workspaceDir := t.TempDir()
+	rallyDir := store.RallyDir(workspaceDir)
+	os.MkdirAll(rallyDir, 0o755)
+	initRepo(t, workspaceDir)
+	runGit(t, workspaceDir, "commit", "--allow-empty", "-m", "initial", "--no-verify")
+	s := newTestStore(t, rallyDir)
+	sink := &capturingSink{}
+	return failureTestContext{store: s, sink: sink}, workspaceDir
+}
+
+func newBudgetKillRunner(t *testing.T, s *store.Store, workspaceDir string, sink *capturingSink, exec agent.Executor, cfg Config) *Runner {
+	t.Helper()
+	cfg.WorkspaceDir = workspaceDir
+	if cfg.DataDir == "" {
+		cfg.DataDir = t.TempDir()
+	}
+	if cfg.Resolver == nil {
+		cfg.Resolver = cheapTestResolver
+	}
+	r := NewRunner(s, cfg, map[string]agent.Executor{"opencode": exec})
+	r.SetTelemetry(sink)
+	r.out = io.Discard
+	return r
+}
+
 func blockTryPersistence(t *testing.T, workspaceDir string) {
 	t.Helper()
 	if err := os.MkdirAll(filepath.Join(store.RallyDir(workspaceDir), "state", "tries.jsonl"), 0o755); err != nil {
@@ -1973,4 +2005,149 @@ func TestRun_AllFrozen_CarriesRallyContext(t *testing.T) {
 		wantNoTag(t, evt.Tags, k)
 	}
 	wantNoContext(t, evt, "failure_evidence")
+}
+
+// TestRunOneBudgetKillWithDirtyTreeEmitsOperatorWorthyCapture verifies scenario
+// (f): when a wall-clock budget kills an attempt whose working tree is dirty
+// (agent made file changes but did not finalize), the resulting telemetry
+// carries the correct budget-kill classification and no regression is
+// introduced in operator-worthy captures (the unfinalized capture is
+// intentionally suppressed for designed timeout outcomes, and the terminal-try
+// issue capture skips non-carrier outcomes).
+func TestRunOneBudgetKillWithDirtyTreeEmitsOperatorWorthyCapture(t *testing.T) {
+	t.Run("try-cap kill then incomplete succeeds with unfinalized capture", func(t *testing.T) {
+		s, workspaceDir := setupRunnerForFailureTestDirty(t)
+		sink := s.sink
+
+		const changedPath = "feature.go"
+		attempts := 0
+		exec := &funcExecutor{
+			fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+				attempts++
+				if err := os.WriteFile(filepath.Join(workspaceDir, changedPath), []byte("package main\n"), 0o644); err != nil {
+					return nil, err
+				}
+				if attempts == 1 {
+					<-ctx.Done()
+					return &agent.TryResult{Completed: false}, ctx.Err()
+				}
+				return &agent.TryResult{Completed: true, Summary: "ok"}, nil
+			},
+		}
+		r := newBudgetKillRunner(t, s.store, workspaceDir, sink, exec, Config{
+			RetryBudget: 2,
+			TryTimeout:  time.Hour,
+			LapsEnabled: true,
+		})
+		r.timerFunc = fireOnCall(1)
+
+		if _, err := r.runOne(
+			context.Background(),
+			&store.RelayRecord{ID: 1, TargetIterations: 1},
+			0,
+			agent.ResolvedAgent{Harness: "opencode", Model: cheapTestModel},
+			runTask{Name: "task", Prompt: "do work", Assignee: "senior", IsLapsBacked: true, LapID: "lap-1"},
+			nil, nil, false, false, nil, nil, io.Discard,
+		); err != nil {
+			t.Fatalf("runOne error = %v", err)
+		}
+
+		evt := findFailure(t, sink, "without finalizing")
+		wantTag(t, evt.Tags, "failure_category", "incomplete_finalization")
+		wantFingerprintCategory(t, evt, "incomplete_finalization")
+		ev, ok := evt.Contexts["failure_evidence"]
+		if !ok {
+			t.Fatal("unfinalized capture must carry failure_evidence context")
+		}
+		if ev["source"] != "dirty_tree" {
+			t.Fatalf("failure_evidence.source = %v, want dirty_tree", ev["source"])
+		}
+		raw, _ := ev["raw_signal"].(string)
+		if raw == "" || !strings.Contains(raw, changedPath) {
+			t.Fatalf("failure_evidence.raw_signal = %q, want it to carry changed path %q", raw, changedPath)
+		}
+	})
+
+	t.Run("run-budget kill with dirty tree stays span-log-only", func(t *testing.T) {
+		s, workspaceDir := setupRunnerForFailureTestDirty(t)
+		sink := s.sink
+
+		const changedPath = "budget.go"
+		exec := &funcExecutor{
+			fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+				if err := os.WriteFile(filepath.Join(workspaceDir, changedPath), []byte("package main\n"), 0o644); err != nil {
+					return nil, err
+				}
+				<-ctx.Done()
+				return &agent.TryResult{Completed: false}, ctx.Err()
+			},
+		}
+		r := newBudgetKillRunner(t, s.store, workspaceDir, sink, exec, Config{
+			RetryBudget: 2,
+			RunTimeout:  time.Hour,
+			LapsEnabled: true,
+		})
+		r.timerFunc = fireOnCall(1)
+
+		res, err := r.runOne(
+			context.Background(),
+			&store.RelayRecord{ID: 1, TargetIterations: 1},
+			0,
+			agent.ResolvedAgent{Harness: "opencode", Model: cheapTestModel},
+			runTask{Name: "task", Prompt: "do work", Assignee: "senior", IsLapsBacked: true, LapID: "lap-1"},
+			nil, nil, false, false, nil, nil, io.Discard,
+		)
+		if err != nil {
+			t.Fatalf("runOne error = %v", err)
+		}
+
+		// The unfinalized capture is intentionally suppressed for designed
+		// timeout outcomes.
+		if got := findFailureCount(sink, "without finalizing"); got != 0 {
+			t.Fatalf("unfinalized captures = %d, want 0 for designed handoff_timeout outcome", got)
+		}
+		// The terminal-try capture is skipped (ShouldCaptureIssue false for
+		// handoff_timeout). Verify no RallyFailure was captured.
+		if got := findFailureCount(sink, "failed:"); got != 0 {
+			t.Fatalf("terminal-try captures = %d, want 0 for handoff_timeout outcome", got)
+		}
+
+		// The log stays span-only: no failure_category flat field.
+		log := findTryLogByOutcome(t, sink, string(reliability.OutcomeHandoffTimeout))
+		if _, found := log["failure_category"]; found {
+			t.Fatalf("handoff_timeout log must not carry failure_category: %#v", log)
+		}
+		if log["timeout_kind"] != "run_budget" {
+			t.Fatalf("try log timeout_kind = %v, want run_budget", log["timeout_kind"])
+		}
+
+		// The span carries timeout telemetry and failure_evidence context.
+		span := findTrySpanByOutcome(t, sink, string(reliability.OutcomeHandoffTimeout))
+		if span.tags["timeout_kind"] != "run_budget" {
+			t.Fatalf("try span timeout_kind = %v, want run_budget", span.tags["timeout_kind"])
+		}
+		// The failure_evidence data block carries the category (unidentified_issue)
+		// and safe error evidence in the raw_signal (within the context, not as
+		// flat tags). Verify the evidence context exists.
+		evidence, ok := span.data["failure_evidence"].(map[string]interface{})
+		if !ok {
+			t.Logf("span data = %#v", span.data)
+			t.Fatal("run-budget kill span must carry failure_evidence data context")
+		}
+		if source, _ := evidence["source"].(string); source == "" {
+			t.Fatalf("failure_evidence.source must be non-empty, got %#v", evidence)
+		}
+
+		// The persisted try record carries the correct budget-kill category.
+		tries := s.store.AllTries()
+		if len(tries) != 1 {
+			t.Fatalf("recorded tries = %d, want 1", len(tries))
+		}
+		if tries[0].Category != string(reliability.CategoryUnidentifiedIssue) {
+			t.Fatalf("try record category = %q, want unidentified_issue (scenario d)", tries[0].Category)
+		}
+		if res.InfraFailures != 0 {
+			t.Errorf("infra failures = %d, want 0 for timeout lifecycle outcome", res.InfraFailures)
+		}
+	})
 }

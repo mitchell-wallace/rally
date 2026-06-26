@@ -94,11 +94,11 @@
       "title": "Tests: budget-kill classification matrix",
       "description": "Context: tasks.md §5.5 (six scenarios). Reviews the subtle gate logic from the previous lap.\n\nFiles \u0026 scope: internal/relay/runner_test.go and siblings. Production fixes limited to tiny safe one-liners; anything larger -\u003e new head lap.\n\nAcceptance: tasks.md §5.5 (a)-(f): (a) try-cap kill, no evidence -\u003e unidentified_issue + \"try budget exhausted; no output\" + FailureAgent; (b) try-cap kill with executor evidence carrying a non-empty Category (e.g. codex session log -\u003e harness_launch) -\u003e no override, executor authoritative; (c) freeze counter does NOT increment on a try-cap kill; (d) run-budget kill, no evidence/no classifier category -\u003e unidentified_issue + \"run timeout\" + FailureAgent (changed from the old empty-category behaviour); (e) run-budget kill where ClassifyError produced a category -\u003e classifier authoritative, no override; (f) no regression in operator-worthy capture for any budget-kill path. go test ./internal/relay/... green.",
       "assignee": "SENIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 458752,
       "createdAt": "2026-06-26T00:55:47.987902517Z",
-      "updatedAt": "2026-06-26T00:55:47.987902517Z",
-      "completedAt": null
+      "updatedAt": "2026-06-26T02:59:07.323690538Z",
+      "completedAt": "2026-06-26T02:59:07.323690538Z"
     },
     {
       "id": "rall-d113",

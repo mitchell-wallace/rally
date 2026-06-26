@@ -305,12 +305,20 @@ func TestRunOneRunBudgetExpiredBeforeCooldownStopsRetries(t *testing.T) {
 	if got := atomic.LoadInt32(&attempts); got != 1 {
 		t.Fatalf("executor ran %d attempts, want 1: expired run budget must stop before retry", got)
 	}
+	if res.InfraFailures < 1 {
+		t.Fatalf("infra failures = %d, want at least 1 (short_rate_limit is infra-class)", res.InfraFailures)
+	}
 	tries := s.AllTries()
 	if len(tries) != 1 {
 		t.Fatalf("recorded %d tries, want 1", len(tries))
 	}
 	if tries[0].Outcome != reliability.OutcomeHandoffTimeout {
 		t.Fatalf("try outcome = %q, want %q", tries[0].Outcome, reliability.OutcomeHandoffTimeout)
+	}
+	// Scenario (e): classifier produced short_rate_limit → run-budget override
+	// must NOT replace it with unidentified_issue.
+	if tries[0].Category != string(reliability.CategoryShortRateLimit) {
+		t.Fatalf("try category = %q, want short_rate_limit (classifier authoritative, no override)", tries[0].Category)
 	}
 }
 
@@ -417,6 +425,66 @@ func TestRunOneRunBudgetIsCumulativeAcrossRetries(t *testing.T) {
 	}
 	if tries[1].Outcome != reliability.OutcomeHandoffTimeout {
 		t.Fatalf("try 2 outcome = %q, want %q", tries[1].Outcome, reliability.OutcomeHandoffTimeout)
+	}
+}
+
+// TestRunOneTryCapKillWithExecutorEvidenceKeepsEvidenceCategory pins scenario
+// (b) & (c): when a try-cap kills the attempt AND the executor returned
+// evidence carrying a non-empty Category (e.g. opencode disk log yielded
+// auth_or_proxy, codex session log yielded harness_launch), the try-cap
+// override (unidentified_issue) does NOT fire — the executor's evidence is
+// authoritative.  Also asserts the freeze counter stays at zero (scenario c).
+func TestRunOneTryCapKillWithExecutorEvidenceKeepsEvidenceCategory(t *testing.T) {
+	var attempts int32
+	var workspaceDir string
+	complete := func(n int) (*agent.TryResult, error) {
+		if err := os.WriteFile(filepath.Join(workspaceDir, "work.txt"), []byte("done\n"), 0o644); err != nil {
+			return nil, err
+		}
+		return &agent.TryResult{Completed: true, Summary: "ok"}, nil
+	}
+	exec := &funcExecutor{
+		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+			n := int(atomic.AddInt32(&attempts, 1))
+			if n == 1 {
+				<-ctx.Done()
+				return &agent.TryResult{
+					Completed: false,
+					Evidence: &reliability.FailureEvidence{
+						Category: reliability.CategoryHarnessLaunch,
+					},
+				}, ctx.Err()
+			}
+			return complete(n)
+		},
+	}
+	r, s, ws := newTimeoutTestRunner(t, exec, Config{
+		RetryBudget: 3,
+		TryTimeout:  time.Hour,
+	})
+	workspaceDir = ws
+	r.timerFunc = fireOnCall(1)
+
+	res := driveRunOne(t, r)
+
+	if !res.Success {
+		t.Fatalf("expected success after retry, got %+v", res)
+	}
+	if res.InfraFailures != 0 {
+		t.Fatalf("infra failures = %d, want 0 for try-cap kill (scenario c)", res.InfraFailures)
+	}
+	tries := s.AllTries()
+	if len(tries) < 2 {
+		t.Fatalf("want at least 2 tries, got %d", len(tries))
+	}
+	if tries[0].Outcome != reliability.OutcomeRunTimeout {
+		t.Fatalf("try 1 outcome = %q, want run_timeout", tries[0].Outcome)
+	}
+	if tries[0].Category == string(reliability.CategoryUnidentifiedIssue) {
+		t.Fatalf("try 1 category = %q, override must not fire when executor evidence is present (scenario b)", tries[0].Category)
+	}
+	if tries[0].FailReason == "try budget exhausted; no output" {
+		t.Fatalf("try 1 fail reason = %q, override must not fire when evidence present (scenario b)", tries[0].FailReason)
 	}
 }
 
