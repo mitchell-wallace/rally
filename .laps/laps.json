@@ -127,11 +127,11 @@
       "title": "Codex session-log fallback (silent exit-1 enrichment)",
       "description": "Context: tasks.md §4, design Decision 2 + 9. Codex's silent exit-1 burst (0.11.2, 10 failures in one relay) wrote nothing in-band, yet codex keeps rich rollout-*.jsonl session logs we never read. Depends on the §10 lap (category) and the §2 ResolvedModel lap.\n\nOutcome: on a codex error with no parser-matchable in-band signal, enrich from the matching session log (Source=\"codex_session_log\"); when no session log matches, the EXECUTOR returns FailureEvidence{Category: CategoryHarnessLaunch, Source: \"codex_no_session_log\"} so ClassifyError Priority 1 maps it to FreshRestart/FailureInfra (retry within budget, then freeze pressure after 2+).\n\nFiles \u0026 scope: internal/agent/codex.go. Locate the latest $CODEX_HOME/sessions/YYYY/MM/DD/rollout-*.jsonl (default ~/.codex/sessions/) whose first-line session_meta.cwd == opts.WorkspaceDir and whose timestamp is within the try window. Read ONLY: first-line scalars (cwd, git.commit_hash, git.branch, model_provider, cli_version) and the last event_msg subtype (task_started / task_complete / turn_aborted) as the diagnostic Message. EXPLICITLY skip base_instructions, token_count, response_item, turn_context. Change the codex.go:195-201 error path: when ParseCodexError is nil and no session log matched, return \u0026TryResult{Evidence: \u003ccodex_no_session_log harness_launch evidence\u003e}, execErr instead of return nil, execErr. 256-rune bound via truncateSignal.\n\nDesign: do NOT use CategoryAuthOrProxy for the no-session-log case (that maps to Rotate/FailureAgent — wrong; the runner should keep retrying launch failures within budget, hence harness_launch -\u003e FreshRestart). The merged-stderr idiom at codex.go:223 is the standard Go pattern, not a race — no refactor. The resolved model is NOT in session_meta; ResolvedModel comes from the executor's model local (§2), not the log.\n\nAcceptance: tasks.md §4.6 (a)-(d): (a) matching session log -\u003e \"codex_session_log\" + Message from the last event subtype; (b) no session log -\u003e CategoryHarnessLaunch + \"codex_no_session_log\" resolving Priority 1 to harness_launch / StrategyFreshRestart / FailureInfra (NOT Rotate/FailureAgent); (c) base_instructions / token_count / turn_context never appear in RawSignal; (d) missing/unreadable session dir is not an error (falls through to the existing safe_exec_error path). Tests green.",
       "assignee": "SENIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 655360,
       "createdAt": "2026-06-26T00:55:47.987908335Z",
-      "updatedAt": "2026-06-26T00:55:47.987908335Z",
-      "completedAt": null
+      "updatedAt": "2026-06-26T04:32:46.98730612Z",
+      "completedAt": "2026-06-26T04:32:46.98730612Z"
     },
     {
       "id": "rall-d6c2",
