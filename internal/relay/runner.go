@@ -806,8 +806,8 @@ func (r *Runner) Run(ctx context.Context) error {
 		runCtx, runSpan := r.tel().StartSpan(ctx, "run", fmt.Sprintf("relay-%d-run-%d", relay.ID, runID))
 		applyTags(runSpan, runTags)
 
-		// Rotating to a backup runner is a healthy recovery, not an alert — log
-		// it as a common event, never an Issue.
+		// Rotating to a backup runner is a healthy recovery, not an alert. Record
+		// it on the routing event stream, not as a try outcome.
 		if selection.PreviousAgent != nil &&
 			(selection.PreviousAgent.Harness != selection.Agent.Harness ||
 				selection.PreviousAgent.Model != selection.Agent.Model) {
@@ -822,7 +822,6 @@ func (r *Runner) Run(ctx context.Context) error {
 				"event":       "route_fallback",
 				"relay_id":    relay.ID,
 				"run_id":      runID,
-				"runner":      to,
 				"from_runner": from,
 				"to_runner":   to,
 				"role":        task.promptAssignee(),
@@ -834,11 +833,25 @@ func (r *Runner) Run(ctx context.Context) error {
 				fallbackCause.addTo(fields, runSpan)
 			}
 			fallbackCause = nil
-			r.tel().EmitTryLog(runCtx, fields)
+			r.tel().EmitRouteEvent(runCtx, fields)
 		} else if fallbackCause != nil {
 			fallbackCause = nil
 		}
 		if selection.RecoveryCapHit {
+			r.tel().EmitRouteEvent(runCtx, map[string]interface{}{
+				"event":                        "recovery_cap_hit",
+				"relay_id":                     relay.ID,
+				"run_id":                       runID,
+				"to_runner":                    telemetry.RunnerLabel(selection.Agent.Harness, selection.Agent.Model),
+				"role":                         task.promptAssignee(),
+				"repo":                         rc.Repo,
+				"repo_name":                    rc.RepoName,
+				"lap_id":                       task.LapID,
+				"route_name":                   selection.Route.Name,
+				"consecutive_recovery_runs":    selection.RecoveryStatus.ConsecutiveRecoveryRuns,
+				"recovery_classification":      "needs_user",
+				"route_entry_exhausted_reason": "recovery_cap_hit",
+			})
 			r.tel().CaptureFailure(ctx, fmt.Sprintf("relay %d lap %s recovery cap reached: needs_user", relay.ID, task.LapID),
 				failureStateEvent(
 					telemetry.Tags(telemetry.EventInfo{RelayID: relay.ID, RunID: runID, Role: task.promptAssignee(), Repo: rc.Repo, RepoName: rc.RepoName, LapID: task.LapID}),

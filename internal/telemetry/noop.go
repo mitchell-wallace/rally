@@ -22,6 +22,8 @@ func (NoopSink) StartSpan(ctx context.Context, _, _ string) (context.Context, Sp
 
 func (NoopSink) EmitTryLog(context.Context, map[string]interface{}) {}
 
+func (NoopSink) EmitRouteEvent(context.Context, map[string]interface{}) {}
+
 func (NoopSink) CaptureFailure(context.Context, string, FailureEvent) {}
 
 func (NoopSink) CaptureEvent(context.Context, string, Event) {}

@@ -21,6 +21,10 @@ type Sink interface {
 	// string-keyed; values should be simple scalars (string, int, float).
 	EmitTryLog(ctx context.Context, fields map[string]interface{})
 
+	// EmitRouteEvent records a structured routing-decision event. Fields are
+	// string-keyed; values should be simple scalars (string, int, float).
+	EmitRouteEvent(ctx context.Context, fields map[string]interface{})
+
 	// CaptureFailure reports an operator-worthy failure. The FailureEvent
 	// carries scalar tags for filtering and context blocks for structured
 	// nested data.

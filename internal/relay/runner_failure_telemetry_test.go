@@ -43,10 +43,11 @@ type capturedSpan struct {
 // and structured-log fields together.
 type capturingSink struct {
 	telemetry.NoopSink
-	failures []capturedFailure
-	events   []capturedEvent
-	logs     []map[string]interface{}
-	spans    []*capturedSpan
+	failures    []capturedFailure
+	events      []capturedEvent
+	logs        []map[string]interface{}
+	routeEvents []map[string]interface{}
+	spans       []*capturedSpan
 }
 
 type capturingSpan struct {
@@ -80,6 +81,14 @@ func (c *capturingSink) EmitTryLog(_ context.Context, fields map[string]interfac
 		copied[k] = v
 	}
 	c.logs = append(c.logs, copied)
+}
+
+func (c *capturingSink) EmitRouteEvent(_ context.Context, fields map[string]interface{}) {
+	copied := make(map[string]interface{}, len(fields))
+	for k, v := range fields {
+		copied[k] = v
+	}
+	c.routeEvents = append(c.routeEvents, copied)
 }
 
 func (c *capturingSink) CaptureFailure(_ context.Context, msg string, evt telemetry.FailureEvent) {
@@ -997,6 +1006,39 @@ func findLogByEvent(t *testing.T, sink *capturingSink, event string) map[string]
 	return nil
 }
 
+func findRouteEventByEvent(t *testing.T, sink *capturingSink, event string) map[string]interface{} {
+	t.Helper()
+	for _, fields := range sink.routeEvents {
+		if fields["event"] == event {
+			return fields
+		}
+	}
+	t.Fatalf("no route event %q found in %#v", event, sink.routeEvents)
+	return nil
+}
+
+func assertNoTryLogEvent(t *testing.T, sink *capturingSink, event string) {
+	t.Helper()
+	for _, fields := range sink.logs {
+		if fields["event"] == event {
+			t.Fatalf("unexpected try log event %q in %#v", event, sink.logs)
+		}
+	}
+}
+
+func assertTryLogsHaveOutcome(t *testing.T, sink *capturingSink) {
+	t.Helper()
+	for _, fields := range sink.logs {
+		if fields["event"] != "try" {
+			continue
+		}
+		outcome, _ := fields["outcome"].(string)
+		if strings.TrimSpace(outcome) == "" {
+			t.Fatalf("try log missing non-empty outcome: %#v", fields)
+		}
+	}
+}
+
 func findTrySpanByOutcome(t *testing.T, sink *capturingSink, outcome string) *capturedSpan {
 	t.Helper()
 	for _, span := range sink.spans {
@@ -1060,24 +1102,32 @@ func TestRun_RouteFallbackTelemetryIncludesTriggerCause(t *testing.T) {
 		t.Fatalf("executed models = %v, want %v", got, want)
 	}
 
-	log := findLogByEvent(t, sink, "route_fallback")
-	if log["from_runner"] != "opencode:model-a" || log["to_runner"] != "opencode:model-b" {
-		t.Fatalf("route_fallback runners = from %#v to %#v", log["from_runner"], log["to_runner"])
+	routeEvent := findRouteEventByEvent(t, sink, "route_fallback")
+	assertNoTryLogEvent(t, sink, "route_fallback")
+	assertTryLogsHaveOutcome(t, sink)
+	if routeEvent["from_runner"] != "opencode:model-a" || routeEvent["to_runner"] != "opencode:model-b" {
+		t.Fatalf("route_fallback runners = from %#v to %#v", routeEvent["from_runner"], routeEvent["to_runner"])
 	}
-	if log["trigger_run_id"] != 1 || log["trigger_try_id"] != 1 {
-		t.Fatalf("route_fallback trigger ids = run %#v try %#v", log["trigger_run_id"], log["trigger_try_id"])
+	if routeEvent["trigger_run_id"] != 1 || routeEvent["trigger_try_id"] != 1 {
+		t.Fatalf("route_fallback trigger ids = run %#v try %#v", routeEvent["trigger_run_id"], routeEvent["trigger_try_id"])
 	}
-	if log["trigger_outcome"] != string(reliability.OutcomeFailed) {
-		t.Fatalf("trigger_outcome = %#v", log["trigger_outcome"])
+	if routeEvent["trigger_outcome"] != string(reliability.OutcomeFailed) {
+		t.Fatalf("trigger_outcome = %#v", routeEvent["trigger_outcome"])
 	}
-	if log["trigger_failure_class"] != string(reliability.FailureAgent) {
-		t.Fatalf("trigger_failure_class = %#v", log["trigger_failure_class"])
+	if routeEvent["trigger_failure_class"] != string(reliability.FailureAgent) {
+		t.Fatalf("trigger_failure_class = %#v", routeEvent["trigger_failure_class"])
 	}
-	if log["trigger_failure_category"] != string(reliability.CategoryInvalidModel) {
-		t.Fatalf("trigger_failure_category = %#v", log["trigger_failure_category"])
+	if routeEvent["trigger_failure_category"] != string(reliability.CategoryInvalidModel) {
+		t.Fatalf("trigger_failure_category = %#v", routeEvent["trigger_failure_category"])
 	}
-	if log["route_name"] != "default" || log["route_entry_exhausted_reason"] != "category:invalid_model" {
-		t.Fatalf("route cause = route %#v exhausted %#v", log["route_name"], log["route_entry_exhausted_reason"])
+	if routeEvent["route_name"] != "default" || routeEvent["route_entry_exhausted_reason"] != "category:invalid_model" {
+		t.Fatalf("route cause = route %#v exhausted %#v", routeEvent["route_name"], routeEvent["route_entry_exhausted_reason"])
+	}
+	if _, hasOutcome := routeEvent["outcome"]; hasOutcome {
+		t.Fatalf("route_fallback must not carry try-only outcome: %#v", routeEvent)
+	}
+	if _, hasTryID := routeEvent["try_id"]; hasTryID {
+		t.Fatalf("route_fallback must not carry try-only try_id: %#v", routeEvent)
 	}
 
 	var fallbackSpan *capturedSpan
@@ -1400,6 +1450,15 @@ func TestRunRecoveryCapHitCapturesNeedsUserIssue(t *testing.T) {
 	wantNoTag(t, evt.Tags, "failure_category")
 	wantNoTag(t, evt.Tags, "outcome")
 	wantFingerprintCategory(t, evt, "needs_user")
+
+	routeEvent := findRouteEventByEvent(t, sink, "recovery_cap_hit")
+	if routeEvent["lap_id"] != "lap-cap" || routeEvent["recovery_classification"] != "needs_user" {
+		t.Fatalf("recovery cap route event = %#v", routeEvent)
+	}
+	if routeEvent["route_entry_exhausted_reason"] != "recovery_cap_hit" {
+		t.Fatalf("route_entry_exhausted_reason = %#v, want recovery_cap_hit", routeEvent["route_entry_exhausted_reason"])
+	}
+	assertTryLogsHaveOutcome(t, sink)
 }
 
 func setupRunnerForFailureTest(t *testing.T) (*store.Store, string, *capturingSink) {

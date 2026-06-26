@@ -105,11 +105,11 @@
       "title": "RallyRoute event + NULL-outcome RallyTry cleanup",
       "description": "Context: tasks.md §7, design Decision 5. 39 routing-fallback events over 30 days are mis-emitted as RallyTry with no outcome, polluting every failure-rate query.\n\nOutcome: a new RallyRoute custom event carries routing decisions; the route-fallback emission moves off RallyTry; every remaining RallyTry emit carries a non-empty outcome; the recovery-cap-hit path keeps its operator-worthy RallyFailure AND additionally emits RallyRoute.\n\nFiles \u0026 scope:\n- internal/telemetry/sink.go (+ NoopSink): add EmitRouteEvent(ctx context.Context, fields map[string]interface{}).\n- internal/telemetry/newrelic.go: implement NewRelicSink.EmitRouteEvent via app.RecordCustomEvent(\"RallyRoute\", buildFlatAttributes(fields)).\n- internal/telemetry/attributes.go: add RallyRoute to the fixed event-name set.\n- internal/telemetry/newrelic_coverage_test.go: add RallyRoute to the allowed event-name map (~146) and bump the count assertion (~154, len != 3 -\u003e != 4).\n- internal/relay/runner.go: move the route-fallback emit at runner.go:830 from EmitTryLog to EmitRouteEvent (carry event=\"route_fallback\", from_runner, to_runner, role, lap_id, repo, repo_name, relay_id, run_id, fallback-cause fields); at runner.go:834 KEEP the existing CaptureFailure (operator-worthy needs_user) AND also emit a RallyRoute for audit parity; add a boundary guard in EmitTryLog that logs a warning and fills outcome=\"unknown\" if missing; audit sites 830/2100/2574/3046 (expected: only 830 was missing outcome).\n\nDesign: keep RallyTry pure (every event a real try outcome with a non-empty outcome). Do not lose the operator-worthy RallyFailure.\n\nAcceptance: tasks.md §7.8 (a)-(d): route-fallback -\u003e RallyRoute (not RallyTry); recovery-cap-hit -\u003e BOTH RallyRoute and a needs_user RallyFailure; every RallyTry has a non-empty outcome; the boundary guard fires when a caller forgets outcome. go test ./internal/telemetry/... ./internal/relay/... green.",
       "assignee": "SENIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 524288,
       "createdAt": "2026-06-26T00:55:47.987903921Z",
-      "updatedAt": "2026-06-26T00:55:47.987903921Z",
-      "completedAt": null
+      "updatedAt": "2026-06-26T03:19:57.007253072Z",
+      "completedAt": "2026-06-26T03:19:57.007253072Z"
     },
     {
       "id": "rall-a590",

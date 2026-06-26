@@ -5,7 +5,9 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
+	"io"
 	"io/fs"
+	"os"
 	"path/filepath"
 	"reflect"
 	"runtime"
@@ -143,7 +145,7 @@ func TestNewRelicSink_VolumeBounds(t *testing.T) {
 				return true
 			}
 			switch name.Name {
-			case "newRelicEventRallyTry", "newRelicEventRallyDiagnostic", "newRelicEventRallyFailure":
+			case "newRelicEventRallyTry", "newRelicEventRallyRoute", "newRelicEventRallyDiagnostic", "newRelicEventRallyFailure":
 			default:
 				t.Errorf("RecordCustomEvent event name at %s = %s, want fixed Rally event constant", pos, name.Name)
 			}
@@ -151,8 +153,8 @@ func TestNewRelicSink_VolumeBounds(t *testing.T) {
 		})
 	}
 
-	if len(customEventCalls) != 3 {
-		t.Fatalf("RecordCustomEvent call sites = %v, want exactly RallyTry, RallyDiagnostic, and RallyFailure", customEventCalls)
+	if len(customEventCalls) != 4 {
+		t.Fatalf("RecordCustomEvent call sites = %v, want exactly RallyTry, RallyRoute, RallyDiagnostic, and RallyFailure", customEventCalls)
 	}
 }
 
@@ -288,6 +290,14 @@ func TestNewRelicSink_EmitsCustomEventsAndErrors(t *testing.T) {
 		"event":    "try",
 		"relay_id": "1",
 		"run_id":   1,
+		"outcome":  "completed",
+	})
+	sink.EmitRouteEvent(ctx, map[string]interface{}{
+		"event":       "route_fallback",
+		"relay_id":    "1",
+		"run_id":      2,
+		"from_runner": "codex:gpt-5",
+		"to_runner":   "claude:sonnet-4",
 	})
 
 	sink.CaptureEvent(ctx, "diagnostic msg", Event{
@@ -310,6 +320,17 @@ func TestNewRelicSink_EmitsCustomEventsAndErrors(t *testing.T) {
 				"event":    "try",
 				"relay_id": "1",
 				"run_id":   1,
+				"outcome":  "completed",
+			},
+		},
+		{
+			Type: newRelicEventRallyRoute,
+			UserAttributes: map[string]interface{}{
+				"event":       "route_fallback",
+				"relay_id":    "1",
+				"run_id":      2,
+				"from_runner": "codex:gpt-5",
+				"to_runner":   "claude:sonnet-4",
 			},
 		},
 		{
@@ -341,4 +362,56 @@ func TestNewRelicSink_EmitsCustomEventsAndErrors(t *testing.T) {
 			},
 		},
 	})
+}
+
+func TestNewRelicSink_EmitTryLogFillsMissingOutcome(t *testing.T) {
+	testApp := integrationsupport.NewTestApp(integrationsupport.SampleEverythingReplyFn)
+	sink := &NewRelicSink{app: testApp.Application}
+	fields := map[string]interface{}{
+		"event":    "try",
+		"relay_id": "1",
+		"run_id":   1,
+	}
+
+	warning := captureStderr(t, func() {
+		sink.EmitTryLog(context.Background(), fields)
+	})
+	if !strings.Contains(warning, "RallyTry event missing non-empty outcome") {
+		t.Fatalf("stderr warning = %q, want missing outcome warning", warning)
+	}
+	if fields["outcome"] != "unknown" {
+		t.Fatalf("outcome = %#v, want unknown", fields["outcome"])
+	}
+
+	expectNewRelicCustomEvents(t, testApp, []newRelicEventExpectation{{
+		Type: newRelicEventRallyTry,
+		UserAttributes: map[string]interface{}{
+			"event":    "try",
+			"relay_id": "1",
+			"run_id":   1,
+			"outcome":  "unknown",
+		},
+	}})
+}
+
+func captureStderr(t *testing.T, fn func()) string {
+	t.Helper()
+	orig := os.Stderr
+	read, write, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("os.Pipe: %v", err)
+	}
+	os.Stderr = write
+	defer func() {
+		os.Stderr = orig
+	}()
+
+	fn()
+	_ = write.Close()
+	out, err := io.ReadAll(read)
+	_ = read.Close()
+	if err != nil {
+		t.Fatalf("read stderr: %v", err)
+	}
+	return string(out)
 }
