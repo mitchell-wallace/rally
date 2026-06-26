@@ -2328,7 +2328,15 @@ attemptLoop:
 			canHandoffResume = exec != nil && exec.ResumeSupported() && sessionID != ""
 			attemptOutcome = reliability.OutcomeRunTimeout
 			failReason = "run timeout"
-			failureCategory = ""
+			// A run-budget kill carries a non-empty category unless an
+			// authoritative Category was already produced by the classifier
+			// (decision.Category from the block above, e.g. a text-pattern
+			// agent_error or dirty-tree incomplete_finalization) or by
+			// executor/session/disk-log evidence. Empty = no telemetry signal,
+			// so fall back to the non-freezing unidentified_issue floor.
+			if runBudgetExhausted && failureCategory == "" && (result.Evidence == nil || result.Evidence.Category == "") {
+				failureCategory = reliability.CategoryUnidentifiedIssue
+			}
 			attemptFailureClass = reliability.FailureAgent
 			failureClass = attemptFailureClass
 			terminalForRun = false
@@ -2336,6 +2344,18 @@ attemptLoop:
 				attemptOutcome = reliability.OutcomeHandoffTimeout
 				failReason = noHandoffResumeReason(exec, sessionID)
 			}
+		}
+		// Try-cap-only kill (per-try deadline fired, run budget remains):
+		// ClassifyError was skipped (attemptOutcome = OutcomeRunTimeout, whose
+		// CarriesFailureCategory() is false), so failureCategory would
+		// otherwise stay empty. Give it the non-freezing agent-class
+		// unidentified_issue floor — unless executor/session/disk-log evidence
+		// already produced an authoritative Category.
+		if failed && timedOut && !runBudgetExhausted && failureCategory == "" && (result.Evidence == nil || result.Evidence.Category == "") {
+			failureCategory = reliability.CategoryUnidentifiedIssue
+			failReason = "try budget exhausted; no output"
+			failureClass = reliability.FailureAgent
+			attemptFailureClass = reliability.FailureAgent
 		}
 		lastAttemptIncomplete = failed && attemptFailureClass == reliability.FailureIncomplete
 

@@ -403,11 +403,17 @@ func TestRunOneRunBudgetIsCumulativeAcrossRetries(t *testing.T) {
 	if len(tries) != 2 {
 		t.Fatalf("recorded %d tries, want 2", len(tries))
 	}
-	if tries[0].FailReason != "try timeout" {
-		t.Fatalf("try 1 fail reason = %q, want %q", tries[0].FailReason, "try timeout")
+	if tries[0].FailReason != "try budget exhausted; no output" {
+		t.Fatalf("try 1 fail reason = %q, want %q", tries[0].FailReason, "try budget exhausted; no output")
+	}
+	if tries[0].Category != string(reliability.CategoryUnidentifiedIssue) {
+		t.Fatalf("try 1 category = %q, want %q (try-cap kill with no evidence)", tries[0].Category, reliability.CategoryUnidentifiedIssue)
 	}
 	if tries[1].FailReason != "run timeout; harness cannot resume for handoff" {
 		t.Fatalf("try 2 fail reason = %q, want no-resume reason", tries[1].FailReason)
+	}
+	if tries[1].Category != string(reliability.CategoryUnidentifiedIssue) {
+		t.Fatalf("try 2 category = %q, want %q (run-budget kill with no evidence)", tries[1].Category, reliability.CategoryUnidentifiedIssue)
 	}
 	if tries[1].Outcome != reliability.OutcomeHandoffTimeout {
 		t.Fatalf("try 2 outcome = %q, want %q", tries[1].Outcome, reliability.OutcomeHandoffTimeout)
@@ -417,7 +423,8 @@ func TestRunOneRunBudgetIsCumulativeAcrossRetries(t *testing.T) {
 // TestRunOneTryCapRetriesWithinBudget pins task 3.5's "a single attempt crossing
 // try_timeout_secs while run budget remains": the per-try cap ends attempt 1, but
 // because the run budget is not exhausted the run retries and the second attempt
-// succeeds. We assert two tries — the first a "try timeout", the second a normal
+// succeeds. We assert two tries — the first a "try budget exhausted; no output"
+// (a try-cap kill with no evidence -> unidentified_issue), the second a normal
 // completion — and overall run success.
 func TestRunOneTryCapRetriesWithinBudget(t *testing.T) {
 	var attempts int32
@@ -458,8 +465,11 @@ func TestRunOneTryCapRetriesWithinBudget(t *testing.T) {
 	if tries[0].Outcome != reliability.OutcomeRunTimeout {
 		t.Fatalf("try 1 outcome = %q, want %q", tries[0].Outcome, reliability.OutcomeRunTimeout)
 	}
-	if tries[0].FailReason != "try timeout" {
-		t.Fatalf("try 1 fail reason = %q, want %q (per-try cap, not run budget)", tries[0].FailReason, "try timeout")
+	if tries[0].FailReason != "try budget exhausted; no output" {
+		t.Fatalf("try 1 fail reason = %q, want %q (per-try cap, not run budget)", tries[0].FailReason, "try budget exhausted; no output")
+	}
+	if tries[0].Category != string(reliability.CategoryUnidentifiedIssue) {
+		t.Fatalf("try 1 category = %q, want %q (try-cap kill with no evidence)", tries[0].Category, reliability.CategoryUnidentifiedIssue)
 	}
 	if !tries[1].Completed {
 		t.Fatalf("try 2 must be completed; got fail reason %q", tries[1].FailReason)
