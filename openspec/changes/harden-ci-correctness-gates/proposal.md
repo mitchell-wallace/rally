@@ -21,8 +21,9 @@ than in a repo where `main` is just an integration branch.
 - Promote the existing local `just check` into CI as a required gate:
   `go vet ./...` (includes `copylocks`, newly relevant since 0.11.5 put a
   `sync.Mutex` in `Store`) and `gofmt -l .` must be empty.
-- Add a `govulncheck ./...` job, **advisory (non-blocking) on first rollout**,
-  with a documented path to flip it to blocking once it proves quiet.
+- Add a `govulncheck ./...` job, **advisory (non-blocking) on first rollout**;
+  the later flip to blocking is scoped to the sibling `adopt-lint-and-fuzz-gates`
+  change (section G), so this change only needs to make it flippable.
 - Add a `go mod tidy` drift gate that fails if `go.mod`/`go.sum` change —
   catching exactly the indirect→direct drift from the cancelreader episode.
 - Run the gate suite on `dev` and `main` pushes (and PRs), so a `main` that the

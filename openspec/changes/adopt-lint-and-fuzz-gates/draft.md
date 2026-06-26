@@ -100,12 +100,34 @@ Add GitHub's CodeQL workflow as an **advisory** SAST scan (free for the repo).
 Low-touch; complements `govulncheck` (dependency CVEs) with first-party code
 analysis.
 
+### G. Promote `govulncheck` from advisory to blocking
+
+The sibling `harden-ci-correctness-gates` introduces `govulncheck ./...` as an
+**advisory** (non-blocking, non-required) job on first rollout, deliberately so
+a surprise upstream CVE disclosure cannot wedge an auto-publishing `main` before
+the gates have settled. This change owns the **flip to blocking**: once the
+lint/fuzz baseline is green and `govulncheck` has run quietly through a
+stabilisation window, remove its `continue-on-error: true` and add it to the
+required-status-check set on `main`. This is a near-one-line CI change plus a
+branch-protection settings update — no structural rework, because harden-ci
+built it to be flippable.
+
+The companion branch-protection hardening rides along naturally here: harden-ci
+enables protection on `main` with **"Include administrators" off**; flipping it
+**on** (so even the maintainer's direct fast-forward must carry green checks) is
+the same "tighten once the baseline is stable" step and can land in the same
+pass as the govulncheck promotion. Confirm the `rally-release` direct-push flow
+still fast-forwards a pre-green `dev` SHA cleanly after both flips.
+
 ## Sequencing
 
 1. `golangci-lint` with the conservative set (one-time triage to green) — A, B.
 2. Formatting decision — D — alongside or just after A.
 3. Fuzz targets — E — incrementally, one parser at a time.
 4. Expansion — C — and CodeQL — F — as ongoing follow-ups.
+5. Hardening flips — G — `govulncheck` advisory→blocking (and, optionally,
+   branch-protection "Include administrators" off→on) once the baseline has
+   been stable for a window.
 
 ## Open questions
 
@@ -121,7 +143,9 @@ analysis.
 ## Out of scope
 
 - The mechanical correctness gates (race, vet, gofmt, govulncheck, mod-tidy) —
-  see `harden-ci-correctness-gates`.
+  see `harden-ci-correctness-gates`. Note: that change *introduces*
+  `govulncheck` (advisory); this change owns only the later *flip to blocking*
+  (section G).
 - Coverage thresholds / ratchets (a separate later decision).
 - Rewriting tests for `t.Parallel()` / parallelism.
 - Any change to runtime/binary behaviour.

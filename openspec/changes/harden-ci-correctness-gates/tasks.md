@@ -28,7 +28,7 @@
 
 - [ ] 5.1 Once the required jobs (`test`, `race`, `lint`, `tidy`) are green on both `dev` and `main`, enable GitHub branch protection on `main` requiring those four status checks. Do NOT include `audit` (advisory). Leave "Include administrators" OFF for first rollout (design Decision 6).
 - [ ] 5.2 Smoke-test compatibility with the direct-push release flow: confirm `rally-release` can still fast-forward `main` to a green `dev` SHA, and that a hypothetical red required check would block the advance.
-- [ ] 5.3 Document the protection setup and the hardened end state in the repo docs (README "Releasing"/CI section or AGENTS.md): the required checks, "Include administrators" off-now / on-later, and flipping govulncheck from advisory to required — so the follow-up is a recorded, deliberate step.
+- [ ] 5.3 Document the protection setup in the repo docs (README "Releasing"/CI section or AGENTS.md): the required checks, "Include administrators" off on first rollout, and that the advisory `audit`/govulncheck job is non-blocking. Note that the hardened end state — flipping govulncheck to required and "Include administrators" on — is owned by the sibling `adopt-lint-and-fuzz-gates` change (section G), not this one.
 
 ## 6. Verification
 

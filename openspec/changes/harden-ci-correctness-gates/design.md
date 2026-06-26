@@ -66,13 +66,14 @@ agents (slowest, flakiest, no extra race coverage where it matters).
 call-graph-aware — it reports only vulnerabilities in reachable code — so it is
 inherently low-noise. It runs with `continue-on-error: true` (advisory) for the
 first rollout, and is **not** in the required-status-check set, so a newly
-disclosed transitive CVE cannot suddenly wedge an auto-publishing `main`. The
-flip to blocking (remove `continue-on-error`, add to required checks) is a
-one-line follow-up once the gate has proven quiet; the spec records this as a
-deliberate, reversible posture rather than a permanent advisory. *Alternative
-considered:* blocking from day one — strongest posture, but couples release
-availability to upstream disclosure timing, which is the wrong trade for a repo
-where `main` publishes on push.
+disclosed transitive CVE cannot suddenly wedge an auto-publishing `main`. This
+change only makes the gate *flippable* (the structure is one `continue-on-error`
+line plus the required-checks set); the actual **flip to blocking is owned by
+the sibling `adopt-lint-and-fuzz-gates` change** (its section G), to be done
+once that change's lint/fuzz baseline is green and govulncheck has run quietly
+through a stabilisation window. *Alternative considered:* blocking from day one
+— strongest posture, but couples release availability to upstream disclosure
+timing, which is the wrong trade for a repo where `main` publishes on push.
 
 **3. A `go mod tidy` drift gate.** Add a `tidy` job that runs `go mod tidy`,
 then fails if `git diff --exit-code go.mod go.sum` is non-empty. This catches
@@ -168,9 +169,11 @@ every CI gate has a one-word local equivalent.
 ## Open Questions
 
 - **When to flip govulncheck to blocking and "Include administrators" on?**
-  Both are deliberately deferred to a follow-up after a stabilisation window
-  (suggested: one or two quiet weeks). Recorded as a posture decision, not an
-  unknown — the spec captures the initial state and the intended end state.
+  Both are deliberately deferred to the sibling `adopt-lint-and-fuzz-gates`
+  change (its section G), to land after a stabilisation window once that
+  change's lint/fuzz baseline is green. Recorded there as a posture decision,
+  not an unknown — this change captures only the initial advisory/excluded
+  state and keeps it flippable.
 - **Does any non-real-agent test transitively require the `laps` binary at
   runtime?** The `race` job installs `laps`/`opencode` to be safe; if the
   non-real-agent subset proves not to need them, the installs can be trimmed
