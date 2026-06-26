@@ -356,9 +356,9 @@ func ClassifyError(logLines []string, harness string, ctx *ClassifyContext, evid
 	// ── Priority 3: Dirty-tree incomplete check ──
 	if ctx != nil && ctx.HasFileChanges && !ctx.Finalized {
 		ev := &FailureEvidence{
-			Category: CategoryIncompleteFinalization,
-			Message:  "agent exited without finalizing",
-			Source:   "dirty_tree",
+			Category:  CategoryIncompleteFinalization,
+			Message:   "agent exited without finalizing",
+			Source:    "dirty_tree",
 			RawSignal: truncateSignal(strings.Join(ctx.ChangedPaths, ", "), 256),
 		}
 		return StrategyDecision{
@@ -451,6 +451,8 @@ func logTailSignal(logLines []string) string {
 		start = len(logLines) - maxLines
 	}
 	tail := strings.Join(logLines[start:], "\n")
+	if strings.TrimSpace(tail) == "" {
+		return "no log output"
+	}
 	return truncateSignal(tail, 256)
 }
-

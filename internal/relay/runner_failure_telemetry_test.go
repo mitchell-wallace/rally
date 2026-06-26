@@ -676,7 +676,7 @@ func TestRun_AllFrozen_CapturesFrozenState(t *testing.T) {
 	}
 }
 
-func TestRunOne_ExecErrorWithoutEvidenceAddsSafeFailureEvidence(t *testing.T) {
+func TestRunOne_ExecErrorWithoutEvidenceUsesClassifierEvidence(t *testing.T) {
 	workspaceDir := t.TempDir()
 	rallyDir := store.RallyDir(workspaceDir)
 	os.MkdirAll(rallyDir, 0o755)
@@ -718,10 +718,10 @@ func TestRunOne_ExecErrorWithoutEvidenceAddsSafeFailureEvidence(t *testing.T) {
 	}
 
 	log := findTryLogByOutcome(t, sink, string(reliability.OutcomeFailed))
-	if log["failure_evidence.raw_signal"] != "launcher failed" {
-		t.Fatalf("try log raw_signal = %#v, want stripped launcher message", log["failure_evidence.raw_signal"])
+	if log["failure_evidence.raw_signal"] != "no log output" {
+		t.Fatalf("try log raw_signal = %#v, want empty-log classifier marker", log["failure_evidence.raw_signal"])
 	}
-	if log["failure_evidence.source"] != "safe_exec_error" {
+	if log["failure_evidence.source"] != "unmatched" {
 		t.Fatalf("try log source = %#v", log["failure_evidence.source"])
 	}
 
@@ -730,7 +730,7 @@ func TestRunOne_ExecErrorWithoutEvidenceAddsSafeFailureEvidence(t *testing.T) {
 	if !ok {
 		t.Fatal("failure_evidence context missing on exec error capture")
 	}
-	if ev["raw_signal"] != "launcher failed" || ev["source"] != "safe_exec_error" {
+	if ev["raw_signal"] != "no log output" || ev["source"] != "unmatched" {
 		t.Fatalf("failure evidence = %#v", ev)
 	}
 }

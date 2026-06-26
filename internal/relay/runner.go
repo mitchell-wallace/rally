@@ -2256,13 +2256,22 @@ attemptLoop:
 		// returns to the routing dispatch loop, which benches the quota scope or
 		// routes the entry away using the surfaced category + reset evidence.
 		terminalForRun := attemptOutcome.IsTerminalForRun("")
+		var decisionEvidence *reliability.FailureEvidence
 		if failed && !lapPinMismatch && attemptOutcome.CarriesFailureCategory() {
 			logLines := readLastNLines(tryLogPath, 50)
-			decision := reliability.ClassifyError(logLines, picked.Harness, &reliability.ClassifyContext{HasFileChanges: incomplete, Finalized: finalized}, result.Evidence)
+			decision := reliability.ClassifyError(logLines, picked.Harness, &reliability.ClassifyContext{
+				HasFileChanges: incomplete,
+				Finalized:      finalized,
+				ChangedPaths:   filesChangedList,
+			}, result.Evidence)
+			decisionEvidence = decision.Evidence
 			attemptFailureClass = decision.FailureClass
 			failureClass = decision.FailureClass
 			failureCategory = decision.Category
 			resetEvidence = result.Evidence
+			if resetEvidence == nil {
+				resetEvidence = decision.Evidence
+			}
 			terminalForRun = attemptOutcome.IsTerminalForRun(decision.Category)
 			if decision.FailureClass == reliability.FailureInfra {
 				infraFailures++
@@ -2459,7 +2468,9 @@ attemptLoop:
 			AgentState:             r.agentStateName(picked),
 		}
 		applyEvidenceToFailureState(&evidenceState, resetEvidence, "executor_evidence")
-		applySafeExecErrorEvidence(&evidenceState, execErr)
+		if result.Evidence == nil && decisionEvidence == nil {
+			applySafeExecErrorEvidence(&evidenceState, execErr)
+		}
 		if failed {
 			addFailureEvidenceTelemetry(trySpan, tryLogFields, evidenceState)
 		}
@@ -2536,7 +2547,9 @@ attemptLoop:
 			if resetEvidence != nil {
 				applyEvidenceToFailureState(&fs, resetEvidence, "executor_evidence")
 			}
-			applySafeExecErrorEvidence(&fs, execErr)
+			if result.Evidence == nil && decisionEvidence == nil {
+				applySafeExecErrorEvidence(&fs, execErr)
+			}
 			if evt, ok := limitSignalEvent(tryTags, rc, fs); ok {
 				r.tel().CaptureEvent(tryCtx, fmt.Sprintf("relay %d run %d try %d provider limit signal: %s", relay.ID, runIndex+1, tryRecord.ID, failReason), evt)
 			}
