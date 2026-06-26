@@ -2104,7 +2104,7 @@ attemptLoop:
 				"try_id":              tryRecord.ID,
 				"attempt":             attempt,
 				"role":                task.promptAssignee(),
-				"runner":              telemetry.RunnerLabel(picked.Harness, picked.Model),
+				"runner":              telemetry.RunnerLabel(picked.Harness, firstNonEmpty(result.ResolvedModel, picked.Model)),
 				"repo":                rc.Repo,
 				"repo_name":           rc.RepoName,
 				"lap_id":              task.LapID,
@@ -2417,7 +2417,7 @@ attemptLoop:
 			"try_id":                         tryRecord.ID,
 			"attempt":                        attempt,
 			"role":                           task.promptAssignee(),
-			"runner":                         telemetry.RunnerLabel(picked.Harness, picked.Model),
+			"runner":                         telemetry.RunnerLabel(picked.Harness, firstNonEmpty(result.ResolvedModel, picked.Model)),
 			"repo":                           rc.Repo,
 			"repo_name":                      rc.RepoName,
 			"lap_id":                         task.LapID,
@@ -2994,7 +2994,7 @@ func (r *Runner) runBoundedHandoffOnly(
 		"try_id":                 tryID,
 		"attempt":                attemptNumber,
 		"role":                   task.promptAssignee(),
-		"runner":                 telemetry.RunnerLabel(picked.Harness, picked.Model),
+		"runner":                 telemetry.RunnerLabel(picked.Harness, firstNonEmpty(result.ResolvedModel, picked.Model)),
 		"repo":                   rc.Repo,
 		"repo_name":              rc.RepoName,
 		"lap_id":                 task.LapID,
@@ -3678,4 +3678,18 @@ func (r *Runner) maybeWriteStubAndClearState(lastOutput string) (bool, error) {
 	_ = progress.AppendRunEntry(r.cfg.WorkspaceDir, entry)
 	_ = progress.ClearRunState(r.cfg.WorkspaceDir)
 	return true, nil
+}
+
+// firstNonEmpty returns the first argument whose trimmed value is non-empty,
+// or "" when none qualify. It resolves the model used in the runner telemetry
+// tag: the executor's ResolvedModel (authoritative for bare-alias routes) wins
+// over the route-resolved picked.Model, but the route-resolved model remains
+// the fallback when the executor did not populate ResolvedModel.
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return value
+		}
+	}
+	return ""
 }

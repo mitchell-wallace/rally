@@ -2499,3 +2499,125 @@ printf '%%s\n' '{"type":"text","part":{"type":"text","text":"%s"}}'
 		t.Errorf("variant flag should be present alongside explicit model, got:\n%s", args)
 	}
 }
+
+// TestExecutors_PopulateResolvedModel verifies every executor populates
+// TryResult.ResolvedModel with the model actually passed to the CLI: the
+// executor's configured default for a bare-alias route (opts.Model empty), and
+// the per-try opts.Model override when set. This is the source the runner uses
+// for the runner-tag fallback (tasks.md §2.2/§2.3/§2.5).
+func TestExecutors_PopulateResolvedModel(t *testing.T) {
+	t.Run("codex", func(t *testing.T) {
+		binDir, _ := testMockBinDir(t, "codex")
+		scriptPath := filepath.Join(binDir, "codex")
+		script := `#!/bin/sh
+printf '%s\n' '{"type":"thread.started","thread_id":"codex-sess"}'
+next=0
+for i in "$@"; do
+  if [ "$next" = "1" ]; then printf '{"completed":true,"summary":"ok"}' > "$i"; break; fi
+  if [ "$i" = "-o" ]; then next=1; fi
+done
+`
+		if err := os.WriteFile(scriptPath, []byte(script), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+		exec := &CodexExecutor{Model: "gpt-5.4"}
+		if res, err := exec.Execute(context.Background(), RunOptions{Prompt: "do work"}); err != nil {
+			t.Fatalf("Execute failed: %v", err)
+		} else if res.ResolvedModel != "gpt-5.4" {
+			t.Errorf("ResolvedModel = %q, want default %q", res.ResolvedModel, "gpt-5.4")
+		}
+
+		exec = &CodexExecutor{Model: "gpt-5.4"}
+		if res, err := exec.Execute(context.Background(), RunOptions{Prompt: "do work", Model: "gpt-5.4-mini"}); err != nil {
+			t.Fatalf("Execute failed: %v", err)
+		} else if res.ResolvedModel != "gpt-5.4-mini" {
+			t.Errorf("ResolvedModel = %q, want opts override %q", res.ResolvedModel, "gpt-5.4-mini")
+		}
+	})
+
+	t.Run("claude", func(t *testing.T) {
+		binDir, _ := testMockBinDir(t, "claude")
+		scriptPath := filepath.Join(binDir, "claude")
+		script := `#!/bin/sh
+printf '%s\n' '{"type":"system","session_id":"claude-sess"}'
+printf '%s\n' '{"type":"result","result":{"completed":true,"summary":"ok"}}'
+`
+		if err := os.WriteFile(scriptPath, []byte(script), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+		exec := &ClaudeExecutor{Model: "sonnet-4"}
+		if res, err := exec.Execute(context.Background(), RunOptions{Prompt: "do work"}); err != nil {
+			t.Fatalf("Execute failed: %v", err)
+		} else if res.ResolvedModel != "sonnet-4" {
+			t.Errorf("ResolvedModel = %q, want default %q", res.ResolvedModel, "sonnet-4")
+		}
+
+		exec = &ClaudeExecutor{Model: "sonnet-4"}
+		if res, err := exec.Execute(context.Background(), RunOptions{Prompt: "do work", Model: "haiku-4"}); err != nil {
+			t.Fatalf("Execute failed: %v", err)
+		} else if res.ResolvedModel != "haiku-4" {
+			t.Errorf("ResolvedModel = %q, want opts override %q", res.ResolvedModel, "haiku-4")
+		}
+	})
+
+	t.Run("opencode", func(t *testing.T) {
+		binDir, _ := testMockBinDir(t, "opencode")
+		scriptPath := filepath.Join(binDir, "opencode")
+		script := `#!/bin/sh
+printf '%s\n' '{"type":"text","part":{"type":"text","text":"{\"completed\":true,\"summary\":\"ok\"}"}}'
+`
+		if err := os.WriteFile(scriptPath, []byte(script), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+		exec := &OpenCodeExecutor{Model: "anthropic/claude-4"}
+		if res, err := exec.Execute(context.Background(), RunOptions{Prompt: "do work"}); err != nil {
+			t.Fatalf("Execute failed: %v", err)
+		} else if res.ResolvedModel != "anthropic/claude-4" {
+			t.Errorf("ResolvedModel = %q, want default %q", res.ResolvedModel, "anthropic/claude-4")
+		}
+
+		exec = &OpenCodeExecutor{Model: "anthropic/claude-4"}
+		if res, err := exec.Execute(context.Background(), RunOptions{Prompt: "do work", Model: "zai-coding-plan/glm-5.1"}); err != nil {
+			t.Fatalf("Execute failed: %v", err)
+		} else if res.ResolvedModel != "zai-coding-plan/glm-5.1" {
+			t.Errorf("ResolvedModel = %q, want opts override %q", res.ResolvedModel, "zai-coding-plan/glm-5.1")
+		}
+	})
+
+	t.Run("antigravity", func(t *testing.T) {
+		tmp := t.TempDir()
+		t.Setenv("HOME", filepath.Join(tmp, "home"))
+		binDir := filepath.Join(tmp, "bin")
+		if err := os.MkdirAll(binDir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		scriptPath := filepath.Join(binDir, "agy")
+		script := `#!/bin/sh
+printf '%s\n' '{"completed":true,"summary":"ok"}'
+`
+		if err := os.WriteFile(scriptPath, []byte(script), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+		exec := &AntigravityExecutor{Model: "Gemini 3.5 Flash (High)", PrintTimeout: time.Second}
+		if res, err := exec.Execute(context.Background(), RunOptions{Prompt: "do work"}); err != nil {
+			t.Fatalf("Execute failed: %v", err)
+		} else if res.ResolvedModel != "Gemini 3.5 Flash (High)" {
+			t.Errorf("ResolvedModel = %q, want default %q", res.ResolvedModel, "Gemini 3.5 Flash (High)")
+		}
+
+		exec = &AntigravityExecutor{Model: "Gemini 3.5 Flash (High)", PrintTimeout: time.Second}
+		if res, err := exec.Execute(context.Background(), RunOptions{Prompt: "do work", Model: "Gemini 3 Pro"}); err != nil {
+			t.Fatalf("Execute failed: %v", err)
+		} else if res.ResolvedModel != "Gemini 3 Pro" {
+			t.Errorf("ResolvedModel = %q, want opts override %q", res.ResolvedModel, "Gemini 3 Pro")
+		}
+	})
+}

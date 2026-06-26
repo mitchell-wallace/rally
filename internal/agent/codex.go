@@ -196,7 +196,7 @@ func (c *CodexExecutor) Execute(ctx context.Context, opts RunOptions) (*TryResul
 		os.Remove(reportPath)
 		execErr := fmt.Errorf("codex exec failed: %w\noutput: %s", err, string(out))
 		if ev := reliability.ParseCodexError(string(out)); ev != nil {
-			return &TryResult{Evidence: ev}, execErr
+			return &TryResult{Evidence: ev, ResolvedModel: model}, execErr
 		}
 		return nil, execErr
 	}
@@ -216,6 +216,7 @@ func (c *CodexExecutor) Execute(ctx context.Context, opts RunOptions) (*TryResul
 		tr.SessionID = streamSessionID
 	}
 	tr.ToolCalls = toolCalls
+	tr.ResolvedModel = model
 	c.setActiveSessionID(tr.SessionID)
 	return tr, nil
 }

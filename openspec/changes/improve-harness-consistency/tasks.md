@@ -20,11 +20,11 @@ NOTE: Implementation order: sections 2-9 (additive features) should ship first p
 
 ## 2. `ResolvedModel` on `TryResult` + runner-tag fix
 
-- [ ] 2.1 Add `ResolvedModel string` field to `agent.TryResult` in `internal/agent/executor.go:48` (NOT `internal/agent/agent.go`, which is an empty package file)
-- [ ] 2.2 Set `ResolvedModel` inside `CodexExecutor.Execute` (`internal/agent/codex.go:170-173`) from the `model` local after the `opts.Model` fallback
-- [ ] 2.3 Set `ResolvedModel` inside `ClaudeExecutor`, `OpenCodeExecutor`, and `AntigravityExecutor` from their respective resolved-model locals
-- [ ] 2.4 Update the three `runner`-tag construction sites (`internal/relay/runner.go:2107, 2420, 2997`) to call `telemetry.RunnerLabel(picked.Harness, firstNonEmpty(result.ResolvedModel, picked.Model))` via a small helper
-- [ ] 2.5 Tests: a route with a bare alias and an executor that populates `ResolvedModel` emits `runner = "<harness>:<resolved-model>"` (not the bare harness); a route with explicit model emits the same value as before; an empty `ResolvedModel` falls back to `picked.Model`
+- [x] 2.1 Add `ResolvedModel string` field to `agent.TryResult` in `internal/agent/executor.go:48` (NOT `internal/agent/agent.go`, which is an empty package file)
+- [x] 2.2 Set `ResolvedModel` inside `CodexExecutor.Execute` (`internal/agent/codex.go:170-173`) from the `model` local after the `opts.Model` fallback
+- [x] 2.3 Set `ResolvedModel` inside `ClaudeExecutor`, `OpenCodeExecutor`, and `AntigravityExecutor` from their respective resolved-model locals
+- [x] 2.4 Update the three `runner`-tag construction sites (`internal/relay/runner.go:2107, 2420, 2997`) to call `telemetry.RunnerLabel(picked.Harness, firstNonEmpty(result.ResolvedModel, picked.Model))` via a small helper
+- [x] 2.5 Tests: a route with a bare alias and an executor that populates `ResolvedModel` emits `runner = "<harness>:<resolved-model>"` (not the bare harness); a route with explicit model emits the same value as before; an empty `ResolvedModel` falls back to `picked.Model`
 
 ## 3. Populate `failure_evidence` on every classification path
 

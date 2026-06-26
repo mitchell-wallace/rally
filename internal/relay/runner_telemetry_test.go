@@ -192,3 +192,82 @@ func TestLapPinMismatchDiagnosticEventCarriesReasonWithoutFailureCategory(t *tes
 		t.Fatalf("base tags were mutated, failure_category = %q", base["failure_category"])
 	}
 }
+
+// TestRunnerLabel_ResolvedModelFallback exercises the exact composition the
+// three runner-tag sites use (runner.go:2107, 2420, 2997):
+//
+//	telemetry.RunnerLabel(picked.Harness, firstNonEmpty(result.ResolvedModel, picked.Model))
+//
+// It pins the three acceptance scenarios from tasks.md §2.5: a bare-alias route
+// (route-resolved model empty, executor populates ResolvedModel) emits the
+// resolved model; an explicit-model route emits the same value as before; an
+// empty ResolvedModel falls back to the route-resolved model.
+func TestRunnerLabel_ResolvedModelFallback(t *testing.T) {
+	tests := []struct {
+		name          string
+		harness       string
+		resolvedModel string // result.ResolvedModel
+		pickedModel   string // picked.Model (route-resolved)
+		want          string
+	}{
+		{
+			name:          "bare alias with resolved model",
+			harness:       "codex",
+			resolvedModel: "gpt-5.4",
+			pickedModel:   "", // bare-alias route resolved only to a harness
+			want:          "codex:gpt-5.4",
+		},
+		{
+			name:          "explicit model route same as before",
+			harness:       "codex",
+			resolvedModel: "gpt-5.4",
+			pickedModel:   "gpt-5.4",
+			want:          "codex:gpt-5.4",
+		},
+		{
+			name:          "empty resolved model falls back to picked model",
+			harness:       "claude",
+			resolvedModel: "",
+			pickedModel:   "claude-haiku-4-5",
+			want:          "claude:claude-haiku-4-5",
+		},
+		{
+			name:          "both empty collapses to bare harness",
+			harness:       "opencode",
+			resolvedModel: "",
+			pickedModel:   "",
+			want:          "opencode",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := telemetry.RunnerLabel(tt.harness, firstNonEmpty(tt.resolvedModel, tt.pickedModel))
+			if got != tt.want {
+				t.Errorf("runner label = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+// TestFirstNonEmpty mirrors the runner-tag model-resolution precedence and
+// guards against whitespace-only models leaking through.
+func TestFirstNonEmpty(t *testing.T) {
+	tests := []struct {
+		name   string
+		values []string
+		want   string
+	}{
+		{name: "first wins", values: []string{"a", "b"}, want: "a"},
+		{name: "skip empty", values: []string{"", "b", "c"}, want: "b"},
+		{name: "skip whitespace", values: []string{"  ", "b"}, want: "b"},
+		{name: "all empty", values: []string{"", "  ", ""}, want: ""},
+		{name: "none", values: nil, want: ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := firstNonEmpty(tt.values...); got != tt.want {
+				t.Errorf("firstNonEmpty(%v) = %q, want %q", tt.values, got, tt.want)
+			}
+		})
+	}
+}
