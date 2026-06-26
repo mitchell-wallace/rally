@@ -2719,7 +2719,12 @@ attemptLoop:
 		// failure — the agent process ended without `laps done`/`laps handoff`.
 		// Categorize it as incomplete_finalization and carry run/runner/budget and
 		// the last known attempt; this is not a provider-limit failure, so no
-		// quota/reset/raw-signal fields attach.
+		// quota/reset fields attach. Apply the Priority-3 dirty_tree
+		// FailureEvidence so the RallyFailure carries failure_evidence.source=
+		// dirty_tree with a bounded raw_signal (changed paths) and message. Prefer
+		// the classifier-produced evidence from the last attempt when it already
+		// resolved to dirty_tree; otherwise build equivalent bounded changed-path
+		// evidence from the dirty working tree.
 		fs := telemetry.FailureState{
 			Outcome:     string(reliability.OutcomeFailed),
 			Category:    string(reliability.CategoryIncompleteFinalization),
@@ -2727,6 +2732,11 @@ attemptLoop:
 			MaxAttempts: maxAttempts,
 			AgentState:  r.agentStateName(picked),
 		}
+		dirtyTreeEv := reliability.DirtyTreeEvidence(r.filesChangedList(nil, "", "", ""))
+		if resetEvidence != nil && resetEvidence.Source == "dirty_tree" {
+			dirtyTreeEv = resetEvidence
+		}
+		applyEvidenceToFailureState(&fs, dirtyTreeEv, "dirty_tree")
 		r.tel().CaptureFailure(ctx, fmt.Sprintf("relay %d run %d: agent exited without finalizing", relay.ID, runIndex+1),
 			failureStateEvent(telemetry.Tags(telemetry.EventInfo{
 				RelayID:  relay.ID,

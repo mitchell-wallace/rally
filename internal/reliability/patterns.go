@@ -301,6 +301,28 @@ func containsSubstring(lines []string, sub string) bool {
 //  5. Default unidentified_issue
 //
 // Unknown/unmatched errors default to FailureAgent (the does-not-freeze side).
+
+// DirtyTreeEvidence builds the Priority-3 dirty-tree incomplete-finalization
+// FailureEvidence from a bounded changed-paths list. It is the single source of
+// truth for the dirty_tree evidence shape: ClassifyError's Priority 3 path and
+// the runner's operator-worthy incomplete_finalization capture both build it
+// here, so a Priority-3 failure always emits failure_evidence.source=dirty_tree
+// with a non-empty, 256-rune-bounded raw_signal/message. When changedPaths is
+// empty the raw_signal falls back to the message verbatim so the
+// failure_evidence block still surfaces a non-empty diagnostic marker.
+func DirtyTreeEvidence(changedPaths []string) *FailureEvidence {
+	raw := truncateSignal(strings.Join(changedPaths, ", "), 256)
+	if strings.TrimSpace(raw) == "" {
+		raw = "agent exited without finalizing"
+	}
+	return &FailureEvidence{
+		Category:  CategoryIncompleteFinalization,
+		Message:   "agent exited without finalizing",
+		Source:    "dirty_tree",
+		RawSignal: raw,
+	}
+}
+
 func ClassifyError(logLines []string, harness string, ctx *ClassifyContext, evidence *FailureEvidence) StrategyDecision {
 	// ── Priority 1: Typed executor Evidence ──
 	// When the executor has already resolved a category, trust it.
@@ -355,19 +377,13 @@ func ClassifyError(logLines []string, harness string, ctx *ClassifyContext, evid
 
 	// ── Priority 3: Dirty-tree incomplete check ──
 	if ctx != nil && ctx.HasFileChanges && !ctx.Finalized {
-		ev := &FailureEvidence{
-			Category:  CategoryIncompleteFinalization,
-			Message:   "agent exited without finalizing",
-			Source:    "dirty_tree",
-			RawSignal: truncateSignal(strings.Join(ctx.ChangedPaths, ", "), 256),
-		}
 		return StrategyDecision{
 			Strategy:     StrategyResume,
 			Reason:       "incomplete: file changes without finalization",
 			FailureClass: FailureIncomplete,
 			Category:     CategoryIncompleteFinalization,
 			DisplayLabel: CategoryDisplayLabel(CategoryIncompleteFinalization),
-			Evidence:     ev,
+			Evidence:     DirtyTreeEvidence(ctx.ChangedPaths),
 		}
 	}
 

@@ -467,8 +467,110 @@ func TestRunOne_UnfinalizedAgent_CapturesIncompleteFinalization(t *testing.T) {
 	for _, k := range []string{"quota_scope", "reset_at", "reset_after"} {
 		wantNoTag(t, evt.Tags, k)
 	}
-	if _, ok := evt.Contexts["failure_evidence"]; ok {
-		t.Error("incomplete_finalization capture must not carry a failure_evidence context")
+	// The operator-worthy incomplete_finalization capture now carries the
+	// Priority-3 dirty_tree evidence so the RallyFailure surfaces a non-empty
+	// failure_evidence block (source/message/raw_signal). This run made no file
+	// changes, so the raw_signal falls back to the bounded diagnostic marker.
+	ev, ok := evt.Contexts["failure_evidence"]
+	if !ok {
+		t.Fatal("incomplete_finalization capture must carry a failure_evidence context with source=dirty_tree")
+	}
+	if ev["source"] != "dirty_tree" {
+		t.Fatalf("failure_evidence.source = %v, want dirty_tree", ev["source"])
+	}
+	if ev["message"] != "agent exited without finalizing" {
+		t.Fatalf("failure_evidence.message = %v, want agent exited without finalizing", ev["message"])
+	}
+	if raw, _ := ev["raw_signal"].(string); raw == "" {
+		t.Errorf("failure_evidence.raw_signal must be non-empty: %#v", ev)
+	}
+}
+
+// TestRunOne_UnfinalizedAgentDirtyTree_EmitsDirtyTreeEvidence drives the
+// genuine Priority-3 scenario: a laps-backed agent that makes real file changes
+// but exits without finalizing (no `laps done`/`laps handoff`). The
+// operator-worthy incomplete_finalization capture must reuse the classifier-/
+// bounded-changed-path evidence so the emitted RallyFailure carries
+// failure_evidence.source=dirty_tree with a non-empty raw_signal (the changed
+// paths) and message. (Tasks.md §3.10 / §9.6.)
+func TestRunOne_UnfinalizedAgentDirtyTree_EmitsDirtyTreeEvidence(t *testing.T) {
+	workspaceDir := t.TempDir()
+	rallyDir := store.RallyDir(workspaceDir)
+	os.MkdirAll(rallyDir, 0o755)
+	initRepo(t, workspaceDir)
+	runGit(t, workspaceDir, "commit", "--allow-empty", "-m", "initial", "--no-verify")
+
+	const changedPath = "feature.go"
+	s := newTestStore(t, rallyDir)
+	exec := &funcExecutor{
+		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+			// Real file change on disk — a dirty working tree — but no laps
+			// finalization (no laps done/handoff recorded). Written at the repo
+			// root so `git status --porcelain` reports the path individually.
+			if err := os.WriteFile(filepath.Join(workspaceDir, changedPath), []byte("package main\n"), 0o644); err != nil {
+				return nil, err
+			}
+			return &agent.TryResult{Completed: false, Summary: "did not finalize"}, nil
+		},
+	}
+
+	sink := &capturingSink{}
+	r := NewRunner(s, Config{
+		WorkspaceDir:     workspaceDir,
+		DataDir:          t.TempDir(),
+		AgentMixSpecs:    []string{"op:dsf"},
+		TargetIterations: 1,
+		RetryBudget:      1,
+		LapsEnabled:      true,
+		Resolver:         cheapTestResolver,
+	}, map[string]agent.Executor{"opencode": exec})
+	r.SetTelemetry(sink)
+
+	if _, err := r.runOne(
+		context.Background(),
+		&store.RelayRecord{ID: 1, TargetIterations: 1},
+		0,
+		agent.ResolvedAgent{Harness: "opencode", Model: cheapTestModel},
+		runTask{Name: "task", Prompt: "do work", Assignee: "senior", IsLapsBacked: true, LapID: "lap-1"},
+		nil, nil, false, false, nil, nil, io.Discard,
+	); err != nil {
+		t.Fatalf("runOne error = %v", err)
+	}
+
+	// The dirty-tree try failure is incomplete-class; it must not itself surface
+	// as a separate "failed:" Issue — only the unfinalized operator capture fires.
+	if got := findFailureCount(sink, "failed:"); got != 0 {
+		t.Fatalf("incomplete-class try failure became an Issue (%d captures); should stay span/log-only", got)
+	}
+
+	evt := findFailure(t, sink, "without finalizing")
+	wantTag(t, evt.Tags, "failure_category", "incomplete_finalization")
+	wantFingerprintCategory(t, evt, "incomplete_finalization")
+	// Provider-limit-only fields must not appear for incomplete_finalization.
+	for _, k := range []string{"quota_scope", "reset_at", "reset_after"} {
+		wantNoTag(t, evt.Tags, k)
+	}
+
+	ev, ok := evt.Contexts["failure_evidence"]
+	if !ok {
+		t.Fatal("incomplete_finalization capture must carry a failure_evidence context with source=dirty_tree")
+	}
+	if ev["source"] != "dirty_tree" {
+		t.Fatalf("failure_evidence.source = %v, want dirty_tree", ev["source"])
+	}
+	if ev["message"] != "agent exited without finalizing" {
+		t.Fatalf("failure_evidence.message = %v, want agent exited without finalizing", ev["message"])
+	}
+	raw, _ := ev["raw_signal"].(string)
+	if raw == "" {
+		t.Fatalf("failure_evidence.raw_signal must be non-empty: %#v", ev)
+	}
+	if !strings.Contains(raw, changedPath) {
+		t.Fatalf("failure_evidence.raw_signal = %q, want it to carry the changed path %q", raw, changedPath)
+	}
+	// The 256-rune bound (task §3.10) must hold for the surfaced raw_signal.
+	if n := len([]rune(raw)); n > 257 {
+		t.Fatalf("failure_evidence.raw_signal is %d runes, exceeds the 256-rune bound (+1 ellipsis)", n)
 	}
 }
 
@@ -1767,7 +1869,7 @@ func TestRunOne_TerminalTryFailure_ScrubsHomePathInRawSignal(t *testing.T) {
 // TestRunOne_UnfinalizedAgent_MultiAttemptBudget drives a laps-backed run with a
 // retry budget of 3 where the agent fails without finalizing on the second
 // attempt, and asserts the unfinalized capture carries the correct attempt and
-// budget values and no failure_evidence context.
+// budget values plus the Priority-3 dirty_tree failure_evidence.
 func TestRunOne_UnfinalizedAgent_MultiAttemptBudget(t *testing.T) {
 	s, workspaceDir, sink := setupRunnerForFailureTest(t)
 
@@ -1803,7 +1905,19 @@ func TestRunOne_UnfinalizedAgent_MultiAttemptBudget(t *testing.T) {
 	for _, k := range []string{"quota_scope", "reset_at", "reset_after"} {
 		wantNoTag(t, evt.Tags, k)
 	}
-	wantNoContext(t, evt, "failure_evidence")
+	// The unfinalized capture reuses the Priority-3 dirty_tree evidence; this run
+	// made no file changes so the raw_signal is the bounded diagnostic marker,
+	// but the source/message must still surface on the RallyFailure.
+	ev, ok := evt.Contexts["failure_evidence"]
+	if !ok {
+		t.Fatal("incomplete_finalization capture must carry a failure_evidence context with source=dirty_tree")
+	}
+	if ev["source"] != "dirty_tree" {
+		t.Fatalf("failure_evidence.source = %v, want dirty_tree", ev["source"])
+	}
+	if raw, _ := ev["raw_signal"].(string); raw == "" {
+		t.Errorf("failure_evidence.raw_signal must be non-empty: %#v", ev)
+	}
 }
 
 // TestRun_AllFrozen_CarriesRallyContext verifies the all-frozen relay stall

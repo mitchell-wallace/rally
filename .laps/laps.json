@@ -61,11 +61,11 @@
       "title": "Complete dirty_tree RallyFailure evidence",
       "description": "Task 3.10 remains incomplete. The runner's unfinalized operator capture at internal/relay/runner.go:2716-2739 emits failure_category=incomplete_finalization but never applies the Priority-3 dirty_tree FailureEvidence, so RallyFailure lacks failure_evidence.source/raw_signal/message. Update the operator-worthy incomplete_finalization capture to reuse the classifier-produced evidence (or equivalent bounded changed-path evidence) and add end-to-end tests proving Priority 3 emits RallyFailure failure_evidence.source=dirty_tree with non-empty raw_signal/message.",
       "assignee": "senior",
-      "isDone": false,
+      "isDone": true,
       "order": 262144,
       "createdAt": "2026-06-26T02:14:32.328465966Z",
-      "updatedAt": "2026-06-26T02:14:32.328465966Z",
-      "completedAt": null
+      "updatedAt": "2026-06-26T02:27:47.85142244Z",
+      "completedAt": "2026-06-26T02:27:47.85142244Z"
     },
     {
       "id": "work-e813",
