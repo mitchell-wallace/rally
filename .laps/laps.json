@@ -116,11 +116,11 @@
       "title": "Verify budget classification + RallyRoute telemetry",
       "description": "OpenSpec verification scoped to tasks.md §5 and §7. Use openspec-verify-change against improve-harness-consistency.\n\nIdentify the merge target (user / PR / repo docs / branch config / history — not assumed main) and the first lap of this batch before diffing; treat earlier branch work as pre-existing.\n\nTrace, do not just run tests: the two runner gate conditions and that a non-empty executor/classifier Category is genuinely respected (override does not fire); the EmitTryLog -\u003e EmitRouteEvent move at runner.go:830 and that the recovery-cap-hit RallyFailure capture is intact at 834; the coverage-test whitelist addition + count bump; confirm the telemetry-boundary guard fills outcome when missing.\n\nCheck off §5/§7 tasks.md boxes for verified-correct work; add a focused head lap for any substantive gap. No history rewriting.",
       "assignee": "VERIFY",
-      "isDone": false,
+      "isDone": true,
       "order": 589824,
       "createdAt": "2026-06-26T00:55:47.987905359Z",
-      "updatedAt": "2026-06-26T00:55:47.987905359Z",
-      "completedAt": null
+      "updatedAt": "2026-06-26T03:34:12.497905752Z",
+      "completedAt": "2026-06-26T03:34:12.497905752Z"
     },
     {
       "id": "rall-1f4b",
