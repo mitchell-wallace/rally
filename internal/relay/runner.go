@@ -250,7 +250,14 @@ func applyEvidenceToFailureState(fs *telemetry.FailureState, ev *reliability.Fai
 	}
 	fs.EvidenceRawSignal = ev.RawSignal
 	fs.EvidenceMessage = ev.Message
-	fs.EvidenceSource = source
+	// Prefer the evidence's own Source tag (set by the classification path)
+	// over the caller-supplied default — this is how dirty_tree / text_pattern
+	// / unmatched evidence propagates its source through to telemetry.
+	if ev.Source != "" {
+		fs.EvidenceSource = ev.Source
+	} else {
+		fs.EvidenceSource = source
+	}
 }
 
 func applySafeExecErrorEvidence(fs *telemetry.FailureState, err error) {

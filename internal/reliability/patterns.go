@@ -37,6 +37,8 @@ type ClassifyContext struct {
 	HasFileChanges bool
 	// Finalized indicates the agent called `laps done` or `laps handoff`.
 	Finalized bool
+	// ChangedPaths lists the files that changed during this try (for evidence).
+	ChangedPaths []string
 }
 
 type RetryStrategy string
@@ -63,6 +65,9 @@ type StrategyDecision struct {
 	// Carries no harness name unless the category is intentionally
 	// harness-specific.
 	DisplayLabel string
+	// Evidence is structured failure evidence populated by the classification
+	// path. Non-nil on every priority so callers can plumb it to telemetry.
+	Evidence *FailureEvidence
 }
 
 type Pattern struct {
@@ -302,11 +307,17 @@ func ClassifyError(logLines []string, harness string, ctx *ClassifyContext, evid
 	if evidence != nil && evidence.Category != "" {
 		cat := evidence.Category
 		class := CategoryToClass(cat)
+		// Default the source tag when the executor didn't set one.
+		ev := *evidence // shallow copy — don't mutate the caller's struct
+		if ev.Source == "" {
+			ev.Source = "executor_evidence"
+		}
 		decision := StrategyDecision{
 			Category:     cat,
 			FailureClass: class,
 			DisplayLabel: CategoryDisplayLabel(cat),
 			Reason:       string(cat),
+			Evidence:     &ev,
 		}
 		// Derive strategy from the category.
 		switch cat {
@@ -344,12 +355,19 @@ func ClassifyError(logLines []string, harness string, ctx *ClassifyContext, evid
 
 	// ── Priority 3: Dirty-tree incomplete check ──
 	if ctx != nil && ctx.HasFileChanges && !ctx.Finalized {
+		ev := &FailureEvidence{
+			Category: CategoryIncompleteFinalization,
+			Message:  "agent exited without finalizing",
+			Source:   "dirty_tree",
+			RawSignal: truncateSignal(strings.Join(ctx.ChangedPaths, ", "), 256),
+		}
 		return StrategyDecision{
 			Strategy:     StrategyResume,
 			Reason:       "incomplete: file changes without finalization",
 			FailureClass: FailureIncomplete,
 			Category:     CategoryIncompleteFinalization,
 			DisplayLabel: CategoryDisplayLabel(CategoryIncompleteFinalization),
+			Evidence:     ev,
 		}
 	}
 
@@ -370,12 +388,19 @@ func ClassifyError(logLines []string, harness string, ctx *ClassifyContext, evid
 			// feeds the freeze counter. This keeps e.g. the usage_limit pattern
 			// from incrementing infraFailures even though its text matches the
 			// rate-limit family.
+			ev := &FailureEvidence{
+				Category:  cat,
+				Source:    "text_pattern",
+				Message:   pattern.Name,
+				RawSignal: extractMatchingLine(logLines, pattern),
+			}
 			decision := StrategyDecision{
 				Strategy:     pattern.Strategy,
 				Reason:       pattern.Name,
 				FailureClass: CategoryToClass(cat),
 				Category:     cat,
 				DisplayLabel: CategoryDisplayLabel(cat),
+				Evidence:     ev,
 			}
 			if pattern.Extract != nil {
 				decision.Cooldown = pattern.Extract(logLines)
@@ -385,11 +410,47 @@ func ClassifyError(logLines []string, harness string, ctx *ClassifyContext, evid
 	}
 
 	// ── Priority 5: Default unidentified_issue ──
+	ev := &FailureEvidence{
+		Category:  CategoryUnidentifiedIssue,
+		Source:    "unmatched",
+		Message:   "no recognised provider signal",
+		RawSignal: logTailSignal(logLines),
+	}
 	return StrategyDecision{
 		Strategy:     StrategyFreshRestart,
 		Reason:       "unknown error",
 		FailureClass: FailureAgent,
 		Category:     CategoryUnidentifiedIssue,
 		DisplayLabel: CategoryDisplayLabel(CategoryUnidentifiedIssue),
+		Evidence:     ev,
 	}
 }
+
+// extractMatchingLine re-scans logLines after a pattern match to find
+// a representative matching line for RawSignal (design Open Q1: re-scan,
+// do NOT change the Pattern.Match API).
+func extractMatchingLine(logLines []string, p Pattern) string {
+	// Re-apply the match function on each individual line to find the
+	// first line that satisfies the pattern on its own.
+	for _, line := range logLines {
+		if p.Match([]string{line}) {
+			return truncateSignal(line, 256)
+		}
+	}
+	// If no single line matches (multi-line pattern), fall back to the
+	// bounded log tail.
+	return logTailSignal(logLines)
+}
+
+// logTailSignal returns a bounded tail of logLines as a RawSignal string.
+func logTailSignal(logLines []string) string {
+	// Take the last few lines to stay bounded.
+	const maxLines = 5
+	start := 0
+	if len(logLines) > maxLines {
+		start = len(logLines) - maxLines
+	}
+	tail := strings.Join(logLines[start:], "\n")
+	return truncateSignal(tail, 256)
+}
+

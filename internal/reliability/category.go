@@ -148,6 +148,10 @@ type FailureEvidence struct {
 	// Message is a human-readable, bounded description of the failure.
 	Message string
 
+	// Source identifies the classification path that produced this evidence.
+	// Values: "executor_evidence", "dirty_tree", "text_pattern", "unmatched".
+	Source string
+
 	// StatusCode is the HTTP status code if the failure was an HTTP error.
 	StatusCode int
 
