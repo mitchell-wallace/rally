@@ -112,6 +112,10 @@ func TestResolveOrCreateMachineID_EmptyDataDir(t *testing.T) {
 }
 
 func TestResolveOrCreateMachineID_UnwritableDir(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root can write to chmod-denied directories; permission fallback is not testable")
+	}
+
 	dir := t.TempDir()
 	unwritable := filepath.Join(dir, "readonly")
 
