@@ -138,11 +138,11 @@
       "title": "OpenCode budget-kill disk-log fallback (extend existing machinery)",
       "description": "Context: tasks.md §6, design Decision 9. OpenCode ALREADY has a disk-log fallback (attachOpenCodeFailureEvidence and friends, opencode.go:120-263) that today only extracts usage-limit / stream-error. EXTEND it — do not stand up a parallel mechanism. Depends on the §5 budget-kill lap (the override respects a non-empty Category).\n\nOutcome: budget-killed opencode tries with no parseable output get Source=\"opencode_disk_log\" evidence with a content-appropriate Category and a bounded structural tail.\n\nFiles \u0026 scope: internal/agent/opencode.go. The existing runErr != nil path already triggers attachOpenCodeFailureEvidence for budget-killed tries (exec.CommandContext kill -\u003e runErr; openCodeNeedsFailureEvidence true; parseOpenCodeOutput always returns non-nil TryResult) — NO new RunOptions flag needed; the gap is the filtering. Extend the filtering for the budget-killed case to ALSO keep level=WARN and level=ERROR lines plus structural message=created / message=\"loop session.id=\" / message=stream markers, bounded to 16 lines; explicitly skip per-token / per-tool-call / per-permission lines. Category by content: recognisable error shape -\u003e recognised category (usage_limit, auth_or_proxy, ...); parseable WARN/ERROR but no recognisable shape -\u003e agent_error; only structural markers -\u003e unidentified_issue (Message \"try budget exhausted; no parseable output\"). UPDATE the precedence at opencode.go:128-133: disk-log evidence NEVER replaces in-band evidence that already has a non-empty Category (the current `== CategoryAgentError` check is too permissive after the stricter agent_error semantics). 256-rune bound.\n\nAcceptance: tasks.md §6.5 (a)-(f): recognisable error -\u003e correct recognised category; WARN/ERROR no shape -\u003e agent_error with error lines in RawSignal; only structural -\u003e unidentified_issue + \"try budget exhausted; no parseable output\"; per-token lines never in RawSignal; 256-rune bound holds; existing usage-limit extraction still works (regression guard). Tests green.",
       "assignee": "SENIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 720896,
       "createdAt": "2026-06-26T00:55:47.98790973Z",
-      "updatedAt": "2026-06-26T00:55:47.98790973Z",
-      "completedAt": null
+      "updatedAt": "2026-06-28T02:06:25.574448229Z",
+      "completedAt": "2026-06-28T02:06:25.574448229Z"
     },
     {
       "id": "rall-5313",
