@@ -171,10 +171,21 @@
       "title": "Verify unified disk-log fallback contract (all four harnesses)",
       "description": "OpenSpec verification scoped to tasks.md §4, §6, §11, §12 (codex / opencode / claude / antigravity disk-log fallbacks). Use openspec-verify-change against improve-harness-consistency.\n\nIdentify the merge target (not assumed main) and the first lap of this batch before diffing; treat earlier branch work as pre-existing.\n\nThe contract to confirm across all four executors: every disk-log fallback yields a non-nil FailureEvidence with a non-empty Category (recognised or unidentified_issue), the correct Source marker (codex_session_log / codex_no_session_log / opencode_disk_log / claude_session_log / antigravity_glog), a \u003c=256-rune RawSignal, and — the headline risk — NO prompt / credential / token-payload content. Read the actual skip-lists in each parser (codex base_instructions+token_count+turn_context; claude user+thinking+tool_result bodies; antigravity I/W lines + credential paths; opencode per-token/per-permission), not just that tests pass. Confirm the codex no-session-log path resolves to harness_launch/FreshRestart/FailureInfra (not Rotate).\n\nCheck off §4/§6/§11/§12 tasks.md boxes for verified-correct, PII-safe work; add a focused head lap for any gap. No history rewriting.",
       "assignee": "VERIFY",
-      "isDone": false,
+      "isDone": true,
       "order": 917504,
       "createdAt": "2026-06-26T00:55:47.987914021Z",
-      "updatedAt": "2026-06-26T00:55:47.987914021Z",
+      "updatedAt": "2026-06-28T02:50:36.33018626Z",
+      "completedAt": "2026-06-28T02:50:36.33018626Z"
+    },
+    {
+      "id": "work-4106",
+      "title": "Fix OpenCode in-band precedence for server-log evidence",
+      "description": "Verification found a contract gap in improve-harness-consistency task 6.4.\n\nContext: openspec/changes/improve-harness-consistency/tasks.md 6.4 and specs/executor/spec.md \"Disk log fallback does not override in-band evidence\" require server-log-derived evidence to NEVER replace in-band Evidence when the in-band path already produced a non-empty Category. Current code in internal/agent/opencode.go:136-146 still does exactly that for the legacy stream-error path: if ParseOpencodeError returns CategoryAgentError from stdout/stderr and openCodeServerLogFailureEvidence finds usage_limit in the server log, attachOpenCodeFailureEvidence overwrites the in-band evidence. The regression guard at internal/agent/agent_test.go:1541-1578 codifies that override.\n\nOutcome: align OpenCode with the unified disk-log contract. Server-log evidence must not replace non-empty in-band Evidence. If preserving the usage-limit regression surface still matters, narrow the generic in-band ParseOpencodeError path so wrapper-only UnknownError output does not claim a specific Category before the server-log path runs. Update tests so they assert both halves of the contract: (a) no override once in-band Evidence has a real Category, and (b) usage-limit extraction still works when the in-band path has no usable category.",
+      "assignee": "SENIOR",
+      "isDone": false,
+      "order": 851968,
+      "createdAt": "2026-06-28T02:49:57.85037525Z",
+      "updatedAt": "2026-06-28T02:49:57.85037525Z",
       "completedAt": null
     },
     {
