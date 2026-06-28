@@ -182,11 +182,11 @@
       "title": "Fix OpenCode in-band precedence for server-log evidence",
       "description": "Verification found a contract gap in improve-harness-consistency task 6.4.\n\nContext: openspec/changes/improve-harness-consistency/tasks.md 6.4 and specs/executor/spec.md \"Disk log fallback does not override in-band evidence\" require server-log-derived evidence to NEVER replace in-band Evidence when the in-band path already produced a non-empty Category. Current code in internal/agent/opencode.go:136-146 still does exactly that for the legacy stream-error path: if ParseOpencodeError returns CategoryAgentError from stdout/stderr and openCodeServerLogFailureEvidence finds usage_limit in the server log, attachOpenCodeFailureEvidence overwrites the in-band evidence. The regression guard at internal/agent/agent_test.go:1541-1578 codifies that override.\n\nOutcome: align OpenCode with the unified disk-log contract. Server-log evidence must not replace non-empty in-band Evidence. If preserving the usage-limit regression surface still matters, narrow the generic in-band ParseOpencodeError path so wrapper-only UnknownError output does not claim a specific Category before the server-log path runs. Update tests so they assert both halves of the contract: (a) no override once in-band Evidence has a real Category, and (b) usage-limit extraction still works when the in-band path has no usable category.",
       "assignee": "SENIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 851968,
       "createdAt": "2026-06-28T02:49:57.85037525Z",
-      "updatedAt": "2026-06-28T02:49:57.85037525Z",
-      "completedAt": null
+      "updatedAt": "2026-06-28T03:12:32.089537049Z",
+      "completedAt": "2026-06-28T03:12:32.089537049Z"
     },
     {
       "id": "work-f61a",
