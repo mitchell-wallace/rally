@@ -197,20 +197,24 @@ func openCodeServerLogFailureEvidence(opts RunOptions, tr *TryResult, model stri
 
 	// First try the existing usage-limit extraction path (unchanged).
 	if len(sessionIDs) > 0 {
-		if ev := openCodeEvidenceFromServerLog(streamErrors, model, func(fields map[string]string) bool {
-			_, ok := sessionIDs[openCodeSessionID(fields)]
+		matchSession := func(fields map[string]string) bool {
+			_, ok := sessionIDs[openCodeLogEntrySessionID(fields)]
 			return ok
-		}); ev != nil {
+		}
+		if ev := openCodeEvidenceFromServerLog(streamErrors, model, matchSession); ev != nil {
+			openCodeAnnotateServerLogEvidence(ev, openCodeFilterServerLogEntries(noteworthyLines, matchSession))
 			return ev
 		}
 	}
 	if providerID != "" {
-		if ev := openCodeEvidenceFromServerLog(streamErrors, model, func(fields map[string]string) bool {
-			if knownSessionID != "" && openCodeSessionID(fields) != knownSessionID {
+		matchProvider := func(fields map[string]string) bool {
+			if knownSessionID != "" && openCodeLogEntrySessionID(fields) != knownSessionID {
 				return false
 			}
 			return fields["providerID"] == providerID
-		}); ev != nil {
+		}
+		if ev := openCodeEvidenceFromServerLog(streamErrors, model, matchProvider); ev != nil {
+			openCodeAnnotateServerLogEvidence(ev, openCodeFilterServerLogEntries(noteworthyLines, matchProvider))
 			return ev
 		}
 	}
@@ -221,6 +225,43 @@ func openCodeServerLogFailureEvidence(opts RunOptions, tr *TryResult, model stri
 		return ev
 	}
 	return nil
+}
+
+func openCodeAnnotateServerLogEvidence(ev *reliability.FailureEvidence, entries []openCodeServerLogEntry) {
+	if ev == nil {
+		return
+	}
+	ev.Source = openCodeDiskLogSource
+	if rawSignal := openCodeServerLogRawSignal(entries); rawSignal != "" {
+		ev.RawSignal = rawSignal
+	}
+}
+
+func openCodeFilterServerLogEntries(entries []openCodeServerLogEntry, match func(map[string]string) bool) []openCodeServerLogEntry {
+	if len(entries) == 0 {
+		return nil
+	}
+	var matched []openCodeServerLogEntry
+	for _, entry := range entries {
+		if match(entry.fields) {
+			matched = append(matched, entry)
+		}
+	}
+	return matched
+}
+
+func openCodeServerLogRawSignal(entries []openCodeServerLogEntry) string {
+	if len(entries) == 0 {
+		return ""
+	}
+	if len(entries) > openCodeDiskLogMaxLines {
+		entries = entries[len(entries)-openCodeDiskLogMaxLines:]
+	}
+	var rawParts []string
+	for _, entry := range entries {
+		rawParts = append(rawParts, entry.raw)
+	}
+	return openCodeTruncateTailSignal(strings.Join(rawParts, "\n"), 256)
 }
 
 func readOpenCodeServerLogTail() ([]byte, error) {
@@ -424,7 +465,7 @@ func openCodeDiskLogEvidence(entries []openCodeServerLogEntry, model string) *re
 	for _, e := range entries {
 		rawParts = append(rawParts, e.raw)
 	}
-	rawSignal := reliability.TruncateSignal(strings.Join(rawParts, "\n"), 256)
+	rawSignal := openCodeTruncateTailSignal(strings.Join(rawParts, "\n"), 256)
 
 	// Try to recognise a specific error shape from the error lines.
 	if len(errorLines) > 0 {
@@ -513,6 +554,15 @@ func openCodeFlatErrorValue(line string) string {
 		return rest[:end]
 	}
 	return rest
+}
+
+func openCodeTruncateTailSignal(s string, maxRunes int) string {
+	s = strings.TrimSpace(s)
+	runes := []rune(s)
+	if len(runes) <= maxRunes {
+		return s
+	}
+	return "…" + string(runes[len(runes)-maxRunes:])
 }
 
 func openCodeLogLineInWindow(ts time.Time, startedAt, endedAt time.Time) bool {

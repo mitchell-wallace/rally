@@ -193,11 +193,11 @@
       "title": "Re-verify OpenCode disk-log contract after precedence fix",
       "description": "OpenSpec re-verification for improve-harness-consistency task 6.4 after work-4106. Confirm the real executor path in internal/agent/opencode.go now satisfies the full disk-log contract, not just the helper-level tests: (1) server-log-derived evidence NEVER replaces non-empty in-band Evidence; (2) the recognized stream-error/server-log path also emits Source = \"opencode_disk_log\" and a bounded filtered-tail RawSignal, instead of the legacy empty-Source ParseOpencodeError result from openCodeEvidenceFromServerLog; (3) budget-killed recognized usage-limit/auth shapes still classify correctly; (4) per-token/per-permission noise still stays out of RawSignal. Re-check openspec/changes/improve-harness-consistency/tasks.md section 6 and only mark 6.4 done once the executor-level path matches specs/executor/spec.md \"Disk log fallback does not override in-band evidence\" end to end.",
       "assignee": "VERIFY",
-      "isDone": false,
+      "isDone": true,
       "order": 917504,
       "createdAt": "2026-06-28T03:05:52.5902834Z",
-      "updatedAt": "2026-06-28T03:05:52.5902834Z",
-      "completedAt": null
+      "updatedAt": "2026-06-28T03:21:43.420187975Z",
+      "completedAt": "2026-06-28T03:21:43.420187975Z"
     },
     {
       "id": "rall-dff0",

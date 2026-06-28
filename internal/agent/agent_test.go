@@ -1292,6 +1292,21 @@ exit 1
 	if tr.Evidence.ResetAfter != 7*24*time.Hour {
 		t.Errorf("ResetAfter = %v, want 168h", tr.Evidence.ResetAfter)
 	}
+	if tr.Evidence.Source != openCodeDiskLogSource {
+		t.Errorf("Source = %q, want %q", tr.Evidence.Source, openCodeDiskLogSource)
+	}
+	if tr.Evidence.RawSignal == "" {
+		t.Fatal("expected bounded disk-log RawSignal")
+	}
+	if !strings.Contains(tr.Evidence.RawSignal, "ses_right") {
+		t.Errorf("RawSignal = %q, want matched session tail", tr.Evidence.RawSignal)
+	}
+	if strings.Contains(tr.Evidence.RawSignal, "ses_other") {
+		t.Errorf("RawSignal = %q, must not include other sessions", tr.Evidence.RawSignal)
+	}
+	if got := len([]rune(tr.Evidence.RawSignal)); got > 257 {
+		t.Errorf("RawSignal rune length = %d, want <= 257 (256 + ellipsis)", got)
+	}
 }
 
 func TestOpenCodeExecutor_ServerLogTailEvidenceByProviderWindowFallback(t *testing.T) {
@@ -1351,6 +1366,23 @@ exit 1
 	}
 	if tr.Evidence.ResetAt != nil {
 		t.Errorf("ResetAt = %v, want nil (wrong provider's absolute reset must be ignored)", tr.Evidence.ResetAt)
+	}
+	if tr.Evidence.Source != openCodeDiskLogSource {
+		t.Errorf("Source = %q, want %q", tr.Evidence.Source, openCodeDiskLogSource)
+	}
+	if tr.Evidence.RawSignal == "" {
+		t.Fatal("expected bounded disk-log RawSignal")
+	}
+	if !strings.Contains(tr.Evidence.RawSignal, "ses_right_provider") {
+		t.Errorf("RawSignal = %q, want provider-matched tail", tr.Evidence.RawSignal)
+	}
+	for _, forbidden := range []string{"ses_stale", "zai-coding-plan"} {
+		if strings.Contains(tr.Evidence.RawSignal, forbidden) {
+			t.Errorf("RawSignal = %q, must not include %q", tr.Evidence.RawSignal, forbidden)
+		}
+	}
+	if got := len([]rune(tr.Evidence.RawSignal)); got > 257 {
+		t.Errorf("RawSignal rune length = %d, want <= 257 (256 + ellipsis)", got)
 	}
 }
 
@@ -1700,6 +1732,66 @@ exit 1
 	}
 }
 
+func TestOpenCodeExecutor_DiskLogFallback_BudgetKilledRecognizedAuth(t *testing.T) {
+	tmp := t.TempDir()
+	binDir := filepath.Join(tmp, "bin")
+	if err := os.MkdirAll(binDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	scriptPath := filepath.Join(binDir, "opencode")
+	script := `#!/bin/sh
+exit 1
+`
+	if err := os.WriteFile(scriptPath, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	workspaceDir := filepath.Join(tmp, "workspace")
+	if err := os.MkdirAll(workspaceDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	serverLogPath := filepath.Join(tmp, "opencode.log")
+	oldServerLogPath := openCodeServerLogPath
+	openCodeServerLogPath = func() string { return serverLogPath }
+	t.Cleanup(func() { openCodeServerLogPath = oldServerLogPath })
+
+	ts := time.Now().UTC().Format(time.RFC3339Nano)
+	logText := strings.Join([]string{
+		fmt.Sprintf(`timestamp=%s level=INFO message=created id=ses_auth directory="%s"`, ts, workspaceDir),
+		fmt.Sprintf(`timestamp=%s level=INFO message="loop session.id=ses_auth"`, ts),
+		fmt.Sprintf(`timestamp=%s level=ERROR message="API key invalid" providerID=opencode-go session.id=ses_auth`, ts),
+		fmt.Sprintf(`timestamp=%s level=WARN message="permission granted" providerID=opencode-go session.id=ses_auth`, ts),
+	}, "\n")
+	if err := os.WriteFile(serverLogPath, []byte(logText), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	exec := &OpenCodeExecutor{Model: "opencode-go/kimi"}
+	tr, err := exec.Execute(context.Background(), RunOptions{Prompt: "do work", WorkspaceDir: workspaceDir})
+	if err == nil {
+		t.Fatal("expected error from opencode mock")
+	}
+	if tr == nil {
+		t.Fatal("expected TryResult, got nil")
+	}
+	if tr.Evidence == nil {
+		t.Fatal("expected disk-log evidence")
+	}
+	if tr.Evidence.Source != openCodeDiskLogSource {
+		t.Errorf("Source = %q, want %q", tr.Evidence.Source, openCodeDiskLogSource)
+	}
+	if tr.Evidence.Category != reliability.CategoryAuthOrProxy {
+		t.Errorf("Category = %q, want %q", tr.Evidence.Category, reliability.CategoryAuthOrProxy)
+	}
+	if !strings.Contains(tr.Evidence.RawSignal, "API key invalid") {
+		t.Errorf("RawSignal = %q, want auth error line", tr.Evidence.RawSignal)
+	}
+	if strings.Contains(tr.Evidence.RawSignal, "permission granted") {
+		t.Errorf("RawSignal = %q, must not contain permission noise", tr.Evidence.RawSignal)
+	}
+}
+
 // Test noteworthy line filter.
 func TestOpenCodeIsNoteworthyLogLine(t *testing.T) {
 	for _, tc := range []struct {
@@ -1741,15 +1833,14 @@ func TestOpenCodeDiskLog_MaxLinesCap(t *testing.T) {
 	if ev.Message != "warning 29" {
 		t.Errorf("Message = %q, want 'warning 29' (last entry should be used)", ev.Message)
 	}
-	// RawSignal starts from the capped tail. It won't contain the earliest
-	// entries because those are trimmed by the 16-line cap. The first kept
-	// entry is warning 14. RawSignal itself is then bounded to 256 runes,
-	// so we check the start rather than the end.
+	// RawSignal is built from the capped tail and then tail-bounded to 256
+	// runes, so the most recent warnings must survive while earlier ones can
+	// fall off.
 	if strings.Contains(ev.RawSignal, "warning 0\"") {
 		t.Error("expected earliest warnings (0-13) to be trimmed by 16-line cap")
 	}
-	if !strings.Contains(ev.RawSignal, "warning 14") {
-		t.Error("expected warning 14 (first of the last 16) in RawSignal")
+	if !strings.Contains(ev.RawSignal, "warning 29") {
+		t.Error("expected warning 29 (most recent entry) in RawSignal")
 	}
 }
 
