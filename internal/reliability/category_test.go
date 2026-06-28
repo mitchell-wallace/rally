@@ -87,7 +87,7 @@ func TestCategoryDisplayLabel_AllCategories(t *testing.T) {
 func TestCategoryDisplayLabel_NoHarnessName(t *testing.T) {
 	// Display labels must not contain harness names unless the category is
 	// intentionally harness-specific (none currently are).
-	harnessNames := []string{"claude", "codex", "gemini", "antigravity", "opencode"}
+	harnessNames := []string{"claude", "codex", "antigravity", "opencode"}
 
 	for _, cat := range AllCategories {
 		label := CategoryDisplayLabel(cat)

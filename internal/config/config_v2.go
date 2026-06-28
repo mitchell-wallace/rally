@@ -44,8 +44,6 @@ var builtInAliases = map[string]string{
 	"claude":      "claude",
 	"cx":          "codex",
 	"codex":       "codex",
-	"ge":          "gemini",
-	"gemini":      "gemini",
 	"op":          "opencode",
 	"opencode":    "opencode",
 }
@@ -54,7 +52,6 @@ var builtInHarnessLookupOrder = map[string][]string{
 	"antigravity": {"antigravity", "ag", "agy"},
 	"claude":      {"claude", "cc"},
 	"codex":       {"codex", "cx"},
-	"gemini":      {"gemini", "ge"},
 	"opencode":    {"opencode", "op"},
 }
 
@@ -64,12 +61,48 @@ var builtInCanonical = map[string]bool{
 	"antigravity": true,
 	"cc":          true,
 	"cx":          true,
-	"ge":          true,
 	"op":          true,
 	"claude":      true,
 	"codex":       true,
-	"gemini":      true,
 	"opencode":    true,
+}
+
+type RemovedGeminiAliasError struct {
+	Alias string
+}
+
+func (e RemovedGeminiAliasError) Error() string {
+	return fmt.Sprintf("removed agent alias %q: the gemini CLI harness was removed; configure antigravity (ag) instead", e.Alias)
+}
+
+func RemovedGeminiAlias(err error) (string, bool) {
+	var removed RemovedGeminiAliasError
+	if errors.As(err, &removed) {
+		return removed.Alias, true
+	}
+	return "", false
+}
+
+func RemovedGeminiAliasWarning(role, routeEntry, alias string) string {
+	role = strings.TrimSpace(role)
+	routeEntry = strings.TrimSpace(routeEntry)
+	alias = strings.TrimSpace(alias)
+	if role == "" {
+		role = "(unknown role)"
+	}
+	if routeEntry == "" {
+		routeEntry = alias
+	}
+	return fmt.Sprintf("route %q entry %q uses removed gemini alias %q; replace it with antigravity (ag)", role, routeEntry, alias)
+}
+
+func isRemovedGeminiAlias(name string) bool {
+	switch strings.ToLower(strings.TrimSpace(name)) {
+	case "ge", "gemini":
+		return true
+	default:
+		return false
+	}
 }
 
 type DefaultsConfig struct {
@@ -77,7 +110,6 @@ type DefaultsConfig struct {
 	Mix              string `toml:"mix,omitempty"`
 	ClaudeModel      string `toml:"claude_model,omitempty"`
 	CodexModel       string `toml:"codex_model,omitempty"`
-	GeminiModel      string `toml:"gemini_model,omitempty"`
 	OpenCodeModel    string `toml:"opencode_model,omitempty"`
 	AntigravityModel string `toml:"antigravity_model,omitempty"`
 }
@@ -191,7 +223,6 @@ type TelemetryConfig struct {
 type V2Config struct {
 	ClaudeModel          string
 	CodexModel           string
-	GeminiModel          string
 	OpenCodeModel        string
 	AntigravityModel     string
 	SchemaVersion        int
@@ -220,7 +251,6 @@ type rawFallbackAlias struct {
 type rawConfig struct {
 	ClaudeModel          string `toml:"claude_model,omitempty"`
 	CodexModel           string `toml:"codex_model,omitempty"`
-	GeminiModel          string `toml:"gemini_model,omitempty"`
 	OpenCodeModel        string `toml:"opencode_model,omitempty"`
 	AntigravityModel     string `toml:"antigravity_model,omitempty"`
 	SchemaVersion        int    `toml:"schema_version,omitempty"`
@@ -452,7 +482,6 @@ func decodeV2(data []byte) (V2Config, error) {
 	fields := []modelField{
 		{"claude_model", raw.ClaudeModel, raw.Defaults.ClaudeModel, func(v string) { cfg.ClaudeModel = v }},
 		{"codex_model", raw.CodexModel, raw.Defaults.CodexModel, func(v string) { cfg.CodexModel = v }},
-		{"gemini_model", raw.GeminiModel, raw.Defaults.GeminiModel, func(v string) { cfg.GeminiModel = v }},
 		{"opencode_model", raw.OpenCodeModel, raw.Defaults.OpenCodeModel, func(v string) { cfg.OpenCodeModel = v }},
 		{"antigravity_model", raw.AntigravityModel, raw.Defaults.AntigravityModel, func(v string) { cfg.AntigravityModel = v }},
 	}
@@ -524,6 +553,9 @@ func harnessConfigWarnings(harnesses map[string]*HarnessConfig) []string {
 
 func validateHarnesses(harnesses map[string]*HarnessConfig) error {
 	for name, h := range harnesses {
+		if isRemovedGeminiAlias(name) {
+			continue
+		}
 		if !harnessNamePattern.MatchString(name) {
 			return fmt.Errorf("config: invalid harness name %q: must match ^[A-Za-z][A-Za-z0-9_-]*$", name)
 		}
@@ -633,8 +665,6 @@ func (c V2Config) defaultModelForHarness(harness string) string {
 		return c.ClaudeModel
 	case "codex":
 		return c.CodexModel
-	case "gemini":
-		return c.GeminiModel
 	case "opencode":
 		return c.OpenCodeModel
 	case "antigravity":
@@ -651,6 +681,9 @@ func (c V2Config) ResolveAgent(spec string) (agent.ResolvedAgent, error) {
 	}
 
 	alias := parts[0]
+	if isRemovedGeminiAlias(alias) {
+		return agent.ResolvedAgent{}, RemovedGeminiAliasError{Alias: alias}
+	}
 	harness, ok := builtInAliases[alias]
 	if !ok {
 		if c.Harnesses != nil {
@@ -728,6 +761,9 @@ func (c V2Config) ResolveRoleReasoning(role, selectedHarness, preference string)
 
 func canonicalHarnessName(name string) string {
 	name = strings.TrimSpace(name)
+	if isRemovedGeminiAlias(name) {
+		return ""
+	}
 	if mapped, ok := builtInAliases[strings.ToLower(name)]; ok {
 		return mapped
 	}
@@ -739,6 +775,9 @@ func (c V2Config) lookupModelAlias(harness, preferredAlias, modelName string) (s
 		return "", false
 	}
 	for _, key := range harnessLookupKeys(harness, preferredAlias) {
+		if isRemovedGeminiAlias(key) {
+			continue
+		}
 		h := c.Harnesses[key]
 		if h == nil || h.Models == nil {
 			continue
@@ -755,6 +794,9 @@ func (c V2Config) modelAliasNamesForHarness(harness, preferredAlias string) []st
 	names := []string{}
 	seen := map[string]bool{}
 	for _, key := range harnessLookupKeys(harness, preferredAlias) {
+		if isRemovedGeminiAlias(key) {
+			continue
+		}
 		h := c.Harnesses[key]
 		if h == nil || h.Models == nil {
 			continue
@@ -920,7 +962,6 @@ func SaveV2File(path string, cfg V2Config) error {
 			Mix:              cfg.Defaults.Mix,
 			ClaudeModel:      effectiveModel(cfg.ClaudeModel, cfg.Defaults.ClaudeModel),
 			CodexModel:       effectiveModel(cfg.CodexModel, cfg.Defaults.CodexModel),
-			GeminiModel:      effectiveModel(cfg.GeminiModel, cfg.Defaults.GeminiModel),
 			OpenCodeModel:    effectiveModel(cfg.OpenCodeModel, cfg.Defaults.OpenCodeModel),
 			AntigravityModel: effectiveModel(cfg.AntigravityModel, cfg.Defaults.AntigravityModel),
 		},

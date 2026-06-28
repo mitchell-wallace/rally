@@ -192,7 +192,7 @@ opencode_go = ['op:opencode-go/*']
 	}
 }
 
-func TestLoadV2_Providers_BareAliasAmbiguous(t *testing.T) {
+func TestLoadV2_Providers_RemovedGeminiHarnessAliasIgnored(t *testing.T) {
 	dir := t.TempDir()
 	writeConfig(t, dir, `schema_version = 2
 
@@ -205,9 +205,19 @@ foo = 'gemini-foo'
 [providers]
 mix = ['foo']
 `)
-	_, err := LoadV2(dir)
-	if err == nil || !strings.Contains(err.Error(), "ambiguous model alias") {
-		t.Fatalf("expected ambiguous alias error, got %v", err)
+	cfg, err := LoadV2(dir)
+	if err != nil {
+		t.Fatalf("LoadV2 failed: %v", err)
+	}
+	idx, err := cfg.BuildProviderIndex()
+	if err != nil {
+		t.Fatalf("BuildProviderIndex: %v", err)
+	}
+	if got, want := idx.QuotaScope("codex", "gpt-foo"), "provider:mix"; got != want {
+		t.Fatalf("QuotaScope(codex/gpt-foo) = %q, want %q", got, want)
+	}
+	if _, ok := idx.ProviderFor("gemini", "gemini-foo"); ok {
+		t.Fatal("removed gemini harness table should not contribute provider members")
 	}
 }
 

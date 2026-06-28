@@ -64,7 +64,6 @@ func runConfig(cmd *cobra.Command, _ []string) error {
 	iterations := strconv.Itoa(cfg.Defaults.Iterations)
 	claudeModel := cfg.ClaudeModel
 	codexModel := cfg.CodexModel
-	geminiModel := cfg.GeminiModel
 	openCodeModel := cfg.OpenCodeModel
 	antigravityModel := cfg.AntigravityModel
 
@@ -108,7 +107,6 @@ func runConfig(cmd *cobra.Command, _ []string) error {
 		huh.NewNote().Title("Default models").Description("Leave blank to inherit the harness's own default."),
 		huh.NewInput().Title("claude_model").Value(&claudeModel),
 		huh.NewInput().Title("codex_model").Value(&codexModel),
-		huh.NewInput().Title("gemini_model").Value(&geminiModel),
 		huh.NewInput().Title("opencode_model").Value(&openCodeModel),
 		huh.NewInput().Title("antigravity_model").Value(&antigravityModel),
 	)
@@ -160,12 +158,10 @@ func runConfig(cmd *cobra.Command, _ []string) error {
 	}
 	cfg.ClaudeModel = strings.TrimSpace(claudeModel)
 	cfg.CodexModel = strings.TrimSpace(codexModel)
-	cfg.GeminiModel = strings.TrimSpace(geminiModel)
 	cfg.OpenCodeModel = strings.TrimSpace(openCodeModel)
 	cfg.AntigravityModel = strings.TrimSpace(antigravityModel)
 	cfg.Defaults.ClaudeModel = cfg.ClaudeModel
 	cfg.Defaults.CodexModel = cfg.CodexModel
-	cfg.Defaults.GeminiModel = cfg.GeminiModel
 	cfg.Defaults.OpenCodeModel = cfg.OpenCodeModel
 	cfg.Defaults.AntigravityModel = cfg.AntigravityModel
 
@@ -245,7 +241,7 @@ func promptHarnesses(cmd *cobra.Command, cfg config.V2Config) error {
 		var name string
 		nameForm := huh.NewForm(
 			huh.NewGroup(
-				huh.NewInput().Title("Harness name").Description("Built-in: antigravity/claude/codex/gemini/opencode. Or invent a new one. Blank to stop.").Value(&name),
+				huh.NewInput().Title("Harness name").Description("Built-in: antigravity/claude/codex/opencode. Or invent a new one. Blank to stop.").Value(&name),
 			),
 		).WithShowHelp(false).WithInput(cmd.InOrStdin()).WithOutput(cmd.OutOrStderr())
 		if err := nameForm.Run(); err != nil {

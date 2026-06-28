@@ -94,7 +94,6 @@ func ParseAgentMix(specs []string, resolver Resolver) (AgentMix, error) {
 				"ag": "antigravity", "agy": "antigravity", "antigravity": "antigravity",
 				"cc": "claude", "claude": "claude",
 				"cx": "codex", "codex": "codex",
-				"ge": "gemini", "gemini": "gemini",
 				"op": "opencode", "opencode": "opencode",
 			}
 			parts := strings.SplitN(spec, ":", 2)

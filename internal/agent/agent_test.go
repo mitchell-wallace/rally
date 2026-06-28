@@ -455,118 +455,6 @@ func TestParseClaudeOutput_BoundsFinalTextFallback(t *testing.T) {
 	}
 }
 
-func TestParseGeminiOutput_Valid(t *testing.T) {
-	out := []byte(`{"response":"{\"completed\":true,\"summary\":\"hello\"}","session_id":"abc","stats":{}}`)
-	tr, err := parseGeminiOutput(out)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !tr.Completed {
-		t.Error("expected completed")
-	}
-	if tr.Summary != "hello" {
-		t.Errorf("expected summary 'hello', got %q", tr.Summary)
-	}
-}
-
-func TestParseGeminiOutput_MissingResponse(t *testing.T) {
-	out := []byte(`{"session_id":"abc","stats":{}}`)
-	tr, err := parseGeminiOutput(out)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if tr.Completed {
-		t.Error("expected not completed")
-	}
-	if tr.Summary != geminiMissingResponseSummary {
-		t.Errorf("summary = %q, want %q", tr.Summary, geminiMissingResponseSummary)
-	}
-}
-
-func TestParseGeminiOutput_CompletedFalse(t *testing.T) {
-	out := []byte(`{"response":"{\"completed\":false,\"summary\":\"still working\"}","session_id":"abc","stats":{}}`)
-	tr, err := parseGeminiOutput(out)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if tr.Completed {
-		t.Error("expected not completed when agent reports false")
-	}
-	if tr.Summary != "still working" {
-		t.Errorf("expected summary 'still working', got %q", tr.Summary)
-	}
-}
-
-func TestParseGeminiOutput_MalformedJSON(t *testing.T) {
-	out := []byte(`{"response":"not json content","session_id":"abc","stats":{}}`)
-	tr, err := parseGeminiOutput(out)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !tr.Completed {
-		t.Error("expected completed fallback for malformed inner JSON")
-	}
-	if tr.Summary != "not json content" {
-		t.Errorf("expected final response text in summary, got %q", tr.Summary)
-	}
-}
-
-func TestParseGeminiOutput_MalformedWrapperDoesNotLeakRawOutput(t *testing.T) {
-	out := []byte(`raw transcript that must not leak`)
-	tr, err := parseGeminiOutput(out)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if tr.Completed {
-		t.Error("expected malformed wrapper to remain incomplete")
-	}
-	if tr.Summary != geminiUnparseableOutputSummary {
-		t.Errorf("summary = %q, want %q", tr.Summary, geminiUnparseableOutputSummary)
-	}
-	if strings.Contains(tr.Summary, "raw transcript") {
-		t.Errorf("summary leaked raw output: %q", tr.Summary)
-	}
-}
-
-func TestParseGeminiOutput_MissingStructuredSummary(t *testing.T) {
-	out := []byte(`{"response":"{\"completed\":true}","session_id":"abc","stats":{"tools":{"totalCalls":2}}}`)
-	tr, err := parseGeminiOutput(out)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if tr.Completed {
-		t.Error("expected response without summary to remain incomplete")
-	}
-	if tr.Summary != geminiMissingSummary {
-		t.Errorf("summary = %q, want %q", tr.Summary, geminiMissingSummary)
-	}
-	if tr.ToolCalls != 2 {
-		t.Errorf("tool calls = %d, want 2", tr.ToolCalls)
-	}
-}
-
-func TestParseGeminiOutput_BoundsFinalTextFallback(t *testing.T) {
-	finalText := strings.Repeat("start ", executorFinalTextRuneLimit) + "useful tail"
-	out, err := json.Marshal(geminiWrapper{Response: finalText, SessionID: "abc"})
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	tr, err := parseGeminiOutput(out)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !tr.Completed {
-		t.Error("expected final assistant text fallback to be completed")
-	}
-	if got := len([]rune(tr.Summary)); got > executorFinalTextRuneLimit {
-		t.Fatalf("summary rune length = %d, want <= %d", got, executorFinalTextRuneLimit)
-	}
-	if !strings.Contains(tr.Summary, "useful tail") {
-		t.Errorf("summary = %q, want useful tail", tr.Summary)
-	}
-}
-
 func TestParseOpenCodeOutput_Valid(t *testing.T) {
 	out := []byte(`{"type":"text","part":{"type":"text","text":"{\"completed\":true,\"summary\":\"text1\"}"}}`)
 	tr, err := parseOpenCodeOutput(out, true)
@@ -639,7 +527,6 @@ func TestResumeSupportImpliesSessionCapture(t *testing.T) {
 		"codex":       &CodexExecutor{},
 		"opencode":    &OpenCodeExecutor{},
 		"antigravity": &AntigravityExecutor{},
-		"gemini":      &GeminiExecutor{},
 		"generic":     &GenericExecutor{},
 		"fixture":     &FixtureExecutor{},
 	}
@@ -1172,17 +1059,6 @@ func TestCodexAdapter_CountsToolItems(t *testing.T) {
 	}
 	if toolCalls != 3 {
 		t.Errorf("toolCalls = %d, want 3 (2 command_execution + 1 file_change)", toolCalls)
-	}
-}
-
-func TestGeminiAdapter_CountsToolCallsFromStats(t *testing.T) {
-	out := []byte(`{"session_id":"s","response":"hello","stats":{"tools":{"totalCalls":5}}}`)
-	tr, err := parseGeminiOutput(out)
-	if err != nil {
-		t.Fatalf("parse error: %v", err)
-	}
-	if tr.ToolCalls != 5 {
-		t.Errorf("toolCalls = %d, want 5", tr.ToolCalls)
 	}
 }
 
@@ -1999,22 +1875,6 @@ func TestOpenCodeAdapter_RotateModel(t *testing.T) {
 	}
 }
 
-func TestGeminiAdapterCapabilities(t *testing.T) {
-	g := &GeminiExecutor{}
-	if g.ResumeSupported() {
-		t.Error("ResumeSupported() = true, want false (gemini --resume takes index/latest, not session UUID)")
-	}
-	if g.RotateSupported() {
-		t.Error("RotateSupported() = true, want false")
-	}
-	if g.LivenessProbeSupported() {
-		t.Error("LivenessProbeSupported() = true, want false")
-	}
-	if err := g.RotateModel("new-model"); err == nil {
-		t.Error("RotateModel() should return error")
-	}
-}
-
 func TestAntigravityAdapterCapabilities(t *testing.T) {
 	a := &AntigravityExecutor{}
 	if !a.ResumeSupported() {
@@ -2028,63 +1888,6 @@ func TestAntigravityAdapterCapabilities(t *testing.T) {
 	}
 	if err := a.RotateModel("new-model"); err == nil {
 		t.Error("RotateModel() should return error")
-	}
-}
-
-func TestGeminiAdapter_SessionIDCapture(t *testing.T) {
-	out := []byte(`{"response":"{\"completed\":true,\"summary\":\"hello\"}","session_id":"gem-sess-456","stats":{}}`)
-	tr, err := parseGeminiOutput(out)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if tr.SessionID != "gem-sess-456" {
-		t.Errorf("SessionID = %q, want %q", tr.SessionID, "gem-sess-456")
-	}
-}
-
-func TestGeminiAdapter_SessionIDOnMissingResponse(t *testing.T) {
-	out := []byte(`{"session_id":"gem-sess-789","stats":{}}`)
-	tr, err := parseGeminiOutput(out)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if tr.SessionID != "gem-sess-789" {
-		t.Errorf("SessionID = %q, want %q", tr.SessionID, "gem-sess-789")
-	}
-}
-
-func TestClassifyGeminiExit(t *testing.T) {
-	cases := []struct {
-		name     string
-		exitCode int
-		want     string
-	}{
-		{"auth", 41, "authentication"},
-		{"input", 42, "invalid CLI input"},
-		{"sandbox", 44, "sandbox"},
-		{"config", 52, "config error"},
-		{"turn limit", 53, "turn limit"},
-		{"tool exec", 54, "tool execution"},
-		{"untrusted", 55, "workspace not trusted"},
-		{"cancel", 130, "cancelled"},
-		{"unknown", 99, ""},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			// Build a synthetic *exec.ExitError by running `sh -c exit <code>`.
-			cmd := exec.Command("sh", "-c", fmt.Sprintf("exit %d", tc.exitCode))
-			err := cmd.Run()
-			got := classifyGeminiExit(err, "")
-			if tc.want == "" {
-				if got != "" {
-					t.Errorf("classifyGeminiExit(%d) = %q, want empty", tc.exitCode, got)
-				}
-				return
-			}
-			if !strings.Contains(got, tc.want) {
-				t.Errorf("classifyGeminiExit(%d) = %q, want substring %q", tc.exitCode, got, tc.want)
-			}
-		})
 	}
 }
 
@@ -2503,65 +2306,6 @@ exit 1
 	}
 }
 
-func TestGeminiExecutor_EvidenceOnQuotaError(t *testing.T) {
-	binDir := filepath.Join(t.TempDir(), "bin")
-	if err := os.MkdirAll(binDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	scriptPath := filepath.Join(binDir, "gemini")
-	script := `#!/bin/sh
-printf 'RESOURCE_EXHAUSTED\nIndividual quota reached\nResets in 1h30m\n' >&2
-exit 1
-`
-	if err := os.WriteFile(scriptPath, []byte(script), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
-
-	exec := &GeminiExecutor{}
-	tr, err := exec.Execute(context.Background(), RunOptions{Prompt: "do work"})
-	if err == nil {
-		t.Fatal("expected error from gemini mock")
-	}
-	if tr == nil {
-		t.Fatal("expected TryResult with Evidence, got nil")
-	}
-	if tr.Evidence == nil {
-		t.Fatal("expected Evidence to be populated for RESOURCE_EXHAUSTED")
-	}
-	if tr.Evidence.Category != reliability.CategoryUsageLimit {
-		t.Errorf("Category = %q, want %q", tr.Evidence.Category, reliability.CategoryUsageLimit)
-	}
-	if tr.Evidence.Provider != reliability.ProviderGemini {
-		t.Errorf("Provider = %q, want %q", tr.Evidence.Provider, reliability.ProviderGemini)
-	}
-}
-
-func TestGeminiExecutor_NoEvidenceOnUnknownError(t *testing.T) {
-	binDir := filepath.Join(t.TempDir(), "bin")
-	if err := os.MkdirAll(binDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	scriptPath := filepath.Join(binDir, "gemini")
-	script := `#!/bin/sh
-printf 'something unexpected\n' >&2
-exit 1
-`
-	if err := os.WriteFile(scriptPath, []byte(script), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
-
-	exec := &GeminiExecutor{}
-	tr, err := exec.Execute(context.Background(), RunOptions{Prompt: "do work"})
-	if err == nil {
-		t.Fatal("expected error from gemini mock")
-	}
-	if tr != nil {
-		t.Fatalf("expected nil TryResult for unknown error, got %+v", tr)
-	}
-}
-
 func TestOpenCodeExecutor_EvidenceOnRateLimitError(t *testing.T) {
 	binDir := filepath.Join(t.TempDir(), "bin")
 	if err := os.MkdirAll(binDir, 0o755); err != nil {
@@ -2768,51 +2512,6 @@ printf '%%s\n' '{"type":"text","part":{"type":"text","text":"%s"}}'
 	args := string(argsData)
 	if !strings.Contains(args, "--variant") || !strings.Contains(args, "max") {
 		t.Errorf("opencode args missing --variant max, got:\n%s", args)
-	}
-}
-
-func TestGeminiExecutor_EffortSkippedInArgs(t *testing.T) {
-	binDir, argsPath := testMockBinDir(t, "gemini")
-	scriptPath := filepath.Join(binDir, "gemini")
-	script := fmt.Sprintf(`#!/bin/sh
-printf '%%s\n' "$@" > %q
-printf '{"response":"{\"completed\":true,\"summary\":\"ok\"}","session_id":"gem-sess"}'
-`, argsPath)
-	if err := os.WriteFile(scriptPath, []byte(script), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
-
-	tmp := t.TempDir()
-	logPath := filepath.Join(tmp, "try.log")
-	exec := &GeminiExecutor{}
-	_, err := exec.Execute(context.Background(), RunOptions{
-		Prompt:          "do work",
-		ReasoningEffort: "high",
-		LogPath:         logPath,
-	})
-	if err != nil {
-		t.Fatalf("Execute failed: %v", err)
-	}
-
-	argsData, err := os.ReadFile(argsPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	args := string(argsData)
-	// Gemini has no reasoning-effort flag; applyReasoningEffort must skip
-	// injection and the args must not contain any effort-related flag.
-	if strings.Contains(args, "--effort") || strings.Contains(args, "model_reasoning_effort") || strings.Contains(args, "--variant") {
-		t.Errorf("gemini args should not contain effort flag, but got:\n%s", args)
-	}
-
-	// The warning should appear in the try log.
-	logData, err := os.ReadFile(logPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(string(logData), "gemini has no reasoning-effort flag") {
-		t.Errorf("expected unsupported-harness warning in try log, got:\n%s", string(logData))
 	}
 }
 

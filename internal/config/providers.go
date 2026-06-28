@@ -483,6 +483,9 @@ func (c V2Config) expandProviderModels(spec string, filter modelFilter, requireM
 func sortedHarnessKeys(harnesses map[string]*HarnessConfig) []string {
 	keys := make([]string, 0, len(harnesses))
 	for key := range harnesses {
+		if isRemovedGeminiAlias(key) {
+			continue
+		}
 		keys = append(keys, key)
 	}
 	sort.Strings(keys)
@@ -508,7 +511,7 @@ func sortResolvedAgents(agents []agent.ResolvedAgent) {
 }
 
 func builtInHarnessNames() []string {
-	return []string{"antigravity", "claude", "codex", "gemini", "opencode"}
+	return []string{"antigravity", "claude", "codex", "opencode"}
 }
 
 // lookupBareModelAlias returns every distinct runner whose harness defines a
@@ -519,6 +522,9 @@ func (c V2Config) lookupBareModelAlias(alias string) []agent.ResolvedAgent {
 	seen := map[providerRunnerKey]bool{}
 	var matches []agent.ResolvedAgent
 	for hkey, hc := range c.Harnesses {
+		if isRemovedGeminiAlias(hkey) {
+			continue
+		}
 		if hc == nil || hc.Models == nil {
 			continue
 		}

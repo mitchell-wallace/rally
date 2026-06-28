@@ -712,7 +712,6 @@ func resolveAgentSpec(spec string, resolver Resolver) (agent.ResolvedAgent, erro
 		"ag": "antigravity", "agy": "antigravity", "antigravity": "antigravity",
 		"cc": "claude", "claude": "claude",
 		"cx": "codex", "codex": "codex",
-		"ge": "gemini", "gemini": "gemini",
 		"op": "opencode", "opencode": "opencode",
 	}
 

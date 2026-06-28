@@ -393,7 +393,7 @@ func TestResilience_SelectActiveAgent_SkipsPausedAndFrozen(t *testing.T) {
 		Cycle: []agent.ResolvedAgent{
 			{Harness: "claude", Model: "test"},
 			{Harness: "codex", Model: "test"},
-			{Harness: "gemini", Model: "test"},
+			{Harness: "antigravity", Model: "test"},
 		},
 	}
 
@@ -401,8 +401,8 @@ func TestResilience_SelectActiveAgent_SkipsPausedAndFrozen(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if selected.Harness != "gemini" {
-		t.Fatalf("expected gemini (only active agent), got %s", selected.Harness)
+	if selected.Harness != "antigravity" {
+		t.Fatalf("expected antigravity (only active agent), got %s", selected.Harness)
 	}
 	if newIdx != 3 {
 		t.Fatalf("expected runIndex 3, got %d", newIdx)

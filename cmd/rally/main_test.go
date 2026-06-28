@@ -69,7 +69,6 @@ iterations = 5
 mix = "cc cx"
 claude_model = "sonnet"
 codex_model = ""
-gemini_model = ""
 opencode_model = ""
 antigravity_model = ""
 `
@@ -102,7 +101,7 @@ antigravity_model = ""
 		t.Errorf("expected sonnet model, got %q", cfg.ClaudeModel)
 	}
 
-	expectedFields := []string{"schema_version", "laps_instructions", "run_hooks_on_autocommit", "data_dir", "[defaults]", "iterations", "mix", "claude_model", "codex_model", "gemini_model", "opencode_model", "antigravity_model"}
+	expectedFields := []string{"schema_version", "laps_instructions", "run_hooks_on_autocommit", "data_dir", "[defaults]", "iterations", "mix", "claude_model", "codex_model", "opencode_model", "antigravity_model"}
 	for _, f := range expectedFields {
 		if !strings.Contains(configContent, f) {
 			t.Errorf("init template missing field %q", f)
@@ -372,9 +371,6 @@ func TestRunInitRoles_InstallsRoutesAndRoleInstructions(t *testing.T) {
 	if cfg.Defaults.ClaudeModel != "claude-opus-4-7" {
 		t.Errorf("ClaudeModel = %q, want claude-opus-4-7", cfg.Defaults.ClaudeModel)
 	}
-	if cfg.Defaults.GeminiModel != "gemini-3.1-pro-preview" {
-		t.Errorf("GeminiModel = %q, want gemini-3.1-pro-preview", cfg.Defaults.GeminiModel)
-	}
 	if cfg.Defaults.CodexModel != "gpt-5.5" {
 		t.Errorf("CodexModel = %q, want gpt-5.5", cfg.Defaults.CodexModel)
 	}
@@ -386,7 +382,7 @@ func TestRunInitRoles_InstallsRoutesAndRoleInstructions(t *testing.T) {
 		"default": "opencode",
 		"junior":  "opencode",
 		"senior":  "claude",
-		"ui":      "gemini",
+		"ui":      "ag",
 		"verify":  "codex",
 	}
 	for role, want := range wantRoutes {
@@ -576,7 +572,7 @@ func TestRunInitRoles_IdempotentRerun(t *testing.T) {
 	}
 
 	cfg, _ := config.LoadV2(tmp)
-	cfg.Defaults.GeminiModel = "my-gemini"
+	cfg.Defaults.AntigravityModel = "my-antigravity"
 	config.SaveV2(tmp, cfg)
 
 	if err := runInitRoles(cmd, []string{}); err != nil {
@@ -587,8 +583,8 @@ func TestRunInitRoles_IdempotentRerun(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadV2: %v", err)
 	}
-	if cfg2.Defaults.GeminiModel != "my-gemini" {
-		t.Errorf("GeminiModel = %q, want my-gemini (idempotent rerun should not overwrite)", cfg2.Defaults.GeminiModel)
+	if cfg2.Defaults.AntigravityModel != "my-antigravity" {
+		t.Errorf("AntigravityModel = %q, want my-antigravity (idempotent rerun should not overwrite)", cfg2.Defaults.AntigravityModel)
 	}
 }
 
@@ -607,7 +603,7 @@ func TestRunRelayNewResetsAgentStatus(t *testing.T) {
 	}
 
 	resilience := relay.NewResilience(s)
-	key := relay.ResilienceKey{Harness: "gemini", Model: "default"}
+	key := relay.ResilienceKey{Harness: "antigravity", Model: "default"}
 	if err := resilience.FreezeAgent(key, 1, "test freeze"); err != nil {
 		t.Fatalf("freeze agent: %v", err)
 	}

@@ -14,8 +14,6 @@ func overrideResolver(spec string) (agent.ResolvedAgent, error) {
 		return agent.ResolvedAgent{Harness: "opencode", Model: "zai-coding-plan/glm-5.1"}, nil
 	case "op:gk":
 		return agent.ResolvedAgent{Harness: "opencode", Model: "google/gemini-2.5-pro"}, nil
-	case "gemini-pro":
-		return agent.ResolvedAgent{Harness: "gemini", Model: "gemini-2.5-pro"}, nil
 	}
 
 	parts := strings.SplitN(spec, ":", 2)
@@ -31,8 +29,6 @@ func overrideResolver(spec string) (agent.ResolvedAgent, error) {
 		"claude":      "claude",
 		"cx":          "codex",
 		"codex":       "codex",
-		"ge":          "gemini",
-		"gemini":      "gemini",
 		"op":          "opencode",
 		"opencode":    "opencode",
 	}
@@ -102,11 +98,11 @@ func TestBuildOverrideRoute_RoleReferenceWithRangeQuotaRejected(t *testing.T) {
 }
 
 // TestBuildOverrideRoute_BareAliasesRoundRobin guards the fix for the
-// `--agent "cc ge op"` regression: multi-entry overrides with no explicit
+// `--agent "cc ag op"` regression: multi-entry overrides with no explicit
 // quotas should round-robin (matching legacy mix semantics), not stay on the
 // first entry. Each bare entry gets an implicit quota=1.
 func TestBuildOverrideRoute_BareAliasesRoundRobin(t *testing.T) {
-	override, err := BuildOverrideRoute("override", []string{"cc", "ge", "op"}, nil, overrideResolver)
+	override, err := BuildOverrideRoute("override", []string{"cc", "ag", "op"}, nil, overrideResolver)
 	if err != nil {
 		t.Fatalf("BuildOverrideRoute() error = %v", err)
 	}
@@ -120,7 +116,7 @@ func TestBuildOverrideRoute_BareAliasesRoundRobin(t *testing.T) {
 	}
 
 	s := NewScheduler(override.Entries)
-	want := []string{"claude", "gemini", "opencode", "claude"}
+	want := []string{"claude", "antigravity", "opencode", "claude"}
 	for i, w := range want {
 		st := mustNext(t, s)
 		if st.Entry.Spec != w {
@@ -133,7 +129,7 @@ func TestBuildOverrideRoute_Scenario5_SingleDirectOverride(t *testing.T) {
 	override, err := BuildOverrideRoute("override", []string{"op:opencode-go/fancy-new-model"}, map[string][]string{
 		"default": {"claude:opus-4.7"},
 		"ROLEA":   {"codex:gpt-5.5"},
-		"ROLEB":   {"gemini:gemini-2.5-pro"},
+		"ROLEB":   {"antigravity:pro"},
 	}, overrideResolver)
 	if err != nil {
 		t.Fatalf("BuildOverrideRoute() error = %v", err)
@@ -163,7 +159,7 @@ func TestBuildOverrideRoute_Scenario6_RoleReferenceAdvancesCursor(t *testing.T) 
 	override, err := BuildOverrideRoute("override", []string{"op:opencode-go/fancy-new-model", "DEFAULT:1"}, map[string][]string{
 		"default": {"claude:opus-4.7", "codex:gpt-5.5"},
 		"ROLEA":   {"claude:sonnet-4.6"},
-		"ROLEB":   {"gemini:gemini-2.5-pro"},
+		"ROLEB":   {"antigravity:pro"},
 	}, overrideResolver)
 	if err != nil {
 		t.Fatalf("BuildOverrideRoute() error = %v", err)

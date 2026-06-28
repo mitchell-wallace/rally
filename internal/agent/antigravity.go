@@ -112,7 +112,7 @@ func (a *AntigravityExecutor) Execute(ctx context.Context, opts RunOptions) (*Tr
 	if runErr != nil {
 		execErr := fmt.Errorf("antigravity exec failed: %w\noutput: %s\nlog: %s", runErr, string(out), tailString(string(agyLogData), 4096))
 		errorText := string(out) + "\n" + string(agyLogData)
-		if ev := reliability.ParseGeminiError(errorText); ev != nil {
+		if ev := reliability.ParseAntigravityError(errorText); ev != nil {
 			return &TryResult{Evidence: ev, ResolvedModel: model}, execErr
 		}
 		if ev := antigravityGlogFailureEvidence(); ev != nil {
@@ -343,7 +343,7 @@ func antigravityGlogEvidence(text, message, rawSignal string) *reliability.Failu
 		return ev
 	}
 
-	if parsed := reliability.ParseGeminiError(text); parsed != nil {
+	if parsed := reliability.ParseAntigravityError(text); parsed != nil {
 		ev.Category = parsed.Category
 		ev.StatusCode = parsed.StatusCode
 		ev.ResetAfter = parsed.ResetAfter

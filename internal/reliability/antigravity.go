@@ -17,10 +17,10 @@ var (
 	geminiAuthOrEligibilityRe = regexp.MustCompile(`(?i)IneligibleTierError|UNSUPPORTED_CLIENT|no longer supported for Gemini Code Assist|Error authenticating`)
 )
 
-// ParseGeminiError examines raw error output from Antigravity/Gemini for
+// ParseAntigravityError examines raw error output from Antigravity for
 // structured provider signals and returns a populated FailureEvidence when a
 // known signature is found. Returns nil when no recognised signature is present.
-func ParseGeminiError(stderr string) *FailureEvidence {
+func ParseAntigravityError(stderr string) *FailureEvidence {
 	if stderr == "" {
 		return nil
 	}

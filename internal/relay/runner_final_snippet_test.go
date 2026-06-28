@@ -196,21 +196,6 @@ func TestRunOneNonOpenCodeInvalidStructuredResultDoesNotPersistTranscript(t *tes
 			wantSummary: "claude structured result contained no summary",
 			newExecutor: func() agent.Executor { return &agent.ClaudeExecutor{} },
 		},
-		{
-			name:        "gemini malformed wrapper",
-			harness:     "gemini",
-			script:      "#!/bin/sh\nprintf '%s\\n' '" + rawTranscript + "'\n",
-			wantSummary: "gemini produced no parseable JSON result",
-			newExecutor: func() agent.Executor { return &agent.GeminiExecutor{} },
-		},
-		{
-			name:    "gemini missing response",
-			harness: "gemini",
-			script: "#!/bin/sh\n" +
-				"printf '%s\\n' '{\"session_id\":\"gem-session\",\"transcript\":\"" + rawTranscript + "\",\"stats\":{}}'\n",
-			wantSummary: "gemini produced no structured response",
-			newExecutor: func() agent.Executor { return &agent.GeminiExecutor{} },
-		},
 	}
 
 	for _, tc := range tests {

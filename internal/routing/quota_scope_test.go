@@ -101,14 +101,6 @@ func TestQuotaScope_DirectHarness_Codex(t *testing.T) {
 	}
 }
 
-func TestQuotaScope_DirectHarness_Gemini(t *testing.T) {
-	got := QuotaScope("gemini", "gemini-3.5-pro")
-	want := "gemini"
-	if got != want {
-		t.Errorf("QuotaScope(%q, %q) = %q, want %q", "gemini", "gemini-3.5-pro", got, want)
-	}
-}
-
 func TestQuotaScope_DirectHarness_StraySlashNotMisSplit(t *testing.T) {
 	got := QuotaScope("claude", "org/model")
 	want := "claude"

@@ -226,7 +226,7 @@ var ErrorPatterns = []Pattern{
 		Harness:  "opencode",
 	},
 	{
-		Name: "gemini-cli exit 1",
+		Name: "antigravity gemini-cli exit 1",
 		Match: func(lines []string) bool {
 			return containsSubstring(lines, "exit status 1") &&
 				containsSubstring(lines, "gemini-cli") &&
@@ -238,18 +238,6 @@ var ErrorPatterns = []Pattern{
 		Strategy: StrategyResume,
 		Category: CategoryAgentError,
 		Harness:  "antigravity",
-	},
-	{
-		Name: "gemini auth or unsupported client",
-		Match: func(lines []string) bool {
-			return containsSubstring(lines, "IneligibleTierError") ||
-				containsSubstring(lines, "UNSUPPORTED_CLIENT") ||
-				containsSubstring(lines, "no longer supported for Gemini Code Assist") ||
-				containsSubstring(lines, "Error authenticating")
-		},
-		Strategy: StrategyRotate,
-		Category: CategoryAuthOrProxy,
-		Harness:  "gemini",
 	},
 	{
 		Name: "antigravity auth or unsupported client",

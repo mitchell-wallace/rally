@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 )
 
 func openTryLog(path string) (*os.File, error) {
@@ -33,6 +34,15 @@ func WriteTryLog(path string, data []byte) error {
 	defer f.Close()
 	_, err = f.Write(data)
 	return err
+}
+
+// tailString returns the last n bytes of s, prefixed with "…" if truncated.
+func tailString(s string, n int) string {
+	s = strings.TrimSpace(s)
+	if len(s) <= n {
+		return s
+	}
+	return "…" + s[len(s)-n:]
 }
 
 func runLoggedCommand(cmd *exec.Cmd, logPath string, mergeStderr bool, onStart func(pid int)) ([]byte, error) {

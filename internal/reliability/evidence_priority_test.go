@@ -155,7 +155,7 @@ func TestEvidencePriority4_TextPattern(t *testing.T) {
 }
 
 // Priority 4 with a harness-scoped pattern: the surviving antigravity
-// gemini-cli exit-1 pattern carries the pattern's agent_error category.
+// antigravity gemini-cli exit-1 pattern carries the pattern's agent_error category.
 func TestEvidencePriority4_HarnessScopedCategory(t *testing.T) {
 	logLines := []string{"agy: gemini-cli failed with exit status 1"}
 	decision := ClassifyError(logLines, "antigravity", nil, nil)
@@ -170,7 +170,7 @@ func TestEvidencePriority4_HarnessScopedCategory(t *testing.T) {
 	if ev.Category != CategoryAgentError {
 		t.Errorf("category = %q, want agent_error (pattern category)", ev.Category)
 	}
-	if ev.Message != "gemini-cli exit 1" {
+	if ev.Message != "antigravity gemini-cli exit 1" {
 		t.Errorf("message = %q, want the pattern name", ev.Message)
 	}
 	if !strings.Contains(ev.RawSignal, "exit status 1") {

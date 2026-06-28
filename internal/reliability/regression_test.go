@@ -6,12 +6,12 @@ import (
 
 func TestRegression_AntigravityQuotaZeroChangedFiles_UsageLimit(t *testing.T) {
 	stderr := "Error: RESOURCE_EXHAUSTED: Individual quota reached for generativelanguage.googleapis.com. Resets in 7d."
-	ev := ParseGeminiError(stderr)
+	ev := ParseAntigravityError(stderr)
 	if ev == nil {
-		t.Fatal("ParseGeminiError: expected non-nil evidence")
+		t.Fatal("ParseAntigravityError: expected non-nil evidence")
 	}
 	if ev.Category != CategoryUsageLimit {
-		t.Fatalf("ParseGeminiError: category = %q, want %q", ev.Category, CategoryUsageLimit)
+		t.Fatalf("ParseAntigravityError: category = %q, want %q", ev.Category, CategoryUsageLimit)
 	}
 	if ev.Provider != ProviderGemini {
 		t.Errorf("provider = %q, want %q", ev.Provider, ProviderGemini)
@@ -34,9 +34,9 @@ func TestRegression_AntigravityQuotaZeroChangedFiles_UsageLimit(t *testing.T) {
 
 func TestRegression_AntigravityQuotaSettingsDirty_UsageLimitNotIncomplete(t *testing.T) {
 	stderr := "RESOURCE_EXHAUSTED: Individual quota reached. Resets in 2h."
-	ev := ParseGeminiError(stderr)
+	ev := ParseAntigravityError(stderr)
 	if ev == nil {
-		t.Fatal("ParseGeminiError: expected non-nil evidence")
+		t.Fatal("ParseAntigravityError: expected non-nil evidence")
 	}
 
 	decision := ClassifyError(nil, "antigravity",

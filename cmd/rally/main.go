@@ -91,7 +91,6 @@ iterations = 5
 mix = "cc cx"
 claude_model = ""
 codex_model = ""
-gemini_model = ""
 opencode_model = ""
 antigravity_model = ""
 
@@ -280,7 +279,6 @@ func runRelay(cmd *cobra.Command, args []string) error {
 		"antigravity": &agent.AntigravityExecutor{Model: cfg.AntigravityModel},
 		"claude":      &agent.ClaudeExecutor{Model: cfg.ClaudeModel},
 		"codex":       &agent.CodexExecutor{Model: cfg.CodexModel},
-		"gemini":      &agent.GeminiExecutor{Model: cfg.GeminiModel},
 		"opencode":    &agent.OpenCodeExecutor{Model: cfg.OpenCodeModel},
 	}
 

@@ -256,7 +256,7 @@ func TestBenchMatrix_D_RepeatUsageLimitReBenchesFreshWindow(t *testing.T) {
 // probation untouched.
 func TestBenchMatrix_E_BenchedDoesNotInterfereWithOtherStates(t *testing.T) {
 	rt, err := newResolvedRouteRuntime(map[string][]string{
-		"default": {"claude:opus-4.7:1", "codex:gpt-5.5:1", "gemini:gemini-2.5-pro:1", "opencode:opencode-go/kimi-k2.6:1"},
+		"default": {"claude:opus-4.7:1", "codex:gpt-5.5:1", "antigravity:pro:1", "opencode:opencode-go/kimi-k2.6:1"},
 	}, testResolver, false, nil)
 	if err != nil {
 		t.Fatalf("newResolvedRouteRuntime: %v", err)
@@ -268,7 +268,7 @@ func TestBenchMatrix_E_BenchedDoesNotInterfereWithOtherStates(t *testing.T) {
 
 	benchedKey := ResilienceKey{Harness: "claude", Model: "opus-4.7"}
 	frozenKey := ResilienceKey{Harness: "codex", Model: "gpt-5.5"}
-	probationKey := ResilienceKey{Harness: "gemini", Model: "gemini-2.5-pro"}
+	probationKey := ResilienceKey{Harness: "antigravity", Model: "pro"}
 	pausedKey := ResilienceKey{Harness: "opencode", Model: "opencode-go/kimi-k2.6"}
 
 	if err := resilience.BenchAgent(benchedKey, now.Add(3*time.Hour), "claude", 1); err != nil {

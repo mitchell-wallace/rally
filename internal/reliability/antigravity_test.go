@@ -5,7 +5,7 @@ import (
 	"time"
 )
 
-func TestParseGeminiError(t *testing.T) {
+func TestParseAntigravityError(t *testing.T) {
 	tests := []struct {
 		name               string
 		stderr             string
@@ -118,7 +118,7 @@ func TestParseGeminiError(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ev := ParseGeminiError(tt.stderr)
+			ev := ParseAntigravityError(tt.stderr)
 			if tt.expectNil {
 				if ev != nil {
 					t.Fatalf("expected nil, got %+v", ev)
@@ -144,8 +144,8 @@ func TestParseGeminiError(t *testing.T) {
 	}
 }
 
-func TestParseGeminiError_PopulatesFields(t *testing.T) {
-	ev := ParseGeminiError("Error: RESOURCE_EXHAUSTED: Individual quota reached. Resets in 7d.")
+func TestParseAntigravityError_PopulatesFields(t *testing.T) {
+	ev := ParseAntigravityError("Error: RESOURCE_EXHAUSTED: Individual quota reached. Resets in 7d.")
 	if ev == nil {
 		t.Fatal("expected non-nil evidence")
 	}

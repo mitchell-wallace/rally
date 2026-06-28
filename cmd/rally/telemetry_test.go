@@ -21,10 +21,15 @@ type mockSink struct {
 	capturedIssues []string
 	capturedTags   []map[string]string
 	tryLogs        []map[string]interface{}
+	routeEvents    []map[string]interface{}
 }
 
 func (m *mockSink) EmitTryLog(ctx context.Context, fields map[string]interface{}) {
 	m.tryLogs = append(m.tryLogs, fields)
+}
+
+func (m *mockSink) EmitRouteEvent(ctx context.Context, fields map[string]interface{}) {
+	m.routeEvents = append(m.routeEvents, fields)
 }
 
 func (m *mockSink) CaptureFailure(ctx context.Context, msg string, evt telemetry.FailureEvent) {
@@ -121,14 +126,19 @@ func TestTelemetryIssueCriteriaAndPromptSize(t *testing.T) {
 		t.Fatal("expected an Issue to be captured")
 	}
 
-	foundFallbackLog := false
-	for _, log := range mock.tryLogs {
-		if log["event"] == "route_fallback" {
-			foundFallbackLog = true
+	foundFallbackEvent := false
+	for _, event := range mock.routeEvents {
+		if event["event"] == "route_fallback" {
+			foundFallbackEvent = true
 		}
 	}
-	if !foundFallbackLog {
-		t.Errorf("expected route_fallback to be logged as a common event")
+	if !foundFallbackEvent {
+		t.Errorf("expected route_fallback to be logged as a route event")
+	}
+	for _, log := range mock.tryLogs {
+		if log["event"] == "route_fallback" {
+			t.Errorf("expected route_fallback to not be logged as a try event")
+		}
 	}
 
 	for _, issue := range mock.capturedIssues {

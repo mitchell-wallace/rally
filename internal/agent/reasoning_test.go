@@ -59,7 +59,7 @@ func TestApplyReasoningEffort_OpencodeVariantNotValidated(t *testing.T) {
 }
 
 func TestApplyReasoningEffort_UnsupportedHarnessesWarnAndSkip(t *testing.T) {
-	for _, harness := range []string{"gemini", "antigravity"} {
+	for _, harness := range []string{"antigravity"} {
 		t.Run(harness, func(t *testing.T) {
 			base := []string{"--prompt", "hi"}
 			args, warning := applyReasoningEffort(base, harness, "high")
@@ -87,7 +87,7 @@ func TestApplyReasoningEffort_UnknownHarnessWarnsAndSkips(t *testing.T) {
 }
 
 func TestApplyReasoningEffort_EmptyEffortNoop(t *testing.T) {
-	for _, harness := range []string{"codex", "gemini"} {
+	for _, harness := range []string{"codex", "antigravity"} {
 		args, warning := applyReasoningEffort([]string{"x"}, harness, "  ")
 		if warning != "" {
 			t.Fatalf("[%s] warning = %q, want none for empty effort", harness, warning)

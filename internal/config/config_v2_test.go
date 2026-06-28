@@ -25,7 +25,6 @@ func TestLoadV2_LegacyRootModelFields(t *testing.T) {
 	dir := t.TempDir()
 	writeConfig(t, dir, `claude_model = "sonnet"
 codex_model = "codex-latest"
-gemini_model = ""
 opencode_model = ""
 data_dir = "/tmp/data"
 run_hooks_on_autocommit = true
@@ -860,7 +859,7 @@ output_strategy = "tail"
 func TestLoadV2_BuiltInRejectsTailStream(t *testing.T) {
 	dir := t.TempDir()
 	writeConfig(t, dir, `
-[harness.gemini]
+[harness.op]
 tail_stream = "stdout"
 `)
 	_, err := LoadV2(dir)
@@ -869,6 +868,28 @@ tail_stream = "stdout"
 	}
 	if !strings.Contains(err.Error(), "cannot declare tail_stream") {
 		t.Errorf("error = %q, want 'cannot declare tail_stream'", err.Error())
+	}
+}
+
+func TestResolveAgent_RemovedGeminiAliasErrors(t *testing.T) {
+	cfg := V2Config{Harnesses: map[string]*HarnessConfig{
+		"gemini": {Models: map[string]string{"pro": "gemini-3.1-pro-preview"}},
+		"ge":     {Models: map[string]string{"pro": "gemini-3.1-pro-preview"}},
+	}}
+	for _, spec := range []string{"ge", "ge:pro", "gemini", "gemini:pro"} {
+		t.Run(spec, func(t *testing.T) {
+			_, err := cfg.ResolveAgent(spec)
+			alias, ok := RemovedGeminiAlias(err)
+			if !ok {
+				t.Fatalf("ResolveAgent(%q) error = %v, want removed gemini alias error", spec, err)
+			}
+			if alias != strings.Split(spec, ":")[0] {
+				t.Fatalf("removed alias = %q, want %q", alias, strings.Split(spec, ":")[0])
+			}
+			if !strings.Contains(err.Error(), "antigravity") {
+				t.Fatalf("error = %q, want antigravity guidance", err.Error())
+			}
+		})
 	}
 }
 

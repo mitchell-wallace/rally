@@ -229,7 +229,7 @@ func TestRouteRuntime_CanonicalScenario5_OverrideIgnoresAssigneeForEntireRelay(t
 	rt, resilience := newOverrideRouteRuntimeOrDie(t, []string{"op:opencode-go/fancy-new-model"}, map[string][]string{
 		"default": {"claude:opus-4.7"},
 		"ROLEA":   {"codex:gpt-5.5"},
-		"ROLEB":   {"gemini:gemini-2.5-pro"},
+		"ROLEB":   {"antigravity:pro"},
 	}, false)
 
 	for _, assignee := range []string{"ROLEA", "ROLEB", ""} {
@@ -247,7 +247,7 @@ func TestRouteRuntime_CanonicalScenario6_OverrideRoleReferenceAdvancesDefaultCur
 	rt, resilience := newOverrideRouteRuntimeOrDie(t, []string{"op:opencode-go/fancy-new-model", "DEFAULT:1"}, map[string][]string{
 		"default": {"claude:opus-4.7", "codex:gpt-5.5"},
 		"ROLEA":   {"claude:sonnet-4.6"},
-		"ROLEB":   {"gemini:gemini-2.5-pro"},
+		"ROLEB":   {"antigravity:pro"},
 	}, false)
 
 	sel := mustNextRouteSelection(t, rt, resilience, "ROLEA")
@@ -453,8 +453,8 @@ func TestFormatMixLabel(t *testing.T) {
 	}{
 		{"empty", "", "(empty)"},
 		{"routes marker", relaySelectionModeRoutes, "configured routes"},
-		{"override with specs", relaySelectionModeOverridePrefix + "cc ge op", "cc ge op"},
-		{"override with quotas", relaySelectionModeOverridePrefix + "cc:1 ge:1", "cc:1 ge:1"},
+		{"override with specs", relaySelectionModeOverridePrefix + "cc ag op", "cc ag op"},
+		{"override with quotas", relaySelectionModeOverridePrefix + "cc:1 ag:1", "cc:1 ag:1"},
 		{"override bare", relaySelectionModeOverridePrefix, "(override)"},
 		{"override only whitespace", relaySelectionModeOverridePrefix + "  ", "(override)"},
 		{"legacy mix", "cc:1 cx:2", "cc:1 cx:2"},
@@ -471,11 +471,11 @@ func TestFormatMixLabel(t *testing.T) {
 
 func TestRouteRuntime_NoBackendAlwaysUsesDefaultRoute(t *testing.T) {
 	rt, resilience := newResolvedRouteRuntimeOrDie(t, map[string][]string{
-		"default": {"codex:gpt-5.5:1", "gemini:gemini-2.5-pro:1"},
+		"default": {"codex:gpt-5.5:1", "antigravity:pro:1"},
 		"SENIOR":  {"claude:opus-4.7"},
 	}, true)
 
-	want := []string{"codex:gpt-5.5", "gemini:gemini-2.5-pro", "codex:gpt-5.5"}
+	want := []string{"codex:gpt-5.5", "antigravity:pro", "codex:gpt-5.5"}
 	for i, assignee := range []string{"SENIOR", "JUNIOR", ""} {
 		sel := mustNextRouteSelection(t, rt, resilience, assignee)
 		if sel.Route.Name != "default" || sel.Route.Source != "default" {
@@ -811,7 +811,7 @@ func TestRouteRuntime_SingleRunnerOverrideWarns(t *testing.T) {
 func TestRouteRuntime_MixedLanesWarnsOnlySingleRunner(t *testing.T) {
 	rt, _ := newResolvedRouteRuntimeOrDie(t, map[string][]string{
 		"default": {"claude:opus-4.7", "codex:gpt-5.5"},
-		"fragile": {"gemini:gemini-2.5-pro"},
+		"fragile": {"antigravity:pro"},
 	}, false)
 
 	warnings := rt.Warnings()
@@ -853,7 +853,7 @@ func TestBenchResetDeadline(t *testing.T) {
 func TestBenchQuotaScope_BenchesEveryKeyInScopeAcrossLanes(t *testing.T) {
 	rt, resilience := newResolvedRouteRuntimeOrDie(t, map[string][]string{
 		"default": {"claude:opus-4.7", "codex:gpt-5.5"},
-		"verify":  {"claude:sonnet-4.5", "gemini:gemini-2.5-pro"},
+		"verify":  {"claude:sonnet-4.5", "antigravity:pro"},
 	}, false)
 
 	now := resilience.NowFunc()
@@ -882,7 +882,7 @@ func TestBenchQuotaScope_BenchesEveryKeyInScopeAcrossLanes(t *testing.T) {
 	// Keys in other quota scopes are not benched.
 	for _, k := range []ResilienceKey{
 		{Harness: "codex", Model: "gpt-5.5"},
-		{Harness: "gemini", Model: "gemini-2.5-pro"},
+		{Harness: "antigravity", Model: "pro"},
 	} {
 		if st, _ := resilience.GetState(k); st != StateActive {
 			t.Errorf("state(%s) = %s, want active (out of scope)", k, st)

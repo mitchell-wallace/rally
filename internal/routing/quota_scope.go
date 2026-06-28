@@ -9,7 +9,7 @@ var antigravityFamilies = []string{"claude", "flash", "pro"}
 // exhausted quota leaves rotation together. Antigravity quotas are per model
 // family (matched case-insensitively against free-form display labels),
 // opencode quotas are per provider (the segment before '/' in provider/model),
-// and direct harnesses (claude, codex, gemini) are per harness — the model is
+// and direct harnesses (claude, codex) are per harness — the model is
 // ignored so a stray '/' cannot mis-split the scope.
 func QuotaScope(harness, model string) string {
 	switch strings.ToLower(harness) {

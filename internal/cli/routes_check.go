@@ -24,6 +24,16 @@ const defaultRouteKey = "default"
 var resolveWorkspaceDir = defaultResolveWorkspaceDir
 var loadConfig = config.LoadV2
 
+type removedAliasRouteError struct {
+	msg     string
+	alias   string
+	warning string
+}
+
+func (e *removedAliasRouteError) Error() string {
+	return e.msg
+}
+
 type RouteCheckResult struct {
 	Summaries       []RouteSummary
 	ProviderSummary []ProviderSummary
@@ -378,6 +388,13 @@ func reasoningTokenRecognised(cfg config.V2Config, token string) bool {
 
 func validateRouteEntry(cfg config.V2Config, routeName string, entry routing.ParsedEntry) error {
 	if _, err := cfg.ResolveAgent(entry.Spec); err != nil {
+		if alias, ok := config.RemovedGeminiAlias(err); ok {
+			return &removedAliasRouteError{
+				msg:     fmt.Sprintf("routes check: route %q entry %q: %s", routeName, entry.Raw, config.RemovedGeminiAliasWarning(routeName, entry.Raw, alias)),
+				alias:   strings.ToLower(alias),
+				warning: config.RemovedGeminiAliasWarning(routeName, entry.Raw, alias),
+			}
+		}
 		return fmt.Errorf("routes check: route %q entry %q: %s", routeName, entry.Raw, decorateResolveError(cfg, entry.Spec, err))
 	}
 	return nil
@@ -438,7 +455,7 @@ func aliasCandidates(cfg config.V2Config) []string {
 	seen := map[string]bool{}
 	candidates := []string{}
 
-	for _, name := range []string{"ag", "agy", "antigravity", "cc", "claude", "cx", "codex", "ge", "gemini", "op", "opencode"} {
+	for _, name := range []string{"ag", "agy", "antigravity", "cc", "claude", "cx", "codex", "op", "opencode"} {
 		if seen[name] {
 			continue
 		}

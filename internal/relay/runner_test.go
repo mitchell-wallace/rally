@@ -106,7 +106,6 @@ func testResolver(spec string) (agent.ResolvedAgent, error) {
 		"ag": "antigravity", "agy": "antigravity", "antigravity": "antigravity",
 		"cc": "claude", "claude": "claude",
 		"cx": "codex", "codex": "codex",
-		"ge": "gemini", "gemini": "gemini",
 		"op": "opencode", "opencode": "opencode",
 	}
 	parts := strings.SplitN(spec, ":", 2)
@@ -916,16 +915,16 @@ func TestRunHeaderDoesNotExceedTargetAfterFailedRun(t *testing.T) {
 		},
 	}
 	executors := map[string]agent.Executor{
-		"claude": exec,
-		"codex":  exec,
-		"gemini": exec,
+		"antigravity": exec,
+		"claude":      exec,
+		"codex":       exec,
 	}
 
 	var buf bytes.Buffer
 	r := NewRunner(s, Config{
 		WorkspaceDir:     workspaceDir,
 		DataDir:          t.TempDir(),
-		AgentMixSpecs:    []string{"cc", "cx", "ge"},
+		AgentMixSpecs:    []string{"cc", "cx", "ag"},
 		UseOverrideRoute: true,
 		TargetIterations: 2,
 		RetryBudget:      1,
@@ -4706,9 +4705,9 @@ func TestE2E_ErrorPatternStrategies(t *testing.T) {
 			wantCompleted:  true,
 		},
 		{
-			name:          "gemini exit status 1 resumes retry",
-			agentSpec:     "ge:1",
-			harness:       "gemini",
+			name:          "antigravity gemini-cli exit status 1 resumes retry",
+			agentSpec:     "ag:1",
+			harness:       "antigravity",
 			logContent:    "running gemini-cli...\nprovider error\nexit status 1\n",
 			wantAttempts:  2,
 			wantCompleted: true,

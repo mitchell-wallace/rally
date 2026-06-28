@@ -10,9 +10,8 @@ import (
 // knownReasoningEfforts records the reasoning-effort values each harness's CLI
 // documents. The sets come from spike-1 (release-0-10-0): codex and claude
 // publish a fixed enum, while opencode treats the value as a provider-specific
-// "variant" with no fixed set (so it is intentionally absent here). Harnesses
-// without an effort mechanism at all (gemini, antigravity) are handled
-// separately in applyReasoningEffort.
+// "variant" with no fixed set (so it is intentionally absent here). Antigravity
+// has no effort flag and is handled separately in applyReasoningEffort.
 var knownReasoningEfforts = map[string]map[string]bool{
 	"codex":  {"none": true, "minimal": true, "low": true, "medium": true, "high": true, "xhigh": true},
 	"claude": {"low": true, "medium": true, "high": true, "xhigh": true, "max": true},
@@ -25,7 +24,6 @@ var knownReasoningEfforts = map[string]map[string]bool{
 //   - codex:       -c model_reasoning_effort=<value>
 //   - claude:      --effort <value>
 //   - opencode:    --variant <value>
-//   - gemini:      unsupported — warn and skip (no flag exists; pick a model)
 //   - antigravity: unsupported as a flag — warn and skip (reasoning is encoded
 //     in the model alias/name instead)
 //
@@ -50,8 +48,6 @@ func applyReasoningEffort(args []string, harness, effort string) ([]string, stri
 		// there is nothing to validate; an unknown variant is silently ignored
 		// by the CLI.
 		return append(args, "--variant", effort), ""
-	case "gemini":
-		return args, fmt.Sprintf("rally: gemini has no reasoning-effort flag; ignoring reasoning effort %q (choose a different model to change reasoning)", effort)
 	case "antigravity":
 		return args, fmt.Sprintf("rally: antigravity has no reasoning-effort flag; ignoring reasoning effort %q (reasoning is selected via the model alias/name)", effort)
 	default:

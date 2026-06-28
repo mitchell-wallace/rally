@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"strings"
@@ -48,8 +49,14 @@ func ValidateRelayStartupRoutes(ctx context.Context, workspaceDir string, cfg co
 	warnings := make([]string, 0, len(issues)+1)
 	needsPrompt := false
 	warningsWritten := false
+	removedAliasWarnings := map[string]bool{}
 
 	for _, issue := range issues {
+		var removed *removedAliasRouteError
+		if errors.As(issue.Err, &removed) && removed.alias != "" && !removedAliasWarnings[removed.alias] {
+			warnings = append(warnings, "warning: "+removed.warning)
+			removedAliasWarnings[removed.alias] = true
+		}
 		warnings = append(warnings, fmt.Sprintf("warning: route %q is invalid and will be ignored: %v", issue.RouteName, issue.Err))
 		needsPrompt = true
 	}

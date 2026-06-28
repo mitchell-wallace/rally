@@ -62,7 +62,7 @@ You are responsible for higher-judgment implementation, architecture-sensitive w
 	},
 	{
 		Name:  "ui",
-		Route: []string{"gemini"},
+		Route: []string{"ag"},
 		Instructions: `# UI Role
 
 Your role is to make the interface look and feel good, not merely to make it functional.
@@ -135,10 +135,6 @@ func runRolesSetup(workspaceDir string) error {
 	}
 	if cfg.Defaults.ClaudeModel == "" && cfg.ClaudeModel == "" {
 		cfg.Defaults.ClaudeModel = "claude-opus-4-7"
-		changedConfig = true
-	}
-	if cfg.Defaults.GeminiModel == "" && cfg.GeminiModel == "" {
-		cfg.Defaults.GeminiModel = "gemini-3.1-pro-preview"
 		changedConfig = true
 	}
 	if cfg.Defaults.CodexModel == "" && cfg.CodexModel == "" {
