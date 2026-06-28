@@ -1525,8 +1525,8 @@ func TestOpenCodeDiskLog_RuneBound(t *testing.T) {
 	}
 }
 
-// Task 6.5(f): existing usage-limit extraction still works unchanged (regression guard).
-// This re-verifies the existing stream-error path is not broken by the new code.
+// Task 6.5(f): existing usage-limit extraction still works when the in-band
+// wrapper-only UnknownError path has no usable category.
 func TestOpenCodeDiskLog_UsageLimitRegressionGuard(t *testing.T) {
 	tmp := t.TempDir()
 	binDir := filepath.Join(tmp, "bin")
@@ -1534,7 +1534,8 @@ func TestOpenCodeDiskLog_UsageLimitRegressionGuard(t *testing.T) {
 		t.Fatal(err)
 	}
 	scriptPath := filepath.Join(binDir, "opencode")
-	// Produce an error event so the executor triggers evidence path.
+	// Produce a generic wrapper-only error event so the executor triggers the
+	// evidence path without claiming a real in-band category.
 	script := `#!/bin/sh
 printf '%s\n' '{"type":"error","error":{"name":"UnknownError","data":{"message":"Unexpected server error.","ref":"err_x"}}}'
 exit 1
@@ -1589,7 +1590,7 @@ func TestOpenCodeDiskLog_InBandEvidencePreserved(t *testing.T) {
 	scriptPath := filepath.Join(binDir, "opencode")
 	// Produce an error event that yields agent_error (a specific category from in-band).
 	script := `#!/bin/sh
-printf '%s\n' '{"type":"error","error":{"name":"UnknownError","data":{"message":"Unexpected server error. Check server logs for details.","ref":"err_xx"}}}'
+printf '%s\n' '{"type":"error","error":{"name":"UnknownError","data":{"message":"Agent runtime crashed while applying patch.","ref":"err_xx"}}}'
 exit 1
 `
 	if err := os.WriteFile(scriptPath, []byte(script), 0o755); err != nil {
@@ -1606,12 +1607,12 @@ exit 1
 	openCodeServerLogPath = func() string { return serverLogPath }
 	t.Cleanup(func() { openCodeServerLogPath = oldServerLogPath })
 
-	// Server log has only structural markers (would produce unidentified_issue
-	// from disk-log). The in-band agent_error should NOT be replaced.
+	// Server log has recognisable usage-limit evidence. The in-band
+	// agent_error should still NOT be replaced.
 	ts := time.Now().UTC().Format(time.RFC3339Nano)
 	logText := strings.Join([]string{
 		fmt.Sprintf(`timestamp=%s level=INFO message=created id=ses_preserve directory="%s"`, ts, workspaceDir),
-		fmt.Sprintf(`timestamp=%s level=INFO message=stream`, ts),
+		fmt.Sprintf(`timestamp=%s level=ERROR message="stream error" providerID=opencode-go modelID=kimi session.id=ses_preserve small=false agent=build error.error="AI_APICallError: Monthly usage limit reached. Resets in 2 days."`, ts),
 	}, "\n")
 	if err := os.WriteFile(serverLogPath, []byte(logText), 0o644); err != nil {
 		t.Fatal(err)
@@ -1628,12 +1629,12 @@ exit 1
 	if tr.Evidence == nil {
 		t.Fatal("expected evidence")
 	}
-	// The in-band ParseOpencodeError produces CategoryAgentError for
-	// "UnknownError" with "Unexpected server error" - that should be preserved.
 	if tr.Evidence.Category != reliability.CategoryAgentError {
 		t.Errorf("Category = %q, want %q (in-band evidence should be preserved)", tr.Evidence.Category, reliability.CategoryAgentError)
 	}
-	// Source should NOT be "opencode_disk_log" - it should be from in-band.
+	if !strings.Contains(tr.Evidence.Message, "Agent runtime crashed") {
+		t.Errorf("Message = %q, want in-band message", tr.Evidence.Message)
+	}
 	if tr.Evidence.Source == "opencode_disk_log" {
 		t.Errorf("Source = opencode_disk_log, want in-band source (in-band evidence should not be replaced)")
 	}

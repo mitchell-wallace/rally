@@ -108,6 +108,9 @@ func ParseOpencodeError(stderr string, model string) *FailureEvidence {
 	// error.error value so usage-limit signatures match across opencode's
 	// AI_APICallError / AI_RetryError / UnknownError wrappers.
 	lowerMsg := strings.ToLower(strings.TrimSpace(msg + " " + flatError))
+	if flatError == "" && opencodeWrapperOnlyUnknownError(lowerName, lowerMsg) {
+		return nil
+	}
 
 	switch {
 	case containsAny(lowerName, "usagelimit", "quotaexceeded", "resourceexhausted") ||
@@ -153,6 +156,21 @@ func ParseOpencodeError(stderr string, model string) *FailureEvidence {
 	}
 
 	return &fe
+}
+
+func opencodeWrapperOnlyUnknownError(lowerName, lowerMsg string) bool {
+	if lowerName != "unknownerror" {
+		return false
+	}
+	msg := strings.TrimSpace(lowerMsg)
+	msg = strings.TrimSuffix(msg, ".")
+	msg = strings.Join(strings.Fields(msg), " ")
+	switch msg {
+	case "", "unexpected server error", "unexpected server error. check server logs for details":
+		return true
+	default:
+		return false
+	}
 }
 
 func extractProviderFromModel(model string) string {

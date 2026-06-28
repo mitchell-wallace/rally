@@ -134,15 +134,7 @@ func attachOpenCodeFailureEvidence(tr *TryResult, out []byte, runErr error, opts
 		tr.Evidence = ev
 	}
 	if ev := openCodeServerLogFailureEvidence(opts, tr, model, startedAt, endedAt); ev != nil {
-		// The new disk-log fallback (Source = opencode_disk_log) never
-		// replaces in-band evidence that already carries a non-empty
-		// Category; the in-band evidence is authoritative for those cases.
-		// The existing stream-error usage-limit path (no Source set) is the
-		// authoritative carrier for subscription-provider limits that the
-		// in-band UnknownError missed, so it may still replace agent_error.
 		if tr.Evidence == nil || tr.Evidence.Category == "" {
-			tr.Evidence = ev
-		} else if ev.Source != openCodeDiskLogSource && (tr.Evidence.Category == reliability.CategoryAgentError || ev.Category == reliability.CategoryUsageLimit) {
 			tr.Evidence = ev
 		}
 	}

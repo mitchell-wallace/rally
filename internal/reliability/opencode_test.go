@@ -112,8 +112,14 @@ func TestParseOpencodeError(t *testing.T) {
 			expectedRetryAfter: 30 * time.Second,
 		},
 		{
-			name:             "unknown error",
-			stderr:           `{"type":"error","timestamp":1780285834220,"sessionID":"ses_17eb1fcb4ffeaM4Hrx1qJbTQHa","error":{"name":"UnknownError","data":{"message":"Unexpected server error. Check server logs for details.","ref":"err_e558e8ba"}}}`,
+			name:      "wrapper-only unknown error",
+			stderr:    `{"type":"error","timestamp":1780285834220,"sessionID":"ses_17eb1fcb4ffeaM4Hrx1qJbTQHa","error":{"name":"UnknownError","data":{"message":"Unexpected server error. Check server logs for details.","ref":"err_e558e8ba"}}}`,
+			model:     "zai-coding-plan/glm-5.1",
+			expectNil: true,
+		},
+		{
+			name:             "specific unknown error",
+			stderr:           `{"type":"error","timestamp":1780285834220,"sessionID":"ses_agent","error":{"name":"UnknownError","data":{"message":"Agent runtime crashed while applying patch.","ref":"err_agent"}}}`,
 			model:            "zai-coding-plan/glm-5.1",
 			expectedCategory: CategoryAgentError,
 			expectedProvider: "zai-coding-plan",
