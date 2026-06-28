@@ -149,11 +149,11 @@
       "title": "Claude session-JSONL disk-log fallback",
       "description": "Context: tasks.md §11, design Decision 9. Claude keeps per-session JSONL at ~/.claude/projects/\u003cproject\u003e/\u003csessionId\u003e.jsonl; Rally already passes --resume \u003csessionId\u003e so the UUID is known at the executor. The user event's display field holds the FULL prompt — the single largest telemetry-leak risk. Depends on the §10 lap.\n\nOutcome: on a claude failure with no in-band evidence, enrich from the session JSONL (Source=\"claude_session_log\") with a recognised Category or unidentified_issue.\n\nFiles \u0026 scope: internal/agent/claude.go. Build the path from the \"-\"-normalised opts.WorkspaceDir + sessionId (Claude's project-path convention). Read the last ~50 lines; keep error-shaped events: assistant events with message.stop_reason == \"error\" (or \"end_turn\"), system events with subtype \"init\" (startup errors). EXPLICITLY skip user events (full prompt in display), thinking events, and tool_result bodies beyond their first line. Map known stop reasons/messages (overloaded_error -\u003e provider_overloaded, authentication_error -\u003e auth_or_proxy); otherwise unidentified_issue. Wire after the existing ParseClaudeError attempt, following the opencode precedence pattern (opencode.go:131). 256-rune bound.\n\nAcceptance: tasks.md §11.6 (a)-(e): (a) stop_reason \"end_turn\", no error -\u003e no fallback evidence; (b) stop_reason \"error\" + overloaded -\u003e \"claude_session_log\" + provider_overloaded; (c) unrecognised error text -\u003e \"claude_session_log\" + unidentified_issue; (d) user event display fields NEVER appear in RawSignal; (e) missing/unreadable session file is not an error (falls through to ParseClaudeError on in-band output). Tests green.",
       "assignee": "SENIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 786432,
       "createdAt": "2026-06-26T00:55:47.987911067Z",
-      "updatedAt": "2026-06-26T00:55:47.987911067Z",
-      "completedAt": null
+      "updatedAt": "2026-06-28T02:27:08.937649482Z",
+      "completedAt": "2026-06-28T02:27:08.937649482Z"
     },
     {
       "id": "rall-9d5c",
