@@ -248,11 +248,11 @@
       "title": "Documentation + 0.12.0 release notes",
       "description": "Context: tasks.md §8. Written last, once behaviour is settled.\n\nFiles \u0026 scope:\n- README telemetry section: list RallyRoute alongside RallyTry, RallyFailure, RallyDiagnostic (8.1).\n- README harness list: drop gemini; note antigravity as the only Google-owned harness (8.2).\n- 0.12.0 release-notes entry (8.3) covering: (a) BREAKING removal of gemini/ge aliases + the ui role default-route change to ag/antigravity; (b) new unidentified_issue failure category — replaces agent_error as the default for unrecognised failures; agent_error now reserved for specifically-extracted agent errors; (c) every harness gets a disk-log fallback (codex session log, claude session JSONL, opencode server log, antigravity glog); (d) runner tag now includes the resolved model — NRQL alerts keyed on bare runner = 'codex' need widening to LIKE 'codex%'; (e) RallyRoute replaces NULL-outcome RallyTry entries (dashboards filtering RallyTry WHERE outcome IS NOT NULL will see routing events disappear); (f) try-cap kills carry fail_reason \"try budget exhausted; no output\" and run-budget kills carry \"run timeout\", both with failure_category unidentified_issue, distinguishable via the existing timeout_kind + runtime_ms / tool_calls / files_changed / last_output_age_ms tags.\n\nNote: do NOT bump internal/buildinfo/VERSION here — cutting the release is a separate operator step (rally-release). This lap only drafts docs + notes.\n\nAcceptance: README updated; 0.12.0 release-notes entry drafted covering all six points. Build unaffected.",
       "assignee": "JUNIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 1245184,
       "createdAt": "2026-06-26T00:55:47.987942627Z",
-      "updatedAt": "2026-06-26T00:55:47.987942627Z",
-      "completedAt": null
+      "updatedAt": "2026-06-28T04:25:59.537771638Z",
+      "completedAt": "2026-06-28T04:25:59.537771638Z"
     },
     {
       "id": "rall-7a02",

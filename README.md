@@ -162,6 +162,11 @@ the agent to review and commit those changes before starting new work.
 | `cx`       | `codex`       | `codex`   |
 | `op`       | `opencode`    | `opencode`|
 
+**Antigravity is the only Google-owned harness.** The standalone `gemini`
+CLI harness was removed in 0.12.0; antigravity serves the same Gemini model
+family on the same provider account. A stale `gemini`/`ge` route now warns
+once and recommends `antigravity` instead of failing late.
+
 For Opencode runs Rally automatically sets:
 
 ```sh
@@ -840,9 +845,21 @@ If you prefer to opt out, set `RALLY_TELEMETRY=0` or configure
 
 ### What is sent
 
-Rally sends structured error signals for operator-worthy failures (panics,
-non-zero exits, freeze detections, stall timeouts, unfinalized agents,
-relay stalls, and lap-integrity violations). Each event carries:
+Rally emits four New Relic custom event types:
+
+- **`RallyTry`** — per-try lifecycle: the `outcome` (e.g. `completed`,
+  `run_timeout`, `handoff_timeout`), retry position, budget state, and
+  prompt-size metrics. One event per try.
+- **`RallyRoute`** — routing decisions: route fallback (a failing harness
+  was rotated past) and recovery-cap hits. (Added in 0.12.0; replaces the
+  NULL-outcome `RallyTry` entries that previously carried these signals.)
+- **`RallyFailure`** — operator-worthy failures needing attention (panics,
+  non-zero exits, freeze detections, stall timeouts, unfinalized agents,
+  relay stalls, and lap-integrity violations).
+- **`RallyDiagnostic`** — low-severity diagnostic signals (e.g. a lap-pin
+  mismatch or a provider limit signal recorded as info).
+
+Each event carries:
 
 **Tags / Custom Attributes** (scalar, filterable):
 
