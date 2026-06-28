@@ -3,6 +3,7 @@ package telemetry
 import (
 	"context"
 	"fmt"
+	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -157,10 +158,30 @@ func (s *NewRelicSink) StartSpan(ctx context.Context, operation, description str
 }
 
 func (s *NewRelicSink) EmitTryLog(_ context.Context, fields map[string]interface{}) {
+	fields = ensureTryLogOutcome(fields)
 	if s == nil || s.app == nil {
 		return
 	}
 	s.app.RecordCustomEvent(newRelicEventRallyTry, buildFlatAttributes(fields))
+}
+
+func (s *NewRelicSink) EmitRouteEvent(_ context.Context, fields map[string]interface{}) {
+	if s == nil || s.app == nil {
+		return
+	}
+	s.app.RecordCustomEvent(newRelicEventRallyRoute, buildFlatAttributes(fields))
+}
+
+func ensureTryLogOutcome(fields map[string]interface{}) map[string]interface{} {
+	if fields == nil {
+		fields = map[string]interface{}{}
+	}
+	if outcome, ok := fields["outcome"].(string); ok && strings.TrimSpace(outcome) != "" {
+		return fields
+	}
+	fmt.Fprintln(os.Stderr, "warning: telemetry RallyTry event missing non-empty outcome; filling outcome=\"unknown\"")
+	fields["outcome"] = "unknown"
+	return fields
 }
 
 func (s *NewRelicSink) CaptureFailure(ctx context.Context, msg string, evt FailureEvent) {
@@ -242,6 +263,8 @@ func newRelicErrorClass(msg string, evt FailureEvent) string {
 		return "RallyIncompleteFinalization"
 	case "agent_error":
 		return "RallyAgentError"
+	case "unidentified_issue":
+		return "RallyUnidentifiedIssue"
 	}
 
 	if evt.Tags["recovery_classification"] == "needs_user" {

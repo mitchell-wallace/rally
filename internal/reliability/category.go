@@ -4,8 +4,8 @@ import "time"
 
 // FailureCategory is a stable taxonomy of failure causes. Each category maps
 // to exactly one FailureClass (via CategoryToClass) and carries a short
-// display label (via CategoryDisplayLabel). The nine categories come from
-// the improve-error-categorisation design Decision 2.
+// display label (via CategoryDisplayLabel). The ten categories come from
+// the improve-error-categorisation design Decision 2 and Decision 8.
 type FailureCategory string
 
 const (
@@ -44,9 +44,16 @@ const (
 	// changes but did not finalize the lap. Resume + retry with guidance.
 	CategoryIncompleteFinalization FailureCategory = "incomplete_finalization"
 
-	// CategoryAgentError is the default for unrecognised errors.
-	// Existing retry/fresh restart behavior.
+	// CategoryAgentError indicates a failure where a SPECIFIC agent-level
+	// error was extracted (e.g. from stdout/stderr text patterns or harness
+	// disk logs). NOT the default for unrecognised errors — use
+	// CategoryUnidentifiedIssue for that.
 	CategoryAgentError FailureCategory = "agent_error"
+
+	// CategoryUnidentifiedIssue is the default for unrecognised errors
+	// where no specific failure signal was extracted. Maps to FailureAgent
+	// (does-not-freeze side). Existing retry/fresh restart behavior.
+	CategoryUnidentifiedIssue FailureCategory = "unidentified_issue"
 )
 
 // AllCategories is the complete, ordered list of FailureCategory values.
@@ -61,6 +68,7 @@ var AllCategories = []FailureCategory{
 	CategoryHarnessLaunch,
 	CategoryIncompleteFinalization,
 	CategoryAgentError,
+	CategoryUnidentifiedIssue,
 }
 
 // categoryDisplayLabels maps each FailureCategory to a short, human-readable
@@ -76,6 +84,7 @@ var categoryDisplayLabels = map[FailureCategory]string{
 	CategoryHarnessLaunch:          "harness launch error",
 	CategoryIncompleteFinalization: "incomplete: file changes without finalization",
 	CategoryAgentError:             "agent error",
+	CategoryUnidentifiedIssue:      "unidentified issue",
 }
 
 // CategoryDisplayLabel returns the short display label for a category.
@@ -96,7 +105,7 @@ func CategoryDisplayLabel(c FailureCategory) string {
 //   - usage_limit, invalid_model, auth_or_proxy → FailureAgent (NOT infra)
 //   - short_rate_limit, provider_overloaded, transient_infra, harness_launch → FailureInfra
 //   - incomplete_finalization → FailureIncomplete
-//   - agent_error → FailureAgent
+//   - agent_error, unidentified_issue → FailureAgent
 var categoryToClass = map[FailureCategory]FailureClass{
 	CategoryUsageLimit:             FailureAgent,
 	CategoryShortRateLimit:         FailureInfra,
@@ -107,6 +116,7 @@ var categoryToClass = map[FailureCategory]FailureClass{
 	CategoryHarnessLaunch:          FailureInfra,
 	CategoryIncompleteFinalization: FailureIncomplete,
 	CategoryAgentError:             FailureAgent,
+	CategoryUnidentifiedIssue:      FailureAgent,
 }
 
 // CategoryToClass returns the FailureClass for a given FailureCategory.
@@ -137,6 +147,10 @@ type FailureEvidence struct {
 
 	// Message is a human-readable, bounded description of the failure.
 	Message string
+
+	// Source identifies the classification path that produced this evidence.
+	// Values: "executor_evidence", "dirty_tree", "text_pattern", "unmatched".
+	Source string
 
 	// StatusCode is the HTTP status code if the failure was an HTTP error.
 	StatusCode int

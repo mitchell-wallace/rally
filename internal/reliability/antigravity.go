@@ -113,3 +113,12 @@ func truncateSignal(s string, maxRunes int) string {
 	}
 	return string(runes[:maxRunes]) + "…"
 }
+
+// TruncateSignal bounds a raw signal string to maxRunes runes, appending an
+// ellipsis when truncated. Exported so executors outside this package (e.g.
+// the codex session-log fallback in internal/agent) can bound their
+// FailureEvidence.RawSignal with the same helper used by the reliability
+// parsers, keeping the 256-rune contract in one place.
+func TruncateSignal(s string, maxRunes int) string {
+	return truncateSignal(s, maxRunes)
+}

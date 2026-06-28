@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/mitchell-wallace/rally/internal/reliability"
 )
@@ -151,6 +152,7 @@ func (c *CodexExecutor) ProbeLiveness(ctx context.Context) (bool, error) {
 }
 
 func (c *CodexExecutor) Execute(ctx context.Context, opts RunOptions) (*TryResult, error) {
+	tryStart := time.Now()
 	prompt := BuildPrompt(opts)
 	c.setActiveSessionID(opts.ResumeSessionID)
 
@@ -196,7 +198,17 @@ func (c *CodexExecutor) Execute(ctx context.Context, opts RunOptions) (*TryResul
 		os.Remove(reportPath)
 		execErr := fmt.Errorf("codex exec failed: %w\noutput: %s", err, string(out))
 		if ev := reliability.ParseCodexError(string(out)); ev != nil {
-			return &TryResult{Evidence: ev}, execErr
+			return &TryResult{Evidence: ev, ResolvedModel: model}, execErr
+		}
+		// No parser-matchable in-band signal (the silent exit-1 burst wrote
+		// nothing to either stream). Enrich from codex's rollout session log:
+		// a matching log yields codex_session_log diagnostics; a scannable
+		// sessions dir with no matching log yields a codex_no_session_log
+		// harness_launch evidence so ClassifyError Priority 1 keeps retrying
+		// the launch within budget. A missing/unreadable sessions dir is not an
+		// error here — fall through to the runner's safe_exec_error path.
+		if ev, sessErr := codexSessionLogEvidence(opts.WorkspaceDir, tryStart, time.Now()); sessErr == nil && ev != nil {
+			return &TryResult{Evidence: ev, ResolvedModel: model}, execErr
 		}
 		return nil, execErr
 	}
@@ -216,6 +228,7 @@ func (c *CodexExecutor) Execute(ctx context.Context, opts RunOptions) (*TryResul
 		tr.SessionID = streamSessionID
 	}
 	tr.ToolCalls = toolCalls
+	tr.ResolvedModel = model
 	c.setActiveSessionID(tr.SessionID)
 	return tr, nil
 }

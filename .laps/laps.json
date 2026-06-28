@@ -6,110 +6,132 @@
       "title": "Add unidentified_issue category + restrict agent_error semantics",
       "description": "Context: OpenSpec change improve-harness-consistency, tasks.md §10 and Decision 8 in design.md. This is the semantic floor the whole change builds on — later laps depend on CategoryUnidentifiedIssue existing. Today CategoryAgentError does double duty (\"agent made a specific mistake\" AND \"we couldn't classify\"); split them.\n\nOutcome: a new CategoryUnidentifiedIssue = \"unidentified_issue\" exists, wired into all category machinery and mapped to the does-not-freeze FailureAgent class. CategoryAgentError is now reserved for failures where a SPECIFIC agent-level error was extracted. Build + reliability/telemetry tests green.\n\nFiles \u0026 scope: internal/reliability/category.go (new category constant; categoryDisplayLabels \"unidentified issue\"; AllCategories; categoryToClass -\u003e FailureAgent; CategoryDisplayLabel; the \"nine categories\"-\u003e\"ten\" docstring at line 8). internal/reliability/patterns.go ONLY the Priority-5 comment at ~line 296 (// 5. Default agent_error -\u003e unidentified_issue); the Priority-5 return value itself is finalized in the §3 evidence lap. internal/telemetry/newrelic.go: add a defensive \"unidentified_issue\" case to the newRelicErrorClass switch (~225-245) returning a distinct class (\"RallyUnidentifiedIssue\"). Audit per 10.7: any existing code using CategoryAgentError as a DEFAULT/FALLBACK switches to CategoryUnidentifiedIssue; keep the text-pattern usages (gemini-cli/antigravity exit-1, opencode bad-request) on CategoryAgentError — those are specific extracted errors. Do NOT touch the runner budget-kill paths here (later lap).\n\nAcceptance: tasks.md §10.9 — AllCategories contains the new category mapping to FailureAgent; categoryDisplayLabels[\"unidentified_issue\"] == \"unidentified issue\"; Priority 5 comment updated; the telemetry error-class switch has the defensive case. go build ./... \u0026\u0026 go test ./internal/reliability/... ./internal/telemetry/... green.",
       "assignee": "SENIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 65536,
       "createdAt": "2026-06-26T00:55:47.98787323Z",
-      "updatedAt": "2026-06-26T00:55:47.98787323Z",
-      "completedAt": null
+      "updatedAt": "2026-06-26T01:22:58.392697972Z",
+      "completedAt": "2026-06-26T01:22:58.392697972Z"
     },
     {
       "id": "rall-bd1a",
       "title": "ResolvedModel on TryResult + runner telemetry-tag fallback",
       "description": "Context: tasks.md §2, design Decision 6. The runner telemetry tag collapses to a bare harness (e.g. \"codex\") whenever a route uses a bare alias, because each executor resolves its default model internally and never reports it back — hiding per-model signal exactly when it matters.\n\nOutcome: agent.TryResult carries a ResolvedModel populated by every executor with the model actually passed to the CLI; the three runner-tag sites use it when non-empty, so bare-alias routes emit runner = \"\u003charness\u003e:\u003cresolved-model\u003e\".\n\nFiles \u0026 scope: add ResolvedModel string to TryResult in internal/agent/executor.go:48 (NOT internal/agent/agent.go, which is an empty package file). Set it in CodexExecutor (codex.go:170-173, the model local after the opts.Model fallback), ClaudeExecutor, OpenCodeExecutor, AntigravityExecutor from each one's resolved-model local. Update the three runner-tag sites internal/relay/runner.go:2107, 2420, 2997 to call telemetry.RunnerLabel(picked.Harness, firstNonEmpty(result.ResolvedModel, picked.Model)) via a small shared helper.\n\nDesign: the executor's own model local is authoritative (the session log does NOT carry the resolved model). The route-resolved model stays authoritative when set; ResolvedModel is the fallback for the bare-alias case only.\n\nAcceptance: tasks.md §2.5 — bare-alias route + executor that sets ResolvedModel emits runner = \"\u003charness\u003e:\u003cresolved-model\u003e\"; explicit-model route emits the same value as before; empty ResolvedModel falls back to picked.Model. Tests + go build ./... green.",
       "assignee": "JUNIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 131072,
       "createdAt": "2026-06-26T00:55:47.987890967Z",
-      "updatedAt": "2026-06-26T00:55:47.987890967Z",
-      "completedAt": null
+      "updatedAt": "2026-06-26T01:40:32.463334844Z",
+      "completedAt": "2026-06-26T01:40:32.463334844Z"
     },
     {
       "id": "rall-f0e9",
       "title": "Populate failure_evidence on every classification priority",
       "description": "Context: tasks.md §3, design Decision 3. Today only Priority-1 (executor evidence) failures carry a failure_evidence block; Priorities 3/4/5 leave it empty and the source tag is hard-coded \"executor_evidence\". New Relic shows 74/77 captured failures carry a category but no diagnostic context. Depends on the §10 lap (CategoryUnidentifiedIssue for Priority 5).\n\nOutcome: ClassifyError attaches a *FailureEvidence (with a Source) on every priority, plumbed through to BOTH applyEvidenceToFailureState call sites so the emitted failure_evidence.source reflects the path that produced the category.\n\nFiles \u0026 scope: internal/reliability/patterns.go — add Evidence *FailureEvidence to StrategyDecision; populate Priority 1 (source=\"executor_evidence\" if unset), Priority 3 (CategoryIncompleteFinalization / \"agent exited without finalizing\" / \"dirty_tree\", RawSignal from changed paths), Priority 4 (RE-SCAN logLines after a match to extract the matching line; source=\"text_pattern\", Message=pattern.Name), Priority 5 (CategoryUnidentifiedIssue / \"unmatched\" / \"no recognised provider signal\", RawSignal from a bounded log tail). internal/reliability/category.go — add Source string to FailureEvidence. ClassifyContext gains ChangedPaths []string. internal/relay/runner.go — populate ChangedPaths from filesChangedList (3239) / preCommitFilesChanged (1935); at line 2258 add `if resetEvidence == nil { resetEvidence = decision.Evidence }`; update applyEvidenceToFailureState (237) to read ev.Source when non-empty (else the caller default); demote applySafeExecErrorEvidence (256) to fire only when BOTH result.Evidence and decision.Evidence are nil.\n\nDesign: re-scan for Priority 4 (design Open Q1 resolved: re-scan, do NOT change the Pattern.Match API). All RawSignals bounded to 256 runes via the existing truncateSignal. The single resetEvidence fallback plumbs Priority 3/4/5 evidence into BOTH the try-log span (runner.go:2454) AND the operator-worthy capture path (runner.go:2530) automatically. Do NOT touch runner.go:2479 — that is handoffOnlyAttempted, not an evidence site.\n\nAcceptance: implementation compiles; reliability + relay packages build (go build ./...). Full evidence assertions are the next lap.",
       "assignee": "SENIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 196608,
       "createdAt": "2026-06-26T00:55:47.987893222Z",
-      "updatedAt": "2026-06-26T00:55:47.987893222Z",
-      "completedAt": null
+      "updatedAt": "2026-06-26T01:50:59.452057597Z",
+      "completedAt": "2026-06-26T01:50:59.452057597Z"
     },
     {
       "id": "rall-5ad0",
       "title": "Tests: failure_evidence per classification priority",
       "description": "Context: tasks.md §3.10. This test lap doubles as the review of the high-risk classification plumbing from the previous lap (it touches every ClassifyError priority + both runner evidence sites).\n\nOutcome: each priority emits a RallyFailure whose failure_evidence.source / category / message / raw_signal match the path that produced it.\n\nFiles \u0026 scope: internal/reliability/*_test.go and the relay runner test files that exercise ClassifyError -\u003e RallyFailure emission. No production changes beyond tiny safe one-liners; anything larger becomes a new focused head lap.\n\nAcceptance: tasks.md §3.10 — Priority 1 -\u003e source \"executor_evidence\"; Priority 3 -\u003e \"dirty_tree\" + CategoryIncompleteFinalization; Priority 4 -\u003e \"text_pattern\" + the pattern's category + the matched line present in raw_signal; Priority 5 -\u003e \"unmatched\" + CategoryUnidentifiedIssue; raw_signal non-empty for every source; message matches each path's contract; 256-rune bound holds. go test ./internal/reliability/... ./internal/relay/... green.",
       "assignee": "SENIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 262144,
       "createdAt": "2026-06-26T00:55:47.987894917Z",
-      "updatedAt": "2026-06-26T00:55:47.987894917Z",
-      "completedAt": null
+      "updatedAt": "2026-06-26T02:10:19.846340243Z",
+      "completedAt": "2026-06-26T02:10:19.846340243Z"
     },
     {
       "id": "rall-5fd9",
       "title": "Verify foundation slice (category floor, ResolvedModel, evidence plumbing)",
       "description": "OpenSpec verification. Use the openspec-verify-change skill against improve-harness-consistency, focused on tasks.md §2, §3, §10.\n\nBefore diffing: identify the intended merge target from the user / PR metadata / repo docs / branch config / recent history — do NOT assume main — then use git diff \u003ctarget\u003e...HEAD. Identify the first lap/try of THIS batch and treat earlier branch work as pre-existing (flag, don't remove).\n\nReview with depth — \"tests green\" is not sufficient for classification semantics: trace CategoryUnidentifiedIssue through categoryToClass / AllCategories; trace the StrategyDecision.Evidence population in each ClassifyError priority and confirm the resetEvidence fallback at runner.go:2258 actually reaches BOTH applyEvidenceToFailureState call sites so the emitted failure_evidence.source genuinely differs per priority; trace ResolvedModel set in all four executors and consumed at the three tag sites (bare-alias case produces \"\u003charness\u003e:\u003cmodel\u003e\").\n\nCheck off the tasks.md boxes for §2/§3/§10 only for work verified correct AND thorough. For substantive gaps, add a focused head lap (laps add head) rather than fixing large issues inline. Do not rewrite git history; prefer additive/revert commits.",
       "assignee": "VERIFY",
-      "isDone": false,
+      "isDone": true,
       "order": 327680,
       "createdAt": "2026-06-26T00:55:47.987896325Z",
-      "updatedAt": "2026-06-26T00:55:47.987896325Z",
-      "completedAt": null
+      "updatedAt": "2026-06-26T02:14:50.183227714Z",
+      "completedAt": "2026-06-26T02:14:50.183227714Z"
+    },
+    {
+      "id": "work-2443",
+      "title": "Complete dirty_tree RallyFailure evidence",
+      "description": "Task 3.10 remains incomplete. The runner's unfinalized operator capture at internal/relay/runner.go:2716-2739 emits failure_category=incomplete_finalization but never applies the Priority-3 dirty_tree FailureEvidence, so RallyFailure lacks failure_evidence.source/raw_signal/message. Update the operator-worthy incomplete_finalization capture to reuse the classifier-produced evidence (or equivalent bounded changed-path evidence) and add end-to-end tests proving Priority 3 emits RallyFailure failure_evidence.source=dirty_tree with non-empty raw_signal/message.",
+      "assignee": "senior",
+      "isDone": true,
+      "order": 262144,
+      "createdAt": "2026-06-26T02:14:32.328465966Z",
+      "updatedAt": "2026-06-26T02:27:47.85142244Z",
+      "completedAt": "2026-06-26T02:27:47.85142244Z"
+    },
+    {
+      "id": "work-e813",
+      "title": "Verify dirty_tree RallyFailure evidence",
+      "description": "Re-verify improve-harness-consistency tasks.md section 3.10 after work-2443. Confirm a Priority-3 dirty-tree incomplete_finalization path emits RallyFailure failure_evidence.source=dirty_tree with bounded raw_signal/message, and re-check the section 2/3/10 task boxes.",
+      "assignee": "verify",
+      "isDone": true,
+      "order": 294912,
+      "createdAt": "2026-06-26T02:14:37.380790578Z",
+      "updatedAt": "2026-06-26T02:30:17.945194442Z",
+      "completedAt": "2026-06-26T02:30:17.945194442Z"
     },
     {
       "id": "rall-fd04",
       "title": "Runner-side try-budget / run-budget exhaustion classification",
       "description": "Context: tasks.md §5, design Decision 4. Budget-killed tries currently carry an empty failure_category (no telemetry signal). Depends on the §10 lap (category) and the §3 lap (evidence gates).\n\nOutcome: both try-cap-only kills and run-budget kills carry failure_category = unidentified_issue with distinct fail_reasons — UNLESS executor/disk-log evidence already produced a non-empty Category, in which case that is authoritative. FailureClass stays agent-class (does-not-freeze).\n\nFiles \u0026 scope: internal/relay/runner.go, two sites.\n- Try-cap-only kill (timedOut \u0026\u0026 !runBudgetExhausted): place the override AFTER the runBudgetExhausted reset block (~2311-2323) and OUTSIDE the `if failed \u0026\u0026 !lapPinMismatch \u0026\u0026 attemptOutcome.CarriesFailureCategory()` block — that block is SKIPPED here (attemptOutcome = OutcomeRunTimeout, whose CarriesFailureCategory() is false), so ClassifyError never ran and the `decision` local is NOT in scope — do not reference it. Gate: result.Evidence == nil || result.Evidence.Category == \"\". When it fires: failureCategory = unidentified_issue, failReason = \"try budget exhausted; no output\", failureClass = FailureAgent.\n- Run-budget kill (timedOut \u0026\u0026 runBudgetExhausted): in the existing block (~2311-2323), change failureCategory = \"\" to unidentified_issue, gated `if runBudgetExhausted \u0026\u0026 failureCategory == \"\" \u0026\u0026 (result.Evidence == nil || result.Evidence.Category == \"\")` so a classifier-produced category (e.g. a text-pattern agent_error) stays authoritative. failReason \"run timeout\" and FailureAgent unchanged.\n\nDesign: the result.Evidence == nil || .Category == \"\" check IS the \"real evidence produced\" gate. Do NOT duplicate the slow-vs-underqualified diagnostic tags into failure_evidence — they live on the try log already (timeout_kind, runtime_ms, tool_calls, last_output_age_ms).\n\nAcceptance: implementation compiles (go build ./...). Full matrix is the next lap.",
       "assignee": "SENIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 393216,
       "createdAt": "2026-06-26T00:55:47.987900874Z",
-      "updatedAt": "2026-06-26T00:55:47.987900874Z",
-      "completedAt": null
+      "updatedAt": "2026-06-26T02:37:41.996951095Z",
+      "completedAt": "2026-06-26T02:37:41.996951095Z"
     },
     {
       "id": "rall-0ea1",
       "title": "Tests: budget-kill classification matrix",
       "description": "Context: tasks.md §5.5 (six scenarios). Reviews the subtle gate logic from the previous lap.\n\nFiles \u0026 scope: internal/relay/runner_test.go and siblings. Production fixes limited to tiny safe one-liners; anything larger -\u003e new head lap.\n\nAcceptance: tasks.md §5.5 (a)-(f): (a) try-cap kill, no evidence -\u003e unidentified_issue + \"try budget exhausted; no output\" + FailureAgent; (b) try-cap kill with executor evidence carrying a non-empty Category (e.g. codex session log -\u003e harness_launch) -\u003e no override, executor authoritative; (c) freeze counter does NOT increment on a try-cap kill; (d) run-budget kill, no evidence/no classifier category -\u003e unidentified_issue + \"run timeout\" + FailureAgent (changed from the old empty-category behaviour); (e) run-budget kill where ClassifyError produced a category -\u003e classifier authoritative, no override; (f) no regression in operator-worthy capture for any budget-kill path. go test ./internal/relay/... green.",
       "assignee": "SENIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 458752,
       "createdAt": "2026-06-26T00:55:47.987902517Z",
-      "updatedAt": "2026-06-26T00:55:47.987902517Z",
-      "completedAt": null
+      "updatedAt": "2026-06-26T02:59:07.323690538Z",
+      "completedAt": "2026-06-26T02:59:07.323690538Z"
     },
     {
       "id": "rall-d113",
       "title": "RallyRoute event + NULL-outcome RallyTry cleanup",
       "description": "Context: tasks.md §7, design Decision 5. 39 routing-fallback events over 30 days are mis-emitted as RallyTry with no outcome, polluting every failure-rate query.\n\nOutcome: a new RallyRoute custom event carries routing decisions; the route-fallback emission moves off RallyTry; every remaining RallyTry emit carries a non-empty outcome; the recovery-cap-hit path keeps its operator-worthy RallyFailure AND additionally emits RallyRoute.\n\nFiles \u0026 scope:\n- internal/telemetry/sink.go (+ NoopSink): add EmitRouteEvent(ctx context.Context, fields map[string]interface{}).\n- internal/telemetry/newrelic.go: implement NewRelicSink.EmitRouteEvent via app.RecordCustomEvent(\"RallyRoute\", buildFlatAttributes(fields)).\n- internal/telemetry/attributes.go: add RallyRoute to the fixed event-name set.\n- internal/telemetry/newrelic_coverage_test.go: add RallyRoute to the allowed event-name map (~146) and bump the count assertion (~154, len != 3 -\u003e != 4).\n- internal/relay/runner.go: move the route-fallback emit at runner.go:830 from EmitTryLog to EmitRouteEvent (carry event=\"route_fallback\", from_runner, to_runner, role, lap_id, repo, repo_name, relay_id, run_id, fallback-cause fields); at runner.go:834 KEEP the existing CaptureFailure (operator-worthy needs_user) AND also emit a RallyRoute for audit parity; add a boundary guard in EmitTryLog that logs a warning and fills outcome=\"unknown\" if missing; audit sites 830/2100/2574/3046 (expected: only 830 was missing outcome).\n\nDesign: keep RallyTry pure (every event a real try outcome with a non-empty outcome). Do not lose the operator-worthy RallyFailure.\n\nAcceptance: tasks.md §7.8 (a)-(d): route-fallback -\u003e RallyRoute (not RallyTry); recovery-cap-hit -\u003e BOTH RallyRoute and a needs_user RallyFailure; every RallyTry has a non-empty outcome; the boundary guard fires when a caller forgets outcome. go test ./internal/telemetry/... ./internal/relay/... green.",
       "assignee": "SENIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 524288,
       "createdAt": "2026-06-26T00:55:47.987903921Z",
-      "updatedAt": "2026-06-26T00:55:47.987903921Z",
-      "completedAt": null
+      "updatedAt": "2026-06-26T03:19:57.007253072Z",
+      "completedAt": "2026-06-26T03:19:57.007253072Z"
     },
     {
       "id": "rall-a590",
       "title": "Verify budget classification + RallyRoute telemetry",
       "description": "OpenSpec verification scoped to tasks.md §5 and §7. Use openspec-verify-change against improve-harness-consistency.\n\nIdentify the merge target (user / PR / repo docs / branch config / history — not assumed main) and the first lap of this batch before diffing; treat earlier branch work as pre-existing.\n\nTrace, do not just run tests: the two runner gate conditions and that a non-empty executor/classifier Category is genuinely respected (override does not fire); the EmitTryLog -\u003e EmitRouteEvent move at runner.go:830 and that the recovery-cap-hit RallyFailure capture is intact at 834; the coverage-test whitelist addition + count bump; confirm the telemetry-boundary guard fills outcome when missing.\n\nCheck off §5/§7 tasks.md boxes for verified-correct work; add a focused head lap for any substantive gap. No history rewriting.",
       "assignee": "VERIFY",
-      "isDone": false,
+      "isDone": true,
       "order": 589824,
       "createdAt": "2026-06-26T00:55:47.987905359Z",
-      "updatedAt": "2026-06-26T00:55:47.987905359Z",
-      "completedAt": null
+      "updatedAt": "2026-06-26T03:34:12.497905752Z",
+      "completedAt": "2026-06-26T03:34:12.497905752Z"
     },
     {
       "id": "rall-1f4b",
       "title": "Codex session-log fallback (silent exit-1 enrichment)",
       "description": "Context: tasks.md §4, design Decision 2 + 9. Codex's silent exit-1 burst (0.11.2, 10 failures in one relay) wrote nothing in-band, yet codex keeps rich rollout-*.jsonl session logs we never read. Depends on the §10 lap (category) and the §2 ResolvedModel lap.\n\nOutcome: on a codex error with no parser-matchable in-band signal, enrich from the matching session log (Source=\"codex_session_log\"); when no session log matches, the EXECUTOR returns FailureEvidence{Category: CategoryHarnessLaunch, Source: \"codex_no_session_log\"} so ClassifyError Priority 1 maps it to FreshRestart/FailureInfra (retry within budget, then freeze pressure after 2+).\n\nFiles \u0026 scope: internal/agent/codex.go. Locate the latest $CODEX_HOME/sessions/YYYY/MM/DD/rollout-*.jsonl (default ~/.codex/sessions/) whose first-line session_meta.cwd == opts.WorkspaceDir and whose timestamp is within the try window. Read ONLY: first-line scalars (cwd, git.commit_hash, git.branch, model_provider, cli_version) and the last event_msg subtype (task_started / task_complete / turn_aborted) as the diagnostic Message. EXPLICITLY skip base_instructions, token_count, response_item, turn_context. Change the codex.go:195-201 error path: when ParseCodexError is nil and no session log matched, return \u0026TryResult{Evidence: \u003ccodex_no_session_log harness_launch evidence\u003e}, execErr instead of return nil, execErr. 256-rune bound via truncateSignal.\n\nDesign: do NOT use CategoryAuthOrProxy for the no-session-log case (that maps to Rotate/FailureAgent — wrong; the runner should keep retrying launch failures within budget, hence harness_launch -\u003e FreshRestart). The merged-stderr idiom at codex.go:223 is the standard Go pattern, not a race — no refactor. The resolved model is NOT in session_meta; ResolvedModel comes from the executor's model local (§2), not the log.\n\nAcceptance: tasks.md §4.6 (a)-(d): (a) matching session log -\u003e \"codex_session_log\" + Message from the last event subtype; (b) no session log -\u003e CategoryHarnessLaunch + \"codex_no_session_log\" resolving Priority 1 to harness_launch / StrategyFreshRestart / FailureInfra (NOT Rotate/FailureAgent); (c) base_instructions / token_count / turn_context never appear in RawSignal; (d) missing/unreadable session dir is not an error (falls through to the existing safe_exec_error path). Tests green.",
       "assignee": "SENIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 655360,
       "createdAt": "2026-06-26T00:55:47.987908335Z",
-      "updatedAt": "2026-06-26T00:55:47.987908335Z",
-      "completedAt": null
+      "updatedAt": "2026-06-26T04:32:46.98730612Z",
+      "completedAt": "2026-06-26T04:32:46.98730612Z"
     },
     {
       "id": "rall-d6c2",

@@ -250,7 +250,14 @@ func applyEvidenceToFailureState(fs *telemetry.FailureState, ev *reliability.Fai
 	}
 	fs.EvidenceRawSignal = ev.RawSignal
 	fs.EvidenceMessage = ev.Message
-	fs.EvidenceSource = source
+	// Prefer the evidence's own Source tag (set by the classification path)
+	// over the caller-supplied default — this is how dirty_tree / text_pattern
+	// / unmatched evidence propagates its source through to telemetry.
+	if ev.Source != "" {
+		fs.EvidenceSource = ev.Source
+	} else {
+		fs.EvidenceSource = source
+	}
 }
 
 func applySafeExecErrorEvidence(fs *telemetry.FailureState, err error) {
@@ -799,8 +806,8 @@ func (r *Runner) Run(ctx context.Context) error {
 		runCtx, runSpan := r.tel().StartSpan(ctx, "run", fmt.Sprintf("relay-%d-run-%d", relay.ID, runID))
 		applyTags(runSpan, runTags)
 
-		// Rotating to a backup runner is a healthy recovery, not an alert — log
-		// it as a common event, never an Issue.
+		// Rotating to a backup runner is a healthy recovery, not an alert. Record
+		// it on the routing event stream, not as a try outcome.
 		if selection.PreviousAgent != nil &&
 			(selection.PreviousAgent.Harness != selection.Agent.Harness ||
 				selection.PreviousAgent.Model != selection.Agent.Model) {
@@ -815,7 +822,6 @@ func (r *Runner) Run(ctx context.Context) error {
 				"event":       "route_fallback",
 				"relay_id":    relay.ID,
 				"run_id":      runID,
-				"runner":      to,
 				"from_runner": from,
 				"to_runner":   to,
 				"role":        task.promptAssignee(),
@@ -827,11 +833,31 @@ func (r *Runner) Run(ctx context.Context) error {
 				fallbackCause.addTo(fields, runSpan)
 			}
 			fallbackCause = nil
-			r.tel().EmitTryLog(runCtx, fields)
+			r.tel().EmitRouteEvent(runCtx, fields)
 		} else if fallbackCause != nil {
 			fallbackCause = nil
 		}
 		if selection.RecoveryCapHit {
+			to := telemetry.RunnerLabel(selection.Agent.Harness, selection.Agent.Model)
+			from := to
+			if selection.PreviousAgent != nil {
+				from = telemetry.RunnerLabel(selection.PreviousAgent.Harness, selection.PreviousAgent.Model)
+			}
+			r.tel().EmitRouteEvent(runCtx, map[string]interface{}{
+				"event":                        "route_fallback",
+				"relay_id":                     relay.ID,
+				"run_id":                       runID,
+				"from_runner":                  from,
+				"to_runner":                    to,
+				"role":                         task.promptAssignee(),
+				"repo":                         rc.Repo,
+				"repo_name":                    rc.RepoName,
+				"lap_id":                       task.LapID,
+				"route_name":                   selection.Route.Name,
+				"consecutive_recovery_runs":    selection.RecoveryStatus.ConsecutiveRecoveryRuns,
+				"recovery_classification":      "needs_user",
+				"route_entry_exhausted_reason": "recovery_cap_hit",
+			})
 			r.tel().CaptureFailure(ctx, fmt.Sprintf("relay %d lap %s recovery cap reached: needs_user", relay.ID, task.LapID),
 				failureStateEvent(
 					telemetry.Tags(telemetry.EventInfo{RelayID: relay.ID, RunID: runID, Role: task.promptAssignee(), Repo: rc.Repo, RepoName: rc.RepoName, LapID: task.LapID}),
@@ -2104,7 +2130,7 @@ attemptLoop:
 				"try_id":              tryRecord.ID,
 				"attempt":             attempt,
 				"role":                task.promptAssignee(),
-				"runner":              telemetry.RunnerLabel(picked.Harness, picked.Model),
+				"runner":              telemetry.RunnerLabel(picked.Harness, firstNonEmpty(result.ResolvedModel, picked.Model)),
 				"repo":                rc.Repo,
 				"repo_name":           rc.RepoName,
 				"lap_id":              task.LapID,
@@ -2249,13 +2275,22 @@ attemptLoop:
 		// returns to the routing dispatch loop, which benches the quota scope or
 		// routes the entry away using the surfaced category + reset evidence.
 		terminalForRun := attemptOutcome.IsTerminalForRun("")
+		var decisionEvidence *reliability.FailureEvidence
 		if failed && !lapPinMismatch && attemptOutcome.CarriesFailureCategory() {
 			logLines := readLastNLines(tryLogPath, 50)
-			decision := reliability.ClassifyError(logLines, picked.Harness, &reliability.ClassifyContext{HasFileChanges: incomplete, Finalized: finalized}, result.Evidence)
+			decision := reliability.ClassifyError(logLines, picked.Harness, &reliability.ClassifyContext{
+				HasFileChanges: incomplete,
+				Finalized:      finalized,
+				ChangedPaths:   filesChangedList,
+			}, result.Evidence)
+			decisionEvidence = decision.Evidence
 			attemptFailureClass = decision.FailureClass
 			failureClass = decision.FailureClass
 			failureCategory = decision.Category
 			resetEvidence = result.Evidence
+			if resetEvidence == nil {
+				resetEvidence = decision.Evidence
+			}
 			terminalForRun = attemptOutcome.IsTerminalForRun(decision.Category)
 			if decision.FailureClass == reliability.FailureInfra {
 				infraFailures++
@@ -2312,7 +2347,15 @@ attemptLoop:
 			canHandoffResume = exec != nil && exec.ResumeSupported() && sessionID != ""
 			attemptOutcome = reliability.OutcomeRunTimeout
 			failReason = "run timeout"
-			failureCategory = ""
+			// A run-budget kill carries a non-empty category unless an
+			// authoritative Category was already produced by the classifier
+			// (decision.Category from the block above, e.g. a text-pattern
+			// agent_error or dirty-tree incomplete_finalization) or by
+			// executor/session/disk-log evidence. Empty = no telemetry signal,
+			// so fall back to the non-freezing unidentified_issue floor.
+			if runBudgetExhausted && failureCategory == "" && (result.Evidence == nil || result.Evidence.Category == "") {
+				failureCategory = reliability.CategoryUnidentifiedIssue
+			}
 			attemptFailureClass = reliability.FailureAgent
 			failureClass = attemptFailureClass
 			terminalForRun = false
@@ -2320,6 +2363,18 @@ attemptLoop:
 				attemptOutcome = reliability.OutcomeHandoffTimeout
 				failReason = noHandoffResumeReason(exec, sessionID)
 			}
+		}
+		// Try-cap-only kill (per-try deadline fired, run budget remains):
+		// ClassifyError was skipped (attemptOutcome = OutcomeRunTimeout, whose
+		// CarriesFailureCategory() is false), so failureCategory would
+		// otherwise stay empty. Give it the non-freezing agent-class
+		// unidentified_issue floor — unless executor/session/disk-log evidence
+		// already produced an authoritative Category.
+		if failed && timedOut && !runBudgetExhausted && failureCategory == "" && (result.Evidence == nil || result.Evidence.Category == "") {
+			failureCategory = reliability.CategoryUnidentifiedIssue
+			failReason = "try budget exhausted; no output"
+			failureClass = reliability.FailureAgent
+			attemptFailureClass = reliability.FailureAgent
 		}
 		lastAttemptIncomplete = failed && attemptFailureClass == reliability.FailureIncomplete
 
@@ -2417,7 +2472,7 @@ attemptLoop:
 			"try_id":                         tryRecord.ID,
 			"attempt":                        attempt,
 			"role":                           task.promptAssignee(),
-			"runner":                         telemetry.RunnerLabel(picked.Harness, picked.Model),
+			"runner":                         telemetry.RunnerLabel(picked.Harness, firstNonEmpty(result.ResolvedModel, picked.Model)),
 			"repo":                           rc.Repo,
 			"repo_name":                      rc.RepoName,
 			"lap_id":                         task.LapID,
@@ -2452,7 +2507,9 @@ attemptLoop:
 			AgentState:             r.agentStateName(picked),
 		}
 		applyEvidenceToFailureState(&evidenceState, resetEvidence, "executor_evidence")
-		applySafeExecErrorEvidence(&evidenceState, execErr)
+		if result.Evidence == nil && decisionEvidence == nil {
+			applySafeExecErrorEvidence(&evidenceState, execErr)
+		}
 		if failed {
 			addFailureEvidenceTelemetry(trySpan, tryLogFields, evidenceState)
 		}
@@ -2529,7 +2586,9 @@ attemptLoop:
 			if resetEvidence != nil {
 				applyEvidenceToFailureState(&fs, resetEvidence, "executor_evidence")
 			}
-			applySafeExecErrorEvidence(&fs, execErr)
+			if result.Evidence == nil && decisionEvidence == nil {
+				applySafeExecErrorEvidence(&fs, execErr)
+			}
 			if evt, ok := limitSignalEvent(tryTags, rc, fs); ok {
 				r.tel().CaptureEvent(tryCtx, fmt.Sprintf("relay %d run %d try %d provider limit signal: %s", relay.ID, runIndex+1, tryRecord.ID, failReason), evt)
 			}
@@ -2699,7 +2758,12 @@ attemptLoop:
 		// failure — the agent process ended without `laps done`/`laps handoff`.
 		// Categorize it as incomplete_finalization and carry run/runner/budget and
 		// the last known attempt; this is not a provider-limit failure, so no
-		// quota/reset/raw-signal fields attach.
+		// quota/reset fields attach. Apply the Priority-3 dirty_tree
+		// FailureEvidence so the RallyFailure carries failure_evidence.source=
+		// dirty_tree with a bounded raw_signal (changed paths) and message. Prefer
+		// the classifier-produced evidence from the last attempt when it already
+		// resolved to dirty_tree; otherwise build equivalent bounded changed-path
+		// evidence from the dirty working tree.
 		fs := telemetry.FailureState{
 			Outcome:     string(reliability.OutcomeFailed),
 			Category:    string(reliability.CategoryIncompleteFinalization),
@@ -2707,6 +2771,11 @@ attemptLoop:
 			MaxAttempts: maxAttempts,
 			AgentState:  r.agentStateName(picked),
 		}
+		dirtyTreeEv := reliability.DirtyTreeEvidence(r.filesChangedList(nil, "", "", ""))
+		if resetEvidence != nil && resetEvidence.Source == "dirty_tree" {
+			dirtyTreeEv = resetEvidence
+		}
+		applyEvidenceToFailureState(&fs, dirtyTreeEv, "dirty_tree")
 		r.tel().CaptureFailure(ctx, fmt.Sprintf("relay %d run %d: agent exited without finalizing", relay.ID, runIndex+1),
 			failureStateEvent(telemetry.Tags(telemetry.EventInfo{
 				RelayID:  relay.ID,
@@ -2994,7 +3063,7 @@ func (r *Runner) runBoundedHandoffOnly(
 		"try_id":                 tryID,
 		"attempt":                attemptNumber,
 		"role":                   task.promptAssignee(),
-		"runner":                 telemetry.RunnerLabel(picked.Harness, picked.Model),
+		"runner":                 telemetry.RunnerLabel(picked.Harness, firstNonEmpty(result.ResolvedModel, picked.Model)),
 		"repo":                   rc.Repo,
 		"repo_name":              rc.RepoName,
 		"lap_id":                 task.LapID,
@@ -3678,4 +3747,18 @@ func (r *Runner) maybeWriteStubAndClearState(lastOutput string) (bool, error) {
 	_ = progress.AppendRunEntry(r.cfg.WorkspaceDir, entry)
 	_ = progress.ClearRunState(r.cfg.WorkspaceDir)
 	return true, nil
+}
+
+// firstNonEmpty returns the first argument whose trimmed value is non-empty,
+// or "" when none qualify. It resolves the model used in the runner telemetry
+// tag: the executor's ResolvedModel (authoritative for bare-alias routes) wins
+// over the route-resolved picked.Model, but the route-resolved model remains
+// the fallback when the executor did not populate ResolvedModel.
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return value
+		}
+	}
+	return ""
 }

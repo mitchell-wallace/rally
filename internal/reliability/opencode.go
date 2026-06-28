@@ -83,7 +83,7 @@ func ParseOpencodeError(stderr string, model string) *FailureEvidence {
 	fe.RawSignal = truncateSignal(stderr, 256)
 
 	if eventError == nil && flatError == "" {
-		fe.Category = CategoryAgentError
+		fe.Category = CategoryUnidentifiedIssue
 		return &fe
 	}
 

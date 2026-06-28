@@ -52,6 +52,15 @@ type TryResult struct {
 	MessageAddressed *bool
 	FilesChanged     []string
 	SessionID        string
+	// ResolvedModel is the model the executor actually passed to the CLI:
+	// its own default resolved with the per-try opts.Model override. It is the
+	// authoritative source of the model used for a try (the session log does not
+	// carry it). The runner uses it as the runner-tag model for bare-alias
+	// routes, where the route resolves only to a harness and each executor
+	// otherwise resolves its default model internally without reporting it back.
+	// It is intentionally empty for executors that do not populate it, in which
+	// case callers fall back to the route-resolved model.
+	ResolvedModel string
 	// ToolCalls is the count of tool-use invocations observed in the harness
 	// transcript. Used to distinguish "agent did real work" from "agent only
 	// emitted text" — a strong signal for the laps-marker-as-text failure.

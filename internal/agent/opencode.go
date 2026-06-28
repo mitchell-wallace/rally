@@ -102,6 +102,7 @@ func (o *OpenCodeExecutor) Execute(ctx context.Context, opts RunOptions) (*TryRe
 	if err != nil {
 		return nil, err
 	}
+	tr.ResolvedModel = model
 	attachOpenCodeFailureEvidence(tr, out, runErr, opts, model, startedAt, endedAt)
 	if runErr != nil {
 		return tr, fmt.Errorf("opencode exec failed: %w", runErr)

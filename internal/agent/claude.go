@@ -66,7 +66,7 @@ func (c *ClaudeExecutor) Execute(ctx context.Context, opts RunOptions) (*TryResu
 	if err != nil {
 		execErr := fmt.Errorf("claude exec failed: %w\noutput: %s", err, string(out))
 		if ev := reliability.ParseClaudeError(string(out)); ev != nil {
-			return &TryResult{Evidence: ev}, execErr
+			return &TryResult{Evidence: ev, ResolvedModel: model}, execErr
 		}
 		return nil, execErr
 	}
@@ -78,6 +78,7 @@ func (c *ClaudeExecutor) Execute(ctx context.Context, opts RunOptions) (*TryResu
 	}
 	tr.SessionID = sessionID
 	tr.ToolCalls = toolCalls
+	tr.ResolvedModel = model
 	return tr, nil
 }
 

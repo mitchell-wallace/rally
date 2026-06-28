@@ -9,6 +9,7 @@ import (
 
 const (
 	newRelicEventRallyTry        = "RallyTry"
+	newRelicEventRallyRoute      = "RallyRoute"
 	newRelicEventRallyDiagnostic = "RallyDiagnostic"
 	newRelicEventRallyFailure    = "RallyFailure"
 
@@ -19,6 +20,7 @@ const (
 
 var newRelicCustomEventNames = map[string]struct{}{
 	newRelicEventRallyTry:        {},
+	newRelicEventRallyRoute:      {},
 	newRelicEventRallyDiagnostic: {},
 	newRelicEventRallyFailure:    {},
 }
