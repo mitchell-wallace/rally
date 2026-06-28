@@ -97,6 +97,17 @@ relay/run/try failures, use New Relic APM transactions, errors, and custom
 events (`RallyTry`, `RallyFailure`, `RallyDiagnostic`) to understand the
 failure.
 
+Use the New Relic CLI as `newrelic`, not a shell alias. On this machine the snap
+command is `newrelic-cli.newrelic`, and `/home/mitchell/.local/bin/newrelic`
+provides a PATH-visible shim for non-interactive agent shells. The configured
+profile is `rally` for account `8182741`; pass `--profile rally --accountId
+8182741` on investigative commands so agents do not depend on implicit profile
+selection. If authentication looks suspect, first smoke-test with:
+
+```sh
+newrelic nerdgraph query '{ actor { user { name email } } }' --profile rally --accountId 8182741
+```
+
 Note: Sentry was removed in Rally 0.9.1. Historical issue IDs (e.g., `RALLY-2`,
 `RALLY-Q`) mentioned in older release notes or planning docs are Sentry references
 and cannot be queried in New Relic.
