@@ -5615,6 +5615,82 @@ func TestLapPinValidation_DuplicateSameLap(t *testing.T) {
 	}
 }
 
+func TestRunOneLapPinIgnoresStaleSummaryEntriesForSameRunID(t *testing.T) {
+	workspaceDir := t.TempDir()
+	rallyDir := store.RallyDir(workspaceDir)
+	os.MkdirAll(rallyDir, 0o755)
+	initRepo(t, workspaceDir)
+	runGit(t, workspaceDir, "commit", "--allow-empty", "-m", "initial", "--no-verify")
+
+	if err := progress.AppendRunEntry(workspaceDir, progress.RunEntry{
+		RunID:         "relay-1-run-1",
+		Summary:       "stale prior relay entry",
+		LapsCompleted: []string{"stale-lap"},
+	}); err != nil {
+		t.Fatalf("AppendRunEntry error = %v", err)
+	}
+
+	s := newTestStore(t, rallyDir)
+	exec := &funcExecutor{
+		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+			if err := os.WriteFile(filepath.Join(workspaceDir, "current.txt"), []byte("done"), 0o644); err != nil {
+				return nil, err
+			}
+			rs, err := progress.LoadRunState(workspaceDir)
+			if err != nil {
+				return nil, err
+			}
+			rs.RecordedLaps = []string{"current-lap"}
+			if err := progress.SaveRunState(workspaceDir, rs); err != nil {
+				return nil, err
+			}
+			return &agent.TryResult{Completed: true, Summary: "current lap done"}, nil
+		},
+	}
+
+	r := NewRunner(s, Config{
+		WorkspaceDir:     workspaceDir,
+		DataDir:          t.TempDir(),
+		AgentMixSpecs:    []string{"op:dsf"},
+		TargetIterations: 1,
+		RetryBudget:      1,
+		LapsEnabled:      true,
+		Resolver:         cheapTestResolver,
+	}, map[string]agent.Executor{"opencode": exec})
+
+	res, err := r.runOne(
+		context.Background(),
+		&store.RelayRecord{ID: 1, TargetIterations: 1},
+		0,
+		agent.ResolvedAgent{Harness: "opencode", Model: cheapTestModel},
+		runTask{Name: "pinned task", Prompt: "do work", Assignee: "senior", LapID: "current-lap", IsLapsBacked: true, LapsRemaining: 1},
+		nil,
+		nil,
+		false,
+		false,
+		nil,
+		nil,
+		io.Discard,
+	)
+	if err != nil {
+		t.Fatalf("runOne error = %v", err)
+	}
+	if !res.Success {
+		t.Fatalf("runOne success = false, fail reason = %q", res.FailReason)
+	}
+
+	tries := s.AllTries()
+	if len(tries) != 1 {
+		t.Fatalf("tries = %d, want 1", len(tries))
+	}
+	if tries[0].FailReason == "multi_lap_consumed" || tries[0].FailReason == "wrong_lap_consumed" {
+		t.Fatalf("unexpected lap pin mismatch: %q", tries[0].FailReason)
+	}
+	if got, want := tries[0].RecordedLaps, []string{"current-lap"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("RecordedLaps = %v, want %v", got, want)
+	}
+}
+
 func TestLapPinWrongLapWarningInRunOne(t *testing.T) {
 	workspaceDir := t.TempDir()
 	rallyDir := store.RallyDir(workspaceDir)

@@ -985,8 +985,12 @@ just
 
 Common recipes include:
 - `just build`: Build the `rally` binary into `bin/`.
-- `just test`: Run the full test suite.
+- `just test`: Run the deterministic test suite.
+- `just test-real`: Reproduce the CI `test` job with opt-in real-agent tests.
 - `just check`: Check code formatting (`gofmt`) and run static analysis (`go vet`).
+- `just test-race`: Run the race-detector suite.
+- `just tidy-check`: Verify `go mod tidy` does not change `go.mod` or `go.sum`.
+- `just audit`: Run `govulncheck ./...` after installing `golang.org/x/vuln/cmd/govulncheck@latest`.
 - `just fmt`: Automatically format all Go files.
 - `just run <args>`: Compile and run the `rally` CLI with arguments.
 - `just setup-hooks`: Configure the local Git hooks path.
@@ -998,6 +1002,38 @@ If you don't have `just` installed, you can run tests directly with Go:
 ```sh
 go test -count=1 ./...
 ```
+
+The CI `test` job sets `RALLY_TEST_REAL_AGENTS=1`, which enables real-backend
+tests that drive live agent CLIs when they are installed and authenticated. To
+reproduce that job locally:
+
+```sh
+just test-real
+# or:
+RALLY_TEST_REAL_AGENTS=1 go test -count=1 ./...
+```
+
+### CI Gates
+
+The test workflow runs on pushes to `dev` and `main`, and on pull requests. It
+contains these jobs:
+
+- `test`: Go tests with real-agent coverage enabled where local prerequisites exist.
+- `race`: `go test -race -shuffle=on -count=1 ./...`.
+- `lint`: `go vet ./...` plus a `gofmt -l .` assertion.
+- `tidy`: `go mod tidy` plus a `go.mod`/`go.sum` drift check.
+- `audit`: `govulncheck ./...`, advisory only (`continue-on-error`).
+
+For local parity before release, run `just test`, `just check`,
+`just test-race`, `just tidy-check`, and `just audit`. The hardened `main`
+branch-protection rollout should require `test`, `race`, `lint`, and `tidy`;
+do not require `audit` until govulncheck is intentionally promoted from
+advisory to blocking.
+
+Branch protection enablement is a post-merge operator step after the required
+jobs have green history on both `dev` and `main`. Administrators should be
+excluded on first rollout so the direct-push release flow cannot be wedged by a
+new-gate mistake.
 
 ### Git hooks
 

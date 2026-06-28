@@ -14,6 +14,10 @@ run *args:
 test:
     go test -count=1 ./...
 
+# Reproduce the CI test job, including real-agent tests when local CLIs/auth exist
+test-real:
+    RALLY_TEST_REAL_AGENTS=1 go test -count=1 ./...
+
 # Run tests in verbose mode
 test-verbose:
     go test -v -count=1 ./...
@@ -36,6 +40,20 @@ check: vet
         exit 1; \
     fi
     @echo "✅ All checks passed!"
+
+# Run tests with the race detector enabled
+test-race:
+    go test -race -shuffle=on -count=1 ./...
+
+# Run vulnerability scanner
+# First run: go install golang.org/x/vuln/cmd/govulncheck@latest
+audit:
+    govulncheck ./...
+
+# Verify go.mod and go.sum are tidy (no uncommitted changes after tidy)
+tidy-check:
+    go mod tidy
+    git diff --exit-code go.mod go.sum
 
 # Set up local Git hooks
 setup-hooks:

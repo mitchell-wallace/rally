@@ -1952,10 +1952,10 @@ attemptLoop:
 			lapsAttempted = append(lapsAttempted, storeLapAttempts(runStateAfter.LapsAttempted)...)
 			handoffState = runStateAfter.HandoffState
 		}
-		if task.IsLapsBacked {
-			recordedLaps = mergeStrings(recordedLaps, progressLapsCompletedForRun(r.cfg.WorkspaceDir, runID))
-		}
 		runEntry := recordedRunEntryForRun(r.cfg.WorkspaceDir, runID, summaryEntryCountBeforeRun)
+		if task.IsLapsBacked && runEntry != nil {
+			recordedLaps = mergeStrings(recordedLaps, progressRunEntryLapIDs(*runEntry))
+		}
 		handoffEntry := handoffEntryFromRunEntry(runEntry)
 		recoveryClassification := recoveryClassificationForRun(task, runEntry)
 

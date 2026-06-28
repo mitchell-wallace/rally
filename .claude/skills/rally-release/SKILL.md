@@ -14,7 +14,7 @@ description: >-
 license: MIT
 metadata:
   author: rally
-  version: "0.2"
+  version: "0.3"
 ---
 
 # Rally Release
@@ -45,44 +45,89 @@ Do **not** use this skill for:
 
 ## Standard flow
 
-The order matters: CI is configured to run on push to `main` only. Pushing to `dev` does **not** trigger CI. The `auto-tag` and `release` workflows fire as a result of the main push.
+The order matters: the test workflow runs on `dev` and `main` pushes. Before advancing `main`, verify the exact `dev` SHA has green required checks (`test`, `race`, `lint`, `tidy`). The `auto-tag` and `release` workflows fire as a result of the main push.
 
 ### Starting from a feature branch
 
 1. **Sanity check** — `git status --short --branch` and `git branch -vv`. Must be on a non-`main`, non-`dev` branch. Working tree must be clean.
-2. **Local checks** — `just test` and `just check` (which runs `go vet` + a `gofmt` check). Both must be clean. (Fallback: `go test -count=1 ./...`, `go vet ./...`, `gofmt -l .`.)
+2. **Local checks** — run `just test`, `just check`, `just test-race`, `just tidy-check`, and `just audit`. All must be clean before pushing. `just test` runs the deterministic suite — the CI `test` job minus the opt-in real-backend tests; to reproduce the *full* CI `test` command (including real-agent coverage) run `just test-real` (`RALLY_TEST_REAL_AGENTS=1 go test -count=1 ./...`), but it needs agent CLIs + auth and is slow/flaky, so it is NOT part of this local gate — CI is authoritative for real-agent coverage. (Fallback: `go test -count=1 ./...`, `go vet ./...` plus `gofmt -l .`, `go test -race -shuffle=on -count=1 ./...`, `go mod tidy && git diff --exit-code go.mod go.sum`, and `govulncheck ./...` after installing `golang.org/x/vuln/cmd/govulncheck@latest`.)
 3. **Push the branch** — `git push origin <branch>`.
 4. **Merge to dev** — `git checkout dev && git merge --ff-only <branch> && git push origin dev`.
-5. **Merge to main** — `git checkout main && git merge --ff-only dev && git push origin main`. (This push is what triggers CI.)
-6. Continue to **Watch CI** below.
+5. **Verify dev CI** — wait for the `test.yml` workflow run on the exact `dev` SHA and confirm required jobs `test`, `race`, `lint`, and `tidy` are green. Stop and report missing, pending, or failing checks before touching `main`.
+6. **Merge to main** — `git checkout main && git merge --ff-only dev && git push origin main`. (This push triggers the main test workflow plus any auto-tag/release workflows.)
+7. Continue to **Watch CI** below.
 
 ### Starting from dev
 
 1. **Sanity check** — `git status --short --branch` and `git branch -vv`. Must be on `dev`. Working tree must be clean.
-2. **Local checks** — `just test` and `just check`. Both must be clean. (Fallback: `go test -count=1 ./...`, `go vet ./...`, `gofmt -l .`.)
-3. **Merge to main** — `git checkout main && git merge --ff-only dev && git push origin main`. (This push is what triggers CI.)
-4. Continue to **Watch CI** below.
+2. **Local checks** — run `just test`, `just check`, `just test-race`, `just tidy-check`, and `just audit`. All must be clean before pushing. `just test` runs the deterministic suite — the CI `test` job minus the opt-in real-backend tests; to reproduce the *full* CI `test` command (including real-agent coverage) run `just test-real` (`RALLY_TEST_REAL_AGENTS=1 go test -count=1 ./...`), but it needs agent CLIs + auth and is slow/flaky, so it is NOT part of this local gate — CI is authoritative for real-agent coverage. (Fallback: `go test -count=1 ./...`, `go vet ./...` plus `gofmt -l .`, `go test -race -shuffle=on -count=1 ./...`, `go mod tidy && git diff --exit-code go.mod go.sum`, and `govulncheck ./...` after installing `golang.org/x/vuln/cmd/govulncheck@latest`.)
+3. **Verify dev CI** — wait for the `test.yml` workflow run on the exact `dev` SHA and confirm required jobs `test`, `race`, `lint`, and `tidy` are green. Stop and report missing, pending, or failing checks before touching `main`.
+4. **Merge to main** — `git checkout main && git merge --ff-only dev && git push origin main`. (This push triggers the main test workflow plus any auto-tag/release workflows.)
+5. Continue to **Watch CI** below.
+
+### Verify dev CI
+
+Run this before the `dev` -> `main` fast-forward:
+
+```sh
+dev_sha="$(git rev-parse dev)"
+run_id="$(
+  gh run list --workflow test.yml --branch dev --limit 50 \
+    --json databaseId,headSha,status,conclusion,url \
+    --jq ".[] | select(.headSha == \"$dev_sha\") | .databaseId" |
+    head -n 1
+)"
+
+if [ -z "$run_id" ]; then
+  echo "No test.yml workflow run found for dev SHA $dev_sha" >&2
+  exit 1
+fi
+
+gh run watch "$run_id" --exit-status || true
+
+bad_required="$(
+  gh run view "$run_id" --json jobs --jq '
+    ["test","race","lint","tidy"] as $required |
+    [ .jobs[] | select(.name as $name | $required | index($name)) ] as $seen |
+    [
+      $required[] as $name |
+      (($seen[] | select(.name == $name)) // {name:$name,status:"missing",conclusion:"missing",url:""}) |
+      select(.status != "completed" or .conclusion != "success") |
+      "\(.name)\t\(.status)\t\(.conclusion)\t\(.url)"
+    ] | .[]
+  '
+)"
+
+if [ -n "$bad_required" ]; then
+  echo "Required dev checks are not green for $dev_sha:" >&2
+  printf '%s\n' "$bad_required" >&2
+  exit 1
+fi
+```
+
+`audit`/govulncheck is advisory in CI and is not part of this required-check preflight. If any required check is missing, pending after the watch, cancelled, skipped, or failed, stop and surface the table above plus `gh run view "$run_id" --log-failed` output for the failing job.
 
 ### Watch CI
 
-7. **Watch CI** — `gh run list --branch main --limit 1 --json databaseId,name,status,conclusion` to find the test, auto-tag, and release run IDs, then `gh run watch <id> --exit-status` for each in order (test → auto-tag → release).
+7. **Watch CI** — `gh run list --branch main --limit 10 --json databaseId,name,status,conclusion,headSha` to find the `test`, `auto-tag`, and `release` run IDs for the main SHA, then `gh run watch <id> --exit-status` for each in order (test -> auto-tag -> release).
 8. **Install latest binary and smoke test** — after CI passes and the release is published:
    - Run `rally update` locally to fetch the latest published binary.
    - Create a throwaway git repo in `/tmp/rally-smoke-<tag>/` with a trivial prompt (e.g. "Create a file called smoke-test.txt").
    - Run a single-iteration relay with an ongoing free smoke-test model (prefer `op:opencode/big-pickle`; `zai-coding-plan/glm-5.1` is a fallback).
    - Verify: exit 0, file created, try record in `.rally/state/tries.jsonl` shows `"completed": true`.
    - This confirms the published binary actually works end-to-end before declaring the release done.
-8. **Report** — final SHAs for `main`/`dev`/`branch>`, CI outcomes, the new release tag (if auto-tag fired), and smoke-test result.
+9. **Report** — final SHAs for `main`/`dev`/`branch>`, CI outcomes, the new release tag (if auto-tag fired), and smoke-test result.
 
 ## Stop conditions
 
 Halt and report (do **not** attempt to recover, rebase, or force-push) when any of these hit:
 
 - **Working tree dirty at start.** Stash, commit, or split before resuming.
-- **`just test` or `just check` fails locally.** Fix on the feature branch, push, and restart from step 2.
+- **Any local check fails.** If `just test`, `just check`, `just test-race`, `just tidy-check`, or `just audit` fails locally, fix on the feature branch, push, and restart from the local-checks step.
+- **Required `dev` CI is not green.** If the exact `dev` SHA is missing the `test.yml` run, or any required job (`test`, `race`, `lint`, `tidy`) is missing, pending, skipped, cancelled, or failed, stop before the `main` fast-forward and report the bad checks and job URLs. Do not rely on branch protection to reject the push.
 - **Non-trivial merge conflict** during the dev or main merge. "Non-trivial" means real code/line conflicts. A failed fast-forward is also a stop — it means the branch is not strictly ahead of the target, and forcing it would rewrite history.
 - **`main` is already at the current branch tip** (or the dev/main fast-forwards would be no-ops). Nothing to ship. Report and exit.
-- **CI test workflow fails.** Read the job log with `gh run view <id> --log`, fix on the feature branch, push, and restart from step 2.
+- **CI test workflow fails.** Read the job log with `gh run view <id> --log` or `gh run view <id> --log-failed`, fix on the feature branch, push, and restart from step 2.
 - **CI auto-tag or release workflow fails.** Same: read the job log, fix on the feature branch, push, and restart from step 2. Successful test is required before auto-tag fires; successful auto-tag is required before release fires.
 - **Smoke test fails.** After `rally update`, if the local relay fails (agent unavailable is OK — report it; but a rally crash or missing file is a real regression), investigate. Do not declare the release done until the smoke test passes or the failure is understood to be an agent-side issue (rate limit, auth) rather than a rally regression.
 
