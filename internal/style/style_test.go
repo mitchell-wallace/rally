@@ -54,7 +54,7 @@ func TestRenderHeader(t *testing.T) {
 func TestRenderHeaderLapsBacked(t *testing.T) {
 	start := time.Date(2024, 6, 15, 15, 4, 0, 0, time.Local)
 	got := RenderHeader(HeaderOptions{
-		AgentName:    "gemini",
+		AgentName:    "antigravity",
 		Attempt:      1,
 		StartTime:    start,
 		IsLapsBacked: true,
@@ -83,7 +83,7 @@ func TestRenderHeaderAttemptTwo(t *testing.T) {
 	got := RenderHeader(HeaderOptions{
 		RunIndex:  0,
 		TotalRuns: 5,
-		AgentName: "gemini",
+		AgentName: "antigravity",
 		Attempt:   2,
 		StartTime: start,
 	})

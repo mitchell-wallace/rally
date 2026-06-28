@@ -215,11 +215,11 @@
       "title": "Gemini cut cleanup — fixture scrub + README + full green",
       "description": "Context: tasks.md §1 remainder (1.10, 1.11, 1.13, 1.15). Mechanical follow-through to the gemini-cut lap to get the whole suite green and the docs consistent.\n\nFiles \u0026 scope:\n- Scrub gemini fixtures (1.10): internal/routing/{override_test,quota_scope_test,provider_test,parse_test}.go, internal/style/style_test.go, internal/store/store_test.go, internal/reliability/{patterns_test,category_test}.go, cmd/rally/main_test.go; the relay fixtures internal/relay/resilience_test.go:396 ({Harness:\"gemini\"}), bench_state_machine_test.go:259,271 (\"gemini:gemini-2.5-pro:1\" and ResilienceKey{Harness:\"gemini\"}), runner_test.go:4709-4712 (gemini exit-status fixture); delete the gemini final-snippet cases in runner_final_snippet_test.go:200-211 (GeminiExecutor-specific output parsing, no antigravity equivalent); update the internal/routing/quota_scope.go docstring (line 12 stale \"gemini\" reference).\n- Delete the gemini real-backend smoke block runner_real_backend_test.go:621-681 (the TestRealBackend_MultiHarnessRoundRobin body) (1.11).\n- Drop gemini from the README harness list, command examples, and defaults tables; audit cli/routes_check.go operator-facing strings for \"gemini\" and update to antigravity or remove (1.13).\n\nAcceptance: tasks.md §1.15 — go build ./... \u0026\u0026 go vet ./... \u0026\u0026 go test ./... all green.",
       "assignee": "JUNIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 1048576,
       "createdAt": "2026-06-26T00:55:47.98792118Z",
-      "updatedAt": "2026-06-26T00:55:47.98792118Z",
-      "completedAt": null
+      "updatedAt": "2026-06-28T03:59:05.804446106Z",
+      "completedAt": "2026-06-28T03:59:05.804446106Z"
     },
     {
       "id": "rall-d4e3",

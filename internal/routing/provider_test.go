@@ -62,7 +62,7 @@ func TestProviderIndex_ProviderFor(t *testing.T) {
 	if name, ok := idx.ProviderFor("codex", "gpt-5.5"); !ok || name != "codex" {
 		t.Errorf("ProviderFor(member) = %q,%v, want codex,true", name, ok)
 	}
-	if _, ok := idx.ProviderFor("gemini", "gemini-3-pro"); ok {
+	if _, ok := idx.ProviderFor("antigravity", "gemini-3-pro"); ok {
 		t.Errorf("ProviderFor(non-member) should be false")
 	}
 }

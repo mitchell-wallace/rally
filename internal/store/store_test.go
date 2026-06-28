@@ -939,7 +939,7 @@ func TestAgentStatusTruncationPreservesProbationTimestamps(t *testing.T) {
 	probationAt := time.Date(2026, 1, 1, 6, 0, 0, 0, time.UTC)
 	_ = store.AppendAgentStatus(AgentStatusEvent{
 		AgentType: "opencode",
-		Model:     "gemini",
+		Model:     "glm-5.1",
 		EventType: "probation",
 		Timestamp: probationAt.Format(time.RFC3339),
 		RelayID:   1,
@@ -955,7 +955,7 @@ func TestAgentStatusTruncationPreservesProbationTimestamps(t *testing.T) {
 		})
 	}
 
-	events, err := store.GetAgentStatus("opencode", "gemini")
+	events, err := store.GetAgentStatus("opencode", "glm-5.1")
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -6,7 +6,7 @@ pick a mix of agents, and Rally cycles through them — iteration after
 iteration — capturing transcripts, auto-committing progress, and rotating
 away from agents that fail or stall.
 
-It pairs well with Claude Code, Codex CLI, Gemini CLI, and Opencode. You
+It pairs well with Claude Code, Codex CLI, Antigravity, and Opencode. You
 can also add your own CLI agent in config without recompiling.
 
 ## Install
@@ -30,7 +30,7 @@ with `RALLY_NO_UPDATE_CHECK=1`.
 ## Prerequisites
 
 - A git repository (Rally always operates inside one).
-- At least one of `agy`, `claude`, `codex`, `gemini`, or `opencode`
+- At least one of `agy`, `claude`, `codex`, or `opencode`
   installed and already authenticated in your shell.
 
 ## Quick start
@@ -41,7 +41,7 @@ From the root of any git repo:
 rally init                  # one-time: writes .rally/config.toml + scaffolding
 rally start                 # run a single iteration with the default mix
 rally start --iterations 4  # run four iterations
-rally start --iterations 4 --agent "ag:1 cc:1 cx:2 ge:1 op:1"  # custom mix
+rally start --iterations 4 --agent "ag:1 cc:1 cx:2 op:1"  # custom mix
 ```
 
 While a relay is running, watch the current try's transcript live in another
@@ -160,7 +160,6 @@ the agent to review and commit those changes before starting new work.
 | `ag`/`agy` | `antigravity` | `agy`     |
 | `cc`       | `claude`      | `claude`  |
 | `cx`       | `codex`       | `codex`   |
-| `ge`       | `gemini`      | `gemini`  |
 | `op`       | `opencode`    | `opencode`|
 
 For Opencode runs Rally automatically sets:
@@ -181,12 +180,12 @@ restores the prior setting.
 string:
 
 ```sh
-rally start --agent cc:1 --agent cx:2 --agent ge:1
-rally start --agent "cc:1 cx:2 ge:1"
+rally start --agent cc:1 --agent cx:2 --agent op:1
+rally start --agent "cc:1 cx:2 op:1"
 ```
 
-**Bare aliases in `--agent` round-robin one at a time.** `--agent "cc ge op"`
-is equivalent to `cc:1 ge:1 op:1`: claude → gemini → opencode → claude → …
+**Bare aliases in `--agent` round-robin one at a time.** `--agent "cc ag op"`
+is equivalent to `cc:1 ag:1 op:1`: claude → antigravity → opencode → claude → …
 (This is a deliberate asymmetry with `[routes]` config — see below.)
 
 Mix bare aliases, quota-bearing aliases, named models, and even role
@@ -247,7 +246,6 @@ iterations = 1
 mix = "cc cx"
 claude_model = "claude-opus-4.7"
 codex_model = "gpt-5.5"
-gemini_model = "gemini-3.1-pro-preview"
 opencode_model = "zai-coding-plan/glm-5.1"
 antigravity_model = "Gemini 3.5 Flash (High)"
 
@@ -271,7 +269,7 @@ flash = "Gemini 3.5 Flash (High)"
 [routes]
 default = ["ag:flash:1", "cc:opus:1", "cx:1", "op:gk:2-4"]
 SENIOR  = ["cx:1", "cc:opus:1"]
-JUNIOR  = ["op:z:4", "op:gk:2", "ge:1"]
+JUNIOR  = ["op:z:4", "op:gk:2", "ag:1"]
 recovery = ["claude"]
 
 [providers]
@@ -300,8 +298,7 @@ handoff_timeout_secs  = 300
 | `mix`                | string | Default agent mix when `--agent` is absent           |
 | `antigravity_model`  | string | Model label for the `ag`/`agy`/`antigravity` alias   |
 | `claude_model`       | string | Model for the `cc`/`claude` alias                    |
-| `codex_model`        | string | Model for the `cx`/`codex` alias                     |
-| `gemini_model`       | string | Model for the `ge`/`gemini` alias                    |
+| `codex_model`        | string | Model for the `cx`/`codex` alias                    |
 | `opencode_model`     | string | Model for the `op`/`opencode` alias                  |
 
 A bare alias like `cc` in a mix resolves through `[defaults].claude_model`
@@ -332,7 +329,7 @@ case-insensitively against the active lap's `assignee` value, with
 
 Each entry is one of:
 
-- a bare harness alias such as `cx` or `ge`
+- a bare harness alias such as `cx` or `ag`
 - a named model such as `cc:opus` or `op:z`
 - a raw `harness:model` string such as `op:opencode-go/kimi-k2.6`
 - any of the above with an optional trailing quota: `:N` or `:N-M`
@@ -348,21 +345,21 @@ Each entry is one of:
 **Important asymmetry between `[routes]` and `--agent`:**
 
 - In `--agent`, bare aliases mean "run once each, then rotate"
-  (`--agent "cc ge"` ⇒ `cc:1 ge:1`).
+  (`--agent "cc ag"` ⇒ `cc:1 ag:1`).
 - In `[routes]`, bare aliases mean "stay until failure". If you want
   one-iteration round-robin from `[routes]`, you must add `:1`:
 
 ```toml
 # Round-robin: one try per agent, then advance
-default = ["cc:1", "ge:1", "op:1"]
+default = ["cc:1", "ag:1", "op:1"]
 
-# Stick on claude until it fails, then gemini until it fails, …
-default = ["cc", "ge", "op"]
+# Stick on claude until it fails, then antigravity until it fails, …
+default = ["cc", "ag", "op"]
 ```
 
 This split is intentional: command-line mixes are usually short and
 exploratory (you want to try a roster), while routes are usually long-lived
-preferences ("use claude for this role, fall back to gemini if it dies").
+preferences ("use claude for this role, fall back to antigravity if it dies").
 
 #### Selection priority
 
@@ -427,7 +424,7 @@ Antigravity with `Gemini 3.5 Flash (High)`.
 Model names must be non-numeric identifiers — `4` is rejected so quota
 parsing stays unambiguous.
 
-Built-in harnesses (`ag`/`cc`/`cx`/`ge`/`op`) can declare named models but
+Built-in harnesses (`ag`/`cc`/`cx`/`op`) can declare named models but
 **cannot** declare `command`, `model_flag`, `output_strategy`, or
 `tail_stream`.
 
@@ -535,7 +532,6 @@ A value may be one of three forms:
   | codex       | `-c model_reasoning_effort=<value>`  | `none` `minimal` `low` `medium` `high` `xhigh` |
   | claude      | `--effort <value>`                   | `low` `medium` `high` `xhigh` `max`            |
   | opencode    | `--variant <value>`                  | provider-specific, no fixed set                |
-  | gemini      | unsupported                          | warned and skipped — pick a model instead      |
   | antigravity | unsupported as a flag                | reasoning encoded in the model alias/name      |
 
 Unknown effort tokens warn and pass through rather than failing the run (the
@@ -705,7 +701,7 @@ in `internal/reliability/patterns.go`.
 | Pattern                                  | Strategy            | Meaning                                      |
 |------------------------------------------|---------------------|----------------------------------------------|
 | opencode "API bad request" from provider | `rotate`            | Advance to the next route entry immediately  |
-| gemini-cli exit 1                        | `resume + retry`    | Resume the session and retry once            |
+| antigravity gemini-cli exit 1            | `resume + retry`    | Resume the session and retry once            |
 | claude rate-limit interrupt              | `wait + resume`     | Wait for the cooldown, then resume and retry |
 | codex completion despite limit warning   | `no-op`             | Treat as a successful completion             |
 | unknown failure                          | `fresh restart`     | Start a new try from scratch (safe default)  |
@@ -954,7 +950,7 @@ Rally is built around a few focused internal packages:
 - `internal/store` — append-only JSONL files with in-memory caching and
   commit-then-truncate windowing.
 - `internal/agent` — pluggable executors (Antigravity, Claude, Codex,
-  Gemini, Opencode, user-defined generic) sharing one prompt builder.
+  Opencode, user-defined generic) sharing one prompt builder.
 - `internal/relay` — deterministic agent cycling, retries, error
   resilience, freeze detection, graceful stop.
 - `internal/routing` — `[routes]` parser, scheduler, override resolution.
