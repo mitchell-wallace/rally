@@ -2103,7 +2103,7 @@ attemptLoop:
 				TryID:    tryRecord.ID,
 				Role:     task.promptAssignee(),
 				Harness:  picked.Harness,
-				Model:    picked.Model,
+				Model:    resolvedRunnerModel(result, picked),
 				Repo:     rc.Repo,
 				RepoName: rc.RepoName,
 				LapID:    task.LapID,
@@ -2130,7 +2130,7 @@ attemptLoop:
 				"try_id":              tryRecord.ID,
 				"attempt":             attempt,
 				"role":                task.promptAssignee(),
-				"runner":              telemetry.RunnerLabel(picked.Harness, firstNonEmpty(result.ResolvedModel, picked.Model)),
+				"runner":              telemetry.RunnerLabel(picked.Harness, resolvedRunnerModel(result, picked)),
 				"repo":                rc.Repo,
 				"repo_name":           rc.RepoName,
 				"lap_id":              task.LapID,
@@ -2448,7 +2448,7 @@ attemptLoop:
 			TryID:    tryRecord.ID,
 			Role:     task.promptAssignee(),
 			Harness:  picked.Harness,
-			Model:    picked.Model,
+			Model:    resolvedRunnerModel(result, picked),
 			Repo:     rc.Repo,
 			RepoName: rc.RepoName,
 			LapID:    task.LapID,
@@ -2472,7 +2472,7 @@ attemptLoop:
 			"try_id":                         tryRecord.ID,
 			"attempt":                        attempt,
 			"role":                           task.promptAssignee(),
-			"runner":                         telemetry.RunnerLabel(picked.Harness, firstNonEmpty(result.ResolvedModel, picked.Model)),
+			"runner":                         telemetry.RunnerLabel(picked.Harness, resolvedRunnerModel(result, picked)),
 			"repo":                           rc.Repo,
 			"repo_name":                      rc.RepoName,
 			"lap_id":                         task.LapID,
@@ -2782,7 +2782,7 @@ attemptLoop:
 				RunID:    runIndex + 1,
 				Role:     task.promptAssignee(),
 				Harness:  picked.Harness,
-				Model:    picked.Model,
+				Model:    resolvedRunnerModel(lastResult, picked),
 				Repo:     rc.Repo,
 				RepoName: rc.RepoName,
 				LapID:    task.LapID,
@@ -3032,7 +3032,7 @@ func (r *Runner) runBoundedHandoffOnly(
 		TryID:    tryID,
 		Role:     task.promptAssignee(),
 		Harness:  picked.Harness,
-		Model:    picked.Model,
+		Model:    resolvedRunnerModel(result, picked),
 		Repo:     rc.Repo,
 		RepoName: rc.RepoName,
 		LapID:    task.LapID,
@@ -3063,7 +3063,7 @@ func (r *Runner) runBoundedHandoffOnly(
 		"try_id":                 tryID,
 		"attempt":                attemptNumber,
 		"role":                   task.promptAssignee(),
-		"runner":                 telemetry.RunnerLabel(picked.Harness, firstNonEmpty(result.ResolvedModel, picked.Model)),
+		"runner":                 telemetry.RunnerLabel(picked.Harness, resolvedRunnerModel(result, picked)),
 		"repo":                   rc.Repo,
 		"repo_name":              rc.RepoName,
 		"lap_id":                 task.LapID,
@@ -3761,4 +3761,11 @@ func firstNonEmpty(values ...string) string {
 		}
 	}
 	return ""
+}
+
+func resolvedRunnerModel(result *agent.TryResult, picked agent.ResolvedAgent) string {
+	if result == nil {
+		return firstNonEmpty(picked.Model)
+	}
+	return firstNonEmpty(result.ResolvedModel, picked.Model)
 }

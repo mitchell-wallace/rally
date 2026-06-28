@@ -259,11 +259,11 @@
       "title": "Final full-change verification (improve-harness-consistency)",
       "description": "Final OpenSpec verification of the whole change. Run the complete openspec-verify-change skill against improve-harness-consistency and inspect the ENTIRE diff.\n\nIdentify the intended merge target (user / PR metadata / repo docs / branch config / recent history — not assumed main) and the first lap/try of this batch before diffing; treat earlier branch work as pre-existing unless the user asks to include it.\n\nConfirm the end-state holds: the migration order was respected (additive features -\u003e unified disk-log fallbacks -\u003e gemini cut -\u003e docs); EVERY failure now carries a non-empty failure_category (floor = unidentified_issue, never nil/empty); all four harnesses have a PII-safe disk-log fallback with the correct Source marker and 256-rune bound; RallyRoute is emitted for routing and every RallyTry carries a non-empty outcome; the runner tag carries the resolved model on bare-alias routes; agent_error is reserved for specifically-extracted errors; the gemini surface is fully gone with the one-time warning in place. go build/vet/test ./... green.\n\nTick any remaining tasks.md boxes only for verified-correct work. For residual gaps, add focused head laps rather than fixing large issues inline. Do not rewrite git history; prefer additive/revert commits or a user-approved recovery branch.",
       "assignee": "VERIFY",
-      "isDone": false,
+      "isDone": true,
       "order": 1310720,
       "createdAt": "2026-06-26T00:55:47.987944174Z",
-      "updatedAt": "2026-06-26T00:55:47.987944174Z",
-      "completedAt": null
+      "updatedAt": "2026-06-28T04:39:08.350785319Z",
+      "completedAt": "2026-06-28T04:39:08.350785319Z"
     }
   ]
 }

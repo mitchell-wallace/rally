@@ -416,6 +416,74 @@ func TestRunOne_TerminalTryFailure_EnrichesUsageLimitState(t *testing.T) {
 	}
 }
 
+func TestRunOne_ResolvedModelBareAliasPropagatesToFailureDiagnosticAndTryTags(t *testing.T) {
+	workspaceDir := t.TempDir()
+	rallyDir := store.RallyDir(workspaceDir)
+	os.MkdirAll(rallyDir, 0o755)
+	initRepo(t, workspaceDir)
+	runGit(t, workspaceDir, "commit", "--allow-empty", "-m", "initial", "--no-verify")
+
+	reset := time.Now().Add(3 * time.Hour).UTC()
+	s := newTestStore(t, rallyDir)
+	exec := &funcExecutor{
+		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+			return &agent.TryResult{
+				Completed:     false,
+				Summary:       "boom",
+				ResolvedModel: "opencode-go/kimi-k2.6",
+				Evidence: &reliability.FailureEvidence{
+					Category:   reliability.CategoryUsageLimit,
+					QuotaScope: "anthropic",
+					ResetAt:    &reset,
+					RawSignal:  "You have hit your usage limit",
+					Message:    "quota exhausted",
+				},
+			}, fmt.Errorf("harness exited non-zero")
+		},
+	}
+
+	sink := &capturingSink{}
+	r := NewRunner(s, Config{
+		WorkspaceDir:     workspaceDir,
+		DataDir:          t.TempDir(),
+		AgentMixSpecs:    []string{"op"},
+		TargetIterations: 1,
+		RetryBudget:      1,
+		LapsEnabled:      true,
+		Resolver:         cheapTestResolver,
+	}, map[string]agent.Executor{"opencode": exec})
+	r.SetTelemetry(sink)
+
+	if _, err := r.runOne(
+		context.Background(),
+		&store.RelayRecord{ID: 1, TargetIterations: 1},
+		0,
+		agent.ResolvedAgent{Harness: "opencode", Model: ""},
+		runTask{Name: "task", Prompt: "do work", Assignee: "senior", IsLapsBacked: true, LapID: "lap-1"},
+		nil, nil, false, false, nil, nil, io.Discard,
+	); err != nil {
+		t.Fatalf("runOne error = %v", err)
+	}
+
+	const wantRunner = "opencode:opencode-go/kimi-k2.6"
+
+	evt := findFailure(t, sink, "failed:")
+	wantTag(t, evt.Tags, "runner", wantRunner)
+
+	diag := findEvent(t, sink, "provider limit signal")
+	wantTag(t, diag.Tags, "runner", wantRunner)
+
+	log := findLogByEvent(t, sink, "try")
+	if got := log["runner"]; got != wantRunner {
+		t.Fatalf("try log runner = %#v, want %q", got, wantRunner)
+	}
+
+	span := findTrySpanByOutcome(t, sink, string(reliability.OutcomeFailed))
+	if got := span.tags["runner"]; got != wantRunner {
+		t.Fatalf("try span runner = %q, want %q", got, wantRunner)
+	}
+}
+
 // TestRunOne_UnfinalizedAgent_CapturesIncompleteFinalization drives a laps-backed
 // run whose agent fails without finalizing and asserts the unfinalized capture
 // carries failure_category=incomplete_finalization with run/runner/budget and the
@@ -581,6 +649,54 @@ func TestRunOne_UnfinalizedAgentDirtyTree_EmitsDirtyTreeEvidence(t *testing.T) {
 	if n := len([]rune(raw)); n > 257 {
 		t.Fatalf("failure_evidence.raw_signal is %d runes, exceeds the 256-rune bound (+1 ellipsis)", n)
 	}
+}
+
+func TestRunOne_UnfinalizedCaptureUsesResolvedModelRunnerTag(t *testing.T) {
+	workspaceDir := t.TempDir()
+	rallyDir := store.RallyDir(workspaceDir)
+	os.MkdirAll(rallyDir, 0o755)
+	initRepo(t, workspaceDir)
+	runGit(t, workspaceDir, "commit", "--allow-empty", "-m", "initial", "--no-verify")
+
+	s := newTestStore(t, rallyDir)
+	exec := &funcExecutor{
+		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+			if err := os.WriteFile(filepath.Join(workspaceDir, "partial.txt"), []byte("partial\n"), 0o644); err != nil {
+				return nil, err
+			}
+			return &agent.TryResult{
+				Completed:     false,
+				Summary:       "did not finalize",
+				ResolvedModel: "opencode-go/kimi-k2.6",
+			}, nil
+		},
+	}
+
+	sink := &capturingSink{}
+	r := NewRunner(s, Config{
+		WorkspaceDir:     workspaceDir,
+		DataDir:          t.TempDir(),
+		AgentMixSpecs:    []string{"op"},
+		TargetIterations: 1,
+		RetryBudget:      1,
+		LapsEnabled:      true,
+		Resolver:         cheapTestResolver,
+	}, map[string]agent.Executor{"opencode": exec})
+	r.SetTelemetry(sink)
+
+	if _, err := r.runOne(
+		context.Background(),
+		&store.RelayRecord{ID: 1, TargetIterations: 1},
+		0,
+		agent.ResolvedAgent{Harness: "opencode", Model: ""},
+		runTask{Name: "task", Prompt: "do work", Assignee: "senior", IsLapsBacked: true, LapID: "lap-1"},
+		nil, nil, false, false, nil, nil, io.Discard,
+	); err != nil {
+		t.Fatalf("runOne error = %v", err)
+	}
+
+	evt := findFailure(t, sink, "without finalizing")
+	wantTag(t, evt.Tags, "runner", "opencode:opencode-go/kimi-k2.6")
 }
 
 func TestRunOne_CancelledLapsAttemptDoesNotCaptureIncompleteFinalization(t *testing.T) {
