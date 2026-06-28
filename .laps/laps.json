@@ -160,11 +160,11 @@
       "title": "Antigravity glog disk-log fallback",
       "description": "Context: tasks.md §12, design Decision 9. Antigravity keeps glog at ~/.gemini/antigravity-cli/log/cli-*.log; Rally already reads its --log-file temp output (antigravity.go:99-101) but not the persistent glog. Credential files live in the same tree and must never be read. Depends on the §10 lap.\n\nOutcome: on an antigravity failure with no in-band evidence, enrich from the latest cli-*.log (Source=\"antigravity_glog\") with a recognised Category or unidentified_issue.\n\nFiles \u0026 scope: internal/agent/antigravity.go. Find the latest cli-*.log by mtime. Read the last ~1MB; glog lines are prefixed I/W/E/F + MMDD HH:MM:SS.uuuuuu. Keep ONLY E-prefixed lines + up to 3 context lines each (one before, two after). EXPLICITLY skip I- and W-prefixed lines and ANY line containing oauth_creds.json / antigravity-oauth-token / settings.json. NEVER read oauth_creds.json or settings.json directly. Map known errors (\"not logged into Antigravity\" / \"error getting token source\" -\u003e auth_or_proxy; \"RESOURCE_EXHAUSTED\" / \"429\" -\u003e usage_limit or short_rate_limit); otherwise unidentified_issue. Wire after the existing temp --log-file read + parse call. 256-rune bound.\n\nDesign note: the reliability parser rename ParseGeminiError -\u003e ParseAntigravityError happens in the LATER gemini-cut lap (task 1.3). At THIS lap the function is still named ParseGeminiError — call whatever name currently exists in the tree; the gemini-cut lap updates the caller.\n\nAcceptance: tasks.md §12.6 (a)-(f): (a) E-prefixed auth error -\u003e \"antigravity_glog\" + auth_or_proxy; (b) unrecognised E error -\u003e \"antigravity_glog\" + unidentified_issue; (c) I-prefixed lines never in RawSignal; (d) credential file paths never in RawSignal; (e) missing/unreadable glog dir is not an error; (f) the existing temp --log-file reading at antigravity.go:99-101 still works (regression guard). Tests green.",
       "assignee": "SENIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 851968,
       "createdAt": "2026-06-26T00:55:47.987912459Z",
-      "updatedAt": "2026-06-26T00:55:47.987912459Z",
-      "completedAt": null
+      "updatedAt": "2026-06-28T02:35:57.049516645Z",
+      "completedAt": "2026-06-28T02:35:57.049516645Z"
     },
     {
       "id": "rall-545e",
