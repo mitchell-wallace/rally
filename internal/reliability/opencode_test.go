@@ -47,7 +47,7 @@ func TestParseOpencodeError(t *testing.T) {
 		{
 			name:               "quota exceeded error",
 			stderr:             `{"type":"error","error":{"name":"QuotaExceededError","data":{"message":"Quota exceeded for this account."}}}`,
-			model:              "google/gemini-pro",
+			model:              "google/model-pro",
 			expectedCategory:   CategoryUsageLimit,
 			expectedProvider:   "google",
 			expectedStatusCode: 429,
@@ -55,7 +55,7 @@ func TestParseOpencodeError(t *testing.T) {
 		{
 			name:               "resource exhausted error",
 			stderr:             `{"type":"error","error":{"name":"ResourceExhausted","data":{"message":"RESOURCE_EXHAUSTED: Quota exceeded. Resets in 7d."}}}`,
-			model:              "google/gemini-flash",
+			model:              "google/model-flash",
 			expectedCategory:   CategoryUsageLimit,
 			expectedProvider:   "google",
 			expectedStatusCode: 429,
@@ -207,7 +207,7 @@ func TestParseOpencodeError_ProviderFromModel(t *testing.T) {
 		{"openai/gpt-5", "openai", false},
 		{"anthropic/claude-sonnet-4", "anthropic", false},
 		{"zai-coding-plan/glm-5.1", "zai-coding-plan", false},
-		{"google/gemini-pro", "google", false},
+		{"google/model-pro", "google", false},
 		{"no-slash-model", "no-slash-model", false},
 		{"", "", false},
 	}

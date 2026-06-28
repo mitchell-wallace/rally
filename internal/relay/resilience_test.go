@@ -95,7 +95,7 @@ func TestResilience_PauseAgent_WritesPausedEvent(t *testing.T) {
 	s := newResilienceTestStore(t)
 	now := time.Now()
 	r := testResilience(s, now)
-	k := key("opencode", "gemini-2.5-pro")
+	k := key("opencode", "kimi-k2.6")
 
 	if err := r.PauseAgent(k, 1); err != nil {
 		t.Fatal(err)
@@ -580,7 +580,7 @@ func TestResilience_ResilienceKey_String(t *testing.T) {
 	}{
 		{ResilienceKey{Harness: "claude"}, "claude"},
 		{ResilienceKey{Harness: "claude", Model: "sonnet"}, "claude:sonnet"},
-		{ResilienceKey{Harness: "opencode", Model: "gemini-2.5-pro"}, "opencode:gemini-2.5-pro"},
+		{ResilienceKey{Harness: "opencode", Model: "kimi-k2.6"}, "opencode:kimi-k2.6"},
 	}
 	for _, tt := range tests {
 		got := tt.key.String()

@@ -226,11 +226,11 @@
       "title": "Verify the gemini cut (BREAKING)",
       "description": "OpenSpec verification scoped to tasks.md §1. This is the single highest-risk lap (BREAKING, broad shared-contract removal) — verify it immediately and thoroughly. Use openspec-verify-change against improve-harness-consistency.\n\nIdentify the merge target (not assumed main) and the first lap of this batch before diffing; treat earlier branch work as pre-existing.\n\nTrace, do not just run tests: confirm cfg.ResolveAgent no longer resolves ge/gemini (follow the builtInAliases removal at config_v2.go:47-48, not just the route_runtime/mix tables) AND the one-time warning actually fires with role/route/alias and recommends antigravity; confirm the surviving \"antigravity gemini-cli exit 1\" pattern is intact (the one nearly deleted by the original \"remove both\" wording); confirm the ui role default is [\"ag\"], not unrouted; sweep for dangling references — grep -ri gemini over non-archive source should surface only intentional antigravity-context strings. go build/vet/test ./... green.\n\nCheck off §1 tasks.md boxes for verified-correct work; add a focused head lap for any gap. Do not rewrite git history; prefer additive/revert commits.",
       "assignee": "VERIFY",
-      "isDone": false,
+      "isDone": true,
       "order": 1114112,
       "createdAt": "2026-06-26T00:55:47.987922609Z",
-      "updatedAt": "2026-06-26T00:55:47.987922609Z",
-      "completedAt": null
+      "updatedAt": "2026-06-28T04:09:51.674888945Z",
+      "completedAt": "2026-06-28T04:09:51.674888945Z"
     },
     {
       "id": "rall-e66d",

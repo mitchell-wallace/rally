@@ -42,7 +42,7 @@ func ValidateRelayStartupRoutes(ctx context.Context, workspaceDir string, cfg co
 		return nil, err
 	}
 
-	if len(validRoutes) == 0 && len(issues) > 0 {
+	if len(validRoutes) == 0 && len(issues) > 0 && !onlyRemovedAliasIssues(issues) {
 		return nil, issues[0].Err
 	}
 
@@ -56,9 +56,18 @@ func ValidateRelayStartupRoutes(ctx context.Context, workspaceDir string, cfg co
 		if errors.As(issue.Err, &removed) && removed.alias != "" && !removedAliasWarnings[removed.alias] {
 			warnings = append(warnings, "warning: "+removed.warning)
 			removedAliasWarnings[removed.alias] = true
+			continue
+		}
+		if errors.As(issue.Err, &removed) {
+			continue
 		}
 		warnings = append(warnings, fmt.Sprintf("warning: route %q is invalid and will be ignored: %v", issue.RouteName, issue.Err))
 		needsPrompt = true
+	}
+
+	if len(cfg.Routes) > 0 && !validDefault && onlyRemovedAliasIssues(issues) {
+		writeWarnings(opts.Out, warnings)
+		return validRoutes, nil
 	}
 
 	if len(cfg.Routes) > 0 && !validDefault {
@@ -88,6 +97,19 @@ func ValidateRelayStartupRoutes(ctx context.Context, workspaceDir string, cfg co
 	}
 
 	return validRoutes, nil
+}
+
+func onlyRemovedAliasIssues(issues []startupRouteIssue) bool {
+	if len(issues) == 0 {
+		return false
+	}
+	for _, issue := range issues {
+		var removed *removedAliasRouteError
+		if !errors.As(issue.Err, &removed) {
+			return false
+		}
+	}
+	return true
 }
 
 func collectValidRoutes(cfg config.V2Config) (map[string][]string, []startupRouteIssue, bool, error) {

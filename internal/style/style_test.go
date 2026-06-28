@@ -61,7 +61,7 @@ func TestRenderHeaderLapsBacked(t *testing.T) {
 		LapTitle:     "Apply neobrutalist UI polish",
 		LapsStarted:  1,
 		LapsTotal:    3,
-		Model:        "gemini-2.5-pro",
+		Model:        "Gemini 3.5 Flash (High)",
 	})
 
 	if strings.Contains(got, "remaining") {
@@ -70,8 +70,8 @@ func TestRenderHeaderLapsBacked(t *testing.T) {
 	if !strings.Contains(got, "laps: 1/3") {
 		t.Errorf("expected 'laps: 1/3' line in header, got: %s", got)
 	}
-	if !strings.Contains(got, "model: gemini-2.5-pro") {
-		t.Errorf("expected 'model: gemini-2.5-pro' line in header, got: %s", got)
+	if !strings.Contains(got, "model: Gemini 3.5 Flash (High)") {
+		t.Errorf("expected antigravity model line in header, got: %s", got)
 	}
 	if !strings.Contains(got, "Apply neobrutalist UI polish") {
 		t.Errorf("expected lap title in header, got: %s", got)

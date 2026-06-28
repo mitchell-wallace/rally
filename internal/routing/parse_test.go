@@ -40,12 +40,12 @@ func TestParseEntry_OneSegment_WithSingleQuota(t *testing.T) {
 }
 
 func TestParseEntry_OneSegment_WithRangeQuota(t *testing.T) {
-	p, err := ParseEntry("gemini-pro:2-5")
+	p, err := ParseEntry("model-pro:2-5")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if p.Spec != "gemini-pro" {
-		t.Errorf("Spec = %q, want %q", p.Spec, "gemini-pro")
+	if p.Spec != "model-pro" {
+		t.Errorf("Spec = %q, want %q", p.Spec, "model-pro")
 	}
 	if !p.HasQuota {
 		t.Fatal("HasQuota should be true")

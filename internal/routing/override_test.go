@@ -13,7 +13,7 @@ func overrideResolver(spec string) (agent.ResolvedAgent, error) {
 	case "op:z":
 		return agent.ResolvedAgent{Harness: "opencode", Model: "zai-coding-plan/glm-5.1"}, nil
 	case "op:gk":
-		return agent.ResolvedAgent{Harness: "opencode", Model: "google/gemini-2.5-pro"}, nil
+		return agent.ResolvedAgent{Harness: "opencode", Model: "google/model-2.5-pro"}, nil
 	}
 
 	parts := strings.SplitN(spec, ":", 2)

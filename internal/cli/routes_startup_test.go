@@ -191,3 +191,50 @@ func TestValidateRelayStartupRoutes_MissingDefaultWithEmptyQueueWarnsAndExits(t 
 		t.Fatalf("output = %q, want no prompt on empty queue", output.String())
 	}
 }
+
+func TestValidateRelayStartupRoutes_RemovedGeminiAliasesWarnWithoutPrompt(t *testing.T) {
+	workspaceDir := t.TempDir()
+	cfg := config.V2Config{
+		Routes: map[string][]string{
+			"ALPHA":   {"ge:pro"},
+			"UI":      {"gemini:flash"},
+			"default": {"ge:flash"},
+		},
+	}
+
+	var output bytes.Buffer
+	validRoutes, err := ValidateRelayStartupRoutes(context.Background(), workspaceDir, cfg, RelayStartupRouteOptions{
+		In:          strings.NewReader(""),
+		Out:         &output,
+		LapsEnabled: false,
+	})
+	if err != nil {
+		t.Fatalf("ValidateRelayStartupRoutes() error = %v, want nil for removed gemini aliases", err)
+	}
+	if len(validRoutes) != 0 {
+		t.Fatalf("validRoutes = %#v, want all removed-alias routes to be ignored", validRoutes)
+	}
+
+	got := output.String()
+	if strings.Count(got, `removed gemini alias "ge"`) != 1 {
+		t.Fatalf("output = %q, want exactly one ge warning", got)
+	}
+	if strings.Count(got, `removed gemini alias "gemini"`) != 1 {
+		t.Fatalf("output = %q, want exactly one gemini warning", got)
+	}
+	if !strings.Contains(got, `route "ALPHA" entry "ge:pro" uses removed gemini alias "ge"; replace it with antigravity (ag)`) {
+		t.Fatalf("output = %q, want route/entry/alias guidance for ge", got)
+	}
+	if !strings.Contains(got, `route "UI" entry "gemini:flash" uses removed gemini alias "gemini"; replace it with antigravity (ag)`) {
+		t.Fatalf("output = %q, want route/entry/alias guidance for gemini", got)
+	}
+	if strings.Contains(got, continueRoutesPrompt) {
+		t.Fatalf("output = %q, want no continue prompt for removed gemini aliases", got)
+	}
+	if strings.Contains(got, `is invalid and will be ignored`) {
+		t.Fatalf("output = %q, want removed aliases to warn without generic invalid-route noise", got)
+	}
+	if strings.Contains(got, `no valid default route is configured`) {
+		t.Fatalf("output = %q, want removed aliases to avoid the missing-default startup block", got)
+	}
+}

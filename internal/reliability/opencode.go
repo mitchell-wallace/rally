@@ -17,7 +17,7 @@ var (
 	// server log as this flat field, never a nested data.message on stdout.
 	opencodeFlatErrorRe = regexp.MustCompile(`error\.error="([^"]*)"`)
 
-	// opencode-specific reset parsing (do not overload the gemini regex).
+	// opencode-specific reset parsing uses its own shapes.
 	// Space-separated spans ("Resets in 7 days", "... 5 hour", "... 30 minutes")
 	// and absolute timestamps ("reset at ...", "will reset at ...") with no
 	// timezone marker.
