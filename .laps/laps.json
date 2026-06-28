@@ -237,11 +237,11 @@
       "title": "New-Relic-derived regression coverage",
       "description": "Context: tasks.md §9. Ten regression guards tying each fix back to a real observed incident. Several are likely already covered by earlier laps' tests — audit what exists and FILL THE GAPS so each 9.x scenario has a passing named test (do not duplicate existing coverage; reference it instead).\n\nFiles \u0026 scope: reliability + relay + agent test files. Notable guards to ensure exist:\n- 9.1 codex exit-1 + matching session log -\u003e failure_evidence.source = \"codex_session_log\".\n- 9.2 codex exit-1, no session log -\u003e harness_launch via executor Evidence (Priority 1) with source \"codex_no_session_log\" (NOT uncategorised agent_error).\n- 9.3 opencode try-budget exhaustion -\u003e source \"opencode_disk_log\".\n- 9.4 bare-alias codex route -\u003e runner = \"codex:\u003cmodel\u003e\".\n- 9.5 route fallback -\u003e a RallyRoute event with NO RallyTry counterpart.\n- 9.6 Priority-3 dirty-tree -\u003e source \"dirty_tree\".\n- 9.7 Priority-4 text-pattern -\u003e source \"text_pattern\" with the matching line in raw_signal.\n- 9.8 the renamed \"antigravity gemini-cli exit 1\" pattern still classifies antigravity exit-1-no-other-signal as agent_error (guards against the near-deletion in 1.4).\n- 9.9 try-cap-only kill -\u003e \"try budget exhausted; no output\" + unidentified_issue + FailureClass agent; run-budget kill -\u003e \"run timeout\" + unidentified_issue; a try-cap kill WITH executor evidence (non-empty Category) is not overridden.\n- 9.10 Priority-5 default -\u003e unidentified_issue (NOT agent_error) + source \"unmatched\" + bounded log tail.\n\nAcceptance: each of §9.1-§9.10 has a passing named test. go test ./... green.",
       "assignee": "JUNIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 1179648,
       "createdAt": "2026-06-26T00:55:47.987929476Z",
-      "updatedAt": "2026-06-26T00:55:47.987929476Z",
-      "completedAt": null
+      "updatedAt": "2026-06-28T04:22:13.559356716Z",
+      "completedAt": "2026-06-28T04:22:13.559356716Z"
     },
     {
       "id": "rall-35c6",
