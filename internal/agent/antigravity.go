@@ -1,9 +1,11 @@
 package agent
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -19,7 +21,14 @@ const DefaultAntigravityModel = "Gemini 3.5 Flash (High)"
 
 const defaultAntigravityPrintTimeout = 30 * time.Minute
 
+const (
+	antigravityGlogSource    = "antigravity_glog"
+	antigravityGlogTailBytes = int64(1 << 20)
+)
+
 var antigravityConversationRe = regexp.MustCompile(`Print mode: conversation=([0-9a-fA-F-]+)`)
+
+var antigravityGlogPrefixRe = regexp.MustCompile(`^([IWEF])\d{4}\s+\d{2}:\d{2}:\d{2}\.\d{6}\b`)
 
 var antigravitySettingsMu sync.Mutex
 
@@ -106,6 +115,9 @@ func (a *AntigravityExecutor) Execute(ctx context.Context, opts RunOptions) (*Tr
 		if ev := reliability.ParseGeminiError(errorText); ev != nil {
 			return &TryResult{Evidence: ev, ResolvedModel: model}, execErr
 		}
+		if ev := antigravityGlogFailureEvidence(); ev != nil {
+			return &TryResult{Evidence: ev, ResolvedModel: model}, execErr
+		}
 		return nil, execErr
 	}
 
@@ -179,6 +191,210 @@ func appendAntigravityLog(path string, data []byte) error {
 	defer f.Close()
 	_, err = fmt.Fprintf(f, "\n--- agy log ---\n%s\n", tailString(string(data), 65536))
 	return err
+}
+
+func antigravityGlogFailureEvidence() *reliability.FailureEvidence {
+	path, err := latestAntigravityGlogPath()
+	if err != nil || path == "" {
+		return nil
+	}
+	data, err := readAntigravityGlogTail(path)
+	if err != nil || len(data) == 0 {
+		return nil
+	}
+	return antigravityGlogEvidenceFromData(data)
+}
+
+func latestAntigravityGlogPath() (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil || home == "" {
+		return "", err
+	}
+	dir := filepath.Join(home, ".gemini", "antigravity-cli", "log")
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return "", err
+	}
+
+	var latestPath string
+	var latestMod time.Time
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		if ok, err := filepath.Match("cli-*.log", entry.Name()); err != nil || !ok {
+			continue
+		}
+		info, err := entry.Info()
+		if err != nil {
+			continue
+		}
+		if latestPath == "" || info.ModTime().After(latestMod) {
+			latestPath = filepath.Join(dir, entry.Name())
+			latestMod = info.ModTime()
+		}
+	}
+	return latestPath, nil
+}
+
+func readAntigravityGlogTail(path string) ([]byte, error) {
+	f, err := os.Open(path)
+	if os.IsNotExist(err) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+
+	st, err := f.Stat()
+	if err != nil {
+		return nil, err
+	}
+	offset := int64(0)
+	if st.Size() > antigravityGlogTailBytes {
+		offset = st.Size() - antigravityGlogTailBytes
+	}
+	if _, err := f.Seek(offset, io.SeekStart); err != nil {
+		return nil, err
+	}
+	data, err := io.ReadAll(f)
+	if err != nil {
+		return nil, err
+	}
+	if offset > 0 {
+		if idx := bytes.IndexByte(data, '\n'); idx >= 0 {
+			data = data[idx+1:]
+		} else {
+			data = nil
+		}
+	}
+	return data, nil
+}
+
+func antigravityGlogEvidenceFromData(data []byte) *reliability.FailureEvidence {
+	lines := strings.Split(string(data), "\n")
+	var errorIndices []int
+	var lastErrorBody string
+	for i, raw := range lines {
+		line := strings.TrimRight(raw, "\r")
+		if !antigravityGlogLineSafe(line) {
+			continue
+		}
+		if antigravityGlogLineLevel(line) != 'E' {
+			continue
+		}
+		errorIndices = append(errorIndices, i)
+		if body := antigravityGlogBody(line); body != "" {
+			lastErrorBody = body
+		}
+	}
+	if len(errorIndices) == 0 {
+		return nil
+	}
+
+	keep := map[int]struct{}{}
+	for _, idx := range errorIndices {
+		for i := idx - 1; i <= idx+2; i++ {
+			if i >= 0 && i < len(lines) {
+				keep[i] = struct{}{}
+			}
+		}
+	}
+
+	var rawParts []string
+	for i, raw := range lines {
+		if _, ok := keep[i]; !ok {
+			continue
+		}
+		line := strings.TrimSpace(strings.TrimRight(raw, "\r"))
+		if line == "" || !antigravityGlogLineSafe(line) {
+			continue
+		}
+		if level := antigravityGlogLineLevel(line); level != 0 && level != 'E' {
+			continue
+		}
+		rawParts = append(rawParts, line)
+	}
+	if len(rawParts) == 0 {
+		return nil
+	}
+	if lastErrorBody == "" {
+		lastErrorBody = rawParts[len(rawParts)-1]
+	}
+
+	rawSignal := antigravityTruncateSignal(strings.Join(rawParts, "\n"), 256)
+	return antigravityGlogEvidence(strings.Join(rawParts, "\n"), lastErrorBody, rawSignal)
+}
+
+func antigravityGlogEvidence(text, message, rawSignal string) *reliability.FailureEvidence {
+	ev := &reliability.FailureEvidence{
+		Category:  reliability.CategoryUnidentifiedIssue,
+		Harness:   "antigravity",
+		Provider:  reliability.ProviderGemini,
+		Message:   antigravityTruncateSignal(message, 200),
+		Source:    antigravityGlogSource,
+		RawSignal: rawSignal,
+	}
+
+	lower := strings.ToLower(text)
+	if strings.Contains(lower, "not logged into antigravity") || strings.Contains(lower, "error getting token source") {
+		ev.Category = reliability.CategoryAuthOrProxy
+		return ev
+	}
+
+	if parsed := reliability.ParseGeminiError(text); parsed != nil {
+		ev.Category = parsed.Category
+		ev.StatusCode = parsed.StatusCode
+		ev.ResetAfter = parsed.ResetAfter
+		ev.ResetAt = parsed.ResetAt
+		ev.RetryAfter = parsed.RetryAfter
+		if parsed.Provider != "" {
+			ev.Provider = parsed.Provider
+		}
+	}
+	return ev
+}
+
+func antigravityGlogLineLevel(line string) byte {
+	m := antigravityGlogPrefixRe.FindStringSubmatch(strings.TrimSpace(line))
+	if len(m) < 2 || len(m[1]) == 0 {
+		return 0
+	}
+	return m[1][0]
+}
+
+func antigravityGlogLineSafe(line string) bool {
+	for _, forbidden := range []string{"oauth_creds.json", "antigravity-oauth-token", "settings.json"} {
+		if strings.Contains(line, forbidden) {
+			return false
+		}
+	}
+	return true
+}
+
+func antigravityGlogBody(line string) string {
+	line = strings.TrimSpace(line)
+	if idx := strings.Index(line, "]"); idx >= 0 && idx+1 < len(line) {
+		return strings.TrimSpace(line[idx+1:])
+	}
+	return line
+}
+
+func antigravityTruncateSignal(s string, maxRunes int) string {
+	s = strings.TrimSpace(s)
+	runes := []rune(s)
+	if len(runes) <= maxRunes {
+		return s
+	}
+	if maxRunes <= 0 {
+		return ""
+	}
+	marker := []rune("...")
+	if maxRunes <= len(marker) {
+		return string(marker[:maxRunes])
+	}
+	return string(runes[:maxRunes-len(marker)]) + string(marker)
 }
 
 func applyAntigravityModel(model string) (func() error, error) {
