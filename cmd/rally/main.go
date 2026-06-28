@@ -147,10 +147,11 @@ func init() {
 }
 
 var startCmd = &cobra.Command{
-	Use:     "start",
-	Aliases: []string{"relay"},
-	Short:   "Start or resume agent relays",
-	RunE:    runRelay,
+	Use:          "start",
+	Aliases:      []string{"relay"},
+	Short:        "Start or resume agent relays",
+	SilenceUsage: true,
+	RunE:         runRelay,
 }
 
 func resolveWorkspaceDir() (string, error) {

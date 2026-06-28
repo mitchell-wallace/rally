@@ -5615,7 +5615,7 @@ func TestLapPinValidation_DuplicateSameLap(t *testing.T) {
 	}
 }
 
-func TestLapPinRejectionInRunOne(t *testing.T) {
+func TestLapPinWrongLapWarningInRunOne(t *testing.T) {
 	workspaceDir := t.TempDir()
 	rallyDir := store.RallyDir(workspaceDir)
 	os.MkdirAll(rallyDir, 0o755)
@@ -5660,8 +5660,8 @@ func TestLapPinRejectionInRunOne(t *testing.T) {
 	if err != nil {
 		t.Fatalf("runOne error = %v", err)
 	}
-	if success {
-		t.Fatal("expected failure for wrong-lap consumption")
+	if !success {
+		t.Fatal("expected warning-only success for wrong-lap consumption")
 	}
 
 	tries := s.AllTries()
@@ -5673,7 +5673,7 @@ func TestLapPinRejectionInRunOne(t *testing.T) {
 	}
 }
 
-func TestLapPinMultiLapRejectionInRunOne(t *testing.T) {
+func TestLapPinMultiLapWarningInRunOne(t *testing.T) {
 	workspaceDir := t.TempDir()
 	rallyDir := store.RallyDir(workspaceDir)
 	os.MkdirAll(rallyDir, 0o755)
@@ -5718,8 +5718,8 @@ func TestLapPinMultiLapRejectionInRunOne(t *testing.T) {
 	if err != nil {
 		t.Fatalf("runOne error = %v", err)
 	}
-	if success {
-		t.Fatal("expected failure for multi-lap consumption")
+	if !success {
+		t.Fatal("expected warning-only success for multi-lap consumption")
 	}
 
 	tries := s.AllTries()

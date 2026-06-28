@@ -155,6 +155,12 @@ func TestHelpCommandDoesNotInitializeTelemetryWithBakedNewRelicLicense(t *testin
 	assertRootCommandDoesNotInitializeTelemetryWithBakedNewRelicLicense(t, "--help")
 }
 
+func TestStartCommandSilencesUsageForRuntimeErrors(t *testing.T) {
+	if !startCmd.SilenceUsage {
+		t.Fatal("start command must not print usage for runtime relay errors")
+	}
+}
+
 func TestRunInit_WritesNewShapeConfig(t *testing.T) {
 	tmp := t.TempDir()
 	t.Chdir(tmp)

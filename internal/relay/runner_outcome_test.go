@@ -795,7 +795,7 @@ func TestRunOneRecoveryClassificationPersistence(t *testing.T) {
 	}
 }
 
-func TestRunOneLapPinMismatchPersistsRunAndTryReasonWithoutCategory(t *testing.T) {
+func TestRunOneLapPinMismatchIsWarningOnly(t *testing.T) {
 	tests := []struct {
 		name         string
 		recordedLaps []string
@@ -857,11 +857,11 @@ func TestRunOneLapPinMismatchPersistsRunAndTryReasonWithoutCategory(t *testing.T
 			if err != nil {
 				t.Fatalf("runOne error = %v", err)
 			}
-			if res.Success {
-				t.Fatal("run success = true, want mismatch-only failure")
+			if !res.Success {
+				t.Fatal("run success = false, want warning-only mismatch to resolve successfully")
 			}
-			if res.Outcome != reliability.OutcomeFailed {
-				t.Fatalf("run outcome = %q, want %q", res.Outcome, reliability.OutcomeFailed)
+			if res.Outcome != reliability.OutcomeCompleted {
+				t.Fatalf("run outcome = %q, want %q", res.Outcome, reliability.OutcomeCompleted)
 			}
 			if res.FailReason != tt.wantReason {
 				t.Fatalf("run FailReason = %q, want %q", res.FailReason, tt.wantReason)
@@ -881,11 +881,11 @@ func TestRunOneLapPinMismatchPersistsRunAndTryReasonWithoutCategory(t *testing.T
 				t.Fatalf("tries = %d, want 1", len(tries))
 			}
 			try := tries[0]
-			if try.Completed {
-				t.Fatal("try completed = true, want false for mismatch-only failure")
+			if !try.Completed {
+				t.Fatal("try completed = false, want true for warning-only mismatch")
 			}
-			if try.Outcome != reliability.OutcomeFailed {
-				t.Fatalf("try outcome = %q, want %q", try.Outcome, reliability.OutcomeFailed)
+			if try.Outcome != reliability.OutcomeCompleted {
+				t.Fatalf("try outcome = %q, want %q", try.Outcome, reliability.OutcomeCompleted)
 			}
 			if try.FailReason != tt.wantReason {
 				t.Fatalf("try FailReason = %q, want %q", try.FailReason, tt.wantReason)

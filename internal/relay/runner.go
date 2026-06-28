@@ -1722,6 +1722,7 @@ func (r *Runner) runOne(
 		// timeout" instead of the run-budget handoff path.
 		tryTimeout = 0
 	}
+	var runStartedAt time.Time
 attemptLoop:
 	for attempt := 1; attempt <= maxAttempts; attempt++ {
 		lastAttempt = attempt
@@ -1792,6 +1793,9 @@ attemptLoop:
 
 		headBefore, _ := r.headHash()
 		startedAt := time.Now().UTC()
+		if runStartedAt.IsZero() {
+			runStartedAt = startedAt
+		}
 
 		var lapsStarted, lapsTotal int
 		if task.IsLapsBacked {
@@ -1956,6 +1960,10 @@ attemptLoop:
 		recoveryClassification := recoveryClassificationForRun(task, runEntry)
 
 		runtime := endedAt.Sub(startedAt)
+		runRuntime := runtime
+		if !runStartedAt.IsZero() {
+			runRuntime = endedAt.Sub(runStartedAt)
+		}
 		commitHash := ""
 		commitHistory := []string{}
 		preCommitFilesChanged := r.filesChangedList(result, headBefore, headAfter, "")
@@ -2046,7 +2054,7 @@ attemptLoop:
 			// the muted cancelled presentation.
 			renderRunFooter(r.outWriter(), style.FooterOptions{
 				Cancelled:          true,
-				Duration:           runtime,
+				Duration:           runRuntime,
 				FilesChanged:       filesChangedCount,
 				CommitHash:         shortHash,
 				CommitTitle:        commitTitle,
@@ -2214,11 +2222,10 @@ attemptLoop:
 				failureClass = reliability.FailureAgent
 				failureCategory = ""
 				resetEvidence = nil
+				failed = false
 				if pinnedLapCompleteElsewhere(r.cfg.WorkspaceDir, runID, task.LapID, recordedLaps) {
-					failed = false
 					fmt.Fprintf(log, "relay %d run %d attempt %d lap pin mismatch warning: pinned_lap=%q consumed_laps=%v reason=%s pinned_lap_already_complete=true\n", relay.ID, runIndex+1, attempt, task.LapID, recordedLaps, reason)
 				} else {
-					failed = true
 					fmt.Fprintf(log, "relay %d run %d attempt %d lap pin mismatch warning: pinned_lap=%q consumed_laps=%v reason=%s\n", relay.ID, runIndex+1, attempt, task.LapID, recordedLaps, reason)
 				}
 			}
@@ -2387,9 +2394,13 @@ attemptLoop:
 		willRetry := failed && attempt < maxAttempts &&
 			!actionTaken && !r.skipFlag.Load() && !lapPinMismatch && !r.stopFlag.Load() &&
 			!terminalForRun && !runBudgetExhausted
+		footerDuration := runtime
+		if !willRetry {
+			footerDuration = runRuntime
+		}
 		renderRunFooter(r.outWriter(), style.FooterOptions{
 			Passed:       !failed,
-			Duration:     runtime,
+			Duration:     footerDuration,
 			FilesChanged: filesChangedCount,
 			CommitHash:   shortHash,
 			CommitTitle:  commitTitle,
