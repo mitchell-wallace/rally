@@ -30,10 +30,10 @@ All new files are `package runner` in `internal/relay/runner/`, bare names. Verb
 
 ## 4. Phase C — decompose the big lifecycle functions (highest risk; LAST)
 
-- [ ] 4.1 Move `runOne` verbatim into `run_one.go` with `runOutcome`, `routeFallbackCause` (+`addTo`), `executeTry`, and `containsInt` (place `containsInt` with its caller). No logic change. `go test -race` green.
-- [ ] 4.2 Decompose `Run` into named private step-methods in `relay_steps.go` (start/resume, relay- & run-scoped message consumption, route select/wait, fallback emit, apply-outcome-to-resilience, update-progress, print-summary) + `tallyRuns`. Each method is a verbatim lift of an existing contiguous block (design Decision 3). `go test -race` after.
-- [ ] 4.3 Decompose `runOne` into named private step-methods in `run_one.go` (budget setup, monitored execution, outcome classification, final-snippet resolution, laps/progress reconciliation, retry/complete decision — boundaries follow existing blocks; names not pre-committed). Block-for-block; `go test -race` after.
-- [ ] 4.4 Confirm `runner.go` is now a thin top-level orchestrator (~250–400 lines aspirational; not enforced here) holding `Config`, `Runner`, `NewRunner`, `RequestStop`, `SetTelemetry`/`tel`, `outWriter`, `newBoundTimer`, and the slimmed `Run` skeleton.
+- [x] 4.1 Move `runOne` verbatim into `run_one.go` with `runOutcome`, `routeFallbackCause` (+`addTo`), `executeTry`, and `containsInt` (place `containsInt` with its caller). No logic change. `go test -race` green.
+- [x] 4.2 Decompose `Run` into named private step-methods in `relay_steps.go` (start/resume, relay- & run-scoped message consumption, route select/wait, fallback emit, apply-outcome-to-resilience, update-progress, print-summary) + `tallyRuns`. Each method is a verbatim lift of an existing contiguous block (design Decision 3). `go test -race` after.
+- [x] 4.3 Decompose `runOne` into named private step-methods in `run_one.go` (budget setup, monitored execution, outcome classification, final-snippet resolution, laps/progress reconciliation, retry/complete decision — boundaries follow existing blocks; names not pre-committed). Block-for-block; `go test -race` after.
+- [x] 4.4 Confirm `runner.go` is now a thin top-level orchestrator (~250–400 lines aspirational; not enforced here) holding `Config`, `Runner`, `NewRunner`, `RequestStop`, `SetTelemetry`/`tel`, `outWriter`, `newBoundTimer`, and the slimmed `Run` skeleton.
 
 ## 5. Test reshard
 

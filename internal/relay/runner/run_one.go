@@ -224,12 +224,13 @@ func (r *Runner) runOne(
 	onStallRecovered func(),
 	log io.Writer,
 ) (runOutcome, error) {
-	state := r.newRunOneState(relay, runIndex, picked, task, consumedMsg, relayMsg)
+	state := r.newRunOneState(relay, runIndex, task, consumedMsg, relayMsg)
 	roleInstructions, err := r.resolveRoleInstructions(task.promptAssignee())
 	if err != nil {
 		return state.outcome(task, false, false, false), err
 	}
 	state.roleInstructions = roleInstructions
+	r.captureRunStartWorkspaceState(state, picked)
 
 	if stop := r.setupRunBudget(state, isHourlyRetry, isProbation); stop != nil {
 		defer stop()
@@ -293,7 +294,7 @@ attemptLoop:
 	return state.outcome(task, state.success, addressed, interrupted), nil
 }
 
-func (r *Runner) newRunOneState(relay *store.RelayRecord, runIndex int, picked agent.ResolvedAgent, task runTask, consumedMsg *store.MessageRecord, relayMsg *store.MessageRecord) *runOneState {
+func (r *Runner) newRunOneState(relay *store.RelayRecord, runIndex int, task runTask, consumedMsg *store.MessageRecord, relayMsg *store.MessageRecord) *runOneState {
 	// Initialize run-state for this run.
 	runID := fmt.Sprintf("relay-%d-run-%d", relay.ID, runIndex+1)
 	rc := r.rallyContext(relay)
@@ -316,11 +317,6 @@ func (r *Runner) newRunOneState(relay *store.RelayRecord, runIndex int, picked a
 	recentTries := r.store.RecentTries(recentTryCount, relay.ID)
 	recentContext := buildRecentContext(recentTries, r.cfg.RecentTryCharLimit, r.cfg.RecentContextCharLimit)
 
-	// Check for uncommitted non-rally changes at run start. Errors are
-	// tolerated (treat as clean) so a broken git setup never crashes the run.
-	leftoverWork, _ := gitx.IsWorkspaceDirty(r.cfg.WorkspaceDir)
-	runStartDirtySnapshot, _ := gitx.WorkspaceDirtyPaths(r.cfg.WorkspaceDir)
-
 	return &runOneState{
 		runID:                      runID,
 		rc:                         rc,
@@ -328,11 +324,16 @@ func (r *Runner) newRunOneState(relay *store.RelayRecord, runIndex int, picked a
 		inbox:                      inbox,
 		relayMessage:               relayMessage,
 		recentContext:              recentContext,
-		leftoverWork:               leftoverWork,
-		runStartDirtySnapshot:      runStartDirtySnapshot,
-		exec:                       r.executors[picked.Harness],
 		failureClass:               reliability.FailureAgent,
 	}
+}
+
+func (r *Runner) captureRunStartWorkspaceState(state *runOneState, picked agent.ResolvedAgent) {
+	// Check for uncommitted non-rally changes at run start. Errors are
+	// tolerated (treat as clean) so a broken git setup never crashes the run.
+	state.leftoverWork, _ = gitx.IsWorkspaceDirty(r.cfg.WorkspaceDir)
+	state.runStartDirtySnapshot, _ = gitx.WorkspaceDirtyPaths(r.cfg.WorkspaceDir)
+	state.exec = r.executors[picked.Harness]
 }
 
 func (r *Runner) setupRunBudget(state *runOneState, isHourlyRetry bool, isProbation bool) func() bool {
