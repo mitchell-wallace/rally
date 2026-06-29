@@ -264,6 +264,138 @@
       "createdAt": "2026-06-26T00:55:47.987944174Z",
       "updatedAt": "2026-06-28T04:39:08.350785319Z",
       "completedAt": "2026-06-28T04:39:08.350785319Z"
+    },
+    {
+      "id": "rall-73ba",
+      "title": "Capture relay runner baselines",
+      "description": "Context: OpenSpec change `decompose-relay-runner`, tasks 1.1-1.4. Read `openspec/changes/decompose-relay-runner/proposal.md`, `design.md`, `tasks.md`, and `specs/relay-module-structure/spec.md` before editing. This lap creates the safety net for the package split and lifecycle refactor.\n\nOutcome: Baseline tests, exported-surface checksum, test/benchmark inventory, and coverage baseline are captured in a durable place useful to later laps. If the initial targeted tests are red, capture the failures and stop without unrelated fixes.\n\nFiles \u0026 scope: Prefer a small tracked note under the change folder if needed for the checksum/inventory/coverage records. Do not move production code in this lap. Do not tick `tasks.md` boxes.\n\nAcceptance: `go test -count=1 ./internal/relay ./cmd/rally` is green or the failure is captured and the lap hands off. Record exported identifiers for current `internal/relay`, every pre-change `(file, Test*/Benchmark*)` under `internal/relay/*_test.go`, and the total from `go test -coverprofile=/tmp/rally-relay-cover-before.out ./internal/relay/...` plus `go tool cover -func=/tmp/rally-relay-cover-before.out`.",
+      "assignee": "SENIOR",
+      "isDone": false,
+      "order": 65536,
+      "createdAt": "2026-06-29T03:48:57.300709392Z",
+      "updatedAt": "2026-06-29T03:48:57.300709392Z",
+      "completedAt": null
+    },
+    {
+      "id": "rall-462c",
+      "title": "Establish runner package boundary",
+      "description": "Context: OpenSpec `decompose-relay-runner`, tasks 2.1-2.5. Use the baseline records from the prior lap. This is the package-boundary move before any carving or decomposition.\n\nOutcome: `internal/relay/runner` exists as `package runner`; `runner.go`, `route_runtime.go`, and `log.go` are moved wholesale; `runner.go` remains monolithic; callers use `runner.NewRunner` / `runner.Config`; and the `runner -\u003e relay` dependency is one-way.\n\nFiles \u0026 scope: Move tests that reference moved runner/route/log symbols before the checkpoint, splitting mixed tests by symbol ownership. Relocate only `FormatMixLabel` down into `internal/relay/mix.go` so it remains `relay.FormatMixLabel`. Preserve exact private route-label literals `__routes__` and `__override__:` on both sides without adding exported token APIs. Update `cmd/rally/main.go`, `cmd/rally/telemetry_test.go`, and any actual relocated-symbol callers; leave primitive `relay.*` callers alone.\n\nDesign: This lap is a relocation, not a redesign. Signatures, CLI strings, telemetry fields, persisted labels, laps semantics, git messages, and `internal/buildinfo/VERSION` must not change.\n\nAcceptance: `go test -count=1 ./...` and `go build ./...` are green with `runner.go` still monolithic. Confirm the exported-identifier checksum now splits as intended across `internal/relay` and `internal/relay/runner`, with no extra exported route-label constants/helpers. Do not tick `tasks.md` boxes.",
+      "assignee": "SENIOR",
+      "isDone": false,
+      "order": 131072,
+      "createdAt": "2026-06-29T03:48:57.300725755Z",
+      "updatedAt": "2026-06-29T03:48:57.300725755Z",
+      "completedAt": null
+    },
+    {
+      "id": "rall-600a",
+      "title": "Verify runner package boundary",
+      "description": "Context: Verify OpenSpec `decompose-relay-runner` tasks 1.1-2.5 only. Use the `openspec-verify-change` skill for this change, focused on the baseline and package-boundary phase.\n\nOutcome: The baseline artifacts and Phase A package split are independently reviewed before carving begins.\n\nReview scope: Identify the intended branch target/base before diffing and use it for diff commands. Identify the first lap/try in this batch and treat earlier branch work as pre-existing unless the user asks otherwise. Do not rewrite git history. Trace the package import graph, relocated exported symbols, exact route-label literals, and caller updates; do not rely only on green tests.\n\nAcceptance: Re-run or validate `go test -count=1 ./...` and `go build ./...`. Confirm `internal/relay` does not import `internal/relay/runner`, `runner` imports relay primitives as needed, `FormatMixLabel` remains `relay.FormatMixLabel`, and no behaviour-surface strings/fields/store shapes changed. Check off tasks 1.1-2.5 in `tasks.md` only for work verified as correct and thorough; add focused head laps for substantive gaps.",
+      "assignee": "VERIFY",
+      "isDone": false,
+      "order": 196608,
+      "createdAt": "2026-06-29T03:48:57.300727232Z",
+      "updatedAt": "2026-06-29T03:48:57.300727232Z",
+      "completedAt": null
+    },
+    {
+      "id": "rall-e792",
+      "title": "Carve runner helper responsibilities",
+      "description": "Context: OpenSpec `decompose-relay-runner`, tasks 3.1, 3.2, 3.5, 3.6, and 3.9. Phase A should already be verified. All production files are now in `internal/relay/runner` using `package runner`.\n\nOutcome: Pure symbol moves create the lower-risk responsibility files: `terminal.go`, `failure_display.go`, `git.go`, `final_snippet.go`, plus `logf` in `log.go` and `prepareExecutorForSelection` in `route_runtime.go`.\n\nFiles \u0026 scope: Move whole existing symbols without behaviour edits. Keep filenames bare, avoid `misc.go`/`helpers.go`, and do not alter tests except as needed for package/file references caused by pure moves. Do not decompose `Run` or `runOne` in this lap.\n\nAcceptance: After each cluster or at least before finishing, run `go test -count=1 ./internal/relay/...`. Confirm moved symbols have exactly one production home and no telemetry-field, CLI-string, store-shape, laps-semantic, git-message, or version changes were introduced. Do not tick `tasks.md` boxes.",
+      "assignee": "JUNIOR",
+      "isDone": false,
+      "order": 262144,
+      "createdAt": "2026-06-29T03:48:57.300728283Z",
+      "updatedAt": "2026-06-29T03:48:57.300728283Z",
+      "completedAt": null
+    },
+    {
+      "id": "rall-c744",
+      "title": "Carve runner state and execution seams",
+      "description": "Context: OpenSpec `decompose-relay-runner`, tasks 3.3, 3.4, 3.7, 3.8, and 3.9 if any stragglers remain. This covers the subtle telemetry, prompt/laps, progress, cancellation, and liveness seams.\n\nOutcome: `telemetry.go`, `task.go`, `progress.go`, `action_loop.go`, `liveness.go`, and `handoff_only.go` own the symbols listed in `tasks.md`/`design.md`, with cohesive clusters moved verbatim and no new abstraction layers.\n\nFiles \u0026 scope: Keep laps/role/prompt coupling in `task.go`, progress reconciliation in `progress.go`, cancellation/operator control in `action_loop.go`, stall wiring in `liveness.go`, and bounded handoff-only recovery in `handoff_only.go`. Do not decompose `Run` or `runOne` yet.\n\nDesign: These files guard behaviour-sensitive surfaces: telemetry event/field names, laps claim/finalization semantics, timeout/stall cancellation, and prompt text. Preserve behaviour exactly.\n\nAcceptance: Run `go test -count=1 ./internal/relay/...` during the moves and `go test -race -shuffle=on -count=1 ./internal/relay/...` after `action_loop.go`/`liveness.go`. Confirm each listed symbol has one home and no catch-all production file appears. Do not tick `tasks.md` boxes.",
+      "assignee": "SENIOR",
+      "isDone": false,
+      "order": 327680,
+      "createdAt": "2026-06-29T03:48:57.300729375Z",
+      "updatedAt": "2026-06-29T03:48:57.300729375Z",
+      "completedAt": null
+    },
+    {
+      "id": "rall-a5ac",
+      "title": "Verify runner responsibility carve",
+      "description": "Context: Verify OpenSpec `decompose-relay-runner` tasks 3.1-3.10. Use the `openspec-verify-change` skill for this change, focused on Phase B.\n\nOutcome: The responsibility-file carve is reviewed before the high-risk lifecycle decomposition begins.\n\nReview scope: Identify the intended branch target/base before diffing and use it for diff commands. Do not rewrite git history. Inspect actual symbol homes against the manifest in `design.md`; ensure there is no catch-all production file and no symbol duplication/drop. Pay special attention to telemetry, task/prompt, progress, action loop, liveness, route runtime, and log behavior surfaces.\n\nAcceptance: Re-run or validate `go test -count=1 ./internal/relay/...` and `go test -race -shuffle=on -count=1 ./internal/relay/...` if applicable to the completed carve. Confirm no behaviour-surface edits. Check off tasks 3.1-3.10 only for verified-correct work; add focused head laps for substantive gaps.",
+      "assignee": "VERIFY",
+      "isDone": false,
+      "order": 393216,
+      "createdAt": "2026-06-29T03:48:57.30073246Z",
+      "updatedAt": "2026-06-29T03:48:57.30073246Z",
+      "completedAt": null
+    },
+    {
+      "id": "rall-9f33",
+      "title": "Extract relay lifecycle steps",
+      "description": "Context: OpenSpec `decompose-relay-runner`, tasks 4.1-4.2. Phase B should already be verified. This starts the highest-risk phase, so keep edits block-for-block.\n\nOutcome: `runOne` is moved verbatim into `run_one.go` with `runOutcome`, `routeFallbackCause` (+`addTo`), `executeTry`, and `containsInt`; `Run` is decomposed into named private step-methods in `relay_steps.go` plus `tallyRuns`.\n\nFiles \u0026 scope: Do not change runtime behaviour, prompt text, telemetry, store shape, laps semantics, git messages, or retry/fallback decisions. Extract existing contiguous blocks and thread existing locals explicitly; do not invent interfaces or redesign control flow.\n\nAcceptance: Run `go test -race -shuffle=on -count=1 ./internal/relay/...` after moving `runOne` and again after decomposing `Run`. `runner.go` should be visibly slimmer but does not need to hit the final line target yet. Do not tick `tasks.md` boxes.",
+      "assignee": "SENIOR",
+      "isDone": false,
+      "order": 458752,
+      "createdAt": "2026-06-29T03:48:57.300733473Z",
+      "updatedAt": "2026-06-29T03:48:57.300733473Z",
+      "completedAt": null
+    },
+    {
+      "id": "rall-ce63",
+      "title": "Extract run lifecycle steps",
+      "description": "Context: OpenSpec `decompose-relay-runner`, tasks 4.3-4.4. The prior lap should have moved `runOne` and extracted `Run`; this lap finishes lifecycle decomposition.\n\nOutcome: `runOne` delegates to named private step-methods in `run_one.go` for budget setup, monitored execution, outcome classification, final-snippet resolution, laps/progress reconciliation, and retry/complete decision. `runner.go` retains only `Config`, `Runner`, `NewRunner`, `RequestStop`, `SetTelemetry`/`tel`, `outWriter`, `newBoundTimer`, and the slim `Run` skeleton.\n\nFiles \u0026 scope: Extract block-for-block from existing contiguous code. Keep method names locally sensible but do not introduce new abstraction layers. Avoid unrelated test resharding beyond what compilation requires.\n\nDesign: This is the highest regression risk. Preserve all observable behaviour, especially retry budgeting, route fallback causes, final-snippet handling, progress/laps reconciliation, and completion/handoff decisions.\n\nAcceptance: Run `go test -race -shuffle=on -count=1 ./internal/relay/...`. Confirm no single function approaches the previous `runOne` scale and `runner.go` is a thin top-level orchestrator. Do not tick `tasks.md` boxes.",
+      "assignee": "SENIOR",
+      "isDone": false,
+      "order": 524288,
+      "createdAt": "2026-06-29T03:48:57.300736429Z",
+      "updatedAt": "2026-06-29T03:48:57.300736429Z",
+      "completedAt": null
+    },
+    {
+      "id": "rall-29e9",
+      "title": "Verify lifecycle decomposition",
+      "description": "Context: Verify OpenSpec `decompose-relay-runner` tasks 4.1-4.4. Use the `openspec-verify-change` skill for this change, focused on Phase C lifecycle extraction.\n\nOutcome: The highest-risk refactor phase is reviewed before broad test resharding.\n\nReview scope: Identify the intended branch target/base before diffing and use it for diff commands. Do not rewrite git history. Compare extracted methods to the original logical blocks using git history/diff context; trace run/try retry budgeting, route fallback, action-loop result handling, final snippet, laps/progress reconciliation, and relay summary paths. Green tests alone are not enough.\n\nAcceptance: Re-run or validate `go test -race -shuffle=on -count=1 ./internal/relay/...`. Confirm `runner.go` is thin, `Run` and `runOne` delegate to named steps, and no behaviour-surface edits slipped in. Check off tasks 4.1-4.4 only for verified-correct work; add focused head laps for substantive gaps.",
+      "assignee": "VERIFY",
+      "isDone": false,
+      "order": 589824,
+      "createdAt": "2026-06-29T03:48:57.300737682Z",
+      "updatedAt": "2026-06-29T03:48:57.300737682Z",
+      "completedAt": null
+    },
+    {
+      "id": "rall-72c8",
+      "title": "Reshard runner tests and helpers",
+      "description": "Context: OpenSpec `decompose-relay-runner`, tasks 5.1-5.3. Use the pre-change inventory captured in task 1.3 and the final production file layout.\n\nOutcome: Tests are split beside the code they exercise across `internal/relay` and `internal/relay/runner`; helpers are split by package; every pre-change test/benchmark function appears exactly once after the split.\n\nFiles \u0026 scope: Split `runner_test.go` into `package runner` files mirroring production files: `terminal_test.go`, `failure_display_test.go`, `telemetry_test.go`, `task_test.go`, `git_test.go`, `final_snippet_test.go`, `progress_test.go`, `action_loop_test.go`, `liveness_test.go`, `handoff_only_test.go`, `run_one_test.go`, and `relay_steps_test.go`. Move whole `func TestXxx`/`BenchmarkXxx` blocks. Keep primitive tests in `internal/relay`; runner behaviour tests move to `internal/relay/runner`. Tiny helpers may be duplicated when clearer; use `internal/testutil` only for truly package-neutral helpers that need no unexported access.\n\nDesign: Do not rewrite assertions or use this lap to add broad new coverage. New tests should be limited to explicit route-label regression coverage required by the package split and recorded separately from relocated tests.\n\nAcceptance: Compare the pre/post inventory and record that each pre-change test/benchmark appears exactly once. Run `go test -count=1 ./internal/relay/...`. Do not tick `tasks.md` boxes.",
+      "assignee": "SENIOR",
+      "isDone": false,
+      "order": 655360,
+      "createdAt": "2026-06-29T03:48:57.30073862Z",
+      "updatedAt": "2026-06-29T03:48:57.30073862Z",
+      "completedAt": null
+    },
+    {
+      "id": "rall-f1d7",
+      "title": "Verify test reshard and coverage",
+      "description": "Context: Verify OpenSpec `decompose-relay-runner` tasks 5.1-5.3 and 6.1-6.4. Use the `openspec-verify-change` skill for this change, focused on tests, exported API, build, race, and coverage.\n\nOutcome: The test split and objective regression gates are verified before final behaviour-surface review.\n\nReview scope: Identify the intended branch target/base before diffing and use it for diff commands. Do not rewrite git history. Compare the captured inventory against the final test tree; ensure no test/benchmark was dropped or duplicated, assertions were not rewritten, and any new tests are limited to route-label regression coverage.\n\nAcceptance: Run `go test -count=1 ./...`, `go test -race -shuffle=on -count=1 ./internal/relay/...`, `go build ./...`, and the after coverage profile `go test -coverprofile=/tmp/rally-relay-cover-after.out ./internal/relay/...` plus `go tool cover -func=/tmp/rally-relay-cover-after.out`; compare total coverage against the baseline. Verify exported-surface relocation matches the spec. Check off tasks 5.1-5.3 and 6.1-6.4 only for verified-correct work; add focused head laps for substantive gaps.",
+      "assignee": "VERIFY",
+      "isDone": false,
+      "order": 720896,
+      "createdAt": "2026-06-29T03:48:57.300739663Z",
+      "updatedAt": "2026-06-29T03:48:57.300739663Z",
+      "completedAt": null
+    },
+    {
+      "id": "rall-4295",
+      "title": "Verify full OpenSpec change",
+      "description": "Context: Final verification for OpenSpec `decompose-relay-runner`, especially tasks 6.5-6.6 and any earlier unchecked tasks. Use the `openspec-verify-change` skill for the complete change and inspect the whole diff.\n\nOutcome: The full refactor is confirmed to satisfy `proposal.md`, `design.md`, `tasks.md`, and `specs/relay-module-structure/spec.md`, with tasks checked only after verification.\n\nReview scope: Identify the intended branch target/base before diffing and use it for diff commands. Identify the first lap/try in this batch and treat earlier branch work as pre-existing unless the user asks otherwise. Do not rewrite git history. Review behavior-surface preservation across CLI output, telemetry event/field names, persisted store shape, laps semantics, git messages, route-label markers, and `internal/buildinfo/VERSION`.\n\nAcceptance: Run or validate final `go test -count=1 ./...`, `go test -race -shuffle=on -count=1 ./internal/relay/...`, coverage comparison, exported-surface check, `go build ./...`, and `openspec validate decompose-relay-runner --strict`. Check off all remaining verified tasks in `openspec/changes/decompose-relay-runner/tasks.md`; add focused head laps for any substantive gap instead of hiding implementation inside verification.",
+      "assignee": "VERIFY",
+      "isDone": false,
+      "order": 786432,
+      "createdAt": "2026-06-29T03:48:57.300740524Z",
+      "updatedAt": "2026-06-29T03:48:57.300740524Z",
+      "completedAt": null
     }
   ]
 }
