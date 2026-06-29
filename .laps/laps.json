@@ -369,11 +369,11 @@
       "title": "Reshard runner tests and helpers",
       "description": "Context: OpenSpec `decompose-relay-runner`, tasks 5.1-5.3. Use the pre-change inventory captured in task 1.3 and the final production file layout.\n\nOutcome: Tests are split beside the code they exercise across `internal/relay` and `internal/relay/runner`; helpers are split by package; every pre-change test/benchmark function appears exactly once after the split.\n\nFiles \u0026 scope: Split `runner_test.go` into `package runner` files mirroring production files: `terminal_test.go`, `failure_display_test.go`, `telemetry_test.go`, `task_test.go`, `git_test.go`, `final_snippet_test.go`, `progress_test.go`, `action_loop_test.go`, `liveness_test.go`, `handoff_only_test.go`, `run_one_test.go`, and `relay_steps_test.go`. Move whole `func TestXxx`/`BenchmarkXxx` blocks. Keep primitive tests in `internal/relay`; runner behaviour tests move to `internal/relay/runner`. Tiny helpers may be duplicated when clearer; use `internal/testutil` only for truly package-neutral helpers that need no unexported access.\n\nDesign: Do not rewrite assertions or use this lap to add broad new coverage. New tests should be limited to explicit route-label regression coverage required by the package split and recorded separately from relocated tests.\n\nAcceptance: Compare the pre/post inventory and record that each pre-change test/benchmark appears exactly once. Run `go test -count=1 ./internal/relay/...`. Do not tick `tasks.md` boxes.",
       "assignee": "SENIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 655360,
       "createdAt": "2026-06-29T03:48:57.30073862Z",
-      "updatedAt": "2026-06-29T03:48:57.30073862Z",
-      "completedAt": null
+      "updatedAt": "2026-06-29T09:30:53.145988728Z",
+      "completedAt": "2026-06-29T09:30:53.145988728Z"
     },
     {
       "id": "rall-f1d7",
