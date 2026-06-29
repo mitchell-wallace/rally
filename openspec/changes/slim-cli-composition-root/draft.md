@@ -1,6 +1,10 @@
 ## Draft: Slim CLI Composition Root
 
-Status: drafted 2026-06-29 - initial architecture concept only.
+Status: drafted 2026-06-29; updated 2026-06-29 to compose over the
+`internal/relay/runner` package that `decompose-relay-runner` (#1) extracts, and
+to drop the "split in `cmd/rally` first, promote to `internal/cli` later" hedge —
+the runner extraction proved the boundaries are knowable up front, so this change
+makes the package call directly instead of deferring it.
 
 This change is an architectural refactor. It should not change command names,
 flags, config semantics, telemetry activation, release behaviour, laps hook
@@ -59,17 +63,17 @@ Introduce a function such as:
 func NewRootCommand(opts RootOptions) *cobra.Command
 ```
 
-Candidate package locations:
+Home: `internal/cli`. It already owns interactive config and route checks, so
+command construction belongs beside them. Earlier framing hedged toward "split
+`main.go` into package-`main` files first, promote to `internal/cli` later"; that
+is the same preemptive same-package deferral that `decompose-relay-runner`
+removed. The boundary here is just as knowable — `cmd/rally` is the only consumer
+of these command builders — so this change moves command construction into
+`internal/cli` directly. A pure intra-`main` file split is acceptable only as a
+mechanical first commit *within* this change, not as a reason to leave the package
+boundary undrawn.
 
-- `internal/cli`: natural because it already owns interactive config and route
-  checks.
-- `cmd/rally`: lower churn, by splitting `main.go` into multiple files while
-  keeping package `main`.
-
-Recommended first step: split within `cmd/rally` if that keeps the diff smaller,
-then promote stable command builders into `internal/cli` later.
-
-`main.go` should ideally retain only:
+`main.go` should retain only:
 
 - build-time variables,
 - `main()`,
@@ -79,7 +83,8 @@ then promote stable command builders into `internal/cli` later.
 ### B. Extract relay startup orchestration
 
 Introduce an app-layer type or function that turns CLI inputs into a configured
-`relay.Runner` and runs it.
+`runner.Runner` (from the `internal/relay/runner` package that #1 extracts) and
+runs it.
 
 Possible shape:
 
@@ -100,8 +105,14 @@ type RelayStartOptions struct {
 func StartRelay(ctx context.Context, opts RelayStartOptions) error
 ```
 
-This can live in a new package such as `internal/runtime`, `internal/app/relay`,
-or `internal/cli/relay`. The best name should be decided during proposal work.
+This composition seam sits *above* `internal/relay/runner`: it maps config →
+`runner.Config` → `runner.NewRunner` → `Runner.Run`. It is the same seam
+`separate-runtime-presentation-boundary` (#5) needs so CLI and the future TUI can
+both start a relay without reaching into runner internals, so name it for reuse,
+not for the CLI: `internal/app` (e.g. `app.StartRelay`) is the lean choice —
+`internal/runtime`/`internal/cli/relay` couple the seam to either a vague
+"runtime" or to the CLI specifically. Decide finally during proposal work, but the
+default is `internal/app`.
 
 The key is that Cobra should parse flags and then delegate. It should not own
 the full relay lifecycle.
@@ -160,8 +171,10 @@ the progressive disclosure clear:
 
 - `cmd/rally`: process entry and build-time values,
 - `internal/cli`: Cobra command construction and interactive prompts,
-- app/runtime package: orchestration from config to relay runner,
-- `internal/relay`: relay/run/try execution,
+- `internal/app`: orchestration from config to relay runner (the reusable
+  `StartRelay` seam shared with the future TUI),
+- `internal/relay/runner`: relay/run/try execution (the orchestrator),
+- `internal/relay`: relay-record/resilience/mix primitives the runner builds on,
 - `internal/agent` or harness packages: executor contract and adapters.
 
 ## Testing Strategy
@@ -206,12 +219,14 @@ Before completion:
 
 ## Open Questions
 
-- Should the reusable relay-start API live in `internal/app`, `internal/runtime`,
-  or `internal/cli`?
-- Should command construction move immediately to `internal/cli`, or should the
-  first change only split package-main files?
+- Final name for the relay-start seam: `internal/app` is the working default (see
+  section B); confirm against #5's needs during proposal work.
 - Should executor registry extraction wait for harness modularization, or is a
-  small `BuildExecutors` helper useful before that larger change?
+  small `BuildExecutors` helper useful before that larger change? (Either way the
+  registry output feeds `runner.NewRunner`, not `relay`.)
+
+Resolved (no longer open): command construction moves to `internal/cli` directly
+rather than being deferred behind a package-`main` split — see section A.
 
 ## Out of Scope
 

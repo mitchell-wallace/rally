@@ -3,10 +3,16 @@
 Status: formalised 2026-06-29 into `proposal.md`, `design.md`, `tasks.md`, and
 `specs/relay-module-structure/spec.md`. This draft is kept as the original seed;
 the binding file manifest, decisions, and the now-resolved open questions live in
-`design.md`. Notable changes during formalisation: every previously-unplaced
-symbol was assigned a home; `runOne`/`Run` decomposition was pulled in from
-"optional" to in-scope (sequenced last); naming standardised to bare
-responsibility names (`runner_` qualifier only on import collisions); a
+`design.md`. **The same-package constraint below is superseded.** The dependency
+graph showed the `runner → relay` boundary is already clean and one-directional
+(only `cmd/rally` imports the package, two references move), so the formalised
+change *extracts* `internal/relay/runner` rather than keeping `package relay`.
+Other notable changes during formalisation: the orchestrator (`runner.go` +
+`route_runtime.go` + `log.go`) moves into the new package while the primitives
+(`relay.go`/`resilience.go`/`mix.go`/`constants.go`) stay; every previously-
+unplaced symbol was assigned a home; `runOne`/`Run` decomposition was pulled in
+from "optional" to in-scope (Phase C, last); files use bare names (no `runner_`
+qualifier, since `package runner` has no import-name collisions); a
 `relay-module-structure` capability spec was added.
 
 Status: drafted 2026-06-29 - initial architecture concept only.

@@ -1,54 +1,51 @@
 ## 1. Baseline & checksums
 
-- [ ] 1.1 Run `go test -count=1 ./internal/relay` and confirm green. If red, capture the failures and STOP — do not fold unrelated fixes into this refactor (design Migration step 1).
-- [ ] 1.2 Capture the exported-identifier set of `internal/relay` as a checksum (e.g. `go doc ./internal/relay` or a grep of exported `func`/`type`/`const`/`var` decls), saved to compare at the end. Note `CancellationSource` and its consts are exported (design Risks).
-- [ ] 1.3 Capture the `Test*`/`Benchmark*` function count in `internal/relay` as a checksum for the test reshard (`grep -c '^func Test\|^func Benchmark' internal/relay/*_test.go` total).
-- [ ] 1.4 (If coverage is used during implementation) capture `go test -cover ./internal/relay` baseline; coverage must not drop by the end.
+- [ ] 1.1 `go test -count=1 ./internal/relay ./cmd/rally` green. If red, capture failures and STOP — do not fold unrelated fixes into this refactor.
+- [ ] 1.2 Capture the exported-identifier set of `internal/relay` as a checksum (`go doc ./internal/relay` or a grep of exported decls), to compare against the post-split `internal/relay` + `internal/relay/runner` sets. Note `CancellationSource` and its consts are exported and will move to `runner`.
+- [ ] 1.3 Capture the `Test*`/`Benchmark*` function count in `internal/relay` as a checksum for the reshard.
+- [ ] 1.4 (If coverage is used) capture `go test -cover ./internal/relay` baseline; coverage must not drop.
 
-## 2. Pure helper files (lowest risk — verbatim symbol moves)
+## 2. Phase A — establish the `internal/relay/runner` package (mechanical move)
 
-Move each cluster into a new `package relay` file, then run `go test -count=1 ./internal/relay` after each move. No logic edits.
+- [ ] 2.1 Create `internal/relay/runner/` and move `runner.go`, `route_runtime.go`, and `log.go` into it wholesale as `package runner`. Do not carve or decompose yet (`runner.go` stays monolithic).
+- [ ] 2.2 Relocate `FormatMixLabel` (the only exported symbol in `route_runtime.go`) *down* into `internal/relay/mix.go` so it stays `relay.FormatMixLabel` (design Decision 2).
+- [ ] 2.3 Add `runner`'s import of `internal/relay` for the primitives it uses (`Resilience`, `ResilienceKey`, `AgentMix`, `Resolver`, the resilience consts). Confirm the dependency is one-way — `internal/relay` must not import `internal/relay/runner` (design Package boundary).
+- [ ] 2.4 Update callers: `relay.NewRunner` → `runner.NewRunner` and `relay.Config` → `runner.Config` in `cmd/rally/main.go`, `cmd/rally/main_test.go`, `cmd/rally/telemetry_test.go`; add the `internal/relay/runner` import. Leave `relay.CompleteRelay`, `relay.FormatMixLabel`, `relay.NewResilience`, `relay.AgentMix`, etc. unchanged.
+- [ ] 2.5 `go test -count=1 ./...` green with `runner.go` still monolithic; `go build ./...` compiles. Confirm the exported-identifier checksum (1.2) now splits cleanly across the two packages as intended and nothing else changed.
 
-- [ ] 2.1 `terminal.go`: `renderRunFooter`, `waitOutcome` (+ its const block), `waitWithCountdown`, `waitLoop`, `formatRemaining`.
-- [ ] 2.2 `failure_display.go`: `formatCategorizedDisplay`, `usageResetDuration`, `formatHoursMinutes`, `formatMinutesSeconds`, `benchResetDeadline`.
-- [ ] 2.3 `runner_telemetry.go` (qualified — `telemetry` is an imported pkg): `applyTags`, `rallyContext`, `applyRallyContext`, `rallyFailure`, `failureStateEvent`, `limitSignalEvent`, `runnerLimitCategory`, `applyEvidenceToFailureState`, `applySafeExecErrorEvidence`, `addFailureEvidenceTelemetry`, `lapPinMismatchDiagnosticEvent`, `agentStateName`, `firstNonEmpty`, `resolvedRunnerModel`.
-- [ ] 2.4 `task.go`: `runTask` (+`promptAssignee`), `headPullLap`, `queueSize`, `errQueueEmpty`, `resolveRunTask`, `resolveInstructions`, `loadFreeRunPrompt`, `resolveRoleInstructions`, the free-run / incomplete-retry prompt consts, `buildRecentContext`, `recentContextStatus`. (Keeps the laps/role/prompt coupling confined here.)
-- [ ] 2.5 `git.go`: `commitLeftoverSummary`, `headHash`, `commitRange`, `autoCommit`, `filesChangedList`, `nonEmptyLines`.
-- [ ] 2.6 `final_snippet.go`: final-snippet consts, `normalizeFinalSnippet`, `progressSummaryEntryCount`, `recordedWrapupSummaryForRun`, `readTryLog`, `boundedFinalSnippetTail`, `finalSnippetErrorIndicator`, `readLastNLines`.
-- [ ] 2.7 `runner_progress.go` (qualified — `progress` is an imported pkg): `newProgressRunState`, `storeLapAttempts`, `mergeStrings`, `hasDirtyChangesSince`, `handoffCreatedLapIDs`, `recoveryClassificationForRun`, `progressLapsCompletedForRun`, `progressRunEntryLapIDs`, `pinnedLapCompleteElsewhere`, `lapDoneInLapsState`, `stringSliceContains`, `recordedHandoffEntryForRun`, `handoffEntryFromRunEntry`, `recordedRunEntryForRun`, `tryOutcomeForAttempt`, `validatePinnedLap`, `detectLapsMarkerInText`, `maybeWriteStubAndClearState`.
-- [ ] 2.8 Confirm the exported-surface checksum (1.2) is still unchanged after the pure-helper moves.
+## 3. Phase B — carve the runner into responsibility files
 
-## 3. Try-level files + relocations (touches monitor/cancellation — run with -race)
+All new files are `package runner` in `internal/relay/runner/`, bare names. Verbatim symbol moves; `go test -count=1 ./internal/relay/...` after each.
 
-- [ ] 3.1 `action_loop.go`: `tryResult`, `actionMonitor`, `actionLoopDeps`, `actionLoopResult`, `CancellationSource` (+ its consts and `String`), `forceKillGroup`, `drainTimedOut`, `runActionLoop`, `drainOperatorCancellation`.
-- [ ] 3.2 `liveness.go`: `stallCheckInterval`, `newStallController`, `buildLivenessProbe` (design Decision 4 — kept distinct from the action loop).
-- [ ] 3.3 Relocate `logf` into the existing `log.go`, and `prepareExecutorForSelection` into the existing `route_runtime.go` (design Relocations).
-- [ ] 3.4 `go test -race -shuffle=on -count=1 ./internal/relay` green after the try-level moves.
+- [ ] 3.1 `terminal.go`: `renderRunFooter`, `waitOutcome` (+const block), `waitWithCountdown`, `waitLoop`, `formatRemaining`.
+- [ ] 3.2 `failure_display.go`: `formatCategorizedDisplay`, `usageResetDuration`, `formatHoursMinutes`, `formatMinutesSeconds`, `benchResetDeadline`.
+- [ ] 3.3 `telemetry.go`: `applyTags`, `rallyContext`, `applyRallyContext`, `rallyFailure`, `failureStateEvent`, `limitSignalEvent`, `runnerLimitCategory`, `applyEvidenceToFailureState`, `applySafeExecErrorEvidence`, `addFailureEvidenceTelemetry`, `lapPinMismatchDiagnosticEvent`, `agentStateName`, `firstNonEmpty`, `resolvedRunnerModel`.
+- [ ] 3.4 `task.go`: `runTask` (+`promptAssignee`), `headPullLap`, `queueSize`, `errQueueEmpty`, `resolveRunTask`, `resolveInstructions`, `loadFreeRunPrompt`, `resolveRoleInstructions`, free-run / incomplete-retry prompt consts, `buildRecentContext`, `recentContextStatus`. (Keeps the laps/role/prompt coupling confined here.)
+- [ ] 3.5 `git.go`: `commitLeftoverSummary`, `headHash`, `commitRange`, `autoCommit`, `filesChangedList`, `nonEmptyLines`.
+- [ ] 3.6 `final_snippet.go`: final-snippet consts, `normalizeFinalSnippet`, `progressSummaryEntryCount`, `recordedWrapupSummaryForRun`, `readTryLog`, `boundedFinalSnippetTail`, `finalSnippetErrorIndicator`, `readLastNLines`.
+- [ ] 3.7 `progress.go`: `newProgressRunState`, `storeLapAttempts`, `mergeStrings`, `hasDirtyChangesSince`, `handoffCreatedLapIDs`, `recoveryClassificationForRun`, `progressLapsCompletedForRun`, `progressRunEntryLapIDs`, `pinnedLapCompleteElsewhere`, `lapDoneInLapsState`, `stringSliceContains`, `recordedHandoffEntryForRun`, `handoffEntryFromRunEntry`, `recordedRunEntryForRun`, `tryOutcomeForAttempt`, `validatePinnedLap`, `detectLapsMarkerInText`, `maybeWriteStubAndClearState`.
+- [ ] 3.8 `action_loop.go`: `tryResult`, `actionMonitor`, `actionLoopDeps`, `actionLoopResult`, `CancellationSource` (+consts, `String`), `forceKillGroup`, `drainTimedOut`, `runActionLoop`, `drainOperatorCancellation`. Then `liveness.go`: `stallCheckInterval`, `newStallController`, `buildLivenessProbe` (design Decision 5). Run `go test -race -shuffle=on -count=1 ./internal/relay/...` after.
+- [ ] 3.9 `handoff_only.go`: `noHandoffResumeReason`, `buildHandoffOnlyPrompt`, `runBoundedHandoffOnly`, `lastOutputAge` (confirm `lastOutputAge` has no other caller before moving).
+- [ ] 3.10 Relocate the in-package stragglers: `logf` → the moved-in `log.go`; `prepareExecutorForSelection` → the moved-in `route_runtime.go`.
 
-## 4. Handoff-only continuation
+## 4. Phase C — decompose the big lifecycle functions (highest risk; LAST)
 
-- [ ] 4.1 `handoff_only.go`: `noHandoffResumeReason`, `buildHandoffOnlyPrompt`, `runBoundedHandoffOnly`, `lastOutputAge` (confirm `lastOutputAge` has no other caller before moving; if shared, leave it with its other caller).
-- [ ] 4.2 `go test -count=1 ./internal/relay` green.
+- [ ] 4.1 Move `runOne` verbatim into `run_one.go` with `runOutcome`, `routeFallbackCause` (+`addTo`), `executeTry`, and `containsInt` (place `containsInt` with its caller). No logic change. `go test -race` green.
+- [ ] 4.2 Decompose `Run` into named private step-methods in `relay_steps.go` (start/resume, relay- & run-scoped message consumption, route select/wait, fallback emit, apply-outcome-to-resilience, update-progress, print-summary) + `tallyRuns`. Each method is a verbatim lift of an existing contiguous block (design Decision 3). `go test -race` after.
+- [ ] 4.3 Decompose `runOne` into named private step-methods in `run_one.go` (budget setup, monitored execution, outcome classification, final-snippet resolution, laps/progress reconciliation, retry/complete decision — boundaries follow existing blocks; names not pre-committed). Block-for-block; `go test -race` after.
+- [ ] 4.4 Confirm `runner.go` is now a thin top-level orchestrator (~250–400 lines aspirational; not enforced here) holding `Config`, `Runner`, `NewRunner`, `RequestStop`, `SetTelemetry`/`tel`, `outWriter`, `newBoundTimer`, and the slimmed `Run` skeleton.
 
-## 5. Lifecycle split (highest risk — sequenced LAST; block-for-block)
+## 5. Test reshard
 
-- [ ] 5.1 Move `runOne` verbatim into `run_one.go` along with `runOutcome`, `routeFallbackCause` (+`addTo`), `executeTry`, and `containsInt` (place `containsInt` with its caller). No logic change yet. `go test -race` green.
-- [ ] 5.2 Decompose `Run` into named private step-methods in `relay_steps.go` (start/resume, relay- & run-scoped message consumption, route select/wait, fallback emit, apply-outcome-to-resilience, update-progress, print-summary) plus `tallyRuns`. Each method is a verbatim lift of an existing contiguous block (design Decision 2). `go test -race` after the extraction.
-- [ ] 5.3 Decompose `runOne` into named private step-methods in `run_one.go` (budget setup, monitored execution, outcome classification, final-snippet resolution, laps/progress reconciliation, retry/complete decision — boundaries follow existing blocks, names not pre-committed). Block-for-block; `go test -race` after the extraction.
-- [ ] 5.4 Confirm `runner.go` is now a thin top-level orchestrator (~250–400 lines aspirational; not enforced here — design Open Questions) holding `Config`, `Runner`, `NewRunner`, `RequestStop`, `SetTelemetry`/`tel`, `outWriter`, `newBoundTimer`, and the slimmed `Run` skeleton.
+- [ ] 5.1 Split `runner_test.go` into `package runner` files mirroring the production files (`terminal_test.go`, `failure_display_test.go`, `telemetry_test.go`, `task_test.go`, `git_test.go`, `final_snippet_test.go`, `progress_test.go`, `action_loop_test.go`, `liveness_test.go`, `handoff_only_test.go`, `run_one_test.go`, `relay_steps_test.go`). Move whole `func TestXxx` blocks; do not rewrite assertions. Move the existing focused `runner_*_test.go` files into the `runner` package too.
+- [ ] 5.2 Keep shared fixtures (`CopyFixtureProject`, `InitGitRepo`, `NewFixtureExecutor`, …) in one small helper file; do NOT create a second large catch-all (design Decision 8). Note: tests that exercise relay primitives (resilience/mix/relay-record) stay in `internal/relay`; tests of runner behaviour move to `internal/relay/runner`.
+- [ ] 5.3 Verify the `Test*`/`Benchmark*` count checksum (1.3) is unchanged across the two packages combined; never drop or duplicate a test.
 
-## 6. Test reshard (mirror the new files)
+## 6. Verification
 
-- [ ] 6.1 Split `runner_test.go` into files mirroring the production files (`terminal_test.go`, `failure_display_test.go`, `runner_telemetry_test.go`, `task_test.go`, `git_test.go`, `final_snippet_test.go`, `runner_progress_test.go`, `action_loop_test.go`, `liveness_test.go`, `handoff_only_test.go`, `run_one_test.go`, `relay_steps_test.go`). Move whole `func TestXxx` blocks; do not rewrite assertions.
-- [ ] 6.2 Keep shared fixtures (`CopyFixtureProject`, `InitGitRepo`, `NewFixtureExecutor`, etc.) in one small helper file; do NOT create a second large catch-all (design Decision 7).
-- [ ] 6.3 Absorb overlaps with existing focused `runner_*_test.go` files where sensible, but never drop or duplicate a test.
-- [ ] 6.4 Verify the `Test*`/`Benchmark*` count checksum (1.3) is unchanged.
-
-## 7. Verification
-
-- [ ] 7.1 `go test -count=1 ./...` green.
-- [ ] 7.2 `go test -race -shuffle=on -count=1 ./internal/relay` green.
-- [ ] 7.3 Exported-surface diff against the 1.2 checksum is empty; `go build ./...` (all callers) compiles.
-- [ ] 7.4 Coverage for `internal/relay` is not below the 1.4 baseline (behaviour did not change).
-- [ ] 7.5 Confirm zero behaviour-surface change: no diff outside `internal/relay/`, `internal/buildinfo/VERSION` untouched (no version bump), and no telemetry-field / CLI-string / store-shape / git-message edits crept in.
-- [ ] 7.6 `openspec validate decompose-relay-runner --strict` passes.
+- [ ] 6.1 `go test -count=1 ./...` green.
+- [ ] 6.2 `go test -race -shuffle=on -count=1 ./internal/relay/...` green.
+- [ ] 6.3 Exported-surface diff matches the intended relocation (`Config`/`Runner`/`NewRunner`/`CancellationSource` now under `runner`; `Resilience`/`AgentMix`/`FormatMixLabel`/`CreateRelay`/… still under `relay`) and nothing else changed; `go build ./...` compiles all callers.
+- [ ] 6.4 Coverage for the two packages combined is not below the 1.4 baseline.
+- [ ] 6.5 Confirm zero behaviour-surface change: no telemetry-field / CLI-string / store-shape / laps-semantic / git-message edits; `internal/buildinfo/VERSION` untouched (no version bump).
+- [ ] 6.6 `openspec validate decompose-relay-runner --strict` passes.

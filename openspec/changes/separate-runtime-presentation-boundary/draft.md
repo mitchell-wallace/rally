@@ -1,13 +1,20 @@
 ## Draft: Separate Runtime Presentation Boundary
 
-Status: drafted 2026-06-29 - initial architecture concept only.
+Status: drafted 2026-06-29; updated 2026-06-29 to attach to the
+`internal/relay/runner` package and its already-isolated `terminal.go` /
+`action_loop.go` / `liveness.go` seams that `decompose-relay-runner` (#1) carves
+out — this change adds the event/control boundary *on top of* that structure
+rather than first untangling presentation from a monolith.
 
 This change prepares Rally's runtime for multiple presentation surfaces,
 including the active `build-new-tui` change, without implementing the TUI itself.
 
 ## Why
 
-`internal/relay` currently owns both orchestration and terminal presentation:
+`internal/relay/runner` owns both orchestration and terminal presentation. After
+#1 these concerns are at least in separate files (`terminal.go` for headers/
+footers/countdowns, `action_loop.go` for operator/cancellation handling,
+`liveness.go` for stall detection), which is exactly where this change attaches:
 
 - run headers and footers via `internal/style`,
 - wait countdown rendering,
@@ -46,14 +53,16 @@ cmd/rally or TUI entry
 presentation adapter  <---->  runtime control/events
         |                              |
         v                              v
-terminal/TUI widgets           internal/relay.Runner
+terminal/TUI widgets        internal/relay/runner.Runner
 ```
 
 ## Candidate Work
 
 ### A. Define a small runtime event model
 
-Add a narrow event type owned by relay or a small runtime package.
+Add a narrow event type owned by `internal/relay/runner` (or a small child
+package such as `internal/relay/runner/runtimeevent`), emitted from the slimmed
+`Run`/`runOne` step-methods #1 produced.
 
 Candidate events:
 
@@ -114,10 +123,13 @@ type ControlSource interface {
 ```
 
 The current `keyboard` package can become the CLI implementation of that
-interface. TUI can produce the same actions from its event loop.
+interface. TUI can produce the same actions from its event loop. This plugs into
+`runActionLoop` (now isolated in `action_loop.go`), whose operator-control state
+machine #1 already separated from the run lifecycle.
 
 This should be staged carefully because cancellation timing is correctness
-sensitive.
+sensitive — keep the gradual approach below even though the structure is now
+pre-separated.
 
 ### D. Keep `monitor` data separate from monitor rendering
 
@@ -138,9 +150,10 @@ rewriting it immediately.
 
 ### E. Move style usage out of relay over time
 
-After events exist, `internal/relay` should not need direct imports of
-`internal/style` for headers, footers, summaries, or shortcut hints. The CLI
-presentation adapter should own style rendering.
+After events exist, `internal/relay/runner` should not need direct imports of
+`internal/style` for headers, footers, summaries, or shortcut hints (today
+concentrated in `terminal.go`). The CLI presentation adapter should own style
+rendering.
 
 This can be gradual:
 
@@ -155,8 +168,9 @@ Once presentation packages exist, update architecture guardrails so:
 
 - harness packages cannot import presentation packages,
 - config and store cannot import presentation packages,
-- relay can import only the presentation-neutral event/control API,
-- presentation packages may import relay API types only through deliberate
+- `internal/relay/runner` can import only the presentation-neutral event/control
+  API, not the concrete CLI/TUI renderers,
+- presentation packages may import runner API types only through deliberate
   public event/control interfaces.
 
 ## Testing Strategy
@@ -192,8 +206,10 @@ Before completion:
 
 ## Sequencing
 
-1. Complete or start `decompose-relay-runner` so terminal/action-loop code is
-   already isolated.
+1. Land `decompose-relay-runner` (#1) first: it creates the
+   `internal/relay/runner` package with terminal/action-loop/liveness code already
+   isolated into their own files, so this change adds the boundary on top instead
+   of carving it out.
 2. Add event sink types and a no-op/default sink without removing existing
    output.
 3. Add recording-sink tests around high-value lifecycle paths.
@@ -205,8 +221,9 @@ Before completion:
 
 ## Open Questions
 
-- Should events live in `internal/relay`, `internal/runtime`, or a small
-  `internal/runstream` package?
+- Should events live directly in `internal/relay/runner` or in a small child
+  package (e.g. `internal/relay/runner/runtimeevent`) to keep the event types from
+  cluttering the orchestrator files?
 - Should event delivery be synchronous, buffered, or best-effort?
 - Should telemetry consume the same runtime events later, or should telemetry
   remain an independent relay concern for now?

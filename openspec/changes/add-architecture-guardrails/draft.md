@@ -1,18 +1,26 @@
 ## Draft: Add Architecture Guardrails
 
-Status: drafted 2026-06-29 - initial architecture concept only.
+Status: drafted 2026-06-29; updated 2026-06-29 to baseline against the post-#1/#2
+tree and to enforce the first real internal edge — `internal/relay/runner →
+internal/relay` — created by `decompose-relay-runner`.
 
 This change adds tooling and CI checks. It should not change Rally runtime
 behaviour.
 
 ## Why
 
-Rally now has production files well beyond healthy review size:
+Rally has production files well beyond healthy review size. Sizes below are a
+2026-06-29 snapshot; this change lands *after* `decompose-relay-runner` (#1) and
+`slim-cli-composition-root` (#2), which split `runner.go` into the
+`internal/relay/runner` package and shrink `main.go`. The grandfather caps
+(section B) MUST be regenerated against the then-current tree at implementation
+time, not hard-coded to these figures:
 
-- `internal/relay/runner.go`: 3,782 lines,
-- `internal/config/config_v2.go`: 993 lines,
-- `cmd/rally/main.go`: 863 lines,
-- `internal/agent/opencode.go`: 801 lines.
+- `internal/relay/runner.go`: 3,782 lines (gone after #1 — replaced by the
+  carved `internal/relay/runner/*.go` files, each already under budget),
+- `internal/config/config_v2.go`: 993 lines (split within `package config` by #2),
+- `cmd/rally/main.go`: 863 lines (slimmed by #2),
+- `internal/agent/opencode.go`: 801 lines (addressed by #4).
 
 The largest tests are even larger:
 
@@ -79,19 +87,24 @@ Recommended initial budgets:
 | `_test.go` | 900 lines | 1,800 lines | grandfather with per-file caps |
 | generated `.go` | exempt | exempt | require `// Code generated` |
 
-Grandfathering should be explicit. Example policy shape:
+Grandfathering should be explicit, and the map should be *generated from the
+then-current tree* — by the time this change lands, #1 will have removed
+`runner.go` entirely. Example policy shape (illustrative caps, regenerate at
+implementation time):
 
 ```go
 var fileBudgets = map[string]int{
-    "internal/relay/runner.go": 3782,
-    "internal/config/config_v2.go": 993,
-    "cmd/rally/main.go": 863,
-    "internal/agent/opencode.go": 801,
+    // runner.go is gone post-#1; cap whatever remains over budget instead, e.g.
+    // "internal/relay/runner/run_one.go": <actual>,
+    "internal/agent/opencode.go": 801, // until #4 splits it
+    // ...regenerate from `archguard --report` against HEAD
 }
 ```
 
 The check should fail if a grandfathered file grows above its cap. As refactors
-land, reduce or remove the caps.
+land, reduce or remove the caps. Because #1 lands first, the relay caps should
+already be low — this change ratchets, it does not have to absorb the 3,782-line
+outlier.
 
 Warnings over 500 lines should appear in local output. CI should hard-fail only
 on new files over the error budget, growth beyond a grandfathered cap, and import
@@ -105,11 +118,17 @@ architecture. Tests can be looser initially.
 Initial production rules:
 
 - `cmd/rally` may import internal packages as the process composition root.
-- `internal/relay` may import orchestration dependencies such as `agent`,
-  `agent_prompt`, `gitx`, `keyboard`, `laps`, `monitor`, `progress`,
-  `reliability`, `routing`, `store`, `style`, `telemetry`, `textutil`, and
-  `user_prompt/roleloader`.
-- `internal/relay` must not import `internal/config` or `internal/cli`.
+- **`internal/relay/runner` (the orchestrator) may import** orchestration
+  dependencies such as `relay`, `agent`, `agent_prompt`, `gitx`, `keyboard`,
+  `laps`, `monitor`, `progress`, `reliability`, `routing`, `store`, `style`,
+  `telemetry`, `textutil`, and `user_prompt/roleloader`.
+- **`internal/relay` (the primitives) must not import `internal/relay/runner`.**
+  This is the flagship edge: `decompose-relay-runner` (#1) established the one-way
+  `runner → relay` dependency, and this rule keeps it one-way. The relay
+  primitives may import only what `relay.go`/`resilience.go`/`mix.go` need (e.g.
+  `store`, `reliability`, `routing`, `agent` for `Resolver`).
+- `internal/relay` and `internal/relay/runner` must not import `internal/config`
+  or `internal/cli`.
 - `internal/agent` may import `agent_prompt`, `reliability`, and `textutil`.
 - `internal/agent` must not import `config`, `store`, `laps`, `relay`,
   `telemetry`, `cli`, or future UI packages.
@@ -128,8 +147,9 @@ Initial production rules:
   confined to `internal/telemetry`.
 - Non-test files must not import `internal/testutil`.
 
-These rules should be reviewed after `decompose-relay-runner` and
-`modularize-harness-adapters` because the ideal boundaries will get sharper.
+The `runner`/`relay` split above already reflects `decompose-relay-runner` (#1),
+which lands first. The harness-adapter rules should still be revisited after
+`modularize-harness-adapters` (#4), since those package boundaries sharpen there.
 
 ### D. Add external dependency confinement rules
 

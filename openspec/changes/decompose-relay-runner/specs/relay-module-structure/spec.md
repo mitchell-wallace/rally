@@ -1,33 +1,39 @@
 ## ADDED Requirements
 
-### Requirement: Preserved public surface
+### Requirement: Runner package boundary
 
-The `internal/relay` package SHALL remain a single Go package named `relay`; this
-change SHALL NOT introduce a new subpackage. The exported surface SHALL be
-unchanged in name and signature, including (non-exhaustively) `Config`, `Runner`,
-`NewRunner`, `Runner.Run`, `Runner.SetTelemetry`, `Runner.RequestStop`,
-`Resilience`, `NewResilience`, `ResilienceKey`, `KeyFromAgent`, `AgentMix`,
-`ParseAgentMix`, `Resolver`, `CancellationSource` (and its exported constants),
-`FormatMixLabel`, `CreateRelay`, `ResumeRelay`, `CompleteRelay`, the `AgentState`
-type and its `State*` constants, and the package's exported test helpers.
+The relay orchestrator SHALL live in its own package, `internal/relay/runner`
+(`package runner`), distinct from the relay primitives in `internal/relay`. The
+dependency SHALL be one-way: `internal/relay/runner` MAY import `internal/relay`,
+and `internal/relay` SHALL NOT import `internal/relay/runner`. The exported API
+SHALL be relocated without signature change: `Config`, `Runner`, `NewRunner`,
+`Runner.Run`, `Runner.SetTelemetry`, `Runner.RequestStop`, and `CancellationSource`
+(with its constants) SHALL be exported from `package runner`; `Resilience`,
+`NewResilience`, `ResilienceKey`, `KeyFromAgent`, `AgentState`/`State*`,
+`AgentMix`, `ParseAgentMix`, `Resolver`, `FormatMixLabel`, `CreateRelay`,
+`ResumeRelay`, `CompleteRelay`, and the resilience-timing constants SHALL remain
+exported from `package relay`.
 
-#### Scenario: Exported identifier set is unchanged
+#### Scenario: One-way dependency, no cycle
 
-- **WHEN** the exported identifiers of `internal/relay` are compared before and
-  after the decomposition
-- **THEN** the set is identical — no identifier is added, removed, renamed, or
-  has its signature changed
+- **WHEN** the package import graph is inspected after the change
+- **THEN** `internal/relay/runner` imports `internal/relay`, `internal/relay` does
+  not import `internal/relay/runner`, and the build has no import cycle
 
-#### Scenario: Callers compile unchanged
+#### Scenario: Exported API relocated, not redesigned
 
-- **WHEN** `go build ./...` runs over every package that imports `internal/relay`
-- **THEN** it compiles with no source change required in any caller
+- **WHEN** the exported identifiers of `internal/relay` and `internal/relay/runner`
+  are compared against the pre-change `internal/relay` surface
+- **THEN** every former identifier appears in exactly one of the two packages with
+  an unchanged signature — none is added, removed, or renamed — with the runner
+  type/constructor/control symbols under `runner` and the relay/resilience/mix
+  primitives under `relay`
 
-#### Scenario: Package stays single, no subpackage
+#### Scenario: Callers compile with only import/qualifier updates
 
-- **WHEN** the package layout is inspected after the change
-- **THEN** all relay code is in `package relay` under `internal/relay/`, and no
-  `internal/relay/<subdir>` package has been created
+- **WHEN** `go build ./...` runs over every caller (notably `cmd/rally`)
+- **THEN** it compiles with no change beyond importing `internal/relay/runner` and
+  qualifying the relocated symbols (`runner.NewRunner`, `runner.Config`)
 
 ### Requirement: Behaviour, telemetry, and persistence preservation
 
@@ -40,38 +46,36 @@ agent-authored git commit messages SHALL be unchanged. The change SHALL NOT bump
 #### Scenario: Test suite passes with only relocated tests
 
 - **WHEN** `go test -count=1 ./...` and `go test -race -shuffle=on -count=1
-  ./internal/relay` run after the decomposition
+  ./internal/relay/...` run after the decomposition
 - **THEN** both pass, with the same set of test and benchmark functions as before
-  (only relocated across files, none added, dropped, or rewritten)
+  (relocated across files and the two packages, none added, dropped, or rewritten)
 
 #### Scenario: No behaviour-surface edits
 
 - **WHEN** the diff of the change is reviewed
-- **THEN** it is confined to `internal/relay/`, contains no telemetry-field, CLI-
-  string, store-shape, laps-semantic, or git-message edit, and leaves
-  `internal/buildinfo/VERSION` untouched
+- **THEN** it contains no telemetry-field, CLI-string, store-shape, laps-semantic,
+  or git-message edit, and leaves `internal/buildinfo/VERSION` untouched
 
 #### Scenario: Coverage does not regress
 
-- **WHEN** `internal/relay` test coverage is compared before and after
+- **WHEN** test coverage for `internal/relay` and `internal/relay/runner` combined
+  is compared before and after
 - **THEN** coverage does not decrease, because behaviour is unchanged
 
 ### Requirement: Responsibility-named decomposition
 
-`internal/relay/runner.go` SHALL be decomposed so that each file answers one
-architectural question and every symbol has exactly one home, with no
-catch-all/`misc` file. `runner.go` SHALL retain only the top-level relay flow
-(the `Runner` type, its construction, and the relay-loop skeleton). The two
+Within `internal/relay/runner`, the former `runner.go` SHALL be decomposed so each
+file answers one architectural question and every symbol has exactly one home,
+with no catch-all/`misc` file. `runner.go` SHALL retain only the top-level relay
+flow (the `Runner` type, its construction, and the relay-loop skeleton). The two
 largest functions (`Run`, `runOne`) SHALL be decomposed into named private steps.
-New production files SHALL use bare responsibility names consistent with existing
-package siblings, qualified with a `runner_` prefix only where a bare name would
-collide with an imported package. Enforcement of file-size and import-boundary
-budgets is out of scope here and is owned by the `add-architecture-guardrails`
-change.
+Files SHALL use bare responsibility names. Enforcement of file-size and
+import-boundary budgets is out of scope here and is owned by the
+`add-architecture-guardrails` change.
 
 #### Scenario: runner.go no longer mixes concerns
 
-- **WHEN** `runner.go` is read after the change
+- **WHEN** `internal/relay/runner/runner.go` is read after the change
 - **THEN** it explains the top-level relay flow and no longer contains the
   terminal/display, telemetry-assembly, action-loop, liveness, task/prompt, git,
   final-snippet, laps/progress-validation, or handoff-only helper clusters
@@ -84,7 +88,6 @@ change.
 
 #### Scenario: Every symbol has one home
 
-- **WHEN** the package files are inventoried
-- **THEN** each former `runner.go` symbol lives in exactly one responsibility-
-  named file (or an existing sibling for the two relocations), and no
-  `misc`/`helpers` catch-all production file exists
+- **WHEN** the `internal/relay/runner` files are inventoried
+- **THEN** each former `runner.go` symbol lives in exactly one responsibility-named
+  file, and no `misc`/`helpers` catch-all production file exists

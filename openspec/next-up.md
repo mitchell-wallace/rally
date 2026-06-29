@@ -34,33 +34,48 @@ and risk-of-drift, not final scope. Last reviewed 2026-06-29.
 
 ## Order
 
+The runner is the spine of this sequence: #1 gives it its own package
+(`internal/relay/runner`) and the one-way `runner → relay` boundary, and #2–#5
+build on that edge rather than on a monolithic `runner.go`.
+
 1. **decompose-relay-runner** _(proposed)_
-   Architecture split for `internal/relay/runner.go` (3,782 lines) and the giant
-   runner tests. Keep `package relay` and public behaviour stable while moving
-   terminal, telemetry, action-loop, liveness, task, git, progress, final-snippet,
-   and handoff-only helpers into responsibility-named files — and decompose the
-   1,221-line `runOne` and 465-line `Run` into named steps (sequenced last). Adds
-   the `relay-module-structure` spec that #3 will enforce.
+   **Extract the `internal/relay/runner` package.** The orchestrator (`runner.go`
+   + `route_runtime.go` + `log.go`, 3,782+ lines) moves into its own package
+   depending one-way on the relay primitives (`relay.go`/`resilience.go`/`mix.go`/
+   `constants.go`); only `cmd/rally` (two refs) changes. Then carve the
+   orchestrator into responsibility-named files (terminal, telemetry, action-loop,
+   liveness, task, git, progress, final-snippet, handoff-only) and decompose the
+   1,221-line `runOne` and 465-line `Run` into named steps (Phase C, last). Adds
+   the `relay-module-structure` spec — including the `runner → relay` edge — that
+   #3 enforces.
 
 2. **slim-cli-composition-root** _(draft)_
    Reduce `cmd/rally/main.go` and `internal/config/config_v2.go` from broad
-   catch-all files into slim entry points and responsibility-named config/runtime
-   modules. This creates a reusable relay-start composition seam for CLI and TUI.
+   catch-all files into slim entry points and responsibility-named config modules.
+   Introduces the `internal/app` relay-start seam that composes `runner.Runner`
+   above config — the reusable start path CLI and the future TUI share. Moves
+   command construction into `internal/cli` directly (no package-`main`-first
+   deferral).
 
 3. **add-architecture-guardrails** _(draft)_
    Add file-size budgets, import-boundary checks, and dependency-confinement CI
-   so future files cannot grow to runner.go scale. Roll out with grandfathered
-   caps and ratchet them down as the refactors land.
+   so future files cannot grow to runner.go scale. Its flagship import rule is the
+   `runner → relay` one-way edge #1 created (relay must not import runner). Roll
+   out with grandfathered caps regenerated against the post-#1/#2 tree, and ratchet
+   them down as refactors land.
 
 4. **modularize-harness-adapters** _(draft)_
    Give future first-class harnesses a clean place to grow: a small executor API,
-   one module per built-in harness, shared process/log support, and a registry
-   that hides concrete adapter construction from command wiring.
+   one module per built-in harness (the deep-module move), shared process/log
+   support, and a registry whose `map[string]agent.Executor` output feeds
+   `runner.NewRunner` at the composition root.
 
 5. **separate-runtime-presentation-boundary** _(draft)_
    Prepare for multiple presentation surfaces by introducing runtime events and
-   operator-control boundaries. Keep relay orchestration presentation-neutral so
-   CLI rendering and the future TUI do not couple to relay internals.
+   operator-control boundaries. Attaches to the `terminal.go`/`action_loop.go`/
+   `liveness.go` seams #1 already isolated inside `internal/relay/runner`, so the
+   CLI and future TUI consume a presentation-neutral runtime instead of runner
+   internals.
 
 6. **rename-rally-roles** _(author input captured; artifacts not drafted)_
    Rename routing roles from skill-hierarchy (JUNIOR/SENIOR/UI/VERIFY) to judgment
@@ -82,6 +97,14 @@ and risk-of-drift, not final scope. Last reviewed 2026-06-29.
 
 ## Carried-over principles
 
+- **Runner/relay boundary** (from decompose-relay-runner): the relay orchestrator
+  lives in `internal/relay/runner` and depends one-way on the `internal/relay`
+  primitives (relay-record/resilience/mix). Downstream changes preserve the
+  direction — `relay` must never import `runner` — and attach new structure
+  (app-start seam #2, import guardrail #3, harness registry #4, presentation
+  boundary #5) on top of that edge, not by re-monolithising the runner. Don't
+  reintroduce a "same-package, defer the boundary" framing: extract when the
+  dependency graph already supports it.
 - **OpenSpec/laps coupling.** Rally core, the executor, and default role docs stay
   OpenSpec-agnostic; **laps** is the permanent backend. OpenSpec-specific tuning lives in
   `prepare-laps`, applied per-lap only when a lap has a related change. (Bounds #3's

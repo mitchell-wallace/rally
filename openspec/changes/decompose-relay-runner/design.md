@@ -1,12 +1,11 @@
 ## Context
 
 `internal/relay/runner.go` accreted every responsibility of the relay engine into
-one 3,782-line file. The package already has well-factored siblings —
-`resilience.go` (the freeze/bench/pause state machine), `route_runtime.go` (route
-selection), `mix.go`, `log.go`, `constants.go` — and a large, exhaustive test
-suite (`runner_test.go` ~6,915 lines plus a dozen focused `runner_*_test.go`
-files). The seams between concerns already exist and are individually tested;
-they are just not reflected in the file layout.
+one 3,782-line file. The package also holds well-factored primitives —
+`relay.go` (relay-record lifecycle), `resilience.go` (the freeze/bench/pause state
+machine), `mix.go` (agent-mix parsing), `constants.go` (resilience timing),
+`log.go` (per-relay log + repo identity) — plus a large, exhaustive test suite
+(`runner_test.go` ~6,915 lines and a dozen focused `runner_*_test.go` files).
 
 The dominant mass is two functions:
 
@@ -16,66 +15,82 @@ The dominant mass is two functions:
 | `Run` | 465 | The relay loop: start/resume, message consumption, route selection + fallback, resilience update, progress, summary. |
 | `runBoundedHandoffOnly` | 273 | Recovery-role bounded continuation. |
 
-Everything else (~1,800 lines) is helper clusters that already have clear owners.
+### The boundary is already obvious
 
-This change is the first of a six-change architecture sequence
-(`openspec/next-up.md`). The carried-over **OpenSpec/laps** principle applies: the
-laps coupling must stay confined (here, to `task.go` and `runner_progress.go`),
-and nothing OpenSpec-specific belongs in this generic surface.
+The original draft said deeper package extraction "should wait until same-package
+sharding has made the real boundaries obvious." The dependency graph disproves
+that — the boundaries are obvious *now*:
+
+- `relay.go`, `resilience.go`, `mix.go`, `constants.go` reference **zero**
+  orchestrator-side symbols (`Runner`, `runTask`, `runOne`, …).
+- `log.go`'s helpers (`repoKey`, `repoDisplayName`, `openRelayLog`) are consumed
+  **only** by `runner.go`.
+- `route_runtime.go` couples to the orchestrator through a single thread: its
+  `next(task runTask, …)` takes `runTask`, a runner concept. Its only *exported*
+  symbol is `FormatMixLabel` (a mix-formatting helper).
+- Externally, only `cmd/rally/main.go` imports the package, and just two of its
+  references move (`relay.NewRunner`, `relay.Config`).
+
+So the cut is clean and one-directional: **`internal/relay/runner` → `internal/relay`**.
+Keeping everything in `package relay` would force every carved file to be moved a
+second time when the boundary is finally drawn. We draw it now.
 
 ### Deep modules, the right way round
 
 A Philosophy of Software Design warns against **shallow** modules — units whose
-interface cost rivals the complexity they hide. The cheapest way to *create*
-shallow modules is to extract subpackages prematurely: each new package is a new
-import edge and a new public API to maintain, justified only once its boundary is
-proven by real use. So this change deliberately does **not** create modules. It
-shards one file into responsibility-named files **inside the same package**,
-which has zero interface cost (no new imports, no new exported API) and makes the
-true boundaries observable. The genuinely deep modules come *later* in the
-sequence, when those boundaries have been exercised:
+interface cost rivals the complexity they hide. The runner is the opposite of
+shallow: an enormous implementation behind a tiny interface (`NewRunner` +
+`Runner.Run`). Giving it its own package makes that depth explicit and pays a
+near-zero interface tax (a one-way import, two relocated call sites). The internal
+carving then makes the depth *navigable*. The genuinely deep modules the rest of
+the sequence wants are built **on** this boundary:
 
-- `action_loop.go` + `liveness.go` (operator control / stall detection) →
-  feed the operator-control boundary in `separate-runtime-presentation-boundary`
-  (#5).
-- `run_one.go` / `relay_steps.go` (the run/try and relay-iteration lifecycle) →
-  the presentation-neutral runtime that #5 and the future TUI render.
-- `runner_telemetry.go` → already a stable provider-neutral surface (New Relic).
-- `task.go` / `runner_progress.go` (laps + role + prompt bridge) → the confined
+- `action_loop.go` + `liveness.go` (operator control / stall detection) → the
+  operator-control boundary in `separate-runtime-presentation-boundary` (#5).
+- `run_one.go` / `relay_steps.go` (run/try and relay-iteration lifecycle) → the
+  presentation-neutral runtime #5 and the future TUI render.
+- `telemetry.go` → a stable provider-neutral surface (New Relic).
+- `task.go` / `progress.go` (laps + role + prompt bridge) → the confined
   laps-coupling seam referenced by the role rename (#6) and `prepare-laps`.
-
-Sequencing the interface tax *after* sharding is the deep-module discipline, not
-a deferral of it.
 
 ## Goals / Non-Goals
 
 **Goals:**
 
+- A dedicated `internal/relay/runner` package with a one-way dependency on
+  `internal/relay`'s primitives.
 - `runner.go` explains the top-level relay flow and little else (~250–400 lines).
-- Every file answers exactly one architectural question; every current symbol has
-  exactly one home (no ambiguous remainder).
-- The 1,221-line `runOne` and 465-line `Run` are decomposed into named steps so
-  the lifecycle is readable and no single function is a future hazard.
-- Tests are split to sit beside the code they exercise, with one small shared
-  fixtures file.
-- Zero behaviour change: identical CLI output, telemetry fields, persisted-store
-  shape, laps semantics, git messages, and exported API.
+- Every file answers one architectural question; every symbol has one home.
+- `runOne` (1,221 lines) and `Run` (465 lines) decomposed into named steps.
+- Tests split beside the code they exercise, one small shared fixtures file.
+- Zero behaviour change: identical CLI output, telemetry fields, store shape, laps
+  semantics, git messages; the exported API is **relocated, not redesigned**.
 
 **Non-Goals:**
 
-- New subpackages, interfaces, or any abstraction layer (deferred to #4/#5 and a
-  later subpackage-extraction change).
+- Any package extraction beyond `runner` (pushing presentation/harness/config out
+  is owned by #2/#4/#5).
+- New interfaces or abstraction layers inside the runner (the carve is by file,
+  not by interface).
 - CI file-size / import-boundary budgets (owned by `add-architecture-guardrails`
-  #3; this change only makes those budgets *easy to set low*).
+  #3; this change only creates the edge it enforces).
 - Behaviour, performance, TUI, harness, or role changes.
 
-## File manifest
+## Package boundary
 
-All files are `package relay` in `internal/relay/`. Naming rule: **bare
-responsibility name**, matching `resilience.go`/`route_runtime.go`; add a
-`runner_` qualifier **only** when a bare name would collide with an imported
-package (`telemetry`, `progress`). A `runner/` subdirectory is intentionally
-*not* used — see Decision 5.
+| Package | Files | Exported surface |
+| --- | --- | --- |
+| `internal/relay` (primitives, stays) | `relay.go`, `resilience.go`, `mix.go` (← gains `FormatMixLabel`), `constants.go` | `CreateRelay`, `ResumeRelay`, `CompleteRelay`, `Resilience`, `NewResilience`, `ResilienceKey`, `KeyFromAgent`, `AgentState`/`State*`, `AgentMix`, `ParseAgentMix`, `Resolver`, `FormatMixLabel`, the resilience-timing consts |
+| `internal/relay/runner` (orchestrator, new `package runner`) | `runner.go`, `route_runtime.go`, `log.go` + the carved files below | `Config`, `Runner`, `NewRunner`, `Runner.Run`, `Runner.SetTelemetry`, `Runner.RequestStop`, `CancellationSource` (+ consts) |
+
+`runner` imports `relay` for `Resilience`/`ResilienceKey`/`AgentMix`/`Resolver`/
+the consts. `relay` imports nothing from `runner`. The boundary is acyclic and
+verified (Phase A compiles before any carving).
+
+## File manifest (inside `internal/relay/runner`)
+
+`package runner`, bare responsibility names throughout (no `runner_` qualifier —
+a filename never collides with an imported package).
 
 ### Lifecycle spine (relay › run › try)
 
@@ -94,155 +109,130 @@ package (`telemetry`, `progress`). A `runner/` subdirectory is intentionally
 | --- | --- | --- |
 | `terminal.go` | `renderRunFooter`, `waitOutcome`(+consts), `waitWithCountdown`, `waitLoop`, `formatRemaining` | How is the run footer/countdown rendered and how do operator waits resolve? |
 | `failure_display.go` | `formatCategorizedDisplay`, `usageResetDuration`, `formatHoursMinutes`, `formatMinutesSeconds`, `benchResetDeadline` | How are failure categories and reset deadlines formatted for the operator? |
-| `runner_telemetry.go` | `applyTags`, `rallyContext`, `applyRallyContext`, `rallyFailure`, `failureStateEvent`, `limitSignalEvent`, `runnerLimitCategory`, `applyEvidenceToFailureState`, `applySafeExecErrorEvidence`, `addFailureEvidenceTelemetry`, `lapPinMismatchDiagnosticEvent`, `agentStateName`, `firstNonEmpty`, `resolvedRunnerModel` | How are relay telemetry spans, events, and evidence assembled? |
-| `task.go` | `runTask`(+`promptAssignee`), `headPullLap`, `queueSize`, `errQueueEmpty`, `resolveRunTask`, `resolveInstructions`, `loadFreeRunPrompt`, `resolveRoleInstructions`, free-run / incomplete-retry prompt consts, `buildRecentContext`, `recentContextStatus` | How is the next lap/role/prompt resolved and the recent-context prompt built for a run? |
+| `telemetry.go` | `applyTags`, `rallyContext`, `applyRallyContext`, `rallyFailure`, `failureStateEvent`, `limitSignalEvent`, `runnerLimitCategory`, `applyEvidenceToFailureState`, `applySafeExecErrorEvidence`, `addFailureEvidenceTelemetry`, `lapPinMismatchDiagnosticEvent`, `agentStateName`, `firstNonEmpty`, `resolvedRunnerModel` | How are relay telemetry spans, events, and evidence assembled? |
+| `task.go` | `runTask`(+`promptAssignee`), `headPullLap`, `queueSize`, `errQueueEmpty`, `resolveRunTask`, `resolveInstructions`, `loadFreeRunPrompt`, `resolveRoleInstructions`, free-run / incomplete-retry prompt consts, `buildRecentContext`, `recentContextStatus` | How is the next lap/role/prompt resolved and the recent-context prompt built? |
 | `git.go` | `commitLeftoverSummary`, `headHash`, `commitRange`, `autoCommit`, `filesChangedList`, `nonEmptyLines` | How is a try's work committed and its file-change list computed? |
 | `final_snippet.go` | final-snippet consts, `normalizeFinalSnippet`, `progressSummaryEntryCount`, `recordedWrapupSummaryForRun`, `readTryLog`, `boundedFinalSnippetTail`, `finalSnippetErrorIndicator`, `readLastNLines` | How is the run's final snippet derived and bounded? |
-| `runner_progress.go` | `newProgressRunState`, `storeLapAttempts`, `mergeStrings`, `hasDirtyChangesSince`, `handoffCreatedLapIDs`, `recoveryClassificationForRun`, `progressLapsCompletedForRun`, `progressRunEntryLapIDs`, `pinnedLapCompleteElsewhere`, `lapDoneInLapsState`, `stringSliceContains`, `recordedHandoffEntryForRun`, `handoffEntryFromRunEntry`, `recordedRunEntryForRun`, `tryOutcomeForAttempt`, `validatePinnedLap`, `detectLapsMarkerInText`, `maybeWriteStubAndClearState` | How is laps/progress state validated and reconciled for a run? |
+| `progress.go` | `newProgressRunState`, `storeLapAttempts`, `mergeStrings`, `hasDirtyChangesSince`, `handoffCreatedLapIDs`, `recoveryClassificationForRun`, `progressLapsCompletedForRun`, `progressRunEntryLapIDs`, `pinnedLapCompleteElsewhere`, `lapDoneInLapsState`, `stringSliceContains`, `recordedHandoffEntryForRun`, `handoffEntryFromRunEntry`, `recordedRunEntryForRun`, `tryOutcomeForAttempt`, `validatePinnedLap`, `detectLapsMarkerInText`, `maybeWriteStubAndClearState` | How is laps/progress state validated and reconciled for a run? |
 
-### Relocations to existing files
+### Moved-in supporting files & relocations
 
-| Symbol | New home | Why |
-| --- | --- | --- |
-| `logf` | `log.go` | The package's logging concern already lives there. |
-| `prepareExecutorForSelection` | `route_runtime.go` | It is route-selection glue; route selection already lives there. |
+- `route_runtime.go` moves into `runner` (it is orchestrator-coupled via
+  `runTask`); `prepareExecutorForSelection` joins it. `FormatMixLabel` is
+  relocated *out* of it, down into `relay`'s `mix.go`.
+- `log.go` moves into `runner` (consumers are runner-only); `logf` joins it.
 
-The exact run/relay step-method names (e.g. `startOrResumeRelay`,
-`selectRouteOrWait`, `applyRunOutcomeToResilience`, `classifyTryOutcome`,
-`reconcileLapsProgress`) and where a tiny util like `containsInt` lands are
-implementation details to be discovered by following the *existing contiguous
-blocks* — not pre-committed here.
+The exact run/relay step-method names and where a tiny util like `containsInt`
+lands follow the *existing contiguous blocks* — not pre-committed here.
 
 ## Decisions
 
-**1. Same package, no subpackages, no new interfaces.** All moved code stays in
-`package relay`. This is the whole reason the change is safe and mechanically
-reviewable: no import churn, no new public API, no risk of an extraction creating
-a shallow module. Subpackage extraction is explicitly a *later* architecture
-change. *Alternative considered:* extract `internal/relay/runner` or
-`internal/relay/lifecycle` now — rejected: it pays the interface tax before the
-boundaries are proven and would collide with the work #4/#5 own.
+**1. Extract `internal/relay/runner` now; do not defer behind a same-package
+shard.** The boundary is one-directional and verified (see Context). Carving in
+place first would move every file twice. The runner is the codebase's largest and
+most-worked body of code; a package is the honest home for it. *Alternative
+considered (and rejected):* the draft's "stay `package relay`, extract later" —
+it is a preemptive constraint the dependency graph does not justify, and it
+double-handles every file.
 
-**2. Decompose `runOne` and `Run` in this change, not "optionally later".** The
-draft listed step-extraction as optional follow-up (its section J). We pull it in
-because a 1,221-line function is the single biggest risk in the package and the
-cheapest time to split it is now, while behaviour is fully pinned by tests and
-before later changes wrap new behaviour around it. The decomposition is
-**block-for-block**: each named private method is a verbatim lift of an existing
-contiguous block, with the same locals threaded through, so the diff stays
-reviewable and `go test` (incl. `-race`) is the safety net. To bound risk, this
-step is sequenced **last**, after all pure helper moves are green (see
-Migration). *Alternative considered:* leave both functions whole (helpers-only
-split) — rejected: `runner.go` would stay ~2,000 lines and the change would
-under-deliver on its own headline goal.
+**2. Cut line = orchestrator vs primitives.** `runner.go` + `route_runtime.go` +
+`log.go` form the orchestrator package; `relay.go` + `resilience.go` + `mix.go` +
+`constants.go` stay as primitives. `route_runtime.go` moves because `runTask`
+binds it to the orchestrator; `log.go` moves because only the runner consumes it;
+`FormatMixLabel` stays in `relay` (relocated to `mix.go`) because it is a mix
+primitive with external callers. This minimises caller churn to two references.
 
-**3. Every symbol gets exactly one home; no catch-all.** The draft left ~14
-symbols unplaced (`tallyRuns`, `buildRecentContext`, `recentContextStatus`,
-`prepareExecutorForSelection`, `executeTry`, `newStallController`,
-`buildLivenessProbe`, `stallCheckInterval`, `runOutcome`, `routeFallbackCause`,
-`containsInt`, `logf`, plus trivial `Runner` glue). The manifest above assigns
-each one, including relocating two into existing files. We do **not** create a
-`misc.go`/`helpers.go` catch-all — that would recreate the original problem at
-smaller scale. The principle is "one file = one architectural question," not "many
-tiny files": cohesive clusters (e.g. the whole laps/progress validation set) stay
-together rather than being atomized.
+**3. Decompose `runOne` and `Run` in this change, sequenced last.** A 1,221-line
+function is the biggest single risk in the codebase and the cheapest time to split
+it is now, while behaviour is fully pinned by tests and before #4/#5 wrap new
+behaviour around it. The decomposition is **block-for-block**: each named private
+method is a verbatim lift of an existing contiguous block. It runs in Phase C,
+after the package move (A) and pure carving (B) are green, so a regression is
+isolated. *Alternative considered:* leave both whole — rejected: `runner.go` stays
+~2,000 lines and the change under-delivers.
 
-**4. `liveness.go` is split from `action_loop.go`.** Both are try-level
-monitoring, but they answer different questions: `action_loop.go` is "how is
-operator/cancellation/timeout state reconciled," `liveness.go` is "how is stall
-detection constructed." Keeping them separate keeps each file single-purpose and
-keeps the operator-control file (the one #5 will lift) focused.
+**4. Every symbol gets exactly one home; no catch-all.** The manifest assigns all
+~14 previously-unplaced symbols (`tallyRuns`, `buildRecentContext`, `executeTry`,
+`newStallController`, `runOutcome`, `routeFallbackCause`, `containsInt`, `logf`,
+`prepareExecutorForSelection`, …), relocating two into moved-in files. No
+`misc.go`/`helpers.go`. Cohesive clusters stay intact rather than being atomized —
+"one file = one question," not "many tiny files."
 
-**5. Filename taxonomy, and why not a `runner/` subdirectory.** Files are named by
-the architectural question they answer, bare, matching existing siblings; the
-`runner_` qualifier is used only on collision with an imported package
-(`runner_telemetry.go`, `runner_progress.go`). A `runner/` *subdirectory* was
-considered for visual grouping but is rejected for this change: in Go one
-directory is one package, so a subdirectory **is** a new package — which violates
-Decision 1 and the sequence (subpackage extraction is later). The flat
-responsibility-named layout is chosen so that the eventual subpackage split is a
-near-mechanical `git mv` of an already-cohesive file, not a re-untangling.
-*Alternative considered:* uniform `runner_` prefix on every carved file —
-rejected: it diverges from the package's established bare-named siblings and adds
-no information once the files are responsibility-named.
+**5. `liveness.go` is split from `action_loop.go`.** Both are try-level
+monitoring, but answer different questions ("how is cancellation reconciled" vs
+"how is stall detection constructed"). Keeping them apart keeps the operator-
+control file — the one #5 lifts — focused.
 
-**6. Carry a `relay-module-structure` capability spec, kept lean.** The spec
-records three things and no more: the preserved exported surface, the
+**6. Bare filenames; no `runner/` *within* `runner`.** Files are named by the
+question they answer, bare. The `runner_` qualifier the same-package draft used
+(to dodge `telemetry`/`progress` import collisions) is gone: in `package runner` a
+filename never collides with an imported package. No further subdirectory nesting
+inside `runner` — the file count is bounded by the manifest.
+
+**7. Carry a `relay-module-structure` capability spec, kept lean.** It records the
+`runner → relay` boundary, the exported-API relocation contract, the
 behaviour/telemetry/persistence-preservation contract, and the
-one-responsibility-per-file invariant (with enforcement explicitly handed to #3).
-It is a risk-management contract — "here is exactly what may not change" — and it
-gives `openspec validate` a delta and #3 a referent. It is **not** a place to
-enumerate every file (that lives in this design); the spec states the *invariant*,
-not the manifest. *Alternative considered:* no spec delta — rejected: it leaves no
-durable contract and diverges from the sibling `harden-ci-correctness-gates`,
-which carried a spec even though it was tooling-only.
+one-responsibility-per-file invariant (enforcement handed to #3). It is a
+risk-management contract — "here is exactly what may not change in behaviour, and
+exactly how the API moved" — not a restatement of the manifest.
 
-**7. Tests shard along the same seams, fixtures stay shared and small.**
-`runner_test.go` is split into files mirroring the production files
-(`terminal_test.go`, `task_test.go`, `git_test.go`, `runner_progress_test.go`,
-`handoff_only_test.go`, …). Existing focused `runner_*_test.go` files are left as
-they are or absorbed where they overlap. Shared fixtures (`CopyFixtureProject`,
-`InitGitRepo`, `NewFixtureExecutor`, etc.) stay in one small helper file; we do
-**not** grow a second giant `helpers_test.go`.
+**8. Tests shard along the new files; fixtures stay shared and small.**
+`runner_test.go` splits into files mirroring the production files. Shared fixtures
+(`CopyFixtureProject`, `InitGitRepo`, `NewFixtureExecutor`, …) stay in one small
+helper file; no second giant `helpers_test.go`.
 
 ## Risks / Trade-offs
 
-- **Step-extraction is not a pure move (Decision 2).** Threading locals through
-  new private methods can subtly change behaviour (e.g. a closed-over variable, an
-  early `return`/`continue`, a deferred call's scope). → Mitigation: extract
-  verbatim contiguous blocks, keep method receivers/params explicit, run
-  `go test -race -shuffle=on -count=1 ./internal/relay` after each extraction, and
-  do this step **last** so a regression is isolated from the pure moves. Compare
-  coverage before/after — it must not drop.
-- **Large test re-shard can drop or duplicate a test.** → Mitigation: move whole
-  `func TestXxx` blocks; assert the total `Test`/`Benchmark` function count is
-  unchanged before and after; `go test ./internal/relay -run . -list .` (or a
-  count) as a checksum.
-- **Accidental exported-surface change** (e.g. capitalizing a moved helper, or
-  dropping `CancellationSource`'s exported consts). → Mitigation: diff the
-  exported-identifier set before/after (`go doc` or a `grep` of exported decls)
-  and `go build ./...` over all callers.
-- **Merge cost against in-flight work.** runner.go is a hot file. → Mitigation:
-  land this change as its own focused branch ahead of #2–#5; it touches only
-  `internal/relay` so its blast radius is contained.
-- **Over-fragmentation** producing shallow files. → Mitigation: the "one file =
-  one question" rule and keeping cohesive clusters intact (Decision 3); the file
-  count is bounded by the manifest, not open-ended.
+- **Phase C step-extraction is not a pure move.** Threading locals through new
+  private methods can subtly change behaviour. → Mitigation: extract verbatim
+  contiguous blocks; explicit receivers/params; `go test -race -shuffle=on` after
+  each; run it **last** so regressions are isolated from the package move; compare
+  coverage (must not drop).
+- **The package move touches the exported API location.** A typo could rename or
+  drop a symbol. → Mitigation: it is a *relocation*, signatures unchanged; diff the
+  exported-identifier set of both packages before/after and `go build ./...` over
+  all callers (only `cmd/rally` + two test files import the package).
+- **Large test re-shard could drop/duplicate a test.** → Mitigation: move whole
+  `func TestXxx` blocks; assert the `Test*`/`Benchmark*` count is unchanged.
+- **Merge cost against in-flight work** (runner.go is hot). → Mitigation: land this
+  as its own focused branch ahead of #2–#5; blast radius is `internal/relay` +
+  `cmd/rally` only.
+- **Over-fragmentation into shallow files.** → Mitigation: the "one file = one
+  question" rule and intact cohesive clusters (Decision 4); count bounded by the
+  manifest.
 
 ## Migration Plan
 
-Strictly ordered so risk rises only after the safe moves are green:
+1. **Baseline.** `go test -count=1 ./internal/relay ./cmd/rally` green; capture the
+   exported-identifier sets and the `Test*` count as checksums. If red, record and
+   do not fold unrelated fixes in.
+2. **Phase A — package move.** Create `internal/relay/runner`; move `runner.go`,
+   `route_runtime.go`, `log.go` (`package runner`); relocate `FormatMixLabel` →
+   `mix.go`; fix `cmd/rally` (+ test) imports. `go test ./...` green with
+   `runner.go` still monolithic.
+3. **Phase B — carve.** Move helper clusters into responsibility files (Section
+   manifest), then the moved-in relocations (`logf` → `log.go`,
+   `prepareExecutorForSelection` → `route_runtime.go`). `go test` after each;
+   `-race` after `action_loop.go`/`liveness.go`.
+4. **Phase C — decompose (last).** Move `runOne` into `run_one.go` verbatim; then
+   decompose `Run` into `relay_steps.go` and `runOne` into `run_one.go` named
+   step-methods, block-for-block, `-race` after each.
+5. **Test reshard** to mirror the new files; verify the `Test*` count checksum.
+6. **Verify:** `go test -count=1 ./...`; `go test -race -shuffle=on -count=1
+   ./internal/relay/...`; coverage ≥ baseline; exported-surface diff matches the
+   intended relocation and nothing else; `openspec validate --strict`.
 
-1. **Baseline.** `go test -count=1 ./internal/relay` green; capture the exported-
-   identifier set and the `Test*` function count as checksums. If the baseline is
-   red, record it and do not fold unrelated fixes into this change.
-2. **Pure helper files** (`terminal.go`, `failure_display.go`,
-   `runner_telemetry.go`, `task.go`, `git.go`, `final_snippet.go`,
-   `runner_progress.go`) — verbatim symbol moves; `go test` after each.
-3. **Try-level files** (`action_loop.go`, `liveness.go`) + relocations (`logf` →
-   `log.go`, `prepareExecutorForSelection` → `route_runtime.go`); run with
-   `-race` since this touches monitor/cancellation code.
-4. **`handoff_only.go`** — move the bounded continuation cluster.
-5. **Lifecycle split (highest risk, last):** move `runOne` to `run_one.go`
-   verbatim; then decompose `Run` into `relay_steps.go` named methods and `runOne`
-   into `run_one.go` named methods, block-for-block, `-race` after each.
-6. **Test re-shard** to mirror the new files; verify the `Test*` count checksum.
-7. **Verification:** `go test -count=1 ./...`, `go test -race -shuffle=on -count=1
-   ./internal/relay`, coverage compared to baseline (must not drop), exported-
-   surface diff empty, `openspec validate decompose-relay-runner --strict`.
-
-**Rollback:** every step is an independent file-move commit; revert the offending
-commit. No data, config, or release-mechanism change is involved.
+**Rollback:** every phase is independent commits; revert the offending one. No
+data, config, or release-mechanism change.
 
 ## Open Questions
 
-- **Exact run/relay step-method boundaries.** Resolved by implementation: follow
-  the existing contiguous blocks in `Run`/`runOne`; do not invent abstractions to
-  make a block extractable. Illustrative names in the manifest are not binding.
-- **Should `runner.go` have an enforced line target here?** No — an aspirational
-  ~250–400 lines is stated, but enforced file-size budgets are owned by
-  `add-architecture-guardrails` (#3). This change only needs to leave `runner.go`
-  small enough that #3's grandfathered cap starts low.
+- **Exact run/relay step-method boundaries** — resolved by implementation: follow
+  the existing contiguous blocks; do not invent abstractions to make a block
+  extractable.
+- **Enforced `runner.go` line target?** No — an aspirational ~250–400 lines is
+  stated; enforced budgets are owned by #3. This change only needs to leave
+  `runner.go` small so #3's grandfathered cap starts low.
 - **Do any focused `runner_*_test.go` files become redundant after the reshard?**
-  Resolve during step 6: absorb overlaps, but never duplicate or drop a test
-  (count checksum guards this).
+  Resolve during step 5: absorb overlaps, never drop or duplicate (count checksum
+  guards this).

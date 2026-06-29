@@ -1,6 +1,9 @@
 ## Draft: Modularize Harness Adapters
 
-Status: drafted 2026-06-29 - initial architecture concept only.
+Status: drafted 2026-06-29; updated 2026-06-29 so adapter import bans cover the
+`internal/relay/runner` package (#1), to note the registry output feeds
+`runner.NewRunner`, and to commit to the adapters-as-subpackages move (the deep-
+module step) rather than deferring it behind a naming decision.
 
 This change is an architectural refactor for executor/harness code. It should
 preserve the current executor contract and existing harness behaviour unless a
@@ -113,9 +116,16 @@ Cons:
 - higher import churn,
 - touches relay, routing, config, and tests that currently import `agent`.
 
-Recommended lean: Option A first unless the proposal intentionally includes a
-terminology cleanup. The architecture guardrails can prevent new bad imports
-even while the API package remains named `agent`.
+What is *not* deferred either way: **adapters become subpackages** (one module per
+harness, importing only the API/support packages). That is the deep-module move
+this change exists to make, and it is the same lesson as #1 — draw the boundary
+the dependency graph already supports rather than leaving everything in one
+growing file. The only genuinely open decision is the **API package name** (keep
+`agent` per Option A, or introduce `harnessapi`/`harness` per Option B).
+Recommended lean: keep `agent` as the API name first (Option A) to avoid a wide
+rename, and treat the rename as an optional later terminology change — but ship
+the subpackage split regardless. The architecture guardrails (#3) prevent new bad
+imports even while the API package remains named `agent`.
 
 ## Candidate Work
 
@@ -160,6 +170,10 @@ Possible API:
 ```go
 func BuildExecutors(cfg config.V2Config) (map[string]agent.Executor, error)
 ```
+
+This map is exactly what `runner.NewRunner` (and the `internal/app` relay-start
+seam in #2) consumes, so the registry slots in at the composition root and keeps
+concrete adapter types out of both `cmd/rally` and the runner.
 
 If importing `config` into the registry would create an undesirable dependency,
 use a narrower input struct instead:
@@ -213,7 +227,7 @@ process execution.
 After at least one adapter module exists, update `add-architecture-guardrails`
 policy so harness adapter packages cannot import:
 
-- `internal/relay`,
+- `internal/relay` and `internal/relay/runner`,
 - `internal/config`, unless using a deliberate registry package,
 - `internal/store`,
 - `internal/progress`,
