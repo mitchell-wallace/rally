@@ -327,6 +327,83 @@ func TestParseAgentMixBareAlias(t *testing.T) {
 	}
 }
 
+func TestParseAgentMixEmptySpecsDefaultMix(t *testing.T) {
+	mix, err := ParseAgentMix(nil, Resolver(mixTestResolver))
+	if err != nil {
+		t.Fatalf("ParseAgentMix with nil specs failed: %v", err)
+	}
+	if len(mix.Cycle) != 3 {
+		t.Fatalf("expected 3 cycle entries (1 claude + 2 codex), got %d: %+v", len(mix.Cycle), mix.Cycle)
+	}
+	if mix.Cycle[0] != (agent.ResolvedAgent{Harness: "claude"}) {
+		t.Fatalf("cycle[0] = %+v, want {claude}", mix.Cycle[0])
+	}
+	if mix.Cycle[1] != (agent.ResolvedAgent{Harness: "codex"}) {
+		t.Fatalf("cycle[1] = %+v, want {codex}", mix.Cycle[1])
+	}
+	if mix.Cycle[2] != (agent.ResolvedAgent{Harness: "codex"}) {
+		t.Fatalf("cycle[2] = %+v, want {codex}", mix.Cycle[2])
+	}
+	if mix.Weights["claude"] != 1 {
+		t.Fatalf("weights[claude] = %d, want 1", mix.Weights["claude"])
+	}
+	if mix.Weights["codex"] != 2 {
+		t.Fatalf("weights[codex] = %d, want 2", mix.Weights["codex"])
+	}
+}
+
+func TestParseAgentMixNilResolverBareAlias(t *testing.T) {
+	mix, err := ParseAgentMix([]string{"cc"}, nil)
+	if err != nil {
+		t.Fatalf("ParseAgentMix with nil resolver failed: %v", err)
+	}
+	if len(mix.Cycle) != 1 {
+		t.Fatalf("expected 1 cycle entry, got %d", len(mix.Cycle))
+	}
+	if mix.Cycle[0] != (agent.ResolvedAgent{Harness: "claude", Model: ""}) {
+		t.Fatalf("cycle[0] = %+v, want {claude}", mix.Cycle[0])
+	}
+	if mix.Label != "claude" {
+		t.Fatalf("label = %q, want %q", mix.Label, "claude")
+	}
+}
+
+func TestParseAgentMixNilResolverWithWeight(t *testing.T) {
+	mix, err := ParseAgentMix([]string{"cc:2", "cx"}, nil)
+	if err != nil {
+		t.Fatalf("ParseAgentMix with nil resolver failed: %v", err)
+	}
+	if len(mix.Cycle) != 3 {
+		t.Fatalf("expected 3 cycle entries, got %d", len(mix.Cycle))
+	}
+	if mix.Weights["claude"] != 2 {
+		t.Fatalf("weights[claude] = %d, want 2", mix.Weights["claude"])
+	}
+	if mix.Weights["codex"] != 1 {
+		t.Fatalf("weights[codex] = %d, want 1", mix.Weights["codex"])
+	}
+}
+
+func TestParseAgentMixNilResolverUnknownAlias(t *testing.T) {
+	_, err := ParseAgentMix([]string{"unknown"}, nil)
+	if err == nil {
+		t.Fatal("expected error for unknown alias with nil resolver")
+	}
+	if !strings.Contains(err.Error(), "unknown agent alias") {
+		t.Fatalf("error = %q, want mention of unknown agent alias", err.Error())
+	}
+}
+
+func TestParseAgentMixNilResolverInvalidWeight(t *testing.T) {
+	_, err := ParseAgentMix([]string{"cc:abc"}, nil)
+	if err == nil {
+		t.Fatal("expected error for invalid weight with nil resolver")
+	}
+	if !strings.Contains(err.Error(), "invalid agent weight") {
+		t.Fatalf("error = %q, want mention of invalid agent weight", err.Error())
+	}
+}
+
 func TestParseAgentMixAllFormsCombined(t *testing.T) {
 	mix, err := ParseAgentMix([]string{"cc", "cx:2", "op:z"}, Resolver(mixTestResolver))
 	if err != nil {

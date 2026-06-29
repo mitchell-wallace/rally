@@ -927,3 +927,35 @@ func TestResilience_ProbationFailure_ReFreezesWithFreshTimestamp(t *testing.T) {
 		t.Fatalf("expected 2 frozen events (original + re-freeze), got %d", frozenCount)
 	}
 }
+
+func TestResilience_persistProbationEvent(t *testing.T) {
+	s := newResilienceTestStore(t)
+	now := time.Now()
+	r := testResilience(s, now)
+	k := key("claude", "sonnet")
+
+	if err := r.persistProbationEvent(k); err != nil {
+		t.Fatalf("persistProbationEvent failed: %v", err)
+	}
+
+	events, err := s.GetAgentStatus(k.Harness, k.Model)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(events) != 1 {
+		t.Fatalf("expected 1 event, got %d", len(events))
+	}
+	e := events[0]
+	if e.EventType != "probation" {
+		t.Fatalf("expected event type probation, got %s", e.EventType)
+	}
+	if e.AgentType != "claude" {
+		t.Fatalf("expected agent type claude, got %s", e.AgentType)
+	}
+	if e.Model != "sonnet" {
+		t.Fatalf("expected model sonnet, got %s", e.Model)
+	}
+	if e.Reason != "freeze decayed to probation" {
+		t.Fatalf("expected reason 'freeze decayed to probation', got %q", e.Reason)
+	}
+}
