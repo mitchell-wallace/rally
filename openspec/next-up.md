@@ -1,7 +1,7 @@
 # Next up — proposed change order
 
 Living planning note for the queued OpenSpec changes. Order reflects dependency
-and risk-of-drift, not final scope. Last reviewed 2026-06-17.
+and risk-of-drift, not final scope. Last reviewed 2026-06-29.
 
 ## Done (archived)
 
@@ -23,38 +23,62 @@ and risk-of-drift, not final scope. Last reviewed 2026-06-17.
 - **enrich-failure-telemetry** (`2026-06-11`) — obsolete telemetry enrichment
   work. Do not schedule follow-up telemetry enrichment; New Relic migration owns
   provider-forward observability.
+- **migrate-telemetry-to-new-relic** (`2026-06-22`) — hard-cut release telemetry
+  to New Relic before the 0.10.0 reliability/model-routing work.
+- **release-0-10-0-reliability-and-model-routing** (`2026-06-22`) — reliability
+  and model-routing release on the New Relic/backend-neutral telemetry vocabulary.
+- **harden-ci-correctness-gates** (`2026-06-28`) — race, vet, gofmt,
+  govulncheck, and mod-tidy CI gates.
+- **improve-harness-consistency** (`2026-06-28`) — normalized harness evidence,
+  session-log recovery, runner tags, and Gemini removal follow-up.
 
 ## Order
 
-1. **migrate-telemetry-to-new-relic** _(full artifacts; 0.9.1 release gate)_
-   Hard-cut release telemetry to New Relic before 0.10.0. Carries
-   forward useful observability concepts from the obsolete enrichment
-   draft only where they fit New Relic: native panic/error capture, application
-   logs, bounded custom events, and backend-neutral privacy scrubbing.
+1. **decompose-relay-runner** _(proposed)_
+   Architecture split for `internal/relay/runner.go` (3,782 lines) and the giant
+   runner tests. Keep `package relay` and public behaviour stable while moving
+   terminal, telemetry, action-loop, liveness, task, git, progress, final-snippet,
+   and handoff-only helpers into responsibility-named files — and decompose the
+   1,221-line `runOne` and 465-line `Run` into named steps (sequenced last). Adds
+   the `relay-module-structure` spec that #3 will enforce.
 
-2. **release-0-10-0-reliability-and-model-routing** _(full artifacts)_
-   Build the reliability/model-routing release on the New Relic/backend-neutral
-   telemetry vocabulary established by 0.9.1, especially warning diagnostics for
-   lap mismatches.
+2. **slim-cli-composition-root** _(draft)_
+   Reduce `cmd/rally/main.go` and `internal/config/config_v2.go` from broad
+   catch-all files into slim entry points and responsibility-named config/runtime
+   modules. This creates a reusable relay-start composition seam for CLI and TUI.
 
-3. **improve-harness-consistency** _(draft)_
-   Normalize harness adapters into one `Executor` contract: uniform final-text/summary
-   extraction, tool-count, session ID, clean-completion-vs-process-exit detection, and a
-   per-adapter conformance suite. Inherits the typed evidence model: this change moves
-   `FailureEvidence` *population* from runner-side log parsing into the adapters.
-   Motivated by opencode's headless `run --format json` issues. See
-   `improve-harness-consistency/draft.md`.
+3. **add-architecture-guardrails** _(draft)_
+   Add file-size budgets, import-boundary checks, and dependency-confinement CI
+   so future files cannot grow to runner.go scale. Roll out with grandfathered
+   caps and ratchet them down as the refactors land.
 
-4. **rename-rally-roles** _(author input captured; artifacts not drafted)_
+4. **modularize-harness-adapters** _(draft)_
+   Give future first-class harnesses a clean place to grow: a small executor API,
+   one module per built-in harness, shared process/log support, and a registry
+   that hides concrete adapter construction from command wiring.
+
+5. **separate-runtime-presentation-boundary** _(draft)_
+   Prepare for multiple presentation surfaces by introducing runtime events and
+   operator-control boundaries. Keep relay orchestration presentation-neutral so
+   CLI rendering and the future TUI do not couple to relay internals.
+
+6. **rename-rally-roles** _(author input captured; artifacts not drafted)_
    Rename routing roles from skill-hierarchy (JUNIOR/SENIOR/UI/VERIFY) to judgment
    framing (**builder**/**architect**/**designer**/**analyst**), builder as default.
    Needs a migration-vs-breaking decision. See `rename-rally-roles/laps-author-input-1.md`.
 
+7. **build-new-tui** _(stub proposal)_
+   Future TUI plus a lighter start-of-run config / inflight steering flow (e.g.
+   disabling a runner for one relay, the ergonomic successor to the
+   invalid-model-name workaround #1 only classifies). Sequence after the runtime
+   presentation boundary and role rename so the TUI has stable concepts to render.
+
 ## Parked
 
-- **build-new-tui** _(stub proposal)_ — future TUI plus a lighter start-of-run config /
-  inflight steering flow (e.g. disabling a runner for one relay, the ergonomic successor
-  to the invalid-model-name workaround #1 only classifies). Not scheduled.
+- **adopt-lint-and-fuzz-gates** _(draft)_ — deeper lint/fuzz hardening after the
+  architectural guardrail baseline is in place. Keep separate from the file-size
+  and import-boundary policy so static-analysis backlog does not block the
+  modularization sequence.
 
 ## Carried-over principles
 

@@ -1,5 +1,14 @@
 ## Draft: Decompose Relay Runner
 
+Status: formalised 2026-06-29 into `proposal.md`, `design.md`, `tasks.md`, and
+`specs/relay-module-structure/spec.md`. This draft is kept as the original seed;
+the binding file manifest, decisions, and the now-resolved open questions live in
+`design.md`. Notable changes during formalisation: every previously-unplaced
+symbol was assigned a home; `runOne`/`Run` decomposition was pulled in from
+"optional" to in-scope (sequenced last); naming standardised to bare
+responsibility names (`runner_` qualifier only on import collisions); a
+`relay-module-structure` capability spec was added.
+
 Status: drafted 2026-06-29 - initial architecture concept only.
 
 This change is an architectural refactor. It should preserve Rally's runtime
