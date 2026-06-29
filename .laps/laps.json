@@ -380,10 +380,21 @@
       "title": "Verify test reshard and coverage",
       "description": "Context: Verify OpenSpec `decompose-relay-runner` tasks 5.1-5.3 and 6.1-6.4. Use the `openspec-verify-change` skill for this change, focused on tests, exported API, build, race, and coverage.\n\nOutcome: The test split and objective regression gates are verified before final behaviour-surface review.\n\nReview scope: Identify the intended branch target/base before diffing and use it for diff commands. Do not rewrite git history. Compare the captured inventory against the final test tree; ensure no test/benchmark was dropped or duplicated, assertions were not rewritten, and any new tests are limited to route-label regression coverage.\n\nAcceptance: Run `go test -count=1 ./...`, `go test -race -shuffle=on -count=1 ./internal/relay/...`, `go build ./...`, and the after coverage profile `go test -coverprofile=/tmp/rally-relay-cover-after.out ./internal/relay/...` plus `go tool cover -func=/tmp/rally-relay-cover-after.out`; compare total coverage against the baseline. Verify exported-surface relocation matches the spec. Check off tasks 5.1-5.3 and 6.1-6.4 only for verified-correct work; add focused head laps for substantive gaps.",
       "assignee": "VERIFY",
-      "isDone": false,
+      "isDone": true,
       "order": 720896,
       "createdAt": "2026-06-29T03:48:57.300739663Z",
-      "updatedAt": "2026-06-29T03:48:57.300739663Z",
+      "updatedAt": "2026-06-29T09:41:21.040707344Z",
+      "completedAt": "2026-06-29T09:41:21.040707344Z"
+    },
+    {
+      "id": "work-921c",
+      "title": "Recover relay coverage gate",
+      "description": "Context: Verification of OpenSpec `decompose-relay-runner` task 6.4 found the written coverage gate below baseline after the runner package split.\n\nObserved during lap `rall-f1d7`:\n- Baseline in `openspec/changes/decompose-relay-runner/baseline.md`: `go test -coverprofile=/tmp/rally-relay-cover-before.out ./internal/relay/...` + `go tool cover` total = 88.1%.\n- Current command: `go test -count=1 -coverprofile=/tmp/rally-relay-cover-after.out ./internal/relay/...` passes, but `go tool cover -func=/tmp/rally-relay-cover-after.out` total = 86.5%.\n- Current package-level output: `internal/relay` 75.9%, `internal/relay/runner` 87.6%.\n- Likely cause: after runner tests moved to `internal/relay/runner`, default Go coverage no longer credits `internal/relay` primitive coverage exercised indirectly by runner tests. Functions that lost counted coverage include `CreateRelay`, `ResumeRelay`, `CompleteRelay`, `persistProbationEvent`, and some `ParseAgentMix` / resilience paths.\n\nOutcome: Restore the exact task 6.4 coverage gate without behavior changes. Prefer focused primitive tests in `internal/relay` if that is the right fix; if the correct fix is a documented comparable coverage command instead, update the OpenSpec task/baseline wording explicitly and leave a clear verification note. Do not hide the failure by lowering the baseline without justification.\n\nAcceptance: `go test -count=1 ./...`, `go test -race -shuffle=on -count=1 ./internal/relay/...`, and `go test -coverprofile=/tmp/rally-relay-cover-after.out ./internal/relay/... \u0026\u0026 go tool cover -func=/tmp/rally-relay-cover-after.out` are green with total coverage \u003e= 88.1%. Do not tick OpenSpec tasks; the following VERIFY lap should check task 6.4.",
+      "assignee": "SENIOR",
+      "isDone": false,
+      "order": 655360,
+      "createdAt": "2026-06-29T09:40:06.92711509Z",
+      "updatedAt": "2026-06-29T09:40:06.92711509Z",
       "completedAt": null
     },
     {
