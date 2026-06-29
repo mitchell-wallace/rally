@@ -270,11 +270,11 @@
       "title": "Capture relay runner baselines",
       "description": "Context: OpenSpec change `decompose-relay-runner`, tasks 1.1-1.4. Read `openspec/changes/decompose-relay-runner/proposal.md`, `design.md`, `tasks.md`, and `specs/relay-module-structure/spec.md` before editing. This lap creates the safety net for the package split and lifecycle refactor.\n\nOutcome: Baseline tests, exported-surface checksum, test/benchmark inventory, and coverage baseline are captured in a durable place useful to later laps. If the initial targeted tests are red, capture the failures and stop without unrelated fixes.\n\nFiles \u0026 scope: Prefer a small tracked note under the change folder if needed for the checksum/inventory/coverage records. Do not move production code in this lap. Do not tick `tasks.md` boxes.\n\nAcceptance: `go test -count=1 ./internal/relay ./cmd/rally` is green or the failure is captured and the lap hands off. Record exported identifiers for current `internal/relay`, every pre-change `(file, Test*/Benchmark*)` under `internal/relay/*_test.go`, and the total from `go test -coverprofile=/tmp/rally-relay-cover-before.out ./internal/relay/...` plus `go tool cover -func=/tmp/rally-relay-cover-before.out`.",
       "assignee": "SENIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 65536,
       "createdAt": "2026-06-29T03:48:57.300709392Z",
-      "updatedAt": "2026-06-29T03:48:57.300709392Z",
-      "completedAt": null
+      "updatedAt": "2026-06-29T04:08:31.527640955Z",
+      "completedAt": "2026-06-29T04:08:31.527640955Z"
     },
     {
       "id": "rall-462c",
