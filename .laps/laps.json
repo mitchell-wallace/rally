@@ -292,11 +292,11 @@
       "title": "Verify runner package boundary",
       "description": "Context: Verify OpenSpec `decompose-relay-runner` tasks 1.1-2.5 only. Use the `openspec-verify-change` skill for this change, focused on the baseline and package-boundary phase.\n\nOutcome: The baseline artifacts and Phase A package split are independently reviewed before carving begins.\n\nReview scope: Identify the intended branch target/base before diffing and use it for diff commands. Identify the first lap/try in this batch and treat earlier branch work as pre-existing unless the user asks otherwise. Do not rewrite git history. Trace the package import graph, relocated exported symbols, exact route-label literals, and caller updates; do not rely only on green tests.\n\nAcceptance: Re-run or validate `go test -count=1 ./...` and `go build ./...`. Confirm `internal/relay` does not import `internal/relay/runner`, `runner` imports relay primitives as needed, `FormatMixLabel` remains `relay.FormatMixLabel`, and no behaviour-surface strings/fields/store shapes changed. Check off tasks 1.1-2.5 in `tasks.md` only for work verified as correct and thorough; add focused head laps for substantive gaps.",
       "assignee": "VERIFY",
-      "isDone": false,
+      "isDone": true,
       "order": 196608,
       "createdAt": "2026-06-29T03:48:57.300727232Z",
-      "updatedAt": "2026-06-29T03:48:57.300727232Z",
-      "completedAt": null
+      "updatedAt": "2026-06-29T04:37:01.97137006Z",
+      "completedAt": "2026-06-29T04:37:01.97137006Z"
     },
     {
       "id": "rall-e792",
