@@ -325,11 +325,11 @@
       "title": "Verify runner responsibility carve",
       "description": "Context: Verify OpenSpec `decompose-relay-runner` tasks 3.1-3.10. Use the `openspec-verify-change` skill for this change, focused on Phase B.\n\nOutcome: The responsibility-file carve is reviewed before the high-risk lifecycle decomposition begins.\n\nReview scope: Identify the intended branch target/base before diffing and use it for diff commands. Do not rewrite git history. Inspect actual symbol homes against the manifest in `design.md`; ensure there is no catch-all production file and no symbol duplication/drop. Pay special attention to telemetry, task/prompt, progress, action loop, liveness, route runtime, and log behavior surfaces.\n\nAcceptance: Re-run or validate `go test -count=1 ./internal/relay/...` and `go test -race -shuffle=on -count=1 ./internal/relay/...` if applicable to the completed carve. Confirm no behaviour-surface edits. Check off tasks 3.1-3.10 only for verified-correct work; add focused head laps for substantive gaps.",
       "assignee": "VERIFY",
-      "isDone": false,
+      "isDone": true,
       "order": 393216,
       "createdAt": "2026-06-29T03:48:57.30073246Z",
-      "updatedAt": "2026-06-29T03:48:57.30073246Z",
-      "completedAt": null
+      "updatedAt": "2026-06-29T06:28:25.135240091Z",
+      "completedAt": "2026-06-29T06:28:25.135240091Z"
     },
     {
       "id": "rall-9f33",

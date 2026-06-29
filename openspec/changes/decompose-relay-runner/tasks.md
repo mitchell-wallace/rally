@@ -17,16 +17,16 @@
 
 All new files are `package runner` in `internal/relay/runner/`, bare names. Verbatim symbol moves; `go test -count=1 ./internal/relay/...` after each.
 
-- [ ] 3.1 `terminal.go`: `renderRunFooter`, `waitOutcome` (+const block), `waitWithCountdown`, `waitLoop`, `formatRemaining`.
-- [ ] 3.2 `failure_display.go`: `formatCategorizedDisplay`, `usageResetDuration`, `formatHoursMinutes`, `formatMinutesSeconds`, `benchResetDeadline`.
-- [ ] 3.3 `telemetry.go`: `applyTags`, `rallyContext`, `applyRallyContext`, `rallyFailure`, `failureStateEvent`, `limitSignalEvent`, `runnerLimitCategory`, `applyEvidenceToFailureState`, `applySafeExecErrorEvidence`, `addFailureEvidenceTelemetry`, `lapPinMismatchDiagnosticEvent`, `agentStateName`, `firstNonEmpty`, `resolvedRunnerModel`, `lastOutputAge` (shared by normal try timeout telemetry and handoff-only timeout telemetry).
-- [ ] 3.4 `task.go`: `runTask` (+`promptAssignee`), `headPullLap`, `queueSize`, `errQueueEmpty`, `resolveRunTask`, `resolveInstructions`, `loadFreeRunPrompt`, `resolveRoleInstructions`, free-run / incomplete-retry prompt consts, `buildRecentContext`, `recentContextStatus`. (Keeps the laps/role/prompt coupling confined here.)
-- [ ] 3.5 `git.go`: `commitLeftoverSummary`, `headHash`, `commitRange`, `autoCommit`, `filesChangedList`, `nonEmptyLines`.
-- [ ] 3.6 `final_snippet.go`: final-snippet consts, `normalizeFinalSnippet`, `progressSummaryEntryCount`, `recordedWrapupSummaryForRun`, `readTryLog`, `boundedFinalSnippetTail`, `finalSnippetErrorIndicator`, `readLastNLines`.
-- [ ] 3.7 `progress.go`: `newProgressRunState`, `storeLapAttempts`, `mergeStrings`, `hasDirtyChangesSince`, `handoffCreatedLapIDs`, `recoveryClassificationForRun`, `progressLapsCompletedForRun`, `progressRunEntryLapIDs`, `pinnedLapCompleteElsewhere`, `lapDoneInLapsState`, `stringSliceContains`, `recordedHandoffEntryForRun`, `handoffEntryFromRunEntry`, `recordedRunEntryForRun`, `tryOutcomeForAttempt`, `validatePinnedLap`, `detectLapsMarkerInText`, `maybeWriteStubAndClearState`.
-- [ ] 3.8 `action_loop.go`: `tryResult`, `actionMonitor`, `actionLoopDeps`, `actionLoopResult`, `CancellationSource` (+consts, `String`), `forceKillGroup`, `drainTimedOut`, `runActionLoop`, `drainOperatorCancellation`. Then `liveness.go`: `stallCheckInterval`, `newStallController`, `buildLivenessProbe` (design Decision 5). Run `go test -race -shuffle=on -count=1 ./internal/relay/...` after.
-- [ ] 3.9 `handoff_only.go`: `noHandoffResumeReason`, `buildHandoffOnlyPrompt`, `runBoundedHandoffOnly`.
-- [ ] 3.10 Relocate the in-package stragglers: `logf` → the moved-in `log.go`; `prepareExecutorForSelection` → the moved-in `route_runtime.go`.
+- [x] 3.1 `terminal.go`: `renderRunFooter`, `waitOutcome` (+const block), `waitWithCountdown`, `waitLoop`, `formatRemaining`.
+- [x] 3.2 `failure_display.go`: `formatCategorizedDisplay`, `usageResetDuration`, `formatHoursMinutes`, `formatMinutesSeconds`, `benchResetDeadline`.
+- [x] 3.3 `telemetry.go`: `applyTags`, `rallyContext`, `applyRallyContext`, `rallyFailure`, `failureStateEvent`, `limitSignalEvent`, `runnerLimitCategory`, `applyEvidenceToFailureState`, `applySafeExecErrorEvidence`, `addFailureEvidenceTelemetry`, `lapPinMismatchDiagnosticEvent`, `agentStateName`, `firstNonEmpty`, `resolvedRunnerModel`, `lastOutputAge` (shared by normal try timeout telemetry and handoff-only timeout telemetry).
+- [x] 3.4 `task.go`: `runTask` (+`promptAssignee`), `headPullLap`, `queueSize`, `errQueueEmpty`, `resolveRunTask`, `resolveInstructions`, `loadFreeRunPrompt`, `resolveRoleInstructions`, free-run / incomplete-retry prompt consts, `buildRecentContext`, `recentContextStatus`. (Keeps the laps/role/prompt coupling confined here.)
+- [x] 3.5 `git.go`: `commitLeftoverSummary`, `headHash`, `commitRange`, `autoCommit`, `filesChangedList`, `nonEmptyLines`.
+- [x] 3.6 `final_snippet.go`: final-snippet consts, `normalizeFinalSnippet`, `progressSummaryEntryCount`, `recordedWrapupSummaryForRun`, `readTryLog`, `boundedFinalSnippetTail`, `finalSnippetErrorIndicator`, `readLastNLines`.
+- [x] 3.7 `progress.go`: `newProgressRunState`, `storeLapAttempts`, `mergeStrings`, `hasDirtyChangesSince`, `handoffCreatedLapIDs`, `recoveryClassificationForRun`, `progressLapsCompletedForRun`, `progressRunEntryLapIDs`, `pinnedLapCompleteElsewhere`, `lapDoneInLapsState`, `stringSliceContains`, `recordedHandoffEntryForRun`, `handoffEntryFromRunEntry`, `recordedRunEntryForRun`, `tryOutcomeForAttempt`, `validatePinnedLap`, `detectLapsMarkerInText`, `maybeWriteStubAndClearState`.
+- [x] 3.8 `action_loop.go`: `tryResult`, `actionMonitor`, `actionLoopDeps`, `actionLoopResult`, `CancellationSource` (+consts, `String`), `forceKillGroup`, `drainTimedOut`, `runActionLoop`, `drainOperatorCancellation`. Then `liveness.go`: `stallCheckInterval`, `newStallController`, `buildLivenessProbe` (design Decision 5). Run `go test -race -shuffle=on -count=1 ./internal/relay/...` after.
+- [x] 3.9 `handoff_only.go`: `noHandoffResumeReason`, `buildHandoffOnlyPrompt`, `runBoundedHandoffOnly`.
+- [x] 3.10 Relocate the in-package stragglers: `logf` → the moved-in `log.go`; `prepareExecutorForSelection` → the moved-in `route_runtime.go`.
 
 ## 4. Phase C — decompose the big lifecycle functions (highest risk; LAST)
 
