@@ -47,8 +47,10 @@ agent-authored git commit messages SHALL be unchanged. The change SHALL NOT bump
 
 - **WHEN** `go test -count=1 ./...` and `go test -race -shuffle=on -count=1
   ./internal/relay/...` run after the decomposition
-- **THEN** both pass, with the same set of test and benchmark functions as before
-  (relocated across files and the two packages, none added, dropped, or rewritten)
+- **THEN** both pass, every pre-change test and benchmark function appears exactly
+  once across the two packages according to the inventory, and any new test
+  functions are limited to the explicit route-label regression coverage needed for
+  the package split
 
 #### Scenario: No behaviour-surface edits
 
@@ -58,9 +60,18 @@ agent-authored git commit messages SHALL be unchanged. The change SHALL NOT bump
 
 #### Scenario: Coverage does not regress
 
-- **WHEN** test coverage for `internal/relay` and `internal/relay/runner` combined
-  is compared before and after
+- **WHEN** the `go tool cover -func` total for `./internal/relay/...` is compared
+  before and after the package split
 - **THEN** coverage does not decrease, because behaviour is unchanged
+
+#### Scenario: Route label display survives package split
+
+- **WHEN** route runtime stores the configured-route marker `__routes__` or an
+  override marker beginning with `__override__:` in a relay's agent-mix label
+- **THEN** `relay.FormatMixLabel` renders the same operator-facing text as before
+  (`configured routes`, the override specs, or `(override)` for an empty override),
+  the stored marker values are unchanged, and no exported route-label constants or
+  helpers are added
 
 ### Requirement: Responsibility-named decomposition
 

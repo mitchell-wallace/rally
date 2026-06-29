@@ -28,6 +28,9 @@ that — the boundaries are obvious *now*:
 - `route_runtime.go` couples to the orchestrator through a single thread: its
   `next(task runTask, …)` takes `runTask`, a runner concept. Its only *exported*
   symbol is `FormatMixLabel` (a mix-formatting helper).
+- `FormatMixLabel` and route runtime also share two private persisted-label tokens
+  (`__routes__`, `__override__:`). The split must preserve those exact stored
+  strings and their display semantics without adding exported token constants.
 - Externally, only `cmd/rally/main.go` imports the package, and just two of its
   references move (`relay.NewRunner`, `relay.Config`).
 
@@ -101,7 +104,7 @@ a filename never collides with an imported package).
 | `run_one.go` | slimmed `runOne` + its extracted run-level steps, `runOutcome`, `routeFallbackCause`(+`addTo`), `executeTry`, `containsInt` | What is the lifecycle of one run (its tries) and how is its outcome resolved? |
 | `action_loop.go` | `tryResult`, `actionMonitor`, `actionLoopDeps`, `actionLoopResult`, `CancellationSource`(+consts/`String`), `forceKillGroup`, `drainTimedOut`, `runActionLoop`, `drainOperatorCancellation` | How are operator keypresses, timeouts, stalls, and cancellation reconciled during a try? |
 | `liveness.go` | `stallCheckInterval`, `newStallController`, `buildLivenessProbe` | How is per-try stall/liveness detection wired? |
-| `handoff_only.go` | `noHandoffResumeReason`, `buildHandoffOnlyPrompt`, `runBoundedHandoffOnly`, `lastOutputAge` | How does a bounded handoff-only recovery run behave? |
+| `handoff_only.go` | `noHandoffResumeReason`, `buildHandoffOnlyPrompt`, `runBoundedHandoffOnly` | How does a bounded handoff-only recovery run behave? |
 
 ### Cross-cutting helpers (by responsibility)
 
@@ -109,7 +112,7 @@ a filename never collides with an imported package).
 | --- | --- | --- |
 | `terminal.go` | `renderRunFooter`, `waitOutcome`(+consts), `waitWithCountdown`, `waitLoop`, `formatRemaining` | How is the run footer/countdown rendered and how do operator waits resolve? |
 | `failure_display.go` | `formatCategorizedDisplay`, `usageResetDuration`, `formatHoursMinutes`, `formatMinutesSeconds`, `benchResetDeadline` | How are failure categories and reset deadlines formatted for the operator? |
-| `telemetry.go` | `applyTags`, `rallyContext`, `applyRallyContext`, `rallyFailure`, `failureStateEvent`, `limitSignalEvent`, `runnerLimitCategory`, `applyEvidenceToFailureState`, `applySafeExecErrorEvidence`, `addFailureEvidenceTelemetry`, `lapPinMismatchDiagnosticEvent`, `agentStateName`, `firstNonEmpty`, `resolvedRunnerModel` | How are relay telemetry spans, events, and evidence assembled? |
+| `telemetry.go` | `applyTags`, `rallyContext`, `applyRallyContext`, `rallyFailure`, `failureStateEvent`, `limitSignalEvent`, `runnerLimitCategory`, `applyEvidenceToFailureState`, `applySafeExecErrorEvidence`, `addFailureEvidenceTelemetry`, `lapPinMismatchDiagnosticEvent`, `agentStateName`, `firstNonEmpty`, `resolvedRunnerModel`, `lastOutputAge` | How are relay telemetry spans, events, and evidence assembled? |
 | `task.go` | `runTask`(+`promptAssignee`), `headPullLap`, `queueSize`, `errQueueEmpty`, `resolveRunTask`, `resolveInstructions`, `loadFreeRunPrompt`, `resolveRoleInstructions`, free-run / incomplete-retry prompt consts, `buildRecentContext`, `recentContextStatus` | How is the next lap/role/prompt resolved and the recent-context prompt built? |
 | `git.go` | `commitLeftoverSummary`, `headHash`, `commitRange`, `autoCommit`, `filesChangedList`, `nonEmptyLines` | How is a try's work committed and its file-change list computed? |
 | `final_snippet.go` | final-snippet consts, `normalizeFinalSnippet`, `progressSummaryEntryCount`, `recordedWrapupSummaryForRun`, `readTryLog`, `boundedFinalSnippetTail`, `finalSnippetErrorIndicator`, `readLastNLines` | How is the run's final snippet derived and bounded? |
@@ -119,7 +122,9 @@ a filename never collides with an imported package).
 
 - `route_runtime.go` moves into `runner` (it is orchestrator-coupled via
   `runTask`); `prepareExecutorForSelection` joins it. `FormatMixLabel` is
-  relocated *out* of it, down into `relay`'s `mix.go`.
+  relocated *out* of it, down into `relay`'s `mix.go`. The route-selection stored
+  labels remain exact private literals in both packages (`__routes__`,
+  `__override__:`), pinned by tests, so the split adds no exported relay token API.
 - `log.go` moves into `runner` (consumers are runner-only); `logf` joins it.
 
 The exact run/relay step-method names and where a tiny util like `containsInt`
@@ -178,8 +183,21 @@ exactly how the API moved" — not a restatement of the manifest.
 
 **8. Tests shard along the new files; fixtures stay shared and small.**
 `runner_test.go` splits into files mirroring the production files. Shared fixtures
-(`CopyFixtureProject`, `InitGitRepo`, `NewFixtureExecutor`, …) stay in one small
-helper file; no second giant `helpers_test.go`.
+(`CopyFixtureProject`, `InitGitRepo`, `NewFixtureExecutor`, …) stay small and
+package-local after the package split: `internal/relay` and
+`internal/relay/runner` each get only the helpers their tests use, with truly
+package-neutral helpers moved to `internal/testutil` only if duplication would be
+larger than the helper itself. No second giant `helpers_test.go`.
+
+**9. Route-selection stored-label tokens stay private and exact.** Route-based
+relays currently persist `Relay.AgentMix` as `__routes__` or `__override__:<specs>`
+so resume and CLI display can distinguish configured routes from legacy mixes. The
+package split leaves `FormatMixLabel` in `relay` and route runtime in `runner`, so
+the two packages deliberately keep tiny unexported constants with the same literal
+values. Tests pin both sides: runner route creation/resume emits and accepts the
+same labels, and `relay.FormatMixLabel` renders them as `configured routes`, the
+override specs, or `(override)` for an empty override. No exported constants or
+helper functions are added for these private persistence markers.
 
 ## Risks / Trade-offs
 
@@ -192,8 +210,17 @@ helper file; no second giant `helpers_test.go`.
   drop a symbol. → Mitigation: it is a *relocation*, signatures unchanged; diff the
   exported-identifier set of both packages before/after and `go build ./...` over
   all callers (only `cmd/rally` + two test files import the package).
+- **Phase A can break tests before the code move is proven.** Existing `package
+  relay` tests call symbols that move into `runner` (`NewRunner`, `runOne`,
+  route runtime helpers, log helpers). → Mitigation: split/move tests by symbol
+  ownership during Phase A, before the first `go test ./...` checkpoint.
+- **Route-label tokens are easy to drift after the package split.** The private
+  stored labels are now needed on both sides of the boundary. → Mitigation: keep
+  exact literals, no new exported API, and add regression tests for route label
+  generation/resume plus `relay.FormatMixLabel` display.
 - **Large test re-shard could drop/duplicate a test.** → Mitigation: move whole
-  `func TestXxx` blocks; assert the `Test*`/`Benchmark*` count is unchanged.
+  `func TestXxx`/`BenchmarkXxx` blocks; keep a pre/post test inventory so every
+  pre-change function appears exactly once after the split.
 - **Merge cost against in-flight work** (runner.go is hot). → Mitigation: land this
   as its own focused branch ahead of #2–#5; blast radius is `internal/relay` +
   `cmd/rally` only.
@@ -204,12 +231,15 @@ helper file; no second giant `helpers_test.go`.
 ## Migration Plan
 
 1. **Baseline.** `go test -count=1 ./internal/relay ./cmd/rally` green; capture the
-   exported-identifier sets and the `Test*` count as checksums. If red, record and
-   do not fold unrelated fixes in.
+   exported-identifier set, the test/benchmark function inventory, and the
+   `./internal/relay/...` coverage total as checksums. If red, record and do not
+   fold unrelated fixes in.
 2. **Phase A — package move.** Create `internal/relay/runner`; move `runner.go`,
-   `route_runtime.go`, `log.go` (`package runner`); relocate `FormatMixLabel` →
-   `mix.go`; fix `cmd/rally` (+ test) imports. `go test ./...` green with
-   `runner.go` still monolithic.
+   `route_runtime.go`, `log.go` (`package runner`) plus tests that reference the
+   moved symbols; split mixed tests so primitive assertions stay in `relay`;
+   relocate `FormatMixLabel` → `mix.go` with exact private route-label literals;
+   fix `cmd/rally` and any test imports that reference `Runner`/`Config`. `go test
+   ./...` green with `runner.go` still monolithic.
 3. **Phase B — carve.** Move helper clusters into responsibility files (Section
    manifest), then the moved-in relocations (`logf` → `log.go`,
    `prepareExecutorForSelection` → `route_runtime.go`). `go test` after each;

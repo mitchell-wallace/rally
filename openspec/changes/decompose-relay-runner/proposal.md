@@ -39,15 +39,20 @@ last) so risk only rises after the mechanical work is green.
 **Phase A — establish the package (mechanical):**
 
 - Create `internal/relay/runner` (`package runner`). Move `runner.go`,
-  `route_runtime.go`, and `log.go` into it wholesale. Relocate the only exported
-  symbol in `route_runtime.go`, `FormatMixLabel`, *down* into `mix.go` so it stays
-  `relay.FormatMixLabel` (a mix-formatting primitive).
+  `route_runtime.go`, and `log.go` into it wholesale, along with the tests that
+  reference those moved symbols before the Phase A test checkpoint. Relocate the
+  only exported symbol in `route_runtime.go`, `FormatMixLabel`, *down* into
+  `mix.go` so it stays `relay.FormatMixLabel` (a mix-formatting primitive).
+  Preserve the exact private stored-label tokens (`__routes__`, `__override__:`)
+  used by route runtime and `FormatMixLabel`; add regression coverage rather than
+  exporting new token constants.
 - The primitives stay in `internal/relay`: `relay.go` (relay-record lifecycle),
   `resilience.go` (the freeze/bench/pause state machine), `mix.go`
   (`AgentMix`/`ParseAgentMix`/`Resolver`/`FormatMixLabel`), `constants.go`. The
   resulting dependency is one-way: `runner → relay`.
 - Update callers: `relay.NewRunner` → `runner.NewRunner` and `relay.Config` →
-  `runner.Config` in `cmd/rally/main.go` (+ two test files). Everything else
+  `runner.Config` in `cmd/rally/main.go`, `cmd/rally/telemetry_test.go`, and any
+  other caller that actually references the relocated symbols. Everything else
   (`relay.CompleteRelay`, `relay.FormatMixLabel`, `relay.NewResilience`,
   `relay.AgentMix`, …) is unchanged. The compiler enforces correctness.
 
@@ -67,7 +72,8 @@ exactly one home (see design.md's file manifest). Because the package is now
 to run-level steps in `run_one.go`. Block-for-block extraction, `-race` after each.
 `runner.go` ends as a thin top-level orchestrator (~250–400 lines).
 
-**Tests & spec:** re-shard `runner_test.go` along the new files (one small shared
+**Tests & spec:** split tests by symbol ownership as the package move requires,
+then finish re-sharding `runner_test.go` along the new files (one small shared
 fixtures file). Add a `relay-module-structure` capability spec codifying the
 `runner → relay` boundary, the behaviour/telemetry/persistence-preservation
 contract, and the one-responsibility-per-file invariant (CI enforcement handed to
@@ -99,8 +105,10 @@ release.**
   `log.go`) move into it and are carved into ~12 responsibility files; `runOne`
   and `Run` decomposed into named private methods; `FormatMixLabel` relocated to
   `mix.go`. `internal/relay` shrinks to the primitive set.
-- **Callers**: `cmd/rally/main.go` (+ `main_test.go`, `telemetry_test.go`) switch
-  two references to `runner.*` and add the import. No other package changes.
+- **Callers**: `cmd/rally/main.go` and `cmd/rally/telemetry_test.go` switch the
+  references that currently use `relay.NewRunner` / `relay.Config` to `runner.*`
+  and add the import. `cmd/rally/main_test.go` keeps using `relay.*` unless it
+  gains runner references. No other caller-package changes.
 - **Public surface**: relocated, not redesigned — `Runner`/`Config`/`NewRunner`/
   `CancellationSource` move to `package runner` with unchanged signatures; the
   `Resilience`/`AgentMix`/`CreateRelay`/`FormatMixLabel`/… surface stays in
