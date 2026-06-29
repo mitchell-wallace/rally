@@ -88,3 +88,10 @@ func openRelayLog(dataDir, workspaceDir string, relayID int) (io.WriteCloser, er
 func relayLogPath(dataDir, workspaceDir string, relayID int) string {
 	return filepath.Join(dataDir, "relays", repoKey(workspaceDir), fmt.Sprintf("relay-%d.log", relayID))
 }
+
+// logf writes to the relay log when one is open; it is a no-op otherwise.
+func (r *Runner) logf(format string, args ...interface{}) {
+	if r.log != nil {
+		fmt.Fprintf(r.log, format, args...)
+	}
+}

@@ -303,11 +303,11 @@
       "title": "Carve runner helper responsibilities",
       "description": "Context: OpenSpec `decompose-relay-runner`, tasks 3.1, 3.2, 3.5, 3.6, and 3.9. Phase A should already be verified. All production files are now in `internal/relay/runner` using `package runner`.\n\nOutcome: Pure symbol moves create the lower-risk responsibility files: `terminal.go`, `failure_display.go`, `git.go`, `final_snippet.go`, plus `logf` in `log.go` and `prepareExecutorForSelection` in `route_runtime.go`.\n\nFiles \u0026 scope: Move whole existing symbols without behaviour edits. Keep filenames bare, avoid `misc.go`/`helpers.go`, and do not alter tests except as needed for package/file references caused by pure moves. Do not decompose `Run` or `runOne` in this lap.\n\nAcceptance: After each cluster or at least before finishing, run `go test -count=1 ./internal/relay/...`. Confirm moved symbols have exactly one production home and no telemetry-field, CLI-string, store-shape, laps-semantic, git-message, or version changes were introduced. Do not tick `tasks.md` boxes.",
       "assignee": "JUNIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 262144,
       "createdAt": "2026-06-29T03:48:57.300728283Z",
-      "updatedAt": "2026-06-29T03:48:57.300728283Z",
-      "completedAt": null
+      "updatedAt": "2026-06-29T06:02:55.215339084Z",
+      "completedAt": "2026-06-29T06:02:55.215339084Z"
     },
     {
       "id": "rall-c744",

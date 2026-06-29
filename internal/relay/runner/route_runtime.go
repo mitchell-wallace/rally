@@ -2,6 +2,7 @@ package runner
 
 import (
 	"fmt"
+	"io"
 	"sort"
 	"strings"
 	"time"
@@ -727,4 +728,25 @@ func agentRouteSpec(resolved agent.ResolvedAgent) string {
 
 func cloneParsedEntries(entries []routing.ParsedEntry) []routing.ParsedEntry {
 	return append([]routing.ParsedEntry(nil), entries...)
+}
+
+func (r *Runner) prepareExecutorForSelection(relayID, runIndex int, selection routeSelection, log io.Writer) {
+	if selection.PreviousAgent == nil {
+		return
+	}
+	if selection.PreviousAgent.Harness != selection.Agent.Harness {
+		return
+	}
+
+	exec := r.executors[selection.Agent.Harness]
+	if exec == nil || !exec.RotateSupported() {
+		return
+	}
+
+	// Each Execute starts a fresh CLI process, so doing nothing here naturally
+	// preserves the existing teardown/respawn fallback path. Rotation is only an
+	// optimization when the adapter opts in and the swap succeeds.
+	if err := exec.RotateModel(selection.Agent.Model); err != nil {
+		fmt.Fprintf(log, "relay %d run %d rotate fallback for %s: %v\n", relayID, runIndex+1, selection.Agent.Harness, err)
+	}
 }
