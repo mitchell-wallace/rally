@@ -1,4 +1,4 @@
-package relay
+package runner
 
 import (
 	"path/filepath"
@@ -21,7 +21,7 @@ func NewFixtureExecutor(t *testing.T, dir, diffPath, outputPath string, delay ti
 
 func CopyFixtureProject(t *testing.T, destDir string) {
 	t.Helper()
-	src := filepath.Join("..", "..", "testdata", "fixture-project")
+	src := filepath.Join("..", "..", "..", "testdata", "fixture-project")
 	if err := testutil.CopyDir(src, destDir); err != nil {
 		t.Fatalf("copy fixture project: %v", err)
 	}

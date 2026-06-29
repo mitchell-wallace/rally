@@ -11,6 +11,7 @@ import (
 
 	"github.com/mitchell-wallace/rally/internal/agent"
 	"github.com/mitchell-wallace/rally/internal/relay"
+	"github.com/mitchell-wallace/rally/internal/relay/runner"
 	"github.com/mitchell-wallace/rally/internal/store"
 	"github.com/mitchell-wallace/rally/internal/telemetry"
 	"github.com/mitchell-wallace/rally/internal/testutil"
@@ -98,7 +99,7 @@ func TestTelemetryIssueCriteriaAndPromptSize(t *testing.T) {
 		"backupagent": &customExecutor{succeedOn: 99}, // always fail
 	}
 
-	cfg := relay.Config{
+	cfg := runner.Config{
 		WorkspaceDir:     workspaceDir,
 		DataDir:          store.RallyDir(workspaceDir),
 		TargetIterations: 1,
@@ -116,7 +117,7 @@ func TestTelemetryIssueCriteriaAndPromptSize(t *testing.T) {
 		},
 	}
 
-	runner := relay.NewRunner(s, cfg, executors)
+	runner := runner.NewRunner(s, cfg, executors)
 	mock := &mockSink{}
 	runner.SetTelemetry(mock)
 
@@ -212,7 +213,7 @@ func TestTelemetry_PromptBreakdown(t *testing.T) {
 		"antigravity": &customExecutor{succeedOn: 2}, // fails first try, succeeds second
 	}
 
-	cfg := relay.Config{
+	cfg := runner.Config{
 		WorkspaceDir:     workspaceDir,
 		DataDir:          store.RallyDir(workspaceDir),
 		LapsEnabled:      true,
@@ -229,7 +230,7 @@ func TestTelemetry_PromptBreakdown(t *testing.T) {
 		},
 	}
 
-	runner := relay.NewRunner(s, cfg, executors)
+	runner := runner.NewRunner(s, cfg, executors)
 	mock := &mockSink{}
 	runner.SetTelemetry(mock)
 
@@ -311,7 +312,7 @@ func TestTelemetry_AgentClassRetry_NoIssue(t *testing.T) {
 		"antigravity": &customExecutor{succeedOn: 2},
 	}
 
-	cfg := relay.Config{
+	cfg := runner.Config{
 		WorkspaceDir:     workspaceDir,
 		DataDir:          store.RallyDir(workspaceDir),
 		TargetIterations: 1,
@@ -326,7 +327,7 @@ func TestTelemetry_AgentClassRetry_NoIssue(t *testing.T) {
 		},
 	}
 
-	runner := relay.NewRunner(s, cfg, executors)
+	runner := runner.NewRunner(s, cfg, executors)
 	mock := &mockSink{}
 	runner.SetTelemetry(mock)
 
@@ -356,7 +357,7 @@ func TestTelemetry_InfraFailure_Issue(t *testing.T) {
 		"antigravity": &customExecutor{succeedOn: 99, logContent: "request timed out\n"},
 	}
 
-	cfg := relay.Config{
+	cfg := runner.Config{
 		WorkspaceDir:     workspaceDir,
 		DataDir:          store.RallyDir(workspaceDir),
 		TargetIterations: 1,
@@ -371,7 +372,7 @@ func TestTelemetry_InfraFailure_Issue(t *testing.T) {
 		},
 	}
 
-	runner := relay.NewRunner(s, cfg, executors)
+	runner := runner.NewRunner(s, cfg, executors)
 	mock := &mockSink{}
 	runner.SetTelemetry(mock)
 
@@ -407,7 +408,7 @@ func TestTelemetry_RelayStall_Issue(t *testing.T) {
 		"antigravity": &customExecutor{succeedOn: 1},
 	}
 
-	cfg := relay.Config{
+	cfg := runner.Config{
 		WorkspaceDir:     workspaceDir,
 		DataDir:          store.RallyDir(workspaceDir),
 		TargetIterations: 1,
@@ -422,7 +423,7 @@ func TestTelemetry_RelayStall_Issue(t *testing.T) {
 		},
 	}
 
-	runner := relay.NewRunner(s, cfg, executors)
+	runner := runner.NewRunner(s, cfg, executors)
 	mock := &mockSink{}
 	runner.SetTelemetry(mock)
 

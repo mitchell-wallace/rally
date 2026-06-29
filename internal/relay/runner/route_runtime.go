@@ -1,4 +1,4 @@
-package relay
+package runner
 
 import (
 	"fmt"
@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/mitchell-wallace/rally/internal/agent"
+	relaycore "github.com/mitchell-wallace/rally/internal/relay"
 	"github.com/mitchell-wallace/rally/internal/routing"
 	"github.com/mitchell-wallace/rally/internal/store"
 )
@@ -16,32 +17,11 @@ const (
 	relaySelectionModeOverridePrefix = "__override__:"
 )
 
-// FormatMixLabel renders a stored agent-mix label as user-friendly text.
-// Stored labels may include internal markers (__routes__, __override__:…)
-// that should never appear in CLI prompts.
-func FormatMixLabel(stored string) string {
-	stored = strings.TrimSpace(stored)
-	switch {
-	case stored == "":
-		return "(empty)"
-	case stored == relaySelectionModeRoutes:
-		return "configured routes"
-	case strings.HasPrefix(stored, relaySelectionModeOverridePrefix):
-		specs := strings.TrimSpace(strings.TrimPrefix(stored, relaySelectionModeOverridePrefix))
-		if specs == "" {
-			return "(override)"
-		}
-		return specs
-	default:
-		return stored
-	}
-}
-
 type routeRuntime struct {
 	selector          *routing.Selector
 	override          *routing.OverrideRoute
 	schedulers        map[string]*routing.Scheduler
-	resolver          Resolver
+	resolver          relaycore.Resolver
 	reasoning         map[string]string
 	reasoningResolver routing.RoleReasoningResolver
 	providers         *routing.ProviderIndex
@@ -170,7 +150,7 @@ func newRouteRuntimeFromStoredLabel(cfg Config, stored string) (*routeRuntime, s
 	return rt, label, err
 }
 
-func newLegacyMixRouteRuntime(specs []string, resolver Resolver, noBackend bool) (*routeRuntime, string, error) {
+func newLegacyMixRouteRuntime(specs []string, resolver relaycore.Resolver, noBackend bool) (*routeRuntime, string, error) {
 	routeEntries, label, err := legacyMixRouteEntries(specs, resolver)
 	if err != nil {
 		return nil, "", err
@@ -186,11 +166,11 @@ func newLegacyMixRouteRuntime(specs []string, resolver Resolver, noBackend bool)
 	return rt, label, nil
 }
 
-func newOverrideRouteRuntime(specs []string, routeSpecs map[string][]string, resolver Resolver, noBackend bool) (*routeRuntime, string, error) {
+func newOverrideRouteRuntime(specs []string, routeSpecs map[string][]string, resolver relaycore.Resolver, noBackend bool) (*routeRuntime, string, error) {
 	return newOverrideRouteRuntimeWithReasoning(specs, routeSpecs, resolver, nil, nil, noBackend)
 }
 
-func newOverrideRouteRuntimeWithReasoning(specs []string, routeSpecs map[string][]string, resolver Resolver, reasoning map[string]string, reasoningResolver routing.RoleReasoningResolver, noBackend bool) (*routeRuntime, string, error) {
+func newOverrideRouteRuntimeWithReasoning(specs []string, routeSpecs map[string][]string, resolver relaycore.Resolver, reasoning map[string]string, reasoningResolver routing.RoleReasoningResolver, noBackend bool) (*routeRuntime, string, error) {
 	override, err := routing.BuildOverrideRoute("override", specs, routeSpecs, routing.AgentResolver(resolver))
 	if err != nil {
 		return nil, "", err
@@ -204,11 +184,11 @@ func newOverrideRouteRuntimeWithReasoning(specs []string, routeSpecs map[string]
 	return rt, relaySelectionModeOverridePrefix + strings.Join(specs, " "), nil
 }
 
-func newResolvedRouteRuntime(routeSpecs map[string][]string, resolver Resolver, noBackend bool, override *routing.OverrideRoute) (*routeRuntime, error) {
+func newResolvedRouteRuntime(routeSpecs map[string][]string, resolver relaycore.Resolver, noBackend bool, override *routing.OverrideRoute) (*routeRuntime, error) {
 	return newResolvedRouteRuntimeWithReasoning(routeSpecs, resolver, nil, nil, noBackend, override)
 }
 
-func newResolvedRouteRuntimeWithReasoning(routeSpecs map[string][]string, resolver Resolver, reasoning map[string]string, reasoningResolver routing.RoleReasoningResolver, noBackend bool, override *routing.OverrideRoute) (*routeRuntime, error) {
+func newResolvedRouteRuntimeWithReasoning(routeSpecs map[string][]string, resolver relaycore.Resolver, reasoning map[string]string, reasoningResolver routing.RoleReasoningResolver, noBackend bool, override *routing.OverrideRoute) (*routeRuntime, error) {
 	selector, err := routing.NewSelector(routeSpecs, noBackend)
 	if err != nil {
 		return nil, err
@@ -252,7 +232,7 @@ func newResolvedRouteRuntimeWithReasoning(routeSpecs map[string][]string, resolv
 	}, nil
 }
 
-func (r *routeRuntime) next(task runTask, resilience *Resilience) (routeSelection, error) {
+func (r *routeRuntime) next(task runTask, resilience *relaycore.Resilience) (routeSelection, error) {
 	effectiveAssignee := task.Assignee
 	recoveryStatus := store.RecoveryPendingStatus{}
 	recoveryForced := false
@@ -323,9 +303,9 @@ func (r *routeRuntime) next(task runTask, resilience *Resilience) (routeSelectio
 		return routeSelection{}, fmt.Errorf("routing: route %q entry %q: %w", route.Name, selectedEntry.Raw, err)
 	}
 
-	st, since := resilience.GetState(KeyFromAgent(picked))
-	hourlyRetry := st == StatePaused && !resilience.NowFunc().Before(since.Add(resilience.PauseDuration))
-	probation := st == StateProbation
+	st, since := resilience.GetState(relaycore.KeyFromAgent(picked))
+	hourlyRetry := st == relaycore.StatePaused && !resilience.NowFunc().Before(since.Add(resilience.PauseDuration))
+	probation := st == relaycore.StateProbation
 
 	var previousAgent *agent.ResolvedAgent
 	routeKey := strings.ToLower(route.Name)
@@ -376,7 +356,7 @@ func (r *routeRuntime) overrideRoute() *routing.Route {
 	return &route
 }
 
-func (r *routeRuntime) syncRecoverySignals(scheduler *routing.Scheduler, resilience *Resilience, effectiveAssignee string) {
+func (r *routeRuntime) syncRecoverySignals(scheduler *routing.Scheduler, resilience *relaycore.Resilience, effectiveAssignee string) {
 	for _, state := range scheduler.EntryStates() {
 		key, err := r.resilienceKeyForEntry(state.Entry, effectiveAssignee)
 		if err != nil {
@@ -393,17 +373,17 @@ func (r *routeRuntime) syncRecoverySignals(scheduler *routing.Scheduler, resilie
 
 		status, since := resilience.GetState(key)
 		switch status {
-		case StateActive:
+		case relaycore.StateActive:
 			if state.Benched {
 				scheduler.OnAgentRecovered(state)
 			}
-		case StatePaused:
+		case relaycore.StatePaused:
 			if !resilience.NowFunc().Before(since.Add(resilience.PauseDuration)) {
 				scheduler.ResetEntry(state)
 			} else if !(state.Benched && state.Exhausted) {
 				scheduler.OnAgentFailed(state, "paused", true)
 			}
-		case StateProbation:
+		case relaycore.StateProbation:
 			// Probation is the freeze-decay window: a frozen agent has aged
 			// past FreezeDuration and is granted exactly one tentative
 			// recovery attempt per probation cycle. The one-shot is split
@@ -416,16 +396,16 @@ func (r *routeRuntime) syncRecoverySignals(scheduler *routing.Scheduler, resilie
 			// transitions. runOne is responsible for writing the active or
 			// frozen event that ends the probation cycle.
 			if !r.hasProbationEventForCurrentFreeze(resilience, key) {
-				_ = resilience.persistProbationEvent(key)
+				_ = persistProbationEvent(resilience, key)
 				scheduler.ResetEntry(state)
 			} else if !(state.Benched && state.Exhausted) {
 				scheduler.OnAgentFailed(state, "probation", true)
 			}
-		case StateFrozen:
+		case relaycore.StateFrozen:
 			if !(state.Benched && state.Exhausted) {
 				scheduler.OnAgentFailed(state, "frozen", true)
 			}
-		case StateBenched:
+		case relaycore.StateBenched:
 			// A benched key is sidelined until its usage-limit reset deadline.
 			// No StateActive-scoped unbench guard is needed: GetState only
 			// reports StateBenched while now < reset_at, so once the deadline
@@ -440,7 +420,7 @@ func (r *routeRuntime) syncRecoverySignals(scheduler *routing.Scheduler, resilie
 // already contains a probation event newer than the latest frozen event for
 // this key. Used by syncRecoverySignals so the probation event is persisted
 // exactly once per freeze cycle.
-func (r *routeRuntime) hasProbationEventForCurrentFreeze(resilience *Resilience, key ResilienceKey) bool {
+func (r *routeRuntime) hasProbationEventForCurrentFreeze(resilience *relaycore.Resilience, key relaycore.ResilienceKey) bool {
 	events, err := resilience.Store.GetAgentStatus(key.Harness, key.Model)
 	if err != nil {
 		return false
@@ -456,10 +436,20 @@ func (r *routeRuntime) hasProbationEventForCurrentFreeze(resilience *Resilience,
 	return false
 }
 
-func (r *routeRuntime) selectionWaitError(scheduler *routing.Scheduler, resilience *Resilience, routeName string, effectiveAssignee string) error {
+func persistProbationEvent(resilience *relaycore.Resilience, key relaycore.ResilienceKey) error {
+	return resilience.Store.AppendAgentStatus(store.AgentStatusEvent{
+		AgentType: key.Harness,
+		Model:     key.Model,
+		EventType: "probation",
+		Timestamp: resilience.NowFunc().UTC().Format(time.RFC3339),
+		Reason:    "freeze decayed to probation",
+	})
+}
+
+func (r *routeRuntime) selectionWaitError(scheduler *routing.Scheduler, resilience *relaycore.Resilience, routeName string, effectiveAssignee string) error {
 	var minWait time.Duration
 	waitSet := false
-	seenKeys := map[ResilienceKey]struct{}{}
+	seenKeys := map[relaycore.ResilienceKey]struct{}{}
 	totalKeys := 0
 	frozenKeys := 0
 	disabledKeys := 0
@@ -486,9 +476,9 @@ func (r *routeRuntime) selectionWaitError(scheduler *routing.Scheduler, resilien
 		status, since := resilience.GetState(key)
 		var wait time.Duration
 		switch status {
-		case StatePaused:
+		case relaycore.StatePaused:
 			wait = since.Add(resilience.PauseDuration).Sub(resilience.NowFunc())
-		case StateBenched:
+		case relaycore.StateBenched:
 			// Benched keys wait out their usage-limit reset deadline, not the
 			// fixed PauseDuration. GetState reports StateBenched only while
 			// now < reset_at, so a positive wait is expected here.
@@ -497,7 +487,7 @@ func (r *routeRuntime) selectionWaitError(scheduler *routing.Scheduler, resilien
 				continue
 			}
 			wait = resetAt.Sub(resilience.NowFunc())
-		case StateFrozen:
+		case relaycore.StateFrozen:
 			frozenKeys++
 			continue
 		default:
@@ -549,8 +539,8 @@ func (r *routeRuntime) selectionWaitError(scheduler *routing.Scheduler, resilien
 // forceUnpauseAll moves every paused harness across the runtime's schedulers
 // back to active state. Used when the user hits skip during a frozen-wait to
 // retry immediately rather than serving out the pause window.
-func (r *routeRuntime) forceUnpauseAll(resilience *Resilience, relayID int, routeName string, effectiveAssignee string) (int, error) {
-	seen := map[ResilienceKey]struct{}{}
+func (r *routeRuntime) forceUnpauseAll(resilience *relaycore.Resilience, relayID int, routeName string, effectiveAssignee string) (int, error) {
+	seen := map[relaycore.ResilienceKey]struct{}{}
 	unpaused := 0
 	for schedulerName, scheduler := range r.schedulers {
 		role := r.roleForScheduler(schedulerName, routeName, effectiveAssignee)
@@ -568,7 +558,7 @@ func (r *routeRuntime) forceUnpauseAll(resilience *Resilience, relayID int, rout
 			// writes an active event for any non-active state, ending the bench
 			// early so the lane retries immediately rather than serving out the
 			// usage-limit reset window.
-			if status != StatePaused && status != StateBenched {
+			if status != relaycore.StatePaused && status != relaycore.StateBenched {
 				continue
 			}
 			if err := resilience.UnpauseAgent(key, relayID); err != nil {
@@ -587,8 +577,8 @@ func (r *routeRuntime) forceUnpauseAll(resilience *Resilience, relayID int, rout
 // All quota-scope fan-out is contained here; GetState, syncRecoverySignals, and
 // selectionWaitError stay per-key. Mirrors the iterate-all-schedulers pattern in
 // forceUnpauseAll. Returns the number of distinct keys benched.
-func (r *routeRuntime) benchQuotaScope(resilience *Resilience, scope string, resetAt time.Time, relayID int, routeName string, effectiveAssignee string) (int, error) {
-	seen := map[ResilienceKey]struct{}{}
+func (r *routeRuntime) benchQuotaScope(resilience *relaycore.Resilience, scope string, resetAt time.Time, relayID int, routeName string, effectiveAssignee string) (int, error) {
+	seen := map[relaycore.ResilienceKey]struct{}{}
 	benched := 0
 	for schedulerName, scheduler := range r.schedulers {
 		role := r.roleForScheduler(schedulerName, routeName, effectiveAssignee)
@@ -613,12 +603,12 @@ func (r *routeRuntime) benchQuotaScope(resilience *Resilience, scope string, res
 	return benched, nil
 }
 
-func (r *routeRuntime) resilienceKeyForEntry(entry routing.ParsedEntry, role string) (ResilienceKey, error) {
+func (r *routeRuntime) resilienceKeyForEntry(entry routing.ParsedEntry, role string) (relaycore.ResilienceKey, error) {
 	resolved, err := r.resolvedEntryAgent(entry, role)
 	if err != nil {
-		return ResilienceKey{}, err
+		return relaycore.ResilienceKey{}, err
 	}
-	return KeyFromAgent(resolved), nil
+	return relaycore.KeyFromAgent(resolved), nil
 }
 
 func (r *routeRuntime) resolvedEntryAgent(entry routing.ParsedEntry, role string) (agent.ResolvedAgent, error) {
@@ -642,7 +632,7 @@ func (r *routeRuntime) roleForScheduler(schedulerName string, selectedRouteName 
 // only meaningful when GetState reports StateBenched: it reads back to the
 // latest benched event, returning false if a later recovery/failure event has
 // since superseded it.
-func (r *routeRuntime) benchResetAt(resilience *Resilience, key ResilienceKey) (time.Time, bool) {
+func (r *routeRuntime) benchResetAt(resilience *relaycore.Resilience, key relaycore.ResilienceKey) (time.Time, bool) {
 	events, err := resilience.Store.GetAgentStatus(key.Harness, key.Model)
 	if err != nil {
 		return time.Time{}, false
@@ -662,8 +652,8 @@ func (r *routeRuntime) benchResetAt(resilience *Resilience, key ResilienceKey) (
 	return time.Time{}, false
 }
 
-func legacyMixRouteEntries(specs []string, resolver Resolver) ([]string, string, error) {
-	mix, err := ParseAgentMix(specs, resolver)
+func legacyMixRouteEntries(specs []string, resolver relaycore.Resolver) ([]string, string, error) {
+	mix, err := relaycore.ParseAgentMix(specs, resolver)
 	if err != nil {
 		return nil, "", err
 	}
@@ -689,7 +679,7 @@ func legacyMixRouteEntries(specs []string, resolver Resolver) ([]string, string,
 	return entries, mix.Label, nil
 }
 
-func resolveRouteEntries(entries []routing.ParsedEntry, resolver Resolver) ([]routing.ParsedEntry, error) {
+func resolveRouteEntries(entries []routing.ParsedEntry, resolver relaycore.Resolver) ([]routing.ParsedEntry, error) {
 	resolved := make([]routing.ParsedEntry, len(entries))
 	for i, entry := range entries {
 		picked, err := resolveAgentSpec(entry.Spec, resolver)
@@ -702,7 +692,7 @@ func resolveRouteEntries(entries []routing.ParsedEntry, resolver Resolver) ([]ro
 	return resolved, nil
 }
 
-func resolveAgentSpec(spec string, resolver Resolver) (agent.ResolvedAgent, error) {
+func resolveAgentSpec(spec string, resolver relaycore.Resolver) (agent.ResolvedAgent, error) {
 	if resolver != nil {
 		return resolver(spec)
 	}

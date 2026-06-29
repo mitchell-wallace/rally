@@ -1,4 +1,4 @@
-package relay
+package runner
 
 import (
 	"crypto/sha256"

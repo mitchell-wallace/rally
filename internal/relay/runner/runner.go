@@ -1,4 +1,4 @@
-package relay
+package runner
 
 import (
 	"bufio"
@@ -21,6 +21,7 @@ import (
 	"github.com/mitchell-wallace/rally/internal/laps"
 	"github.com/mitchell-wallace/rally/internal/monitor"
 	"github.com/mitchell-wallace/rally/internal/progress"
+	relaycore "github.com/mitchell-wallace/rally/internal/relay"
 	"github.com/mitchell-wallace/rally/internal/reliability"
 	"github.com/mitchell-wallace/rally/internal/routing"
 	"github.com/mitchell-wallace/rally/internal/store"
@@ -54,7 +55,7 @@ type Config struct {
 	Instructions           string
 	TaskPrompt             string
 	OverwriteMixOnResume   bool
-	Resolver               Resolver
+	Resolver               relaycore.Resolver
 	ReasoningResolver      routing.RoleReasoningResolver
 	LapsInstructionsFile   string
 	FreeRunPromptFile      string
@@ -70,7 +71,7 @@ type Runner struct {
 	stopFlag   atomic.Bool
 	skipFlag   atomic.Bool
 	log        io.WriteCloser
-	resilience *Resilience
+	resilience *relaycore.Resilience
 	relayStart time.Time
 
 	lapsInstructionsCache string
@@ -310,9 +311,9 @@ func lapPinMismatchDiagnosticEvent(baseTags map[string]string, rc telemetry.Rall
 func (r *Runner) agentStateName(picked agent.ResolvedAgent) string {
 	res := r.resilience
 	if res == nil {
-		res = NewResilience(r.store)
+		res = relaycore.NewResilience(r.store)
 	}
-	state, _ := res.GetState(KeyFromAgent(picked))
+	state, _ := res.GetState(relaycore.KeyFromAgent(picked))
 	return string(state)
 }
 
@@ -624,7 +625,7 @@ func (r *Runner) Run(ctx context.Context) error {
 	// Clear any stale run-state from a previous interrupted relay.
 	_, _ = r.maybeWriteStubAndClearState("")
 
-	relay, resumed, err := ResumeRelay(r.store)
+	relay, resumed, err := relaycore.ResumeRelay(r.store)
 	if err != nil {
 		return err
 	}
@@ -652,7 +653,7 @@ func (r *Runner) Run(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
-		relay, err = CreateRelay(r.store, r.cfg.TargetIterations, selectionLabel)
+		relay, err = relaycore.CreateRelay(r.store, r.cfg.TargetIterations, selectionLabel)
 		if err != nil {
 			return err
 		}
@@ -691,7 +692,7 @@ func (r *Runner) Run(ctx context.Context) error {
 
 	resilience := r.resilience
 	if resilience == nil {
-		resilience = NewResilience(r.store)
+		resilience = relaycore.NewResilience(r.store)
 	}
 
 	// Consume oldest eligible relay-scoped message at relay start
@@ -729,7 +730,7 @@ func (r *Runner) Run(ctx context.Context) error {
 		if err != nil {
 			if errors.Is(err, errQueueEmpty) {
 				fmt.Fprintf(log, "relay %d completed: laps queue empty\n", relay.ID)
-				_ = CompleteRelay(r.store, relay.ID)
+				_ = relaycore.CompleteRelay(r.store, relay.ID)
 				break
 			}
 			return err
@@ -751,14 +752,14 @@ func (r *Runner) Run(ctx context.Context) error {
 						failureStateEvent(
 							telemetry.Tags(telemetry.EventInfo{RelayID: relay.ID, Repo: rc.Repo, RepoName: rc.RepoName}),
 							rc,
-							telemetry.FailureState{AgentState: string(StateFrozen)},
+							telemetry.FailureState{AgentState: string(relaycore.StateFrozen)},
 						))
-					_ = CompleteRelay(r.store, relay.ID)
+					_ = relaycore.CompleteRelay(r.store, relay.ID)
 					return fmt.Errorf("relay failed: all agents frozen")
 				}
 				if routeErr.Wait <= 0 {
 					fmt.Fprintf(log, "relay %d failed: %s\n", relay.ID, routeErr.Error())
-					_ = CompleteRelay(r.store, relay.ID)
+					_ = relaycore.CompleteRelay(r.store, relay.ID)
 					return fmt.Errorf("relay failed: %s", routeErr.Error())
 				}
 				fmt.Fprintf(log, "relay %d all agents paused, waiting %v\n", relay.ID, routeErr.Wait)
@@ -994,27 +995,27 @@ func (r *Runner) Run(ctx context.Context) error {
 
 		if selection.Probation {
 			if res.Success || res.FailureClass == reliability.FailureIncomplete {
-				if err := resilience.UnpauseAgent(KeyFromAgent(selection.Agent), relay.ID); err != nil {
+				if err := resilience.UnpauseAgent(relaycore.KeyFromAgent(selection.Agent), relay.ID); err != nil {
 					return err
 				}
 			} else {
-				if err := resilience.FreezeAgent(KeyFromAgent(selection.Agent), relay.ID, "probation run failed"); err != nil {
+				if err := resilience.FreezeAgent(relaycore.KeyFromAgent(selection.Agent), relay.ID, "probation run failed"); err != nil {
 					return err
 				}
 			}
 		} else if selection.HourlyRetry {
 			if res.Success {
-				if err := resilience.UnpauseAgent(KeyFromAgent(selection.Agent), relay.ID); err != nil {
+				if err := resilience.UnpauseAgent(relaycore.KeyFromAgent(selection.Agent), relay.ID); err != nil {
 					return err
 				}
 			} else if res.FailureClass == reliability.FailureInfra && res.InfraFailures > 1 {
-				if err := resilience.RecordHourlyFailure(KeyFromAgent(selection.Agent), relay.ID); err != nil {
+				if err := resilience.RecordHourlyFailure(relaycore.KeyFromAgent(selection.Agent), relay.ID); err != nil {
 					return err
 				}
 			}
 		} else {
 			if !res.Success && res.FailureClass == reliability.FailureInfra && res.InfraFailures > 1 {
-				if err := resilience.PauseAgent(KeyFromAgent(selection.Agent), relay.ID); err != nil {
+				if err := resilience.PauseAgent(relaycore.KeyFromAgent(selection.Agent), relay.ID); err != nil {
 					return err
 				}
 			}
@@ -1061,7 +1062,7 @@ func (r *Runner) Run(ctx context.Context) error {
 	}
 
 	if relay.CompletedIterations >= relay.TargetIterations {
-		if err := CompleteRelay(r.store, relay.ID); err != nil {
+		if err := relaycore.CompleteRelay(r.store, relay.ID); err != nil {
 			return err
 		}
 		fmt.Fprintf(log, "relay %d completed\n", relay.ID)
@@ -1513,7 +1514,7 @@ func benchResetDeadline(ev *reliability.FailureEvidence, now time.Time) time.Tim
 			return now.Add(ev.ResetAfter)
 		}
 	}
-	return now.Add(BenchDefaultDuration)
+	return now.Add(relaycore.BenchDefaultDuration)
 }
 
 // runOutcome carries the result of one run (one runner assigned to one lap)
@@ -1694,10 +1695,10 @@ func (r *Runner) runOne(
 		maxAttempts = 5
 	}
 	if isHourlyRetry {
-		maxAttempts = HourlyRetryMaxAttempts
+		maxAttempts = relaycore.HourlyRetryMaxAttempts
 	}
 	if isProbation {
-		maxAttempts = HourlyRetryMaxAttempts
+		maxAttempts = relaycore.HourlyRetryMaxAttempts
 	}
 
 	// Per-run wall-clock budget across all retry attempts. Constructed ONCE here

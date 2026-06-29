@@ -1,4 +1,4 @@
-package relay
+package runner
 
 import (
 	"errors"
@@ -442,30 +442,6 @@ func TestRouteRuntime_PausedExpiryResetsExhaustedEntry(t *testing.T) {
 	}
 	if second.Entry.Exhausted {
 		t.Fatal("entry should be selectable again after pause expiry reset")
-	}
-}
-
-func TestFormatMixLabel(t *testing.T) {
-	tests := []struct {
-		name   string
-		stored string
-		want   string
-	}{
-		{"empty", "", "(empty)"},
-		{"routes marker", relaySelectionModeRoutes, "configured routes"},
-		{"override with specs", relaySelectionModeOverridePrefix + "cc ag op", "cc ag op"},
-		{"override with quotas", relaySelectionModeOverridePrefix + "cc:1 ag:1", "cc:1 ag:1"},
-		{"override bare", relaySelectionModeOverridePrefix, "(override)"},
-		{"override only whitespace", relaySelectionModeOverridePrefix + "  ", "(override)"},
-		{"legacy mix", "cc:1 cx:2", "cc:1 cx:2"},
-		{"trims whitespace", "  cc cx  ", "cc cx"},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := FormatMixLabel(tt.stored); got != tt.want {
-				t.Errorf("FormatMixLabel(%q) = %q, want %q", tt.stored, got, tt.want)
-			}
-		})
 	}
 }
 

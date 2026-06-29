@@ -1,4 +1,4 @@
-package relay
+package runner
 
 // Real-backend e2e tests that invoke actual agent CLIs (claude, codex, etc).
 // These tests are skipped unless RALLY_TEST_REAL_AGENTS=1 is set and the

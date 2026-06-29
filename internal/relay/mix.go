@@ -23,6 +23,32 @@ type AgentMix struct {
 	Label   string
 }
 
+const (
+	relaySelectionModeRoutes         = "__routes__"
+	relaySelectionModeOverridePrefix = "__override__:"
+)
+
+// FormatMixLabel renders a stored agent-mix label as user-friendly text.
+// Stored labels may include internal markers (__routes__, __override__:...)
+// that should never appear in CLI prompts.
+func FormatMixLabel(stored string) string {
+	stored = strings.TrimSpace(stored)
+	switch {
+	case stored == "":
+		return "(empty)"
+	case stored == relaySelectionModeRoutes:
+		return "configured routes"
+	case strings.HasPrefix(stored, relaySelectionModeOverridePrefix):
+		specs := strings.TrimSpace(strings.TrimPrefix(stored, relaySelectionModeOverridePrefix))
+		if specs == "" {
+			return "(override)"
+		}
+		return specs
+	default:
+		return stored
+	}
+}
+
 func ParseAgentMix(specs []string, resolver Resolver) (AgentMix, error) {
 	weights := map[string]int{}
 	order := []string{}

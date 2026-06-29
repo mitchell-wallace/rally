@@ -1,4 +1,4 @@
-package relay
+package runner
 
 import (
 	"os"

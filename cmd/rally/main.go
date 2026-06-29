@@ -19,6 +19,7 @@ import (
 	"github.com/mitchell-wallace/rally/internal/laps"
 	"github.com/mitchell-wallace/rally/internal/progress"
 	"github.com/mitchell-wallace/rally/internal/relay"
+	"github.com/mitchell-wallace/rally/internal/relay/runner"
 	"github.com/mitchell-wallace/rally/internal/release"
 	"github.com/mitchell-wallace/rally/internal/routing"
 	"github.com/mitchell-wallace/rally/internal/store"
@@ -331,7 +332,7 @@ func runRelay(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("resolve providers: %w", err)
 	}
 
-	runnerCfg := relay.Config{
+	runnerCfg := runner.Config{
 		WorkspaceDir:           workspaceDir,
 		DataDir:                dataDir,
 		MachineID:              activeMachineID,
@@ -448,7 +449,7 @@ func runRelay(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	r := relay.NewRunner(s, runnerCfg, executors)
+	r := runner.NewRunner(s, runnerCfg, executors)
 	r.SetTelemetry(activeTelemetry)
 
 	ctx, cancel := context.WithCancel(context.Background())
