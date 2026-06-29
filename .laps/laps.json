@@ -347,11 +347,11 @@
       "title": "Extract run lifecycle steps",
       "description": "Context: OpenSpec `decompose-relay-runner`, tasks 4.3-4.4. The prior lap should have moved `runOne` and extracted `Run`; this lap finishes lifecycle decomposition.\n\nOutcome: `runOne` delegates to named private step-methods in `run_one.go` for budget setup, monitored execution, outcome classification, final-snippet resolution, laps/progress reconciliation, and retry/complete decision. `runner.go` retains only `Config`, `Runner`, `NewRunner`, `RequestStop`, `SetTelemetry`/`tel`, `outWriter`, `newBoundTimer`, and the slim `Run` skeleton.\n\nFiles \u0026 scope: Extract block-for-block from existing contiguous code. Keep method names locally sensible but do not introduce new abstraction layers. Avoid unrelated test resharding beyond what compilation requires.\n\nDesign: This is the highest regression risk. Preserve all observable behaviour, especially retry budgeting, route fallback causes, final-snippet handling, progress/laps reconciliation, and completion/handoff decisions.\n\nAcceptance: Run `go test -race -shuffle=on -count=1 ./internal/relay/...`. Confirm no single function approaches the previous `runOne` scale and `runner.go` is a thin top-level orchestrator. Do not tick `tasks.md` boxes.",
       "assignee": "SENIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 524288,
       "createdAt": "2026-06-29T03:48:57.300736429Z",
-      "updatedAt": "2026-06-29T03:48:57.300736429Z",
-      "completedAt": null
+      "updatedAt": "2026-06-29T08:37:50.37865471Z",
+      "completedAt": "2026-06-29T08:37:50.37865471Z"
     },
     {
       "id": "rall-29e9",
