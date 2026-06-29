@@ -336,11 +336,11 @@
       "title": "Extract relay lifecycle steps",
       "description": "Context: OpenSpec `decompose-relay-runner`, tasks 4.1-4.2. Phase B should already be verified. This starts the highest-risk phase, so keep edits block-for-block.\n\nOutcome: `runOne` is moved verbatim into `run_one.go` with `runOutcome`, `routeFallbackCause` (+`addTo`), `executeTry`, and `containsInt`; `Run` is decomposed into named private step-methods in `relay_steps.go` plus `tallyRuns`.\n\nFiles \u0026 scope: Do not change runtime behaviour, prompt text, telemetry, store shape, laps semantics, git messages, or retry/fallback decisions. Extract existing contiguous blocks and thread existing locals explicitly; do not invent interfaces or redesign control flow.\n\nAcceptance: Run `go test -race -shuffle=on -count=1 ./internal/relay/...` after moving `runOne` and again after decomposing `Run`. `runner.go` should be visibly slimmer but does not need to hit the final line target yet. Do not tick `tasks.md` boxes.",
       "assignee": "SENIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 458752,
       "createdAt": "2026-06-29T03:48:57.300733473Z",
-      "updatedAt": "2026-06-29T03:48:57.300733473Z",
-      "completedAt": null
+      "updatedAt": "2026-06-29T07:30:11.01563912Z",
+      "completedAt": "2026-06-29T07:30:11.01563912Z"
     },
     {
       "id": "rall-ce63",
