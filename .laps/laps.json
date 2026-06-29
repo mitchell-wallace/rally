@@ -391,11 +391,11 @@
       "title": "Recover relay coverage gate",
       "description": "Context: Verification of OpenSpec `decompose-relay-runner` task 6.4 found the written coverage gate below baseline after the runner package split.\n\nObserved during lap `rall-f1d7`:\n- Baseline in `openspec/changes/decompose-relay-runner/baseline.md`: `go test -coverprofile=/tmp/rally-relay-cover-before.out ./internal/relay/...` + `go tool cover` total = 88.1%.\n- Current command: `go test -count=1 -coverprofile=/tmp/rally-relay-cover-after.out ./internal/relay/...` passes, but `go tool cover -func=/tmp/rally-relay-cover-after.out` total = 86.5%.\n- Current package-level output: `internal/relay` 75.9%, `internal/relay/runner` 87.6%.\n- Likely cause: after runner tests moved to `internal/relay/runner`, default Go coverage no longer credits `internal/relay` primitive coverage exercised indirectly by runner tests. Functions that lost counted coverage include `CreateRelay`, `ResumeRelay`, `CompleteRelay`, `persistProbationEvent`, and some `ParseAgentMix` / resilience paths.\n\nOutcome: Restore the exact task 6.4 coverage gate without behavior changes. Prefer focused primitive tests in `internal/relay` if that is the right fix; if the correct fix is a documented comparable coverage command instead, update the OpenSpec task/baseline wording explicitly and leave a clear verification note. Do not hide the failure by lowering the baseline without justification.\n\nAcceptance: `go test -count=1 ./...`, `go test -race -shuffle=on -count=1 ./internal/relay/...`, and `go test -coverprofile=/tmp/rally-relay-cover-after.out ./internal/relay/... \u0026\u0026 go tool cover -func=/tmp/rally-relay-cover-after.out` are green with total coverage \u003e= 88.1%. Do not tick OpenSpec tasks; the following VERIFY lap should check task 6.4.",
       "assignee": "SENIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 655360,
       "createdAt": "2026-06-29T09:40:06.92711509Z",
-      "updatedAt": "2026-06-29T09:40:06.92711509Z",
-      "completedAt": null
+      "updatedAt": "2026-06-29T10:43:37.115790656Z",
+      "completedAt": "2026-06-29T10:43:37.115790656Z"
     },
     {
       "id": "rall-4295",
