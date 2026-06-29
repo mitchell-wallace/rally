@@ -281,11 +281,11 @@
       "title": "Establish runner package boundary",
       "description": "Context: OpenSpec `decompose-relay-runner`, tasks 2.1-2.5. Use the baseline records from the prior lap. This is the package-boundary move before any carving or decomposition.\n\nOutcome: `internal/relay/runner` exists as `package runner`; `runner.go`, `route_runtime.go`, and `log.go` are moved wholesale; `runner.go` remains monolithic; callers use `runner.NewRunner` / `runner.Config`; and the `runner -\u003e relay` dependency is one-way.\n\nFiles \u0026 scope: Move tests that reference moved runner/route/log symbols before the checkpoint, splitting mixed tests by symbol ownership. Relocate only `FormatMixLabel` down into `internal/relay/mix.go` so it remains `relay.FormatMixLabel`. Preserve exact private route-label literals `__routes__` and `__override__:` on both sides without adding exported token APIs. Update `cmd/rally/main.go`, `cmd/rally/telemetry_test.go`, and any actual relocated-symbol callers; leave primitive `relay.*` callers alone.\n\nDesign: This lap is a relocation, not a redesign. Signatures, CLI strings, telemetry fields, persisted labels, laps semantics, git messages, and `internal/buildinfo/VERSION` must not change.\n\nAcceptance: `go test -count=1 ./...` and `go build ./...` are green with `runner.go` still monolithic. Confirm the exported-identifier checksum now splits as intended across `internal/relay` and `internal/relay/runner`, with no extra exported route-label constants/helpers. Do not tick `tasks.md` boxes.",
       "assignee": "SENIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 131072,
       "createdAt": "2026-06-29T03:48:57.300725755Z",
-      "updatedAt": "2026-06-29T03:48:57.300725755Z",
-      "completedAt": null
+      "updatedAt": "2026-06-29T04:26:19.558009587Z",
+      "completedAt": "2026-06-29T04:26:19.558009587Z"
     },
     {
       "id": "rall-600a",
