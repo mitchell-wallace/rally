@@ -358,11 +358,11 @@
       "title": "Verify lifecycle decomposition",
       "description": "Context: Verify OpenSpec `decompose-relay-runner` tasks 4.1-4.4. Use the `openspec-verify-change` skill for this change, focused on Phase C lifecycle extraction.\n\nOutcome: The highest-risk refactor phase is reviewed before broad test resharding.\n\nReview scope: Identify the intended branch target/base before diffing and use it for diff commands. Do not rewrite git history. Compare extracted methods to the original logical blocks using git history/diff context; trace run/try retry budgeting, route fallback, action-loop result handling, final snippet, laps/progress reconciliation, and relay summary paths. Green tests alone are not enough.\n\nAcceptance: Re-run or validate `go test -race -shuffle=on -count=1 ./internal/relay/...`. Confirm `runner.go` is thin, `Run` and `runOne` delegate to named steps, and no behaviour-surface edits slipped in. Check off tasks 4.1-4.4 only for verified-correct work; add focused head laps for substantive gaps.",
       "assignee": "VERIFY",
-      "isDone": false,
+      "isDone": true,
       "order": 589824,
       "createdAt": "2026-06-29T03:48:57.300737682Z",
-      "updatedAt": "2026-06-29T03:48:57.300737682Z",
-      "completedAt": null
+      "updatedAt": "2026-06-29T08:54:04.060391062Z",
+      "completedAt": "2026-06-29T08:54:04.060391062Z"
     },
     {
       "id": "rall-72c8",
