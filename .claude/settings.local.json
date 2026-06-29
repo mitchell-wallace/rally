@@ -10,7 +10,9 @@
       "Bash(find:*)",
       "Bash(git commit:*)",
       "Bash(go test *)",
-      "Bash(go version *)"
+      "Bash(go version *)",
+      "Bash(claude --version)",
+      "Read(//home/mitchell/.claude/**)"
     ]
   }
 }
