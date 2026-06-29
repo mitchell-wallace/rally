@@ -314,11 +314,11 @@
       "title": "Carve runner state and execution seams",
       "description": "Context: OpenSpec `decompose-relay-runner`, tasks 3.3, 3.4, 3.7, 3.8, and 3.9 if any stragglers remain. This covers the subtle telemetry, prompt/laps, progress, cancellation, and liveness seams.\n\nOutcome: `telemetry.go`, `task.go`, `progress.go`, `action_loop.go`, `liveness.go`, and `handoff_only.go` own the symbols listed in `tasks.md`/`design.md`, with cohesive clusters moved verbatim and no new abstraction layers.\n\nFiles \u0026 scope: Keep laps/role/prompt coupling in `task.go`, progress reconciliation in `progress.go`, cancellation/operator control in `action_loop.go`, stall wiring in `liveness.go`, and bounded handoff-only recovery in `handoff_only.go`. Do not decompose `Run` or `runOne` yet.\n\nDesign: These files guard behaviour-sensitive surfaces: telemetry event/field names, laps claim/finalization semantics, timeout/stall cancellation, and prompt text. Preserve behaviour exactly.\n\nAcceptance: Run `go test -count=1 ./internal/relay/...` during the moves and `go test -race -shuffle=on -count=1 ./internal/relay/...` after `action_loop.go`/`liveness.go`. Confirm each listed symbol has one home and no catch-all production file appears. Do not tick `tasks.md` boxes.",
       "assignee": "SENIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 327680,
       "createdAt": "2026-06-29T03:48:57.300729375Z",
-      "updatedAt": "2026-06-29T03:48:57.300729375Z",
-      "completedAt": null
+      "updatedAt": "2026-06-29T06:11:43.028850554Z",
+      "completedAt": "2026-06-29T06:11:43.028850554Z"
     },
     {
       "id": "rall-a5ac",
