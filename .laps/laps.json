@@ -402,11 +402,11 @@
       "title": "Verify full OpenSpec change",
       "description": "Context: Final verification for OpenSpec `decompose-relay-runner`, especially tasks 6.5-6.6 and any earlier unchecked tasks. Use the `openspec-verify-change` skill for the complete change and inspect the whole diff.\n\nOutcome: The full refactor is confirmed to satisfy `proposal.md`, `design.md`, `tasks.md`, and `specs/relay-module-structure/spec.md`, with tasks checked only after verification.\n\nReview scope: Identify the intended branch target/base before diffing and use it for diff commands. Identify the first lap/try in this batch and treat earlier branch work as pre-existing unless the user asks otherwise. Do not rewrite git history. Review behavior-surface preservation across CLI output, telemetry event/field names, persisted store shape, laps semantics, git messages, route-label markers, and `internal/buildinfo/VERSION`.\n\nAcceptance: Run or validate final `go test -count=1 ./...`, `go test -race -shuffle=on -count=1 ./internal/relay/...`, coverage comparison, exported-surface check, `go build ./...`, and `openspec validate decompose-relay-runner --strict`. Check off all remaining verified tasks in `openspec/changes/decompose-relay-runner/tasks.md`; add focused head laps for any substantive gap instead of hiding implementation inside verification.",
       "assignee": "VERIFY",
-      "isDone": false,
+      "isDone": true,
       "order": 786432,
       "createdAt": "2026-06-29T03:48:57.300740524Z",
-      "updatedAt": "2026-06-29T03:48:57.300740524Z",
-      "completedAt": null
+      "updatedAt": "2026-06-29T10:51:32.389709742Z",
+      "completedAt": "2026-06-29T10:51:32.389709742Z"
     }
   ]
 }

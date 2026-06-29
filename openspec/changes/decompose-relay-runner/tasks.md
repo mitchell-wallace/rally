@@ -46,6 +46,6 @@ All new files are `package runner` in `internal/relay/runner/`, bare names. Verb
 - [x] 6.1 `go test -count=1 ./...` green.
 - [x] 6.2 `go test -race -shuffle=on -count=1 ./internal/relay/...` green.
 - [x] 6.3 Exported-surface diff matches the intended relocation (`Config`/`Runner`/`NewRunner`/`CancellationSource` now under `runner`; `Resilience`/`AgentMix`/`FormatMixLabel`/`CreateRelay`/… still under `relay`) and nothing else changed; `go build ./...` compiles all callers.
-- [ ] 6.4 Coverage for the post-split `./internal/relay/...` packages is not below the 1.4 baseline: `go test -coverprofile=/tmp/rally-relay-cover-after.out ./internal/relay/...`, then compare the `go tool cover -func=/tmp/rally-relay-cover-after.out` total to the recorded baseline.
-- [ ] 6.5 Confirm zero behaviour-surface change: no telemetry-field / CLI-string / store-shape / laps-semantic / git-message edits; `internal/buildinfo/VERSION` untouched (no version bump).
-- [ ] 6.6 `openspec validate decompose-relay-runner --strict` passes.
+- [x] 6.4 Coverage for the post-split `./internal/relay/...` packages is not below the 1.4 baseline: `go test -coverprofile=/tmp/rally-relay-cover-after.out ./internal/relay/...`, then compare the `go tool cover -func=/tmp/rally-relay-cover-after.out` total to the recorded baseline.
+- [x] 6.5 Confirm zero behaviour-surface change: no telemetry-field / CLI-string / store-shape / laps-semantic / git-message edits; `internal/buildinfo/VERSION` untouched (no version bump).
+- [x] 6.6 `openspec validate decompose-relay-runner --strict` passes.
