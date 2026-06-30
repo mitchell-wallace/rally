@@ -424,11 +424,11 @@
       "title": "Split cmd/rally/main.go into same-package files",
       "description": "Context: Phase 1, task 2.1 of `slim-cli-composition-root`. `cmd/rally/main.go` is 864 lines fusing the Cobra root, command registration, and every command implementation. This lap only re-files it within `package main` — no symbols move packages and no logic changes (those happen in Phases 2–3).\n\nOutcome: `cmd/rally/main.go` is decomposed into responsibility-named `package main` files; behaviour is byte-for-byte identical.\n\nFiles \u0026 scope: Only `cmd/rally/*.go`. Suggested split (design discretion on exact grouping): `commands_relay.go`, `commands_init.go`, `commands_instructions.go`, `commands_update.go`, `templates.go`, plus a still-fat-but-smaller `main.go`. Verbatim moves of functions/vars/consts between files; do not rename, merge, or rewrite any symbol.\n\nDesign: Pure mechanical cut/paste between files in the same package. Keep build vars (`Version`, `DefaultNewRelic*`) in `main.go`. Do not start the package extractions yet.\n\nAcceptance: `go test -count=1 ./cmd/rally` green; `go build ./...` compiles. No diff to any file outside `cmd/rally/`.",
       "assignee": "JUNIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 131072,
       "createdAt": "2026-06-30T07:29:04.773588061Z",
-      "updatedAt": "2026-06-30T07:29:04.773588061Z",
-      "completedAt": null
+      "updatedAt": "2026-06-30T12:39:28.182532053Z",
+      "completedAt": "2026-06-30T12:39:28.182532053Z"
     },
     {
       "id": "rall-a981",
