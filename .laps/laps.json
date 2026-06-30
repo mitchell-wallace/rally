@@ -523,11 +523,11 @@
       "title": "Verify the presentation-neutral app seam (Phase 2)",
       "description": "Context: Verification of the `internal/app` relay-start seam for `slim-cli-composition-root` (tasks 3.4–3.8). Use the `openspec-verify-change` skill against the change, then focus your report on the seam. This is the highest-risk slice — review the actual lines, not just green tests.\n\nBranch/diff scope: Identify the intended merge target first (ask the user / PR metadata / repo docs / branch config / history; do NOT assume `main`; current branch is `dev`). Treat work before this batch's first lap as pre-existing. Use `git diff \u003ctarget\u003e...HEAD`.\n\nWhat to verify (trace the dependency lines):\n- Import boundary: `go list -f '{{.Imports}}' ./internal/app` lists neither `internal/user_prompt` nor `internal/laps`; `go list -deps ./internal/app` completes with no cycle (laps allowed only transitively via `runner`). Confirm against the 1.3 baseline.\n- Resume semantics preserved exactly: `--new` discards + resets status; interactive “Start new” discards but does NOT reset status; non-interactive `--resume --agent` does not flip OverwriteMixOnResume. Read the actual mapping from prompt outcome → `RelayStartOptions` fields.\n- Telemetry result is local to `StartRelay` (machine id into `runner.Config`, `SetTelemetry(sink)`); no reliance on `activeTelemetry`/`activeMachineID` main globals.\n- `InspectResume` is non-mutating and uses the startup store-migration path; legacy `.rally/relays.jsonl` is visible.\n- `app.StartRelay` does no stdin prompting; laps hook install remains CLI-side.\n- `go test -count=1 ./...` green; `go test -race -count=1 ./internal/app` green.\n\nFollow-ups: substantive gaps → new head lap; only tiny safe one-liners inline; no history rewrites (additive/revert only).\n\nOn success: tick tasks.md boxes 3.4–3.8 for work confirmed correct and thorough.",
       "assignee": "VERIFY",
-      "isDone": false,
+      "isDone": true,
       "order": 720896,
       "createdAt": "2026-06-30T07:29:04.773597181Z",
-      "updatedAt": "2026-06-30T07:29:04.773597181Z",
-      "completedAt": null
+      "updatedAt": "2026-06-30T14:22:19.531704655Z",
+      "completedAt": "2026-06-30T14:22:19.531704655Z"
     },
     {
       "id": "rall-cc7d",
