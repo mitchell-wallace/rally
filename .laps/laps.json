@@ -479,11 +479,11 @@
       "title": "Add non-mutating app.InspectResume with layout-migration coverage",
       "description": "Context: Phase 2, task 3.4 of `slim-cli-composition-root`. The CLI must prompt resume-vs-new BEFORE `app.StartRelay` opens the store for the run, but `internal/app` must not import `internal/user_prompt`. `InspectResume` is the non-mutating peek that gives the CLI the unfinished-relay summary to prompt with.\n\nOutcome: `app.InspectResume(workspaceDir) (app.ResumeInfo, error)` returns the most-recent-unfinished-relay summary using the same store init/migration path as startup, without mutating relay or agent status.\n\nFiles \u0026 scope: Add `internal/app/relay_start.go` (or start it here) with `ResumeInfo{HasUnfinished, RelayID, CompletedIterations, TargetIterations, AgentMix}` and `InspectResume`. Open the store via the same `store.NewStore(store.RallyDir(workspaceDir))` initialization/migration path current startup uses.\n\nDesign: “Non-mutating” means no relay completion and no agent-status reset — NOT bypassing the existing on-open layout migration. Legacy top-level `.rally/relays.jsonl` state must be visible through this peek (the migration runs as it would at startup). Keep `internal/app` free of `internal/user_prompt` and `internal/laps`.\n\nAcceptance: Unit-test `InspectResume` two ways: (a) a temp workspace seeded with a current-layout store holding an unfinished relay, and (b) a legacy top-level `.rally/relays.jsonl` layout — both must surface the unfinished relay and its summary, and neither may complete the relay or reset status. `go test -count=1 ./internal/app ./cmd/rally` green; `go build ./...` compiles.",
       "assignee": "SENIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 458752,
       "createdAt": "2026-06-30T07:29:04.773593548Z",
-      "updatedAt": "2026-06-30T07:29:04.773593548Z",
-      "completedAt": null
+      "updatedAt": "2026-06-30T13:54:00.104627515Z",
+      "completedAt": "2026-06-30T13:54:00.104627515Z"
     },
     {
       "id": "rall-ba73",
