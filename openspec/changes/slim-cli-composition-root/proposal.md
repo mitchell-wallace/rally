@@ -54,11 +54,17 @@ deferring behind a same-package hedge (the same correction #1 made).
 
 **Phase 2 — extract the presentation-neutral `internal/app` seam:**
 
+- Break the existing `release → app` metadata edge before `app` imports
+  `relay/runner`: move the release-facing constants currently in `internal/app`
+  (`BinaryName`, `ReleaseOwner`, `ReleaseRepo`, `EnvNoUpdateCheck`) to
+  `internal/release`, and update the process entry/CLI to read them from there.
+  Without this, `app → runner → laps → release → app` would cycle because the
+  runner legitimately imports `internal/laps`.
 - Add `app.BuildExecutors(cfg) map[string]agent.Executor` (section C): the
   built-in + generic executor registry as composition wiring feeding
   `runner.NewRunner`. (#4 `modularize-harness-adapters` later relocates this into
   a real harness registry; a small helper here is a low-risk win now.)
-- Add `app.StartRelay(ctx, RelayStartOptions) error` and a read-only
+- Add `app.StartRelay(ctx, RelayStartOptions) error` and a non-mutating
   `app.InspectResume(workspaceDir) (ResumeInfo, error)`. `StartRelay` owns the
   runtime mechanics that turn **already-resolved** inputs into a running runner:
   store open, executor build, telemetry init, provider index, `runner.Config`
@@ -71,11 +77,11 @@ deferring behind a same-package hedge (the same correction #1 made).
   needs to prompt without opening the store itself. This keeps the seam reusable
   by the future TUI and avoids a `cli ↔ app` import cycle (the start path already
   calls the interactive `cli.ValidateRelayStartupRoutes`).
-- **Laps hook install stays CLI-side before `app.StartRelay`.** `internal/laps`
-  currently imports `internal/release`, and `internal/release` imports
-  `internal/app`; moving `laps.InstallHooks` into `internal/app` would create an
-  import cycle. The CLI already owns laps warning/detect and can preserve the
-  current hook-install timing while passing only `LapsEnabled` into the app seam.
+- **Laps hook install stays CLI-side before `app.StartRelay`.** The runner already
+  imports `internal/laps`, so `app` must not add a direct `laps` dependency on top
+  of the runner path. The CLI already owns laps warning/detect and can preserve
+  the current hook-install timing while passing only `LapsEnabled` into the app
+  seam.
 - **Build-time variables stay in `package main`.** GoReleaser injects
   `-X main.Version` / `-X main.DefaultNewRelicLicenseKey` /
   `-X main.DefaultNewRelicAppName`; those targets do not move. They thread
@@ -133,16 +139,18 @@ bump, no release.**
   (`relay_start.go`, `executors.go`) beside the existing `app.go`; `commitSetupFiles`
   relocated to `internal/gitx`; new `cli.NewRootCommand` + per-command files,
   including `tail` and the hidden `init-roles` compatibility alias.
-- **Callers**: only `cmd/rally` imports `internal/cli`, and `internal/cli` (plus
-  `internal/release`, already a consumer) imports `internal/app`. The new
-  dependency chain is `cmd/rally → internal/cli → internal/app → internal/relay/runner
-  → internal/relay`. No package gains an import of `internal/user_prompt` that did
-  not have one — `internal/app` deliberately does not. `internal/app` also does
-  not import `internal/laps`, avoiding the existing `laps → release → app` edge.
+- **Callers**: only `cmd/rally` imports `internal/cli`, and `internal/cli` imports
+  `internal/app`; release metadata no longer imports `internal/app`. The new
+  dependency chain is `cmd/rally → internal/cli → internal/app →
+  internal/relay/runner → internal/relay`. No package gains an import of
+  `internal/user_prompt` that did not have one — `internal/app` deliberately does
+  not. `internal/app` also does not directly import `internal/laps`; `runner` keeps
+  owning laps task interaction.
 - **Public surface**: relocated, not redesigned. Config exported identifiers keep
   their names and signatures across the file split; the runner API from #1 is
   unchanged. New surface is additive (`cli.NewRootCommand`, `app.StartRelay`,
-  `app.InspectResume`, `app.BuildExecutors`, `gitx.CommitSetupFiles`).
+  `app.InspectResume`, `app.BuildExecutors`, `gitx.CommitSetupFiles`) plus the
+  release-owned homes for existing product constants.
 - **Build/release**: `main.Version` / `main.DefaultNewRelic*` stay in `package
   main`; `.goreleaser.yaml` ldflags unchanged; telemetry stays no-op until the
   relay path, with baked release credentials still reachable only there.

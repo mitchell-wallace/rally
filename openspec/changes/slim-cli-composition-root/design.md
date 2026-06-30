@@ -31,6 +31,9 @@ that owns X, without reading the layer beneath:
 
 The dependency direction is strictly downward:
 `cmd/rally → internal/cli → internal/app → internal/relay/runner → internal/relay`.
+Because `runner` already imports `internal/laps`, and `internal/laps` imports
+`internal/release`, this change first removes the current `release → app` metadata
+edge so adding `app → runner` does not create `app → runner → laps → release → app`.
 
 ## Goals / Non-Goals
 
@@ -115,7 +118,7 @@ type ResumeInfo struct {
     TargetIterations    int
     AgentMix            string
 }
-func InspectResume(workspaceDir string) (ResumeInfo, error) // read-only store peek
+func InspectResume(workspaceDir string) (ResumeInfo, error) // non-mutating store peek
 
 func BuildExecutors(cfg config.V2Config) map[string]agent.Executor
 ```
@@ -136,14 +139,15 @@ hook install) stays in `internal/cli`; every lower-level runtime line is in
 > avoids the cycle and keeps a single store open, but adds an abstraction the
 > call sites do not need yet and that #5 would likely reshape. The chosen split
 > is the most boring and the most reusable; the only cost is `InspectResume`
-> re-opening the store read-only (a cheap JSONL read) so the CLI can prompt.
+> re-opening the store via the existing `store.NewStore` initialization/migration
+> path so the CLI can prompt before `StartRelay` opens the same state for the run.
 
-> Import-cycle constraint. `laps.InstallHooks` stays in `internal/cli` for this
-> change because `internal/laps` imports `internal/release`, and
-> `internal/release` already imports `internal/app` for release metadata. Moving
-> hook install into `app.StartRelay` would create `app → laps → release → app` or
-> force a release/laps dependency refactor that is outside this structure-only
-> change.
+> Import-cycle constraint. Before `app.StartRelay` imports `runner`, the existing
+> `release → app` metadata edge must move, because `runner` already imports
+> `internal/laps` and `internal/laps` imports `internal/release`. `laps.InstallHooks`
+> still stays in `internal/cli`: even after the cycle is broken, hook installation
+> is start-command setup work and `StartRelay` only needs the resolved
+> `LapsEnabled` value.
 
 ## Package & file manifest
 
@@ -179,14 +183,21 @@ hook install) stays in `internal/cli`; every lower-level runtime line is in
 ### `internal/app`
 
 - `app.go`: existing path/env helpers (`ContainerDataDir`, `SessionDir`, …) +
-  `BinaryName` — unchanged.
+  `ContainerDataRoot`/runtime env constants — unchanged, except release-facing
+  constants move out before `app` imports `runner`.
 - `relay_start.go`: `RelayStartOptions`, `ResumeInfo`, `TelemetryBuild`,
   `StartRelay`, `InspectResume`, `telemetryConfigForRelay`, the runner.Config
   assembly, resolver closure, override-route validation, instructions read, and
   signal handling (double-Ctrl+C window). It deliberately does not import
-  `internal/laps`; hook install remains in the CLI layer to avoid the current
-  `laps → release → app` cycle.
+  `internal/laps`; hook install remains in the CLI layer so the app seam only
+  receives resolved runner inputs.
 - `executors.go`: `BuildExecutors`.
+
+### `internal/release`
+
+- `release.go`: additionally owns `BinaryName`, `ReleaseOwner`, `ReleaseRepo`, and
+  `EnvNoUpdateCheck` (moved from `internal/app`) so release/update metadata does
+  not require importing the lower app layer.
 
 ### `internal/gitx`
 
@@ -222,11 +233,11 @@ and no identifier is renamed; the table above is the intended grouping.
    same-package split is a risk-reduction *first commit within this change*, not a
    reason to leave the boundary undrawn — matching #1's carried-over principle.
 2. **CLI resolves interactivity; `app` is presentation-neutral.** See "The
-    interactive seam." `internal/app` must not import `internal/user_prompt`;
-    enforced by review here and available for #3 to codify as an import rule.
-   Laps hook install also stays CLI-side because moving `laps.InstallHooks` into
-   `app` would create an `app → laps → release → app` import cycle under the
-   current release metadata layout.
+   interactive seam." `internal/app` must not directly import
+   `internal/user_prompt` or `internal/laps`; enforced by review here and
+   available for #3 to codify as an import rule. Laps hook install stays CLI-side
+   because it is start-command setup work, while `app.StartRelay` only needs the
+   resolved `LapsEnabled` value.
 3. **Build vars stay in `package main`, threaded via options.** GoReleaser targets
    `main.Version` / `main.DefaultNewRelicLicenseKey` / `main.DefaultNewRelicAppName`.
    They flow `main → RootOptions → RelayStartOptions.Telemetry`. `.goreleaser.yaml`
@@ -246,7 +257,13 @@ and no identifier is renamed; the table above is the intended grouping.
    install need the same path-scoped, `--no-verify` commit helper; `gitx` is the
    natural home for that Git-specific behavior even though both call sites remain
    CLI-side after the hook-install correction.
-7. **Config split is a same-package move only.** No config name, error string, or
+7. **Break `release → app` before `app → runner`.** `runner` legitimately imports
+   `internal/laps`, and `laps` imports `release`. Move the release-facing constants
+   (`BinaryName`, `ReleaseOwner`, `ReleaseRepo`, `EnvNoUpdateCheck`) from
+   `internal/app` to `internal/release` before `StartRelay` imports `runner`; then
+   update main/CLI callers to use `release.*`. This keeps `app.StartRelay` as the
+   reusable seam without choosing a different package home to dodge the cycle.
+8. **Config split is a same-package move only.** No config name, error string, or
    deprecation message changes unless a test proves a move forces it. Exported
    identifiers keep names and signatures; `go doc ./internal/config` before/after
    differs only in source file, not surface.
@@ -258,10 +275,13 @@ and no identifier is renamed; the table above is the intended grouping.
   green first; Phase 3 moves whole files/symbols verbatim and re-points imports;
   the compiler plus the existing `cmd/rally` test suite (which moves with its
   symbols) enforce correctness.
-- **`InspectResume` re-opens the store** read-only so the CLI can prompt before
-  `StartRelay` opens it for the run. Two cheap JSONL reads; accepted to keep `app`
-  free of `user_prompt`. If this ever shows up, the fix is a single shared store
-  handle threaded through options — not a boundary change.
+- **`InspectResume` re-opens the store** so the CLI can prompt before `StartRelay`
+  opens it for the run. It must use the same `store.NewStore` migration path as
+  startup so legacy state is visible before prompting; “read-only” means it does
+  not complete relays or reset status, not that it bypasses the existing layout
+  migration. Accepted to keep `app` free of `user_prompt`. If the duplicate open
+  ever shows up, the fix is a single shared store handle threaded through options
+  — not a boundary change.
 - **Tests that assert on `package main` helpers/commands** (`commitSetupFiles`,
   `chooseRelayAgentSpecs`, `syncRoleFolders`, telemetry config, `tail`, command
   registration) move to the new homes. Risk is misclassifying a test; mitigation
@@ -277,9 +297,9 @@ and no identifier is renamed; the table above is the intended grouping.
 Phases land in order, each green before the next (see `tasks.md`):
 
 1. Same-package split of `main.go`, then `config_v2.go`. No package moves.
-2. `app.BuildExecutors`, then `app.InspectResume` + `app.StartRelay`; the relay
-   command (still in `package main`) delegates to them; `commitSetupFiles` →
-   `gitx`.
+2. Break the `release → app` metadata edge, then add `app.BuildExecutors`,
+   `app.InspectResume`, and `app.StartRelay`; the relay command (still in
+   `package main`) delegates to them; `commitSetupFiles` → `gitx`.
 3. `cli.NewRootCommand` + promote all handlers/helpers into `internal/cli`;
    `main.go` shrinks to entry.
 4. Move config/init templates beside the `init` command.
@@ -294,8 +314,8 @@ Resolved during proposal work:
 
 - **Relay-start seam name** → `internal/app` (`app.StartRelay`), as the draft's
   working default; it is the low, presentation-neutral layer #5 reuses.
-- **Interactive ownership** → CLI-side; `app` does not import `user_prompt` or
-  `laps` (cycle + reuse, see Decisions 2).
+- **Interactive ownership** → CLI-side; `app` does not directly import
+  `user_prompt` or `laps` (cycle + reuse, see Decisions 2).
 - **Executor registry now vs #4** → small `app.BuildExecutors` now; #4 re-homes.
 
 None remaining that block implementation.
