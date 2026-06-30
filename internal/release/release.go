@@ -16,11 +16,16 @@ import (
 	"strings"
 	"time"
 
-	"github.com/mitchell-wallace/rally/internal/app"
 	"github.com/mitchell-wallace/rally/internal/buildinfo"
 )
 
-const latestReleaseURL = "https://api.github.com/repos/" + app.ReleaseOwner + "/" + app.ReleaseRepo + "/releases/latest"
+const (
+	BinaryName       = "rally"
+	ReleaseOwner     = "mitchell-wallace"
+	ReleaseRepo      = "rally"
+	EnvNoUpdateCheck = "RALLY_NO_UPDATE_CHECK"
+	latestReleaseURL = "https://api.github.com/repos/" + ReleaseOwner + "/" + ReleaseRepo + "/releases/latest"
+)
 
 // MinLapsVersion is the minimum laps release supported by Rally's companion
 // contract, including installed hooks and checked-in agent workflows. Bump this
@@ -39,7 +44,7 @@ type Tool struct {
 
 var (
 	// Rally is this binary.
-	Rally = Tool{Owner: app.ReleaseOwner, Repo: app.ReleaseRepo, BinaryName: app.BinaryName}
+	Rally = Tool{Owner: ReleaseOwner, Repo: ReleaseRepo, BinaryName: BinaryName}
 	// Laps is the companion work-queue binary bundled alongside rally.
 	Laps = Tool{Owner: "mitchell-wallace", Repo: "laps", BinaryName: "laps"}
 )

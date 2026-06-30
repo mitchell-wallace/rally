@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/mitchell-wallace/rally/internal/app"
 	"github.com/mitchell-wallace/rally/internal/cli"
 	"github.com/mitchell-wallace/rally/internal/laps"
 	"github.com/mitchell-wallace/rally/internal/progress"
@@ -50,7 +49,7 @@ func init() {
 	// it finds one already declared).
 	rootCmd.Flags().BoolP("version", "v", false, "Print version and exit")
 	rootCmd.Version = release.DisplayVersion(Version)
-	rootCmd.SetVersionTemplate(app.BinaryName + " {{.Version}}\n")
+	rootCmd.SetVersionTemplate(release.BinaryName + " {{.Version}}\n")
 }
 
 func init() {

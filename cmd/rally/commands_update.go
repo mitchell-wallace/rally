@@ -7,7 +7,6 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/mitchell-wallace/rally/internal/app"
 	"github.com/mitchell-wallace/rally/internal/laps"
 	"github.com/mitchell-wallace/rally/internal/release"
 	"github.com/spf13/cobra"
@@ -17,7 +16,7 @@ var versionCmd = &cobra.Command{
 	Use:   "version",
 	Short: "Print version",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		fmt.Printf("%s %s\n", app.BinaryName, release.DisplayVersion(Version))
+		fmt.Printf("%s %s\n", release.BinaryName, release.DisplayVersion(Version))
 		return nil
 	},
 }
@@ -38,9 +37,9 @@ executable so the two travel together; laps remains independently usable.`,
 			return err
 		}
 		if !updated {
-			fmt.Printf("%s is already up to date (%s)\n", app.BinaryName, newVersion)
+			fmt.Printf("%s is already up to date (%s)\n", release.BinaryName, newVersion)
 		} else {
-			fmt.Printf("Updated %s from %s to %s\n", app.BinaryName, oldVersion, newVersion)
+			fmt.Printf("Updated %s from %s to %s\n", release.BinaryName, oldVersion, newVersion)
 		}
 
 		// Upgrade the bundled laps binary alongside rally. A laps failure is
@@ -66,7 +65,7 @@ executable so the two travel together; laps remains independently usable.`,
 }
 
 func startBackgroundUpdateCheck(argv []string, stderr io.Writer) func() {
-	if os.Getenv(app.EnvNoUpdateCheck) == "1" {
+	if os.Getenv(release.EnvNoUpdateCheck) == "1" {
 		return func() {}
 	}
 	if len(argv) > 0 && (argv[0] == "update" || argv[0] == "version" || argv[0] == "--version" || argv[0] == "-v") {

@@ -7,7 +7,6 @@ import (
 )
 
 const (
-	BinaryName          = "rally"
 	ContainerDataRoot   = "/persist/agent/rally"
 	DefaultRepoProgress = ".rally/summary.jsonl"
 	EnvContainerName    = "RALLY_CONTAINER_NAME"
@@ -19,11 +18,8 @@ const (
 	EnvAgent            = "RALLY_AGENT"
 	EnvSessionDir       = "RALLY_SESSION_DIR"
 	EnvWorkspaceDir     = "RALLY_WORKSPACE_DIR"
-	EnvNoUpdateCheck    = "RALLY_NO_UPDATE_CHECK"
 	SchemaVersion       = 1
 	RepoHistoryWindow   = 50
-	ReleaseOwner        = "mitchell-wallace"
-	ReleaseRepo         = "rally"
 )
 
 func ContainerDataDir(containerName string) string {

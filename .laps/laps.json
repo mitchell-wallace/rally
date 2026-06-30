@@ -446,11 +446,11 @@
       "title": "Break the release → app metadata edge",
       "description": "Context: Phase 2, task 3.1 of `slim-cli-composition-root`. Before `internal/app` may import `internal/relay/runner` (later laps), the existing `release → app` edge must be removed, because `runner` imports `internal/laps` and `laps` imports `internal/release`; otherwise `app → runner → laps → release → app` would cycle. This is the architecture-critical edge break that unblocks the whole seam extraction.\n\nOutcome: Release/update metadata no longer depends on the app layer; `internal/release` does not import `internal/app`.\n\nFiles \u0026 scope: Move `BinaryName`, `ReleaseOwner`, `ReleaseRepo`, and `EnvNoUpdateCheck` from `internal/app` to `internal/release` (release.go). Re-point all callers (process entry / CLI / update-check) to use `release.*`. Do not move anything else out of `internal/app` in this lap.\n\nDesign: The constants are product/release metadata, so `internal/release` is their correct home; this also keeps the future `app.StartRelay` seam reusable without dodging the cycle via a different package. Verify the direction with `go list -f '{{.Imports}}' ./internal/release` after the move — it must not list `internal/app`.\n\nAcceptance: `internal/release` no longer imports `internal/app`; all former `app.BinaryName`/`app.ReleaseOwner`/`app.ReleaseRepo`/`app.EnvNoUpdateCheck` references now resolve to `release.*`; `go build ./...` compiles; `go test -count=1 ./internal/release ./cmd/rally` green.",
       "assignee": "SENIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 262144,
       "createdAt": "2026-06-30T07:29:04.773590837Z",
-      "updatedAt": "2026-06-30T07:29:04.773590837Z",
-      "completedAt": null
+      "updatedAt": "2026-06-30T13:16:29.913985618Z",
+      "completedAt": "2026-06-30T13:16:29.913985618Z"
     },
     {
       "id": "rall-2aa8",
