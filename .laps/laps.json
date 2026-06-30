@@ -413,11 +413,11 @@
       "title": "Capture refactor baselines and test-migration inventory",
       "description": "Context: First lap of OpenSpec change `slim-cli-composition-root` (see openspec/changes/slim-cli-composition-root/{proposal,design,tasks}.md), tasks 1.1–1.5. This change is a structure-only refactor of the composition root; later laps assert post-change state against the snapshots you capture now, so capture them faithfully and persist them where the verification laps can read them.\n\nOutcome: A committed baseline snapshot the later VERIFY laps can diff against, plus a green starting point.\n\nFiles \u0026 scope: Record snapshots into a scratch notes file kept with the change (e.g. openspec/changes/slim-cli-composition-root/baseline-snapshot.md). Do not modify production code in this lap.\n\nWork:\n- 1.1 Run `go test -count=1 ./cmd/rally ./internal/cli ./internal/config ./internal/app ./internal/gitx`. It MUST be green. If red, capture the failures verbatim into the snapshot and STOP (add a head lap describing the pre-existing failure); do not fold unrelated fixes into this refactor.\n- 1.2 Capture the exported-identifier set of `internal/config` (`go doc ./internal/config`, or a grep of exported decls) so the file split can be proven surface-preserving later.\n- 1.3 Capture `internal/app`'s exported surface, `go list -f '{{.Imports}}' ./internal/app` (direct imports), and `go list -deps ./internal/app`. Note that today `internal/app` directly imports neither `internal/user_prompt` nor `internal/laps` — this invariant must still hold post-change.\n- 1.4 Record the `cmd/rally` test/helper inventory as a migration checklist: for each of `commitSetupFiles`, `chooseRelayAgentSpecs`, `syncRoleFolders`, telemetry-config, init, `tail`, the hidden `init-roles` alias, and command-registration, list `(file, Test* name)`. Phase 3 must land every one of these exactly once after the moves — this checklist is how that is audited.\n- 1.5 Confirm `.goreleaser.yaml` ldflags target `main.Version` / `main.DefaultNewRelicLicenseKey` / `main.DefaultNewRelicAppName`, and record them. These build vars must remain in `package main` after the change.\n\nAcceptance: Snapshot file committed with all five captures; baseline test command is green (or, if red, STOP with a head lap). Do NOT tick tasks.md — verification ticks boxes.",
       "assignee": "JUNIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 65536,
       "createdAt": "2026-06-30T07:29:04.773573994Z",
-      "updatedAt": "2026-06-30T07:29:04.773573994Z",
-      "completedAt": null
+      "updatedAt": "2026-06-30T12:28:42.012028125Z",
+      "completedAt": "2026-06-30T12:28:42.012028125Z"
     },
     {
       "id": "rall-4071",
