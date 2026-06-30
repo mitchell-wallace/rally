@@ -468,11 +468,11 @@
       "title": "Verify Phase 1 splits + edge break + helper extractions",
       "description": "Context: Verification checkpoint for `slim-cli-composition-root` after the mechanical splits and the lower-risk Phase 2 extractions (tasks 1.1–1.5, 2.1–2.3, 3.1–3.3). Use the `openspec-verify-change` skill against change `slim-cli-composition-root`, then focus your report on these tasks.\n\nBranch/diff scope: Identify the intended merge target before diffing (ask the user, or infer from PR metadata / repo docs / branch config / recent history — do NOT assume `main`; current branch is `dev`). Identify the first lap/try of this batch and treat earlier branch work as pre-existing baseline context, not in-scope cleanup. Use `git diff \u003ctarget\u003e...HEAD` for the change surface.\n\nWhat to verify (trace real lines, not just “tests pass”):\n- Phase 1 splits are verbatim: no symbol renamed/dropped; `internal/config` exported surface is byte-identical to the 1.2 baseline snapshot (re-run `go doc ./internal/config` and compare). `cmd/rally` package compiles and its tests are intact.\n- 3.1: `internal/release` no longer imports `internal/app` (`go list -f '{{.Imports}}' ./internal/release`); all release-metadata callers now use `release.*`.\n- 3.2: `app.BuildExecutors` produces the same harness set/config as the former inline map; relay command calls it.\n- 3.3: `gitx.CommitSetupFiles` is used at both call sites (init setup, laps-hook install); its moved tests run under `internal/gitx`.\n- `go test -count=1 ./...` green; `go build ./...` compiles.\n\nFollow-ups: For any substantive gap, add a focused head lap (`laps add head`) rather than fixing it here; only tiny safe one-liners may be fixed inline. Do not rewrite git history; prefer additive/revert commits.\n\nOn success: tick the tasks.md boxes for 1.1–1.5, 2.1–2.3, 3.1–3.3 in openspec/changes/slim-cli-composition-root/tasks.md — only for work you confirmed correct and thorough.",
       "assignee": "VERIFY",
-      "isDone": false,
+      "isDone": true,
       "order": 393216,
       "createdAt": "2026-06-30T07:29:04.773592655Z",
-      "updatedAt": "2026-06-30T07:29:04.773592655Z",
-      "completedAt": null
+      "updatedAt": "2026-06-30T13:34:55.952840651Z",
+      "completedAt": "2026-06-30T13:34:55.952840651Z"
     },
     {
       "id": "rall-14f8",

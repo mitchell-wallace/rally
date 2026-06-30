@@ -1,16 +1,16 @@
 ## 1. Baseline & checksums
 
-- [ ] 1.1 `go test -count=1 ./cmd/rally ./internal/cli ./internal/config ./internal/app ./internal/gitx` green. If red, capture failures and STOP — do not fold unrelated fixes into this refactor.
-- [ ] 1.2 Capture the exported-identifier set of `internal/config` (`go doc ./internal/config` or a grep of exported decls) to compare against the post-split package: the file split must change source files only, not the exported surface.
-- [ ] 1.3 Capture the current `internal/app` exported surface, a direct-import snapshot (`go list -f '{{.Imports}}' ./internal/app`), and a `go list -deps ./internal/app` snapshot. After the change, assert `internal/app` still does **not directly** import `internal/user_prompt` or `internal/laps`, and that `cmd/rally → internal/cli → internal/app → internal/relay/runner` has no cycle.
-- [ ] 1.4 Record the `cmd/rally` test/helper inventory: `(file, Test* name)` for `commitSetupFiles`, `chooseRelayAgentSpecs`, `syncRoleFolders`, telemetry-config, init, `tail`, hidden `init-roles`, and command-registration tests. Keep a migration checklist so every pre-change test appears exactly once after the moves.
-- [ ] 1.5 Confirm `.goreleaser.yaml` ldflags target `main.Version` / `main.DefaultNewRelicLicenseKey` / `main.DefaultNewRelicAppName`; these must remain valid after the change (build vars stay in `package main`).
+- [x] 1.1 `go test -count=1 ./cmd/rally ./internal/cli ./internal/config ./internal/app ./internal/gitx` green. If red, capture failures and STOP — do not fold unrelated fixes into this refactor.
+- [x] 1.2 Capture the exported-identifier set of `internal/config` (`go doc ./internal/config` or a grep of exported decls) to compare against the post-split package: the file split must change source files only, not the exported surface.
+- [x] 1.3 Capture the current `internal/app` exported surface, a direct-import snapshot (`go list -f '{{.Imports}}' ./internal/app`), and a `go list -deps ./internal/app` snapshot. After the change, assert `internal/app` still does **not directly** import `internal/user_prompt` or `internal/laps`, and that `cmd/rally → internal/cli → internal/app → internal/relay/runner` has no cycle.
+- [x] 1.4 Record the `cmd/rally` test/helper inventory: `(file, Test* name)` for `commitSetupFiles`, `chooseRelayAgentSpecs`, `syncRoleFolders`, telemetry-config, init, `tail`, hidden `init-roles`, and command-registration tests. Keep a migration checklist so every pre-change test appears exactly once after the moves.
+- [x] 1.5 Confirm `.goreleaser.yaml` ldflags target `main.Version` / `main.DefaultNewRelicLicenseKey` / `main.DefaultNewRelicAppName`; these must remain valid after the change (build vars stay in `package main`).
 
 ## 2. Phase 1 — same-package splits (mechanical; no symbols change package)
 
-- [ ] 2.1 Split `cmd/rally/main.go` into responsibility-named `package main` files (e.g. `commands_relay.go`, `commands_init.go`, `commands_instructions.go`, `commands_update.go`, `templates.go`, plus the slim `main.go`). Verbatim moves; no logic change. `go test -count=1 ./cmd/rally` green.
-- [ ] 2.2 Split `internal/config/config_v2.go` into `types.go`, `load.go`, `decode.go`, `validate.go`, `resolve.go`, `save.go` per the design manifest (`providers.go` unchanged). Verbatim moves; keep `ReliabilityConfig` timeout methods beside their type. No config name/error/message edits. `go test -count=1 ./internal/config ./cmd/rally` green.
-- [ ] 2.3 Confirm the 1.2 exported-identifier set of `internal/config` is unchanged (file moves only) and `go build ./...` compiles.
+- [x] 2.1 Split `cmd/rally/main.go` into responsibility-named `package main` files (e.g. `commands_relay.go`, `commands_init.go`, `commands_instructions.go`, `commands_update.go`, `templates.go`, plus the slim `main.go`). Verbatim moves; no logic change. `go test -count=1 ./cmd/rally` green.
+- [x] 2.2 Split `internal/config/config_v2.go` into `types.go`, `load.go`, `decode.go`, `validate.go`, `resolve.go`, `save.go` per the design manifest (`providers.go` unchanged). Verbatim moves; keep `ReliabilityConfig` timeout methods beside their type. No config name/error/message edits. `go test -count=1 ./internal/config ./cmd/rally` green.
+- [x] 2.3 Confirm the 1.2 exported-identifier set of `internal/config` is unchanged (file moves only) and `go build ./...` compiles.
 
 ## 3. Phase 2 — extract the presentation-neutral `internal/app` seam
 
