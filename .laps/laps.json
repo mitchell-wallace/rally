@@ -534,11 +534,11 @@
       "title": "Introduce cli.NewRootCommand and RootOptions",
       "description": "Context: Phase 3, task 4.1 of `slim-cli-composition-root` — the keystone of the CLI layer. Establish the root-command builder that `cmd/rally/main.go` will collapse onto; subsequent laps move the individual handlers into `internal/cli` to register here.\n\nOutcome: `cli.NewRootCommand(opts RootOptions) *cobra.Command` constructs the full command tree, beside the existing `NewConfigCmd`/`NewRoutesCmd`/`NewHooksCmd`.\n\nFiles \u0026 scope: `internal/cli/root.go`. Add `RootOptions` carrying the build vars (`Version` + `NewRelic{LicenseKey,AppName,HostDisplayName}`) threaded from `package main`. `NewRootCommand` registers `start`/`relay`, `init`, hidden `init-roles`, `instructions`, `routes`, `hooks`, `config`, `version`, `update`, `progress`, and `tail`; wires the `--version`/`-v` flag; and installs the laps-aware dynamic help func (hides `progress` when laps is detected). Thread the `opts` build vars into the telemetry config eventually passed to `app.StartRelay`.\n\nDesign: This lap may temporarily delegate to handlers still defined in `package main` (call across the import edge as needed) so it compiles before the next laps physically move them — OR move them together if cleaner; either way preserve exact command names/flags/help text and the dynamic-help behaviour. Do not redeclare build vars in `internal/cli`; they live in `package main` and arrive via `RootOptions`.\n\nAcceptance: `go build ./...` compiles; `go test -count=1 ./internal/cli ./cmd/rally` green; the constructed root registers exactly the same command set, flags, and help behaviour as before (no command/flag/help diff).",
       "assignee": "SENIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 786432,
       "createdAt": "2026-06-30T07:29:04.773597983Z",
-      "updatedAt": "2026-06-30T07:29:04.773597983Z",
-      "completedAt": null
+      "updatedAt": "2026-06-30T14:31:57.514839846Z",
+      "completedAt": "2026-06-30T14:31:57.514839846Z"
     },
     {
       "id": "rall-badf",
