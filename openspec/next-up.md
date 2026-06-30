@@ -31,31 +31,31 @@ and risk-of-drift, not final scope. Last reviewed 2026-06-29.
   govulncheck, and mod-tidy CI gates.
 - **improve-harness-consistency** (`2026-06-28`) — normalized harness evidence,
   session-log recovery, runner tags, and Gemini removal follow-up.
+- **decompose-relay-runner** (`2026-06-30`) — extracted the
+  `internal/relay/runner` package, carved the orchestrator into
+  responsibility-named files, decomposed the large run/try loops into named
+  steps, and added the `relay-module-structure` spec for the runner/relay
+  boundary.
 
 ## Order
 
-The runner is the spine of this sequence: #1 gives it its own package
+The runner is the spine of this sequence: #1 gave it its own package
 (`internal/relay/runner`) and the one-way `runner → relay` boundary, and #2–#5
-build on that edge rather than on a monolithic `runner.go`.
+build on that edge rather than on a monolithic runner.
 
-1. **decompose-relay-runner** _(proposed)_
-   **Extract the `internal/relay/runner` package.** The orchestrator (`runner.go`
-   + `route_runtime.go` + `log.go`, 3,782+ lines) moves into its own package
-   depending one-way on the relay primitives (`relay.go`/`resilience.go`/`mix.go`/
-   `constants.go`); only `cmd/rally` (two refs) changes. Then carve the
-   orchestrator into responsibility-named files (terminal, telemetry, action-loop,
-   liveness, task, git, progress, final-snippet, handoff-only) and decompose the
-   1,221-line `runOne` and 465-line `Run` into named steps (Phase C, last). Adds
-   the `relay-module-structure` spec — including the `runner → relay` edge — that
-   #3 enforces.
-
-2. **slim-cli-composition-root** _(draft)_
-   Reduce `cmd/rally/main.go` and `internal/config/config_v2.go` from broad
-   catch-all files into slim entry points and responsibility-named config modules.
-   Introduces the `internal/app` relay-start seam that composes `runner.Runner`
-   above config — the reusable start path CLI and the future TUI share. Moves
-   command construction into `internal/cli` directly (no package-`main`-first
-   deferral).
+2. **slim-cli-composition-root** _(proposed)_
+   Reduce `cmd/rally/main.go` (864 lines) and `internal/config/config_v2.go` (993
+   lines) from broad catch-all files into a slim process entry, an `internal/cli`
+   command/prompt layer, and responsibility-named config modules. Introduces the
+   **presentation-neutral** `internal/app.StartRelay` seam (plus `InspectResume` /
+   `BuildExecutors`) that composes `runner.Runner` above config — the reusable
+   start path CLI and the future TUI share. The CLI resolves every interactive
+   start-of-run decision so `internal/app` never directly imports
+   `internal/user_prompt` or `internal/laps`; it first breaks the current
+   `release → app` metadata edge so `app → runner → laps → release` remains
+   acyclic. Release build vars stay in `package main` and thread through options
+   so GoReleaser ldflags are untouched. Adds the `composition-root-structure`
+   spec #3 can codify as import rules.
 
 3. **add-architecture-guardrails** _(draft)_
    Add file-size budgets, import-boundary checks, and dependency-confinement CI

@@ -13,5 +13,9 @@
 
 scratchpad.md
 
+# Editor swap files
+.swp
+*.swp
+
 /tmp/*
 .laps/claim
