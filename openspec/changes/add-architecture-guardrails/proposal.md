@@ -61,9 +61,9 @@ construction before it is allowed to fail a build.
 
 **Phase 2 — file-size budgets with a grandfathered baseline:**
 
-- Warning thresholds: 500 lines (production `.go`), 900 lines (`_test.go`).
+- Warning thresholds: 500 lines (production `.go`), 700 lines (`_test.go`).
 - Hard-error thresholds for files **not** grandfathered: 800 lines (production),
-  1,800 lines (`_test.go`). Generated files are exempt but must carry the
+  1,000 lines (`_test.go`). Generated files are exempt but must carry the
   `// Code generated` marker.
 - A grandfather map records every file currently over its hard-error budget at
   its **actual** current line count; the check fails if a grandfathered file

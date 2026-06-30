@@ -67,9 +67,12 @@ build on that edge rather than on a monolithic runner.
    composition-root edges (`release ↛ app`; `app ↛ {cli, user_prompt, laps}`;
    nothing imports `cli` but `cmd/rally`). Baselined against the current tree
    (2026-07-01) so the gate enforces from day one with a green baseline; warnings
-   (500/900) stay advisory while hard budgets (800/1,800) and grandfather caps
+   (500/700) stay advisory while hard budgets (800/1,000) and grandfather caps
    ratchet down as #4+ split the remaining outliers (e.g. `opencode.go` 801,
-   `run_one.go` 1,510). Adds the `architecture-guardrails` spec.
+   `run_one.go` 1,510). Note: #4/#5 only own the harness + presentation seams; the
+   runner orchestration core (`run_one.go` + its tests), `config`, `store`, and
+   `monitor` outliers have no owning change yet and need follow-up splits. Adds the
+   `architecture-guardrails` spec.
 
 4. **modularize-harness-adapters** _(draft)_
    Give future first-class harnesses a clean place to grow: a small executor API,

@@ -1,7 +1,7 @@
 ## 1. Baseline & regeneration
 
 - [ ] 1.1 Confirm the working tree is green before adding the gate: `go build ./...`, `go vet ./...`, `gofmt -l .` (empty), `go test -count=1 ./...`. If red, STOP — do not fold unrelated fixes into this tooling change.
-- [ ] 1.2 Regenerate the file-size baseline against HEAD (do **not** trust the 2026-07-01 figures in `design.md`): list every production `.go` over 800 lines and every `_test.go` over 1,800 lines (excluding `// Code generated` files, `testdata`, `vendor`, `.git`/`.rally`/`.laps`). This set becomes the grandfather map.
+- [ ] 1.2 Regenerate the file-size baseline against HEAD (do **not** trust the 2026-07-01 figures in `design.md`): list every production `.go` over 800 lines and every `_test.go` over 1,000 lines (excluding `// Code generated` files, `testdata`, `vendor`, `.git`/`.rally`/`.laps`). This set becomes the grandfather map.
 - [ ] 1.3 Regenerate the internal import graph against HEAD (`go list -f '{{range .Imports}}{{.}} {{end}}' ./internal/... ./cmd/...`) and confirm it still matches the rule tables in `design.md` (Decision 4). If #1/#2 follow-up commits changed any edge, update the rules to match the **current** graph before encoding them.
 - [ ] 1.4 Regenerate the third-party dependency scopes against HEAD for New Relic, `go-toml`, Cobra, huh, and lipgloss; confirm they still match Decision 5 (note `cobra` in `internal/progress`).
 
@@ -14,7 +14,7 @@
 
 ## 3. Phase 2 — file-size budgets with grandfathered baseline
 
-- [ ] 3.1 Encode budgets: production `.go` warn 500 / hard 800; `_test.go` warn 900 / hard 1,800; generated exempt (require `// Code generated`). A grandfathered file is exempt from the standard hard budget but fails if it exceeds its own recorded cap.
+- [ ] 3.1 Encode budgets: production `.go` warn 500 / hard 800; `_test.go` warn 700 / hard 1,000; generated exempt (require `// Code generated`). A grandfathered file is exempt from the standard hard budget but fails if it exceeds its own recorded cap.
 - [ ] 3.2 Paste the grandfather map produced in 1.2 (caps = current actual line counts). Confirm `archguard --ci` exits 0 on the clean tree, and that bumping a grandfathered file by one line in a scratch edit makes it fail (then revert).
 
 ## 4. Phase 3 — import-boundary & dependency-confinement rules

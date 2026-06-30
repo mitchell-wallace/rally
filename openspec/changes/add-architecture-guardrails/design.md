@@ -59,13 +59,18 @@ surface than a test assertion.
 | File kind        | Warning | Hard error (non-grandfathered) | Grandfathered |
 |------------------|--------:|-------------------------------:|---------------|
 | production `.go` |     500 |                            800 | per-file cap  |
-| `_test.go`       |     900 |                          1,800 | per-file cap  |
+| `_test.go`       |     700 |                          1,000 | per-file cap  |
 | generated `.go`  |  exempt |                         exempt | must carry `// Code generated` |
 
 - "Physical lines" = newline count (the same number `wc -l` reports).
-- Test files keep the larger budget for now (resolves the draft's open question):
-  the test outliers are mostly table-driven and the production splits come first;
-  revisit tightening `_test.go` after the #4 refactor wave.
+- Test files get a higher cap than production (1,000 vs 800) because table-driven
+  cases and fixtures add legitimate verbosity — but the goal is the same: an agent
+  should be able to scan a test file and find the case it needs. Go lets a package
+  hold many `_test.go` files, so a long suite can always be split by concern
+  (e.g. `foo_validation_test.go`, `foo_error_test.go`) in the **same** package
+  rather than growing one file. This 1,000 budget is deliberately tighter than the
+  draft's 1,800 (which barely managed total length); the extra files it
+  grandfathers are the split backlog, not a permanent exemption.
 - A file in the grandfather map is exempt from the standard hard budget but fails
   if it exceeds **its own** recorded cap. A file **not** in the map fails if it
   exceeds the standard hard budget — that is how "new oversize file" is caught.
@@ -79,7 +84,7 @@ Production `.go` over 800:
 | `internal/relay/runner/run_one.go` | 1510 |
 | `internal/agent/opencode.go` | 801 |
 
-`_test.go` over 1,800:
+`_test.go` over 1,000:
 
 | File | Cap |
 |------|----:|
@@ -88,12 +93,18 @@ Production `.go` over 800:
 | `internal/relay/runner/runner_failure_telemetry_test.go` | 2331 |
 | `internal/relay/runner/relay_steps_test.go` | 2238 |
 | `internal/config/config_v2_test.go` | 1801 |
+| `internal/relay/runner/route_runtime_test.go` | 1392 |
+| `internal/store/store_test.go` | 1112 |
+| `internal/relay/resilience_test.go` | 1063 |
+| `internal/relay/runner/runner_outcome_test.go` | 1038 |
 
 Everything else is under its hard budget; the production files in the 500–800
 band (e.g. `route_runtime.go` 752, `monitor.go` 663, `providers.go` 621,
 `routes_check.go` 619, `claude.go` 560, `store.go` 541, `relay_steps.go` 526,
-`antigravity.go` 517) and tests in the 900–1,800 band emit advisory warnings
-only and need no grandfather entry.
+`antigravity.go` 517) and tests in the 700–1,000 band (e.g.
+`runner_timeout_runone_test.go` 945, `task_test.go` 764,
+`reliability/patterns_test.go` 745) emit advisory warnings only and need no
+grandfather entry.
 
 ## Decision 4 — import-boundary rules (verified against the current graph)
 
@@ -216,6 +227,8 @@ internal/agent/new_big.go: size: 920 lines exceeds the 800-line production
 - **Location** → `tools/archguard` in the main module (Decision 1).
 - **Warnings in CI logs** → CI runs `--ci` (hard-only exit); warnings are local
   advisory via `just arch-check` / `just check` (Decision 2/6).
-- **Test budget** → keep the larger 1,800 hard budget for now; revisit after the
-  #4 refactor wave (Decision 3).
+- **Test budget** → 1,000-line hard budget (warn 700), tighter than the draft's
+  1,800: a package can hold many `_test.go` files, so test length should be
+  managed by splitting per concern like production. Revisit further after the #4
+  refactor wave (Decision 3).
 - **Budgets for Markdown/scripts** → out of scope for v1; Go files only.

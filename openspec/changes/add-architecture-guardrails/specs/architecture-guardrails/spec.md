@@ -36,8 +36,8 @@ baseline and a `--ci` mode whose exit code reflects only hard violations.
 ### Requirement: File-size budgets with grandfathered caps
 
 The checker SHALL enforce file-size budgets: production `.go` files warn at 500
-lines and hard-fail at 800 lines; `_test.go` files warn at 900 lines and
-hard-fail at 1,800 lines; generated files are exempt but SHALL carry the
+lines and hard-fail at 800 lines; `_test.go` files warn at 700 lines and
+hard-fail at 1,000 lines; generated files are exempt but SHALL carry the
 `// Code generated` marker. The hard-fail budgets SHALL apply only to files not
 listed in a grandfather map. The grandfather map SHALL record each currently
 over-budget file at its actual line count, and a grandfathered file SHALL hard-
