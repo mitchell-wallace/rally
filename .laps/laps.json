@@ -435,11 +435,11 @@
       "title": "Split internal/config/config_v2.go into same-package files",
       "description": "Context: Phase 1, tasks 2.2 and 2.3 of `slim-cli-composition-root`. `internal/config/config_v2.go` is 993 lines fusing decode, layering, defaults, validation, deprecation warnings, alias/model resolution, route validation, and save. This lap re-files it within `package config` only — no identifier renamed, no error/message/config-name edits.\n\nOutcome: `config_v2.go` is decomposed per the design manifest with the package's exported surface unchanged.\n\nFiles \u0026 scope: Only `internal/config/*.go`. Per design.md manifest: `types.go` (schema-version const, name patterns/regexes, built-in alias maps, the config structs + `ReliabilityConfig` timeout methods kept beside their type, `RemovedGeminiAliasError` + helpers, `rawConfig`/`rawFallbackAlias`), `load.go` (`V2Path`, `LoadV2`, `LoadV2File`, `readConfigFile`, `emptyV2Config`, `mergeTOMLDocuments`, `deepMergeMaps`), `decode.go` (`decodeV2`, `harnessConfigWarnings`, deprecation-note assembly), `validate.go` (`validateHarnesses`, `validateBuiltInHarness`, `validateRoutes`, `normalizeReasoning`, `ValidateRoutesTable`, validation regexes), `resolve.go` (`defaultModelForHarness`, `ResolveAgent`, `ResolveRoleReasoning`, `canonicalHarnessName`, alias/levenshtein/`didYouMean`/`effectiveModel`/gemini-warning helpers), `save.go` (`SaveV2`, `SaveV2File`, `providersToRaw`, `toAnySlice`). `providers.go` stays untouched. Exact const/regex placement is discretion as long as it compiles and nothing is renamed.\n\nDesign: Verbatim moves only. Keep `ReliabilityConfig` timeout methods beside their type. No config name, error string, or deprecation message changes unless a test proves a move forces one (none expected).\n\nAcceptance: 2.2 `go test -count=1 ./internal/config ./cmd/rally` green. 2.3 Re-run the 1.2 exported-identifier capture and confirm it is byte-identical to the baseline (file moves only, surface unchanged); `go build ./...` compiles.",
       "assignee": "JUNIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 196608,
       "createdAt": "2026-06-30T07:29:04.773589691Z",
-      "updatedAt": "2026-06-30T07:29:04.773589691Z",
-      "completedAt": null
+      "updatedAt": "2026-06-30T13:14:09.262567012Z",
+      "completedAt": "2026-06-30T13:14:09.262567012Z"
     },
     {
       "id": "rall-3f62",
