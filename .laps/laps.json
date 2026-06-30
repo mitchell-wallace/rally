@@ -578,11 +578,11 @@
       "title": "Verify the slim composition root (Phase 3)",
       "description": "Context: Verification of the CLI-layer promotion for `slim-cli-composition-root` (tasks 4.1–4.4). Use the `openspec-verify-change` skill against the change, then focus your report on the command moves and the slimmed entry point.\n\nBranch/diff scope: Identify the intended merge target first (ask the user / PR metadata / repo docs / branch config / history; do NOT assume `main`; branch is `dev`). Treat pre-batch work as baseline. Use `git diff \u003ctarget\u003e...HEAD`.\n\nWhat to verify:\n- Command construction: `start`/`relay`, `init`, hidden `init-roles`, `instructions`, `routes`, `hooks`, `config`, `version`, `update`, `progress`, `tail` are all constructed via `cli.NewRootCommand` and per-command files in `internal/cli` — none implemented in `package main`. The `--version`/`-v` flag and the laps-aware dynamic help (hides `progress` under laps) still behave identically.\n- Test migration: cross-check the 1.4 inventory — every pre-change `cmd/rally` helper/command test (`commitSetupFiles`, `chooseRelayAgentSpecs`, `syncRoleFolders`, telemetry-config, init, `tail`, `init-roles`, registration) now appears exactly once in its new home, none dropped or duplicated.\n- `cmd/rally/main.go` is reduced to build vars + `main()` + `startBackgroundUpdateCheck` + `cli.NewRootCommand(…).Execute()` + exit handling; no command/lifecycle body remains.\n- Dependency direction holds: `internal/cli` imports `internal/app`; `internal/app` does not import `internal/cli`; no import cycle.\n- `go build ./...` compiles; `go test -count=1 ./...` green.\n\nFollow-ups: substantive gaps → new head lap; tiny safe one-liners only inline; no history rewrites.\n\nOn success: tick tasks.md boxes 4.1–4.4 for work confirmed correct and thorough.",
       "assignee": "VERIFY",
-      "isDone": false,
+      "isDone": true,
       "order": 1048576,
       "createdAt": "2026-06-30T07:29:04.773609046Z",
-      "updatedAt": "2026-06-30T07:29:04.773609046Z",
-      "completedAt": null
+      "updatedAt": "2026-06-30T15:04:52.44451679Z",
+      "completedAt": "2026-06-30T15:04:52.44451679Z"
     },
     {
       "id": "rall-1278",
