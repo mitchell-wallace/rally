@@ -490,11 +490,11 @@
       "title": "Extract the runtime relay-start mechanics into app.StartRelay",
       "description": "Context: Phase 2, task 3.5 of `slim-cli-composition-root` — the highest-risk lap. Lift the lower-level runtime mechanics out of the ~295-line `runRelay` into a presentation-neutral `app.StartRelay`, leaving interactive prompting in the (still `package main`) command for now (the next lap rewires the command top-half).\n\nOutcome: `app.StartRelay(ctx, app.RelayStartOptions) error` turns already-resolved inputs into a configured `runner.Runner` and runs it; the relay command delegates the runtime portion to it.\n\nFiles \u0026 scope: In `internal/app/relay_start.go` add `RelayStartOptions` (per design.md: WorkspaceDir, Config, TaskPrompt, AgentMixSpecs, UsedOverride, TargetIters, LapsEnabled, DataDir, Telemetry, and the resolved decision fields DiscardUnfinishedRelay/ResetAgentStatus/OverwriteMixOnResume, plus Out/Err writers), `TelemetryBuild`, `telemetryConfigForRelay` (moved alongside, fed by `opts.Telemetry`), and `StartRelay`. Move verbatim out of `runRelay`: rally-initialized check / store open, new-batch/discard handling from the resolved booleans, mix-overwrite application, `app.BuildExecutors`, `telemetry.InitWithIdentity`, `BuildProviderIndex`, `runner.Config` assembly + resolver closure + override-route validation + instructions read, `runner.NewRunner` + `SetTelemetry`, the double-Ctrl+C signal handling window, and `Runner.Run`.\n\nDesign: HARD constraints — keep the telemetry result LOCAL to `StartRelay`: pass `telemetryResult.MachineID` into `runner.Config` and call `r.SetTelemetry(telemetryResult.Sink)`; do NOT rely on any main-package `activeTelemetry`/`activeMachineID` globals after extraction. `internal/app` MUST NOT directly import `internal/user_prompt` or `internal/laps`. Build vars arrive only via `opts.Telemetry` (threaded from `package main`); do not redeclare them in `internal/app`. `app` may write to `Out`/`Err` but must never read input to branch.\n\nAcceptance: `go build ./...` compiles; `go test -count=1 ./internal/app ./cmd/rally` green; `go list -f '{{.Imports}}' ./internal/app` lists neither `internal/user_prompt` nor `internal/laps`. (Full unit tests for StartRelay come in the dedicated test lap.)",
       "assignee": "SENIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 524288,
       "createdAt": "2026-06-30T07:29:04.773594546Z",
-      "updatedAt": "2026-06-30T07:29:04.773594546Z",
-      "completedAt": null
+      "updatedAt": "2026-06-30T13:59:17.084708417Z",
+      "completedAt": "2026-06-30T13:59:17.084708417Z"
     },
     {
       "id": "rall-ed7f",
