@@ -1,4 +1,4 @@
-package main
+package runner
 
 import (
 	"context"
@@ -11,7 +11,6 @@ import (
 
 	"github.com/mitchell-wallace/rally/internal/agent"
 	"github.com/mitchell-wallace/rally/internal/relay"
-	"github.com/mitchell-wallace/rally/internal/relay/runner"
 	"github.com/mitchell-wallace/rally/internal/store"
 	"github.com/mitchell-wallace/rally/internal/telemetry"
 	"github.com/mitchell-wallace/rally/internal/testutil"
@@ -99,7 +98,7 @@ func TestTelemetryIssueCriteriaAndPromptSize(t *testing.T) {
 		"backupagent": &customExecutor{succeedOn: 99}, // always fail
 	}
 
-	cfg := runner.Config{
+	cfg := Config{
 		WorkspaceDir:     workspaceDir,
 		DataDir:          store.RallyDir(workspaceDir),
 		TargetIterations: 1,
@@ -117,11 +116,11 @@ func TestTelemetryIssueCriteriaAndPromptSize(t *testing.T) {
 		},
 	}
 
-	runner := runner.NewRunner(s, cfg, executors)
+	r := NewRunner(s, cfg, executors)
 	mock := &mockSink{}
-	runner.SetTelemetry(mock)
+	r.SetTelemetry(mock)
 
-	_ = runner.Run(context.Background())
+	_ = r.Run(context.Background())
 
 	if len(mock.capturedIssues) == 0 {
 		t.Fatal("expected an Issue to be captured")
@@ -213,7 +212,7 @@ func TestTelemetry_PromptBreakdown(t *testing.T) {
 		"antigravity": &customExecutor{succeedOn: 2}, // fails first try, succeeds second
 	}
 
-	cfg := runner.Config{
+	cfg := Config{
 		WorkspaceDir:     workspaceDir,
 		DataDir:          store.RallyDir(workspaceDir),
 		LapsEnabled:      true,
@@ -230,11 +229,11 @@ func TestTelemetry_PromptBreakdown(t *testing.T) {
 		},
 	}
 
-	runner := runner.NewRunner(s, cfg, executors)
+	r := NewRunner(s, cfg, executors)
 	mock := &mockSink{}
-	runner.SetTelemetry(mock)
+	r.SetTelemetry(mock)
 
-	err = runner.Run(context.Background())
+	err = r.Run(context.Background())
 	if err != nil {
 		t.Fatalf("runner failed: %v", err)
 	}
@@ -312,7 +311,7 @@ func TestTelemetry_AgentClassRetry_NoIssue(t *testing.T) {
 		"antigravity": &customExecutor{succeedOn: 2},
 	}
 
-	cfg := runner.Config{
+	cfg := Config{
 		WorkspaceDir:     workspaceDir,
 		DataDir:          store.RallyDir(workspaceDir),
 		TargetIterations: 1,
@@ -327,11 +326,11 @@ func TestTelemetry_AgentClassRetry_NoIssue(t *testing.T) {
 		},
 	}
 
-	runner := runner.NewRunner(s, cfg, executors)
+	r := NewRunner(s, cfg, executors)
 	mock := &mockSink{}
-	runner.SetTelemetry(mock)
+	r.SetTelemetry(mock)
 
-	err = runner.Run(context.Background())
+	err = r.Run(context.Background())
 	if err != nil {
 		t.Fatalf("runner failed: %v", err)
 	}
@@ -357,7 +356,7 @@ func TestTelemetry_InfraFailure_Issue(t *testing.T) {
 		"antigravity": &customExecutor{succeedOn: 99, logContent: "request timed out\n"},
 	}
 
-	cfg := runner.Config{
+	cfg := Config{
 		WorkspaceDir:     workspaceDir,
 		DataDir:          store.RallyDir(workspaceDir),
 		TargetIterations: 1,
@@ -372,11 +371,11 @@ func TestTelemetry_InfraFailure_Issue(t *testing.T) {
 		},
 	}
 
-	runner := runner.NewRunner(s, cfg, executors)
+	r := NewRunner(s, cfg, executors)
 	mock := &mockSink{}
-	runner.SetTelemetry(mock)
+	r.SetTelemetry(mock)
 
-	_ = runner.Run(context.Background())
+	_ = r.Run(context.Background())
 
 	// Verify that an Issue was captured containing the rate-limit failure
 	foundInfraIssue := false
@@ -408,7 +407,7 @@ func TestTelemetry_RelayStall_Issue(t *testing.T) {
 		"antigravity": &customExecutor{succeedOn: 1},
 	}
 
-	cfg := runner.Config{
+	cfg := Config{
 		WorkspaceDir:     workspaceDir,
 		DataDir:          store.RallyDir(workspaceDir),
 		TargetIterations: 1,
@@ -423,11 +422,11 @@ func TestTelemetry_RelayStall_Issue(t *testing.T) {
 		},
 	}
 
-	runner := runner.NewRunner(s, cfg, executors)
+	r := NewRunner(s, cfg, executors)
 	mock := &mockSink{}
-	runner.SetTelemetry(mock)
+	r.SetTelemetry(mock)
 
-	err = runner.Run(context.Background())
+	err = r.Run(context.Background())
 	if err == nil {
 		t.Fatal("expected runner to return error due to all agents frozen")
 	}
