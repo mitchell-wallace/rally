@@ -512,11 +512,11 @@
       "title": "Unit-test app.StartRelay and assert the seam invariants",
       "description": "Context: Phase 2, tasks 3.7 and 3.8 of `slim-cli-composition-root`. Dedicated test lap that doubles as a thorough review of the high-risk `StartRelay` extraction and the import-boundary invariant.\n\nOutcome: `app.StartRelay` has focused unit tests driven entirely by resolved options (no stdin reaches `app`), and the app-layer import invariant is asserted.\n\nFiles \u0026 scope: Tests under `internal/app`. Use a temp workspace and captured `Out`/`Err` writers; assert no prompting path exists in `app`.\n\nDesign: Cover the resolved-decision matrix that `StartRelay` consumes (discard/reset/overwrite-mix combinations as far as is testable without a live runner), telemetry result staying local, and that the signal-handling goroutine is race-clean. 3.8 invariant: `go list -f '{{.Imports}}' ./internal/app` contains neither `internal/user_prompt` nor `internal/laps`; `go list -deps ./internal/app` may contain `internal/laps` transitively via `runner` but MUST complete without an import cycle.\n\nAcceptance: `go test -count=1 ./internal/app ./cmd/rally` green; `go test -race -count=1 ./internal/app` green (signal-handling goroutine); the 3.8 import assertions hold.",
       "assignee": "SENIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 655360,
       "createdAt": "2026-06-30T07:29:04.773596264Z",
-      "updatedAt": "2026-06-30T07:29:04.773596264Z",
-      "completedAt": null
+      "updatedAt": "2026-06-30T14:19:36.41263619Z",
+      "completedAt": "2026-06-30T14:19:36.41263619Z"
     },
     {
       "id": "rall-ecb9",
