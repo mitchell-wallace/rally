@@ -1,4 +1,4 @@
-package main
+package cli
 
 import (
 	"context"
@@ -12,10 +12,15 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var tailCmd = &cobra.Command{
-	Use:   "tail",
-	Short: "Stream a try's log file",
-	RunE:  runTail,
+func newTailCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "tail",
+		Short: "Stream a try's log file",
+		RunE:  runTail,
+	}
+	cmd.Flags().Int("try", 0, "Try number to tail (1-based historical try; default: active or latest completed)")
+	cmd.Flags().String("highlight", "off", "Syntax highlighting mode: off, heuristic, chroma")
+	return cmd
 }
 
 func runTail(cmd *cobra.Command, args []string) error {
@@ -169,10 +174,4 @@ func followFile(ctx context.Context, f *os.File, out io.Writer) error {
 			}
 		}
 	}
-}
-
-func init() {
-	tailCmd.Flags().Int("try", 0, "Try number to tail (1-based historical try; default: active or latest completed)")
-	tailCmd.Flags().String("highlight", "off", "Syntax highlighting mode: off, heuristic, chroma")
-	rootCmd.AddCommand(tailCmd)
 }

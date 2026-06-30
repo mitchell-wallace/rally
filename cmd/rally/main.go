@@ -2,13 +2,12 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"os"
+	"time"
 
 	"github.com/mitchell-wallace/rally/internal/cli"
-	"github.com/mitchell-wallace/rally/internal/laps"
-	"github.com/mitchell-wallace/rally/internal/progress"
 	"github.com/mitchell-wallace/rally/internal/release"
-	"github.com/spf13/cobra"
 )
 
 var Version = "dev"
@@ -29,6 +28,14 @@ var DefaultNewRelicHostDisplayName = ""
 func main() {
 	flushUpdateNotice := startBackgroundUpdateCheck(os.Args[1:], os.Stderr)
 
+	rootCmd := cli.NewRootCommand(cli.RootOptions{
+		Version: Version,
+		NewRelic: cli.NewRelicOptions{
+			LicenseKey:      DefaultNewRelicLicenseKey,
+			AppName:         DefaultNewRelicAppName,
+			HostDisplayName: DefaultNewRelicHostDisplayName,
+		},
+	})
 	if err := rootCmd.Execute(); err != nil {
 		flushUpdateNotice()
 		fmt.Fprintln(os.Stderr, err)
@@ -37,46 +44,33 @@ func main() {
 	flushUpdateNotice()
 }
 
-var rootCmd = &cobra.Command{
-	Use:   "rally",
-	Short: "Agent orchestrator",
-	Long:  `Rally is a CLI agent orchestrator for managing multi-agent relay sessions.`,
-}
+func startBackgroundUpdateCheck(argv []string, stderr io.Writer) func() {
+	if os.Getenv(release.EnvNoUpdateCheck) == "1" {
+		return func() {}
+	}
+	if len(argv) > 0 && (argv[0] == "update" || argv[0] == "version" || argv[0] == "--version" || argv[0] == "-v") {
+		return func() {}
+	}
 
-func init() {
-	// Register the --version flag with a -v short alias before Cobra would
-	// auto-register a long-only one (Cobra reuses an existing "version" flag if
-	// it finds one already declared).
-	rootCmd.Flags().BoolP("version", "v", false, "Print version and exit")
-	rootCmd.Version = release.DisplayVersion(Version)
-	rootCmd.SetVersionTemplate(release.BinaryName + " {{.Version}}\n")
-}
+	msgCh := make(chan string, 1)
+	go func() {
+		msg, err := release.CheckForUpdate(Version)
+		if err != nil {
+			msg = fmt.Sprintf("update check: %s", err)
+		}
+		if msg != "" {
+			msgCh <- msg
+		}
+		close(msgCh)
+	}()
 
-func init() {
-	rootCmd.AddCommand(startCmd)
-	rootCmd.AddCommand(initCmd)
-	rootCmd.AddCommand(instructionsCmd)
-	rootCmd.AddCommand(cli.NewRoutesCmd())
-	rootCmd.AddCommand(cli.NewHooksCmd())
-	rootCmd.AddCommand(cli.NewConfigCmd())
-	instructionsCmd.AddCommand(instructionsEditCmd)
-	instructionsCmd.AddCommand(instructionsShowCmd)
-	rootCmd.AddCommand(versionCmd)
-	rootCmd.AddCommand(updateCmd)
-	progressCmd := progress.NewProgressCmd()
-	rootCmd.AddCommand(progressCmd)
-
-	// Dynamic visibility: hide progress from help when laps is enabled.
-	originalHelp := rootCmd.HelpFunc()
-	rootCmd.SetHelpFunc(func(cmd *cobra.Command, args []string) {
-		workspaceDir, _ := resolveWorkspaceDir()
-		progressCmd.Hidden = laps.Detect(workspaceDir)
-		originalHelp(cmd, args)
-	})
-
-	startCmd.Flags().IntP("iterations", "i", 0, "Number of iterations (default 50 unless laps-backed)")
-	startCmd.Flags().StringArrayP("agent", "a", nil, "Agent mix (repeatable; comma- or space-separated, e.g. \"cc:2,cx:1\" or \"cc:2 cx:1\")")
-	startCmd.Flags().StringArrayP("mix", "m", nil, "Legacy synonym for --agent")
-	startCmd.Flags().Bool("resume", false, "Resume the last unfinished batch explicitly")
-	startCmd.Flags().Bool("new", false, "Start a new batch explicitly, discarding unfinished batch state")
+	return func() {
+		select {
+		case msg, ok := <-msgCh:
+			if ok && msg != "" {
+				fmt.Fprintln(stderr, msg)
+			}
+		case <-time.After(25 * time.Millisecond):
+		}
+	}
 }

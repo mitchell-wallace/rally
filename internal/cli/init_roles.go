@@ -1,4 +1,4 @@
-package main
+package cli
 
 import (
 	"fmt"
@@ -284,15 +284,4 @@ func bootstrapInstructionsFor(role string) string {
 		}
 	}
 	return ""
-}
-
-func init() {
-	initCmd.AddCommand(initRolesCmd)
-	initCmd.AddCommand(initAllCmd)
-	rootCmd.AddCommand(&cobra.Command{
-		Use:    "init-roles",
-		Short:  "Alias for `rally init all`",
-		Hidden: true,
-		RunE:   runInitAll,
-	})
 }

@@ -1,4 +1,4 @@
-package main
+package cli
 
 import (
 	"fmt"
@@ -10,9 +10,14 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var instructionsCmd = &cobra.Command{
-	Use:   "instructions",
-	Short: "Manage project instructions",
+func newInstructionsCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "instructions",
+		Short: "Manage project instructions",
+	}
+	cmd.AddCommand(instructionsEditCmd)
+	cmd.AddCommand(instructionsShowCmd)
+	return cmd
 }
 
 var instructionsEditCmd = &cobra.Command{

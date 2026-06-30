@@ -1,4 +1,4 @@
-package main
+package cli
 
 import (
 	"fmt"
@@ -10,7 +10,6 @@ import (
 
 	"github.com/mitchell-wallace/rally/internal/laps"
 	"github.com/mitchell-wallace/rally/internal/release"
-	"github.com/mitchell-wallace/rally/internal/telemetry"
 )
 
 func captureOutput(t *testing.T, fn func()) (string, string) {
@@ -80,6 +79,7 @@ func TestUpdateCommandWiring_LapsAlreadyUpToDate(t *testing.T) {
 	}
 
 	stdout, stderr := captureOutput(t, func() {
+		updateCmd := newUpdateCmd("dev")
 		err := updateCmd.RunE(updateCmd, []string{})
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
@@ -106,19 +106,10 @@ func TestUpdateCommandDoesNotInitializeTelemetryWithBakedNewRelicLicense(t *test
 	oldUpdateCurrentBinary := release.UpdateCurrentBinary
 	oldUpdateTool := release.UpdateTool
 	oldInstalledVersion := laps.CompanionVersion
-	prevDefaultLicense := DefaultNewRelicLicenseKey
-	prevTelemetry := activeTelemetry
-	prevMachineID := activeMachineID
 	defer func() {
 		release.UpdateCurrentBinary = oldUpdateCurrentBinary
 		release.UpdateTool = oldUpdateTool
 		laps.CompanionVersion = oldInstalledVersion
-		DefaultNewRelicLicenseKey = prevDefaultLicense
-		activeTelemetry = prevTelemetry
-		activeMachineID = prevMachineID
-		rootCmd.SetArgs(nil)
-		rootCmd.SetOut(os.Stdout)
-		rootCmd.SetErr(os.Stderr)
 	}()
 
 	release.UpdateCurrentBinary = func(currentVersion, destination string) (string, string, bool, error) {
@@ -131,10 +122,12 @@ func TestUpdateCommandDoesNotInitializeTelemetryWithBakedNewRelicLicense(t *test
 		return currentVersion, currentVersion, false, nil
 	}
 
-	DefaultNewRelicLicenseKey = "0123456789012345678901234567890123456789"
-	activeTelemetry = telemetry.NoopSink{}
-	activeMachineID = ""
-
+	rootCmd := NewRootCommand(RootOptions{
+		Version: "dev",
+		NewRelic: NewRelicOptions{
+			LicenseKey: "0123456789012345678901234567890123456789",
+		},
+	})
 	rootCmd.SetArgs([]string{"update"})
 	rootCmd.SetOut(io.Discard)
 	rootCmd.SetErr(io.Discard)
@@ -147,9 +140,6 @@ func TestUpdateCommandDoesNotInitializeTelemetryWithBakedNewRelicLicense(t *test
 	machineIDPath := filepath.Join(home, ".local", "share", "rally", "machine-id")
 	if _, err := os.Stat(machineIDPath); !os.IsNotExist(err) {
 		t.Fatalf("update command must not create machine-id file, stat err=%v", err)
-	}
-	if activeMachineID != "" {
-		t.Fatalf("update command initialized activeMachineID = %q", activeMachineID)
 	}
 }
 
@@ -182,6 +172,7 @@ func TestUpdateCommandWiring_LapsNotInstalled(t *testing.T) {
 	}
 
 	stdout, stderr := captureOutput(t, func() {
+		updateCmd := newUpdateCmd("dev")
 		err := updateCmd.RunE(updateCmd, []string{})
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
@@ -228,6 +219,7 @@ func TestUpdateCommandWiring_LapsUpdateFailsNonFatally(t *testing.T) {
 	}
 
 	stdout, stderr := captureOutput(t, func() {
+		updateCmd := newUpdateCmd("dev")
 		err := updateCmd.RunE(updateCmd, []string{})
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)

@@ -25,14 +25,14 @@
 
 ## 4. Phase 3 — promote command construction into `internal/cli`
 
-- [ ] 4.1 Add `cli.RootOptions` (carrying `Version` + `NewRelic{LicenseKey,AppName,HostDisplayName}` build vars) and `cli.NewRootCommand(opts) *cobra.Command`, registering all commands (`start`/`relay`, `init`, hidden `init-roles`, `instructions`, `routes`, `hooks`, `config`, `version`, `update`, `progress`, `tail`) and the `--version`/`-v` flag and the laps-aware dynamic help func. Thread `opts` build vars into the telemetry config passed to `app.StartRelay`.
-- [ ] 4.2 Move the relay command + handler into `internal/cli/start.go`; move `expandRelayFlag`/`chooseRelayAgentSpecs` into `internal/cli/relay_flags.go`; move `resolveWorkspaceDir` and the telemetry-config mapping into `internal/cli`. Move their tests verbatim. `go test -count=1 ./internal/cli ./cmd/rally` green.
-- [ ] 4.3 Move `init` + role bootstrap/sync (`init.go`, role bootstraps, `syncRoleFolders`, `migrateLegacyRoleFiles`) into `internal/cli`; move `instructions`, `version`, `update`, `tail`, and the hidden `init-roles` alias into `internal/cli`. Move `roles_sync_test.go` / relevant `main_test.go` / `update_test.go` / `relay_flags_test.go` / `tail_test.go` blocks with them. `go test -count=1 ./internal/cli ./cmd/rally` green.
-- [ ] 4.4 Reduce `cmd/rally/main.go` to: `Version` + `DefaultNewRelic*` build vars, `main()`, `startBackgroundUpdateCheck`, `cli.NewRootCommand(RootOptions{…}).Execute()`, and exit handling. Confirm the only remaining `package main` files are entry + the update-check + any tests that must stay (e.g. ldflag/version smoke). `go build ./...` compiles; `go test -count=1 ./...` green.
+- [x] 4.1 Add `cli.RootOptions` (carrying `Version` + `NewRelic{LicenseKey,AppName,HostDisplayName}` build vars) and `cli.NewRootCommand(opts) *cobra.Command`, registering all commands (`start`/`relay`, `init`, hidden `init-roles`, `instructions`, `routes`, `hooks`, `config`, `version`, `update`, `progress`, `tail`) and the `--version`/`-v` flag and the laps-aware dynamic help func. Thread `opts` build vars into the telemetry config passed to `app.StartRelay`.
+- [x] 4.2 Move the relay command + handler into `internal/cli/start.go`; move `expandRelayFlag`/`chooseRelayAgentSpecs` into `internal/cli/relay_flags.go`; move `resolveWorkspaceDir` and the telemetry-config mapping into `internal/cli`. Move their tests verbatim. `go test -count=1 ./internal/cli ./cmd/rally` green.
+- [x] 4.3 Move `init` + role bootstrap/sync (`init.go`, role bootstraps, `syncRoleFolders`, `migrateLegacyRoleFiles`) into `internal/cli`; move `instructions`, `version`, `update`, `tail`, and the hidden `init-roles` alias into `internal/cli`. Move `roles_sync_test.go` / relevant `main_test.go` / `update_test.go` / `relay_flags_test.go` / `tail_test.go` blocks with them. `go test -count=1 ./internal/cli ./cmd/rally` green.
+- [x] 4.4 Reduce `cmd/rally/main.go` to: `Version` + `DefaultNewRelic*` build vars, `main()`, `startBackgroundUpdateCheck`, `cli.NewRootCommand(RootOptions{…}).Execute()`, and exit handling. Confirm the only remaining `package main` files are entry + the update-check + any tests that must stay (e.g. ldflag/version smoke). `go build ./...` compiles; `go test -count=1 ./...` green.
 
 ## 5. Phase 4 — config templates out of `main.go`
 
-- [ ] 5.1 Move `repoConfigTemplate`, `userConfigSeed`, and the `.rally/README.md` body string into `internal/cli/init_templates.go` beside the `init` command. Byte-for-byte identical template content (verified by an existing or added golden test on `rally init` output).
+- [x] 5.1 Move `repoConfigTemplate`, `userConfigSeed`, and the `.rally/README.md` body string into `internal/cli/init_templates.go` beside the `init` command. Byte-for-byte identical template content (verified by an existing or added golden test on `rally init` output).
 
 ## 6. Phase 5 — docs & spec
 

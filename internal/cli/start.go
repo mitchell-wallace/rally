@@ -1,4 +1,4 @@
-package main
+package cli
 
 import (
 	"context"
@@ -8,44 +8,34 @@ import (
 	"strings"
 
 	"github.com/mitchell-wallace/rally/internal/app"
-	"github.com/mitchell-wallace/rally/internal/cli"
 	"github.com/mitchell-wallace/rally/internal/config"
 	"github.com/mitchell-wallace/rally/internal/gitx"
 	"github.com/mitchell-wallace/rally/internal/laps"
 	"github.com/mitchell-wallace/rally/internal/relay"
 	"github.com/mitchell-wallace/rally/internal/store"
-	"github.com/mitchell-wallace/rally/internal/telemetry"
 	"github.com/mitchell-wallace/rally/internal/user_prompt"
 	"github.com/spf13/cobra"
 )
 
-// activeTelemetry defaults to a no-op so mechanical commands stay telemetry-free.
-// Relay execution initializes a real sink when telemetry is configured.
-var activeTelemetry telemetry.Sink = telemetry.NoopSink{}
-
-// activeMachineID is empty until relay execution initializes telemetry.
-var activeMachineID string
-
-var startCmd = &cobra.Command{
-	Use:          "start",
-	Aliases:      []string{"relay"},
-	Short:        "Start or resume agent relays",
-	SilenceUsage: true,
-	RunE:         runRelay,
+func newStartCmd(opts RootOptions) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:          "start",
+		Aliases:      []string{"relay"},
+		Short:        "Start or resume agent relays",
+		SilenceUsage: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runRelay(cmd, args, opts)
+		},
+	}
+	cmd.Flags().IntP("iterations", "i", 0, "Number of iterations (default 50 unless laps-backed)")
+	cmd.Flags().StringArrayP("agent", "a", nil, "Agent mix (repeatable; comma- or space-separated, e.g. \"cc:2,cx:1\" or \"cc:2 cx:1\")")
+	cmd.Flags().StringArrayP("mix", "m", nil, "Legacy synonym for --agent")
+	cmd.Flags().Bool("resume", false, "Resume the last unfinished batch explicitly")
+	cmd.Flags().Bool("new", false, "Start a new batch explicitly, discarding unfinished batch state")
+	return cmd
 }
 
-func resolveWorkspaceDir() (string, error) {
-	wd, err := os.Getwd()
-	if err != nil {
-		return "", err
-	}
-	if root, ok, _ := gitx.GitRepoRoot(wd); ok {
-		return root, nil
-	}
-	return wd, nil
-}
-
-func runRelay(cmd *cobra.Command, args []string) error {
+func runRelay(cmd *cobra.Command, args []string, opts RootOptions) error {
 	iterations, _ := cmd.Flags().GetInt("iterations")
 	agentSpecs, _ := cmd.Flags().GetStringArray("agent")
 	mixSpecs, _ := cmd.Flags().GetStringArray("mix")
@@ -95,7 +85,7 @@ func runRelay(cmd *cobra.Command, args []string) error {
 		fmt.Fprintln(os.Stderr, warning)
 	}
 
-	validRoutes, err := cli.ValidateRelayStartupRoutes(context.Background(), workspaceDir, cfg, cli.RelayStartupRouteOptions{
+	validRoutes, err := ValidateRelayStartupRoutes(context.Background(), workspaceDir, cfg, RelayStartupRouteOptions{
 		In:          os.Stdin,
 		Out:         os.Stderr,
 		LapsEnabled: lapsEnabled,
@@ -220,7 +210,7 @@ func runRelay(cmd *cobra.Command, args []string) error {
 		TargetIters:            iterations,
 		LapsEnabled:            lapsEnabled,
 		DataDir:                dataDir,
-		Telemetry:              app.TelemetryBuild{DefaultNewRelicLicenseKey: DefaultNewRelicLicenseKey, DefaultNewRelicAppName: DefaultNewRelicAppName, DefaultNewRelicHostDisplayName: DefaultNewRelicHostDisplayName},
+		Telemetry:              app.TelemetryBuild{DefaultNewRelicLicenseKey: opts.NewRelic.LicenseKey, DefaultNewRelicAppName: opts.NewRelic.AppName, DefaultNewRelicHostDisplayName: opts.NewRelic.HostDisplayName},
 		DiscardUnfinishedRelay: discardUnfinishedRelay,
 		ResetAgentStatus:       resetAgentStatus,
 		OverwriteMixOnResume:   overwriteMixOnResume,

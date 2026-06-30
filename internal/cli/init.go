@@ -1,4 +1,4 @@
-package main
+package cli
 
 import (
 	"fmt"
@@ -12,10 +12,15 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var initCmd = &cobra.Command{
-	Use:   "init",
-	Short: "Initialize rally workspace",
-	RunE:  runInit,
+func newInitCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "init",
+		Short: "Initialize rally workspace",
+		RunE:  runInit,
+	}
+	cmd.AddCommand(initRolesCmd)
+	cmd.AddCommand(initAllCmd)
+	return cmd
 }
 
 func runInit(cmd *cobra.Command, args []string) error {
@@ -110,36 +115,7 @@ func runInit(cmd *cobra.Command, args []string) error {
 	// 5. Create .rally/README.md
 	readmePath := filepath.Join(rallyDir, "README.md")
 	if _, err := os.Stat(readmePath); os.IsNotExist(err) {
-		content := `# Rally Data Directory
-
-This directory contains rally's workspace configuration and local runtime data.
-
-## Tracked Files
-- ` + "`config.toml`" + ` — Repo-level config overrides (base config lives in ` + "`~/.config/rally/config.toml`" + `)
-- ` + "`agents/builtin/`" + ` — Rally-managed role instructions (auto-updated by rally; do not edit)
-- ` + "`agents/user/`" + ` — Your role instruction overrides (win over ` + "`builtin/`" + `)
-- ` + "`README.md`" + ` — This guide
-- ` + "`summary.jsonl`" + ` — Append-only run summary digest, when enabled by the current workflow
-
-## Local State
-
-Machine-managed runtime records live under ` + "`.rally/state/`" + `. That directory is gitignored and not shared through repository history.
-
-- ` + "`state/tries.jsonl`" + ` — One line per agent execution attempt
-- ` + "`state/messages.jsonl`" + ` — Inbox messages for agents
-- ` + "`state/relays.jsonl`" + ` — Relay session records
-- ` + "`state/agent_status.jsonl`" + ` — Agent pause/freeze state history
-- ` + "`state/hook-audit.jsonl`" + ` — Laps hook audit trail
-- ` + "`state/run-state.json`" + ` — Current run handoff and lap recording state
-- ` + "`state/current_task.md`" + ` — Most recent assembled prompt
-
-## Quick Reference for Agents
-- View recent tries (last 10): ` + "`tail -10 .rally/state/tries.jsonl | jq .`" + `
-- View pending messages: ` + "`cat .rally/state/messages.jsonl | jq 'select(.status==\\\"pending\\\")'`" + `
-- View current relay status: ` + "`tail -1 .rally/state/relays.jsonl | jq .`" + `
-- Counts: ` + "`wc -l .rally/state/*.jsonl`" + `
-`
-		if err := os.WriteFile(readmePath, []byte(content), 0o644); err != nil {
+		if err := os.WriteFile(readmePath, []byte(rallyReadmeBody), 0o644); err != nil {
 			return err
 		}
 	}
