@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/mitchell-wallace/rally/internal/agent"
+	"github.com/mitchell-wallace/rally/internal/relay"
 	"github.com/mitchell-wallace/rally/internal/reliability"
 	"github.com/mitchell-wallace/rally/internal/store"
 )
@@ -96,6 +97,37 @@ func mustNextRouteSelection(t *testing.T, rt *routeRuntime, resilience *Resilien
 		t.Fatalf("next(%q) error = %v", assignee, err)
 	}
 	return selection
+}
+
+func TestRouteRuntimeStoredLabelsRenderThroughRelayFormatter(t *testing.T) {
+	routeSpecs := map[string][]string{
+		"default": {"claude:opus-4.7", "op:opencode-go/kimi-k2.6"},
+	}
+
+	_, routesLabel, err := newRouteRuntimeFromConfig(Config{
+		RouteSpecs: routeSpecs,
+		Resolver:   testResolver,
+	})
+	if err != nil {
+		t.Fatalf("newRouteRuntimeFromConfig() error = %v", err)
+	}
+	if routesLabel != "__routes__" {
+		t.Fatalf("route label = %q, want __routes__", routesLabel)
+	}
+	if got := relay.FormatMixLabel(routesLabel); got != "configured routes" {
+		t.Fatalf("FormatMixLabel(%q) = %q, want configured routes", routesLabel, got)
+	}
+
+	_, overrideLabel, err := newOverrideRouteRuntime([]string{"cc", "op:opencode-go/kimi-k2.6"}, routeSpecs, testResolver, false)
+	if err != nil {
+		t.Fatalf("newOverrideRouteRuntime() error = %v", err)
+	}
+	if overrideLabel != "__override__:cc op:opencode-go/kimi-k2.6" {
+		t.Fatalf("override label = %q, want __override__:cc op:opencode-go/kimi-k2.6", overrideLabel)
+	}
+	if got := relay.FormatMixLabel(overrideLabel); got != "cc op:opencode-go/kimi-k2.6" {
+		t.Fatalf("FormatMixLabel(%q) = %q, want override specs", overrideLabel, got)
+	}
 }
 
 func TestRouteRuntime_CanonicalScenario1_NoQuotasRunUntilFailure(t *testing.T) {
