@@ -37,14 +37,14 @@
 ## 6. Phase 5 — docs & spec
 
 - [x] 6.1 Update the README architecture section to the layered entry-point model: `cmd/rally` (entry/build vars) → `internal/cli` (commands + prompts + laps hook install) → `internal/app` (`StartRelay` seam) → `internal/relay/runner` (orchestrator) → `internal/relay` (primitives) → `internal/agent` (executors). State the `app` presentation-neutral / no-`user_prompt` / no-`laps` rule.
-- [ ] 6.2 Confirm the `composition-root-structure` spec scenarios hold (layering, neutral seam, config split, slim main, no behaviour/telemetry/release change).
+- [x] 6.2 Confirm the `composition-root-structure` spec scenarios hold (layering, neutral seam, config split, slim main, no behaviour/telemetry/release change).
 
 ## 7. Verification
 
-- [ ] 7.1 `go test -count=1 ./...` green.
-- [ ] 7.2 `go test -race -shuffle=on -count=1 ./internal/app ./internal/cli` green.
-- [ ] 7.3 `go build ./...` compiles; `go list -f '{{.Imports}}' ./internal/app` does not include `internal/user_prompt` or `internal/laps`; `go list -deps ./internal/app` completes without an import cycle.
-- [ ] 7.4 Exported surface of `internal/config` unchanged vs the 1.2 baseline (source-file moves only).
-- [ ] 7.5 Build/release unchanged: `.goreleaser.yaml` untouched; `go build -ldflags "-X main.Version=test -X main.DefaultNewRelicLicenseKey=k -X main.DefaultNewRelicAppName=n"` succeeds and `rally version` reflects the injected value.
-- [ ] 7.6 Zero behaviour-surface change: no command-name/flag/help, config-schema/semantics, telemetry-field/activation, laps-hook, store-shape, or git-message edits; `internal/buildinfo/VERSION` untouched (no version bump).
-- [ ] 7.7 `just check` if available.
+- [x] 7.1 `go test -count=1 ./...` green.
+- [x] 7.2 `go test -race -shuffle=on -count=1 ./internal/app ./internal/cli` green.
+- [x] 7.3 `go build ./...` compiles; `go list -f '{{.Imports}}' ./internal/app` does not include `internal/user_prompt` or `internal/laps`; `go list -deps ./internal/app` completes without an import cycle.
+- [x] 7.4 Exported surface of `internal/config` unchanged vs the 1.2 baseline (source-file moves only).
+- [x] 7.5 Build/release unchanged: `.goreleaser.yaml` untouched; `go build -ldflags "-X main.Version=test -X main.DefaultNewRelicLicenseKey=k -X main.DefaultNewRelicAppName=n"` succeeds and `rally version` reflects the injected value.
+- [x] 7.6 Zero behaviour-surface change: no command-name/flag/help, config-schema/semantics, telemetry-field/activation, laps-hook, store-shape, or git-message edits; `internal/buildinfo/VERSION` untouched (no version bump).
+- [x] 7.7 `just check` if available.
