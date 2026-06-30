@@ -545,11 +545,11 @@
       "title": "Move the start/relay command and its helpers into internal/cli",
       "description": "Context: Phase 3, task 4.2 of `slim-cli-composition-root`. Verbatim relocation of the relay command and its immediate helpers out of `package main` into `internal/cli`. This is mechanical but large — the largest mechanical surface of the change.\n\nOutcome: The `start`/`relay` command + handler, relay-flag expansion, workspace resolution, and the telemetry-config mapping live in `internal/cli`; tests move with them.\n\nFiles \u0026 scope: Create `internal/cli/start.go` (the `start`/`relay` command + handler: flag parse → config load → interactive resolution → `app.StartRelay`), `internal/cli/relay_flags.go` (`expandRelayFlag`, `chooseRelayAgentSpecs`). Move `resolveWorkspaceDir` and the telemetry-config mapping (`RootOptions` build vars → `app` telemetry input) into `internal/cli`. Move the corresponding test blocks verbatim from `cmd/rally` (`relay_flags_test.go`, the relevant `main_test.go` telemetry-config and `chooseRelayAgentSpecs` tests) into `internal/cli`.\n\nDesign: Verbatim moves; re-point imports only. Cross off `chooseRelayAgentSpecs` and the telemetry-config test against the 1.4 migration checklist (each appears exactly once after the move). Keep command names/flags/help identical.\n\nAcceptance: `go build ./...` compiles; `go test -count=1 ./internal/cli ./cmd/rally` green; moved tests run under `internal/cli` and no longer under `cmd/rally`.",
       "assignee": "JUNIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 851968,
       "createdAt": "2026-06-30T07:29:04.77359879Z",
-      "updatedAt": "2026-06-30T07:29:04.77359879Z",
-      "completedAt": null
+      "updatedAt": "2026-06-30T14:36:53.803472255Z",
+      "completedAt": "2026-06-30T14:36:53.803472255Z"
     },
     {
       "id": "rall-4724",
