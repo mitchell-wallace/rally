@@ -567,11 +567,11 @@
       "title": "Slim cmd/rally/main.go to a process entry point",
       "description": "Context: Phase 3, task 4.4 of `slim-cli-composition-root`. With every handler moved into `internal/cli`, reduce `main.go` to the bare process root.\n\nOutcome: `cmd/rally/main.go` contains only: the `Version` + `DefaultNewRelic*` build vars, `main()`, `startBackgroundUpdateCheck`, the `cli.NewRootCommand(RootOptions{…}).Execute()` call, and exit handling (~40 lines).\n\nFiles \u0026 scope: `cmd/rally/`. Remove the now-drained Phase-1 split files. Confirm the only remaining `package main` files are the entry point, the background update-check, and any tests that must stay in `package main` (e.g. an ldflag/version smoke test).\n\nDesign: Build vars stay in `package main` and thread into `RootOptions`. No behaviour change. After this lap the dependency chain is `cmd/rally → internal/cli → internal/app → internal/relay/runner → internal/relay`.\n\nAcceptance: `go build ./...` compiles; `go test -count=1 ./...` green; `cmd/rally` contains only the entry/update-check (+ permitted tests), with no command implementation or relay-lifecycle body remaining.",
       "assignee": "JUNIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 983040,
       "createdAt": "2026-06-30T07:29:04.773608237Z",
-      "updatedAt": "2026-06-30T07:29:04.773608237Z",
-      "completedAt": null
+      "updatedAt": "2026-06-30T14:57:15.387392755Z",
+      "completedAt": "2026-06-30T14:57:15.387392755Z"
     },
     {
       "id": "rall-a4a5",
