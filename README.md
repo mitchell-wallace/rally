@@ -962,17 +962,43 @@ bundled companion.
 
 ## Architecture
 
-Rally is built around a few focused internal packages:
+Rally is built as a layered composition root with a strictly downward
+dependency direction:
+
+- `cmd/rally` (`package main`) — process entry only: build-time variables
+  (`Version`, `DefaultNewRelic*`), `main()`, the background update-check, the
+  `cli.NewRootCommand(...).Execute()` call, and exit handling. No command
+  implementation or relay lifecycle body lives here.
+- `internal/cli` — command construction (`cli.NewRootCommand` and per-command
+  files: `start`/`relay`, `init`, hidden `init-roles`, `instructions`,
+  `routes`, `hooks`, `config`, `version`, `update`, `progress`, `tail`),
+  user-facing prompts, laps hook install, and the config seed templates beside
+  `init`. It resolves every interactive start-of-run decision and hands the
+  runtime a fully-resolved `app.RelayStartOptions`.
+- `internal/app` — the presentation-neutral relay-start seam:
+  `app.StartRelay`, `app.InspectResume`, and `app.BuildExecutors`. It turns
+  already-resolved inputs into a configured runner and runs it. **It imports
+  neither `internal/user_prompt` nor `internal/laps`** — all prompting and
+  laps hook installation stay CLI-side.
+- `internal/relay/runner` — the relay orchestrator (assemble `runner.Config`,
+  drive the run, manage retries/signal handling).
+- `internal/relay` — the primitives: deterministic agent cycling, retries,
+  error resilience, freeze detection, graceful stop.
+- `internal/agent` — pluggable executors (Antigravity, Claude, Codex,
+  Opencode, user-defined generic) sharing one prompt builder.
+
+The full chain `cmd/rally → internal/cli → internal/app → internal/relay/runner
+→ internal/relay → internal/agent` contains no import cycle. Supporting
+packages sit beside this spine:
 
 - `internal/store` — append-only JSONL files with in-memory caching and
   commit-then-truncate windowing.
-- `internal/agent` — pluggable executors (Antigravity, Claude, Codex,
-  Opencode, user-defined generic) sharing one prompt builder.
-- `internal/relay` — deterministic agent cycling, retries, error
-  resilience, freeze detection, graceful stop.
 - `internal/routing` — `[routes]` parser, scheduler, override resolution.
-- `cmd/rally` — Cobra CLI: `relay`, `init`, `tail`, `routes`, `update`,
-  `version`, `instructions`.
+- `internal/config` — V2 config types, load/decode/validate/resolve/save.
+- `internal/gitx` — path-scoped setup commits shared by CLI workspace init and
+  laps hook install.
+- `internal/release` — release/update metadata (`BinaryName`, `ReleaseOwner`,
+  `ReleaseRepo`); deliberately does not import `internal/app`.
 
 ## Development
 

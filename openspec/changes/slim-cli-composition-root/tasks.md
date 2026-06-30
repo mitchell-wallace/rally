@@ -36,7 +36,7 @@
 
 ## 6. Phase 5 — docs & spec
 
-- [ ] 6.1 Update the README architecture section to the layered entry-point model: `cmd/rally` (entry/build vars) → `internal/cli` (commands + prompts + laps hook install) → `internal/app` (`StartRelay` seam) → `internal/relay/runner` (orchestrator) → `internal/relay` (primitives) → `internal/agent` (executors). State the `app` presentation-neutral / no-`user_prompt` / no-`laps` rule.
+- [x] 6.1 Update the README architecture section to the layered entry-point model: `cmd/rally` (entry/build vars) → `internal/cli` (commands + prompts + laps hook install) → `internal/app` (`StartRelay` seam) → `internal/relay/runner` (orchestrator) → `internal/relay` (primitives) → `internal/agent` (executors). State the `app` presentation-neutral / no-`user_prompt` / no-`laps` rule.
 - [ ] 6.2 Confirm the `composition-root-structure` spec scenarios hold (layering, neutral seam, config split, slim main, no behaviour/telemetry/release change).
 
 ## 7. Verification

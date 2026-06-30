@@ -589,11 +589,11 @@
       "title": "Move config templates beside init and update the README architecture",
       "description": "Context: Phases 4 and 5 of `slim-cli-composition-root` (tasks 5.1 and 6.1) — the final low-risk implementation work before the full-change verification.\n\nOutcome: The repo/user config seed templates live beside the `init` command, and the README architecture section describes the new layered entry-point model.\n\nFiles \u0026 scope:\n- 5.1 Move `repoConfigTemplate`, `userConfigSeed`, and the `.rally/README.md` body string into `internal/cli/init_templates.go` beside the `init` command. Template content must be BYTE-FOR-BYTE identical (verify via an existing golden test on `rally init` output, or add one if absent).\n- 6.1 Update the README architecture section to the layered model: `cmd/rally` (entry/build vars) → `internal/cli` (commands + prompts + laps hook install) → `internal/app` (`StartRelay` seam) → `internal/relay/runner` (orchestrator) → `internal/relay` (primitives) → `internal/agent` (executors). State the rule that `internal/app` is presentation-neutral and imports neither `internal/user_prompt` nor `internal/laps`.\n\nDesign: 5.1 is a verbatim string move — no template-content edits. 6.1 is docs only.\n\nAcceptance: `go build ./...` compiles; `go test -count=1 ./internal/cli ./cmd/rally` green; the `rally init` golden test passes (templates byte-identical); README architecture section reflects the new layering and the app-layer import rule.",
       "assignee": "JUNIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 1114112,
       "createdAt": "2026-06-30T07:29:04.773609874Z",
-      "updatedAt": "2026-06-30T07:29:04.773609874Z",
-      "completedAt": null
+      "updatedAt": "2026-06-30T15:16:21.979447845Z",
+      "completedAt": "2026-06-30T15:16:21.979447845Z"
     },
     {
       "id": "rall-9827",
