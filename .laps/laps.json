@@ -501,11 +501,11 @@
       "title": "Rewire the relay command to the seam, preserving resume semantics",
       "description": "Context: Phase 2, task 3.6 of `slim-cli-composition-root`. With `StartRelay` extracted, reorganize the (still `package main`) relay command into a top-to-bottom script that resolves every interactive decision CLI-side and hands `app.StartRelay` fully-resolved options. Resume/mix semantics are subtle and must be preserved exactly.\n\nOutcome: The relay command reads as a script: parse flags → resolve workspace → `config.LoadV2` + print deprecation notes → laps warning/detect → default iterations (laps-aware) → `chooseRelayAgentSpecs` → `cli.ValidateRelayStartupRoutes` → initialized-workspace check → `syncRoleFolders` → when laps enabled: `laps.InstallHooks` + `gitx.CommitSetupFiles` → `app.InspectResume` + resume/mix `user_prompt` decisions → build `RelayStartOptions` → `app.StartRelay`.\n\nFiles \u0026 scope: The relay command file under `cmd/rally/` (still `package main` this phase). Laps hook install stays CLI-side; `app` only receives the resolved `LapsEnabled`.\n\nDesign: PRESERVE these exact semantics — `--new` completes the unfinished relay AND resets agent status (DiscardUnfinishedRelay=true, ResetAgentStatus=true); interactive “Start new” completes the unfinished relay but does NOT reset agent status (DiscardUnfinishedRelay=true, ResetAgentStatus=false); non-interactive `--resume --agent ...` does NOT set OverwriteMixOnResume unless a separate change intentionally alters it. Map each prompt outcome to the resolved boolean fields on `RelayStartOptions`. Do not change any command name, flag, help text, or printed output.\n\nAcceptance: `go build ./...` compiles; `go test -count=1 ./cmd/rally ./internal/app` green; observable relay-start behaviour (resume/new/mix prompts and their effects) is identical to pre-change `runRelay`.",
       "assignee": "SENIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 589824,
       "createdAt": "2026-06-30T07:29:04.773595359Z",
-      "updatedAt": "2026-06-30T07:29:04.773595359Z",
-      "completedAt": null
+      "updatedAt": "2026-06-30T14:02:09.862185572Z",
+      "completedAt": "2026-06-30T14:02:09.862185572Z"
     },
     {
       "id": "rall-9d66",
