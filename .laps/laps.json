@@ -600,11 +600,11 @@
       "title": "Full-change verification of slim-cli-composition-root",
       "description": "Context: Final verification of `slim-cli-composition-root` (tasks 6.2 and 7.1–7.7) covering the whole structure-only refactor. Run the `openspec-verify-change` skill against the change and inspect the entire diff — this is the gate before archiving.\n\nBranch/diff scope: Identify the intended merge target first (ask the user / PR metadata / repo docs / branch config / history; do NOT assume `main`; branch is `dev`). Identify this batch's first lap/try and treat earlier branch work as pre-existing baseline (flag it if odd, but do not add cleanup laps removing it unless the user asks). Use `git diff \u003ctarget\u003e...HEAD` over the full change.\n\nVerify (trace the real evidence, not just green tests):\n- 7.1 `go test -count=1 ./...` green.\n- 7.2 `go test -race -shuffle=on -count=1 ./internal/app ./internal/cli` green.\n- 7.3 `go build ./...` compiles; `go list -f '{{.Imports}}' ./internal/app` includes neither `internal/user_prompt` nor `internal/laps`; `go list -deps ./internal/app` completes without an import cycle. Confirm the full chain `cmd/rally → internal/cli → internal/app → internal/relay/runner` has no cycle and `internal/release` does not import `internal/app`.\n- 7.4 `internal/config` exported surface byte-identical to the 1.2 baseline (source-file moves only).\n- 7.5 Build/release unchanged: `.goreleaser.yaml` untouched; `go build -ldflags \"-X main.Version=test -X main.DefaultNewRelicLicenseKey=k -X main.DefaultNewRelicAppName=n\"` succeeds and the built `rally version` reflects the injected value.\n- 7.6 Zero behaviour-surface change: no command-name/flag/help, config-schema/semantics, telemetry-field/activation, laps-hook, store-shape, or git-message edits.\n- 7.7 `internal/buildinfo/VERSION` untouched (no version bump); run `just check` if available.\n- 6.2 Confirm the `composition-root-structure` spec scenarios hold: layering + no cycle, presentation-neutral seam, config file-split surface-preserving, slim `main.go`, build-vars-process-scoped, and no behaviour/telemetry/release change.\n\nFollow-ups: substantive gaps → new head lap; only tiny safe one-liners inline; never rewrite git history (additive/revert or ask the user for a recovery branch).\n\nOn success: tick the remaining tasks.md boxes (5.1, 6.1, 6.2, 7.1–7.7) for work confirmed correct and thorough, so the change is ready to archive.",
       "assignee": "VERIFY",
-      "isDone": false,
+      "isDone": true,
       "order": 1179648,
       "createdAt": "2026-06-30T07:29:04.77361076Z",
-      "updatedAt": "2026-06-30T07:29:04.77361076Z",
-      "completedAt": null
+      "updatedAt": "2026-06-30T15:20:32.698962997Z",
+      "completedAt": "2026-06-30T15:20:32.698962997Z"
     }
   ]
 }
