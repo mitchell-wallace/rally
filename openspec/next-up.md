@@ -1,7 +1,7 @@
 # Next up — proposed change order
 
 Living planning note for the queued OpenSpec changes. Order reflects dependency
-and risk-of-drift, not final scope. Last reviewed 2026-06-29.
+and risk-of-drift, not final scope. Last reviewed 2026-07-01.
 
 ## Done (archived)
 
@@ -43,7 +43,7 @@ The runner is the spine of this sequence: #1 gave it its own package
 (`internal/relay/runner`) and the one-way `runner → relay` boundary, and #2–#5
 build on that edge rather than on a monolithic runner.
 
-2. **slim-cli-composition-root** _(proposed)_
+2. **slim-cli-composition-root** _(landed; review in progress, not yet archived)_
    Reduce `cmd/rally/main.go` (864 lines) and `internal/config/config_v2.go` (993
    lines) from broad catch-all files into a slim process entry, an `internal/cli`
    command/prompt layer, and responsibility-named config modules. Introduces the
@@ -57,12 +57,19 @@ build on that edge rather than on a monolithic runner.
    so GoReleaser ldflags are untouched. Adds the `composition-root-structure`
    spec #3 can codify as import rules.
 
-3. **add-architecture-guardrails** _(draft)_
-   Add file-size budgets, import-boundary checks, and dependency-confinement CI
-   so future files cannot grow to runner.go scale. Its flagship import rule is the
-   `runner → relay` one-way edge #1 created (relay must not import runner). Roll
-   out with grandfathered caps regenerated against the post-#1/#2 tree, and ratchet
-   them down as refactors land.
+3. **add-architecture-guardrails** _(proposed)_
+   Add the `tools/archguard` checker (file-size budgets with grandfathered caps,
+   import-boundary rules, dependency confinement, test-helper confinement) plus a
+   `just arch-check` recipe folded into `just check` and an `archguard` step in the
+   CI `lint` job. Tooling-and-CI only — no runtime change, no version bump, no
+   release; stdlib-only so no new dependency. Flagship import rules are #1's
+   one-way `runner → relay` edge (relay must not import runner) and #2's
+   composition-root edges (`release ↛ app`; `app ↛ {cli, user_prompt, laps}`;
+   nothing imports `cli` but `cmd/rally`). Baselined against the current tree
+   (2026-07-01) so the gate enforces from day one with a green baseline; warnings
+   (500/900) stay advisory while hard budgets (800/1,800) and grandfather caps
+   ratchet down as #4+ split the remaining outliers (e.g. `opencode.go` 801,
+   `run_one.go` 1,510). Adds the `architecture-guardrails` spec.
 
 4. **modularize-harness-adapters** _(draft)_
    Give future first-class harnesses a clean place to grow: a small executor API,
