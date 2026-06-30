@@ -18,52 +18,6 @@ var initCmd = &cobra.Command{
 	RunE:  runInit,
 }
 
-// commitSetupFiles stages exactly the listed paths and commits them with
-// the given message. It returns true if a commit was made, false if nothing
-// was staged. It tolerates non-git repos and git failures gracefully
-// (returns an error rather than panicking) and uses --no-verify to avoid
-// tripping repository hooks during tooling setup.
-func commitSetupFiles(workspaceDir string, paths []string, message string) (bool, error) {
-	_, inGit, err := gitx.GitRepoRoot(workspaceDir)
-	if err != nil || !inGit {
-		return false, nil // not a git repo — nothing to do
-	}
-
-	// Stage only the specific setup paths that exist on disk.
-	for _, p := range paths {
-		abs := filepath.Join(workspaceDir, p)
-		if _, err := os.Stat(abs); os.IsNotExist(err) {
-			continue
-		}
-		if _, err := gitx.GitOutput(workspaceDir, "add", "--", p); err != nil {
-			// The path might be gitignored; skip it silently.
-			continue
-		}
-	}
-
-	// Check whether anything is actually staged for the listed paths.
-	diffArgs := append([]string{"diff", "--cached", "--name-only", "--"}, paths...)
-	cached, err := gitx.GitOutput(workspaceDir, diffArgs...)
-	if err != nil {
-		return false, fmt.Errorf("check staged files: %w", err)
-	}
-	if strings.TrimSpace(string(cached)) == "" {
-		return false, nil // nothing staged — no-op
-	}
-
-	// Commit only the staged setup paths.
-	args := append(gitx.GitUserFallbackConfig(workspaceDir), "commit", "--no-verify", "-m", message, "--")
-	args = append(args, paths...)
-	if out, err := gitx.GitOutput(workspaceDir, args...); err != nil {
-		// "nothing to commit" is benign — treat as no-op.
-		if strings.Contains(string(out), "nothing to commit") || strings.Contains(string(out), "no changes added") {
-			return false, nil
-		}
-		return false, fmt.Errorf("commit: %w", err)
-	}
-	return true, nil
-}
-
 func runInit(cmd *cobra.Command, args []string) error {
 	workspaceDir, err := resolveWorkspaceDir()
 	if err != nil {
@@ -196,7 +150,7 @@ Machine-managed runtime records live under ` + "`.rally/state/`" + `. That direc
 		".rally/config.toml",
 		".rally/README.md",
 	}
-	if committed, err := commitSetupFiles(workspaceDir, initPaths, "rally: initialize workspace"); err != nil {
+	if committed, err := gitx.CommitSetupFiles(workspaceDir, initPaths, "rally: initialize workspace"); err != nil {
 		fmt.Fprintf(os.Stderr, "warning: auto-commit setup files: %v\n", err)
 	} else if committed {
 		fmt.Println("Committed workspace setup.")

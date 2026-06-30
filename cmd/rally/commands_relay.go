@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/mitchell-wallace/rally/internal/agent"
+	"github.com/mitchell-wallace/rally/internal/app"
 	"github.com/mitchell-wallace/rally/internal/cli"
 	"github.com/mitchell-wallace/rally/internal/config"
 	"github.com/mitchell-wallace/rally/internal/gitx"
@@ -160,25 +161,7 @@ func runRelay(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("load store: %w", err)
 	}
 
-	executors := map[string]agent.Executor{
-		"antigravity": &agent.AntigravityExecutor{Model: cfg.AntigravityModel},
-		"claude":      &agent.ClaudeExecutor{Model: cfg.ClaudeModel},
-		"codex":       &agent.CodexExecutor{Model: cfg.CodexModel},
-		"opencode":    &agent.OpenCodeExecutor{Model: cfg.OpenCodeModel},
-	}
-
-	for name, hc := range cfg.Harnesses {
-		if len(hc.Command) > 0 {
-			executors[name] = &agent.GenericExecutor{
-				Command:        hc.Command,
-				ModelFlag:      hc.ModelFlag,
-				OutputStrategy: hc.OutputStrategy,
-				OutputLines:    hc.OutputLines,
-				TailStream:     hc.TailStream,
-			}
-		}
-	}
-
+	executors := app.BuildExecutors(cfg)
 	if lapsEnabled {
 		lapsDir := filepath.Join(workspaceDir, ".laps")
 		changed, err := laps.InstallHooks(lapsDir)
@@ -193,7 +176,7 @@ func runRelay(cmd *cobra.Command, args []string) error {
 				".laps/hooks/rally/laps-handoff-hook.sh",
 				".laps/hooks/rally/laps-wrapup-hook.sh",
 			}
-			if committed, err := commitSetupFiles(workspaceDir, hookPaths, "rally: install laps hooks"); err != nil {
+			if committed, err := gitx.CommitSetupFiles(workspaceDir, hookPaths, "rally: install laps hooks"); err != nil {
 				fmt.Fprintf(os.Stderr, "warning: auto-commit laps hooks: %v\n", err)
 			} else if committed {
 				fmt.Println("Committed laps hook setup.")

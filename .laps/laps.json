@@ -457,11 +457,11 @@
       "title": "Extract BuildExecutors and relocate commitSetupFiles to gitx",
       "description": "Context: Phase 2, tasks 3.2 and 3.3 of `slim-cli-composition-root`. Two self-contained verbatim lifts out of the relay command / main package, done together because both are mechanical extractions of composition helpers feeding the seam.\n\nOutcome: The executor registry and the setup-file commit helper live in their target packages with call sites re-pointed; behaviour unchanged.\n\nFiles \u0026 scope:\n- 3.2 Add `app.BuildExecutors(cfg config.V2Config) map[string]agent.Executor` in `internal/app/executors.go`: lift the built-in (`antigravity`/`claude`/`codex`/`opencode`) + generic-harness registry construction verbatim out of `runRelay`, and point the (still `package main`) relay command at it. Same harness set and configuration as the inline map.\n- 3.3 Relocate `commitSetupFiles` → `internal/gitx` as `gitx.CommitSetupFiles(workspaceDir string, paths []string, message string) (bool, error)` (the path-scoped `--no-verify` setup commit). Move its tests from `cmd/rally/main_test.go` into `internal/gitx`. Update BOTH CLI-side call sites: init workspace-setup files, and laps-hook install.\n\nDesign: Verbatim lifts; no logic change. `BuildExecutors` is deliberately a thin helper here (change #4 re-homes it into a real harness registry). Mark off this helper in the 1.4 migration checklist so the `commitSetupFiles` test is accounted for exactly once.\n\nAcceptance: `go test -count=1 ./internal/app ./internal/gitx ./cmd/rally` green; `go build ./...` compiles; the relay command builds executors via `app.BuildExecutors` and both setup-commit call sites use `gitx.CommitSetupFiles`.",
       "assignee": "JUNIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 327680,
       "createdAt": "2026-06-30T07:29:04.773591791Z",
-      "updatedAt": "2026-06-30T07:29:04.773591791Z",
-      "completedAt": null
+      "updatedAt": "2026-06-30T13:30:31.205645123Z",
+      "completedAt": "2026-06-30T13:30:31.205645123Z"
     },
     {
       "id": "rall-2b1d",

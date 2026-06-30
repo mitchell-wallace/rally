@@ -262,9 +262,14 @@ cmd/rally/tail_highlight.go   (highlightWriter + apply* helpers)
 > command/helper test and moves only with whatever `package main` test
 > scaffolding remains.
 
-#### `commitSetupFiles` → `internal/gitx` (task 3.3)
+#### `commitSetupFiles` → `internal/gitx` (task 3.3) — DONE (task 3.3)
 
-File: `cmd/rally/main_test.go`
+> Status: moved in task 3.3. All 9 tests now live in
+> `internal/gitx/setup_test.go` (verbatim, package qualifiers adjusted to the
+> `gitx` home) and no longer appear in `cmd/rally/main_test.go` — accounted for
+> exactly once.
+
+File: `cmd/rally/main_test.go` (pre-change home; now `internal/gitx/setup_test.go`)
 
 ```
 TestCommitSetupFiles_InitCreatesExactlyOneCommit            (723)
