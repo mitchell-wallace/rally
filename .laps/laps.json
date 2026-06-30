@@ -407,6 +407,204 @@
       "createdAt": "2026-06-29T03:48:57.300740524Z",
       "updatedAt": "2026-06-29T10:51:32.389709742Z",
       "completedAt": "2026-06-29T10:51:32.389709742Z"
+    },
+    {
+      "id": "rall-55cd",
+      "title": "Capture refactor baselines and test-migration inventory",
+      "description": "Context: First lap of OpenSpec change `slim-cli-composition-root` (see openspec/changes/slim-cli-composition-root/{proposal,design,tasks}.md), tasks 1.1–1.5. This change is a structure-only refactor of the composition root; later laps assert post-change state against the snapshots you capture now, so capture them faithfully and persist them where the verification laps can read them.\n\nOutcome: A committed baseline snapshot the later VERIFY laps can diff against, plus a green starting point.\n\nFiles \u0026 scope: Record snapshots into a scratch notes file kept with the change (e.g. openspec/changes/slim-cli-composition-root/baseline-snapshot.md). Do not modify production code in this lap.\n\nWork:\n- 1.1 Run `go test -count=1 ./cmd/rally ./internal/cli ./internal/config ./internal/app ./internal/gitx`. It MUST be green. If red, capture the failures verbatim into the snapshot and STOP (add a head lap describing the pre-existing failure); do not fold unrelated fixes into this refactor.\n- 1.2 Capture the exported-identifier set of `internal/config` (`go doc ./internal/config`, or a grep of exported decls) so the file split can be proven surface-preserving later.\n- 1.3 Capture `internal/app`'s exported surface, `go list -f '{{.Imports}}' ./internal/app` (direct imports), and `go list -deps ./internal/app`. Note that today `internal/app` directly imports neither `internal/user_prompt` nor `internal/laps` — this invariant must still hold post-change.\n- 1.4 Record the `cmd/rally` test/helper inventory as a migration checklist: for each of `commitSetupFiles`, `chooseRelayAgentSpecs`, `syncRoleFolders`, telemetry-config, init, `tail`, the hidden `init-roles` alias, and command-registration, list `(file, Test* name)`. Phase 3 must land every one of these exactly once after the moves — this checklist is how that is audited.\n- 1.5 Confirm `.goreleaser.yaml` ldflags target `main.Version` / `main.DefaultNewRelicLicenseKey` / `main.DefaultNewRelicAppName`, and record them. These build vars must remain in `package main` after the change.\n\nAcceptance: Snapshot file committed with all five captures; baseline test command is green (or, if red, STOP with a head lap). Do NOT tick tasks.md — verification ticks boxes.",
+      "assignee": "JUNIOR",
+      "isDone": false,
+      "order": 65536,
+      "createdAt": "2026-06-30T07:29:04.773573994Z",
+      "updatedAt": "2026-06-30T07:29:04.773573994Z",
+      "completedAt": null
+    },
+    {
+      "id": "rall-4071",
+      "title": "Split cmd/rally/main.go into same-package files",
+      "description": "Context: Phase 1, task 2.1 of `slim-cli-composition-root`. `cmd/rally/main.go` is 864 lines fusing the Cobra root, command registration, and every command implementation. This lap only re-files it within `package main` — no symbols move packages and no logic changes (those happen in Phases 2–3).\n\nOutcome: `cmd/rally/main.go` is decomposed into responsibility-named `package main` files; behaviour is byte-for-byte identical.\n\nFiles \u0026 scope: Only `cmd/rally/*.go`. Suggested split (design discretion on exact grouping): `commands_relay.go`, `commands_init.go`, `commands_instructions.go`, `commands_update.go`, `templates.go`, plus a still-fat-but-smaller `main.go`. Verbatim moves of functions/vars/consts between files; do not rename, merge, or rewrite any symbol.\n\nDesign: Pure mechanical cut/paste between files in the same package. Keep build vars (`Version`, `DefaultNewRelic*`) in `main.go`. Do not start the package extractions yet.\n\nAcceptance: `go test -count=1 ./cmd/rally` green; `go build ./...` compiles. No diff to any file outside `cmd/rally/`.",
+      "assignee": "JUNIOR",
+      "isDone": false,
+      "order": 131072,
+      "createdAt": "2026-06-30T07:29:04.773588061Z",
+      "updatedAt": "2026-06-30T07:29:04.773588061Z",
+      "completedAt": null
+    },
+    {
+      "id": "rall-a981",
+      "title": "Split internal/config/config_v2.go into same-package files",
+      "description": "Context: Phase 1, tasks 2.2 and 2.3 of `slim-cli-composition-root`. `internal/config/config_v2.go` is 993 lines fusing decode, layering, defaults, validation, deprecation warnings, alias/model resolution, route validation, and save. This lap re-files it within `package config` only — no identifier renamed, no error/message/config-name edits.\n\nOutcome: `config_v2.go` is decomposed per the design manifest with the package's exported surface unchanged.\n\nFiles \u0026 scope: Only `internal/config/*.go`. Per design.md manifest: `types.go` (schema-version const, name patterns/regexes, built-in alias maps, the config structs + `ReliabilityConfig` timeout methods kept beside their type, `RemovedGeminiAliasError` + helpers, `rawConfig`/`rawFallbackAlias`), `load.go` (`V2Path`, `LoadV2`, `LoadV2File`, `readConfigFile`, `emptyV2Config`, `mergeTOMLDocuments`, `deepMergeMaps`), `decode.go` (`decodeV2`, `harnessConfigWarnings`, deprecation-note assembly), `validate.go` (`validateHarnesses`, `validateBuiltInHarness`, `validateRoutes`, `normalizeReasoning`, `ValidateRoutesTable`, validation regexes), `resolve.go` (`defaultModelForHarness`, `ResolveAgent`, `ResolveRoleReasoning`, `canonicalHarnessName`, alias/levenshtein/`didYouMean`/`effectiveModel`/gemini-warning helpers), `save.go` (`SaveV2`, `SaveV2File`, `providersToRaw`, `toAnySlice`). `providers.go` stays untouched. Exact const/regex placement is discretion as long as it compiles and nothing is renamed.\n\nDesign: Verbatim moves only. Keep `ReliabilityConfig` timeout methods beside their type. No config name, error string, or deprecation message changes unless a test proves a move forces one (none expected).\n\nAcceptance: 2.2 `go test -count=1 ./internal/config ./cmd/rally` green. 2.3 Re-run the 1.2 exported-identifier capture and confirm it is byte-identical to the baseline (file moves only, surface unchanged); `go build ./...` compiles.",
+      "assignee": "JUNIOR",
+      "isDone": false,
+      "order": 196608,
+      "createdAt": "2026-06-30T07:29:04.773589691Z",
+      "updatedAt": "2026-06-30T07:29:04.773589691Z",
+      "completedAt": null
+    },
+    {
+      "id": "rall-3f62",
+      "title": "Break the release → app metadata edge",
+      "description": "Context: Phase 2, task 3.1 of `slim-cli-composition-root`. Before `internal/app` may import `internal/relay/runner` (later laps), the existing `release → app` edge must be removed, because `runner` imports `internal/laps` and `laps` imports `internal/release`; otherwise `app → runner → laps → release → app` would cycle. This is the architecture-critical edge break that unblocks the whole seam extraction.\n\nOutcome: Release/update metadata no longer depends on the app layer; `internal/release` does not import `internal/app`.\n\nFiles \u0026 scope: Move `BinaryName`, `ReleaseOwner`, `ReleaseRepo`, and `EnvNoUpdateCheck` from `internal/app` to `internal/release` (release.go). Re-point all callers (process entry / CLI / update-check) to use `release.*`. Do not move anything else out of `internal/app` in this lap.\n\nDesign: The constants are product/release metadata, so `internal/release` is their correct home; this also keeps the future `app.StartRelay` seam reusable without dodging the cycle via a different package. Verify the direction with `go list -f '{{.Imports}}' ./internal/release` after the move — it must not list `internal/app`.\n\nAcceptance: `internal/release` no longer imports `internal/app`; all former `app.BinaryName`/`app.ReleaseOwner`/`app.ReleaseRepo`/`app.EnvNoUpdateCheck` references now resolve to `release.*`; `go build ./...` compiles; `go test -count=1 ./internal/release ./cmd/rally` green.",
+      "assignee": "SENIOR",
+      "isDone": false,
+      "order": 262144,
+      "createdAt": "2026-06-30T07:29:04.773590837Z",
+      "updatedAt": "2026-06-30T07:29:04.773590837Z",
+      "completedAt": null
+    },
+    {
+      "id": "rall-2aa8",
+      "title": "Extract BuildExecutors and relocate commitSetupFiles to gitx",
+      "description": "Context: Phase 2, tasks 3.2 and 3.3 of `slim-cli-composition-root`. Two self-contained verbatim lifts out of the relay command / main package, done together because both are mechanical extractions of composition helpers feeding the seam.\n\nOutcome: The executor registry and the setup-file commit helper live in their target packages with call sites re-pointed; behaviour unchanged.\n\nFiles \u0026 scope:\n- 3.2 Add `app.BuildExecutors(cfg config.V2Config) map[string]agent.Executor` in `internal/app/executors.go`: lift the built-in (`antigravity`/`claude`/`codex`/`opencode`) + generic-harness registry construction verbatim out of `runRelay`, and point the (still `package main`) relay command at it. Same harness set and configuration as the inline map.\n- 3.3 Relocate `commitSetupFiles` → `internal/gitx` as `gitx.CommitSetupFiles(workspaceDir string, paths []string, message string) (bool, error)` (the path-scoped `--no-verify` setup commit). Move its tests from `cmd/rally/main_test.go` into `internal/gitx`. Update BOTH CLI-side call sites: init workspace-setup files, and laps-hook install.\n\nDesign: Verbatim lifts; no logic change. `BuildExecutors` is deliberately a thin helper here (change #4 re-homes it into a real harness registry). Mark off this helper in the 1.4 migration checklist so the `commitSetupFiles` test is accounted for exactly once.\n\nAcceptance: `go test -count=1 ./internal/app ./internal/gitx ./cmd/rally` green; `go build ./...` compiles; the relay command builds executors via `app.BuildExecutors` and both setup-commit call sites use `gitx.CommitSetupFiles`.",
+      "assignee": "JUNIOR",
+      "isDone": false,
+      "order": 327680,
+      "createdAt": "2026-06-30T07:29:04.773591791Z",
+      "updatedAt": "2026-06-30T07:29:04.773591791Z",
+      "completedAt": null
+    },
+    {
+      "id": "rall-2b1d",
+      "title": "Verify Phase 1 splits + edge break + helper extractions",
+      "description": "Context: Verification checkpoint for `slim-cli-composition-root` after the mechanical splits and the lower-risk Phase 2 extractions (tasks 1.1–1.5, 2.1–2.3, 3.1–3.3). Use the `openspec-verify-change` skill against change `slim-cli-composition-root`, then focus your report on these tasks.\n\nBranch/diff scope: Identify the intended merge target before diffing (ask the user, or infer from PR metadata / repo docs / branch config / recent history — do NOT assume `main`; current branch is `dev`). Identify the first lap/try of this batch and treat earlier branch work as pre-existing baseline context, not in-scope cleanup. Use `git diff \u003ctarget\u003e...HEAD` for the change surface.\n\nWhat to verify (trace real lines, not just “tests pass”):\n- Phase 1 splits are verbatim: no symbol renamed/dropped; `internal/config` exported surface is byte-identical to the 1.2 baseline snapshot (re-run `go doc ./internal/config` and compare). `cmd/rally` package compiles and its tests are intact.\n- 3.1: `internal/release` no longer imports `internal/app` (`go list -f '{{.Imports}}' ./internal/release`); all release-metadata callers now use `release.*`.\n- 3.2: `app.BuildExecutors` produces the same harness set/config as the former inline map; relay command calls it.\n- 3.3: `gitx.CommitSetupFiles` is used at both call sites (init setup, laps-hook install); its moved tests run under `internal/gitx`.\n- `go test -count=1 ./...` green; `go build ./...` compiles.\n\nFollow-ups: For any substantive gap, add a focused head lap (`laps add head`) rather than fixing it here; only tiny safe one-liners may be fixed inline. Do not rewrite git history; prefer additive/revert commits.\n\nOn success: tick the tasks.md boxes for 1.1–1.5, 2.1–2.3, 3.1–3.3 in openspec/changes/slim-cli-composition-root/tasks.md — only for work you confirmed correct and thorough.",
+      "assignee": "VERIFY",
+      "isDone": false,
+      "order": 393216,
+      "createdAt": "2026-06-30T07:29:04.773592655Z",
+      "updatedAt": "2026-06-30T07:29:04.773592655Z",
+      "completedAt": null
+    },
+    {
+      "id": "rall-14f8",
+      "title": "Add non-mutating app.InspectResume with layout-migration coverage",
+      "description": "Context: Phase 2, task 3.4 of `slim-cli-composition-root`. The CLI must prompt resume-vs-new BEFORE `app.StartRelay` opens the store for the run, but `internal/app` must not import `internal/user_prompt`. `InspectResume` is the non-mutating peek that gives the CLI the unfinished-relay summary to prompt with.\n\nOutcome: `app.InspectResume(workspaceDir) (app.ResumeInfo, error)` returns the most-recent-unfinished-relay summary using the same store init/migration path as startup, without mutating relay or agent status.\n\nFiles \u0026 scope: Add `internal/app/relay_start.go` (or start it here) with `ResumeInfo{HasUnfinished, RelayID, CompletedIterations, TargetIterations, AgentMix}` and `InspectResume`. Open the store via the same `store.NewStore(store.RallyDir(workspaceDir))` initialization/migration path current startup uses.\n\nDesign: “Non-mutating” means no relay completion and no agent-status reset — NOT bypassing the existing on-open layout migration. Legacy top-level `.rally/relays.jsonl` state must be visible through this peek (the migration runs as it would at startup). Keep `internal/app` free of `internal/user_prompt` and `internal/laps`.\n\nAcceptance: Unit-test `InspectResume` two ways: (a) a temp workspace seeded with a current-layout store holding an unfinished relay, and (b) a legacy top-level `.rally/relays.jsonl` layout — both must surface the unfinished relay and its summary, and neither may complete the relay or reset status. `go test -count=1 ./internal/app ./cmd/rally` green; `go build ./...` compiles.",
+      "assignee": "SENIOR",
+      "isDone": false,
+      "order": 458752,
+      "createdAt": "2026-06-30T07:29:04.773593548Z",
+      "updatedAt": "2026-06-30T07:29:04.773593548Z",
+      "completedAt": null
+    },
+    {
+      "id": "rall-ba73",
+      "title": "Extract the runtime relay-start mechanics into app.StartRelay",
+      "description": "Context: Phase 2, task 3.5 of `slim-cli-composition-root` — the highest-risk lap. Lift the lower-level runtime mechanics out of the ~295-line `runRelay` into a presentation-neutral `app.StartRelay`, leaving interactive prompting in the (still `package main`) command for now (the next lap rewires the command top-half).\n\nOutcome: `app.StartRelay(ctx, app.RelayStartOptions) error` turns already-resolved inputs into a configured `runner.Runner` and runs it; the relay command delegates the runtime portion to it.\n\nFiles \u0026 scope: In `internal/app/relay_start.go` add `RelayStartOptions` (per design.md: WorkspaceDir, Config, TaskPrompt, AgentMixSpecs, UsedOverride, TargetIters, LapsEnabled, DataDir, Telemetry, and the resolved decision fields DiscardUnfinishedRelay/ResetAgentStatus/OverwriteMixOnResume, plus Out/Err writers), `TelemetryBuild`, `telemetryConfigForRelay` (moved alongside, fed by `opts.Telemetry`), and `StartRelay`. Move verbatim out of `runRelay`: rally-initialized check / store open, new-batch/discard handling from the resolved booleans, mix-overwrite application, `app.BuildExecutors`, `telemetry.InitWithIdentity`, `BuildProviderIndex`, `runner.Config` assembly + resolver closure + override-route validation + instructions read, `runner.NewRunner` + `SetTelemetry`, the double-Ctrl+C signal handling window, and `Runner.Run`.\n\nDesign: HARD constraints — keep the telemetry result LOCAL to `StartRelay`: pass `telemetryResult.MachineID` into `runner.Config` and call `r.SetTelemetry(telemetryResult.Sink)`; do NOT rely on any main-package `activeTelemetry`/`activeMachineID` globals after extraction. `internal/app` MUST NOT directly import `internal/user_prompt` or `internal/laps`. Build vars arrive only via `opts.Telemetry` (threaded from `package main`); do not redeclare them in `internal/app`. `app` may write to `Out`/`Err` but must never read input to branch.\n\nAcceptance: `go build ./...` compiles; `go test -count=1 ./internal/app ./cmd/rally` green; `go list -f '{{.Imports}}' ./internal/app` lists neither `internal/user_prompt` nor `internal/laps`. (Full unit tests for StartRelay come in the dedicated test lap.)",
+      "assignee": "SENIOR",
+      "isDone": false,
+      "order": 524288,
+      "createdAt": "2026-06-30T07:29:04.773594546Z",
+      "updatedAt": "2026-06-30T07:29:04.773594546Z",
+      "completedAt": null
+    },
+    {
+      "id": "rall-ed7f",
+      "title": "Rewire the relay command to the seam, preserving resume semantics",
+      "description": "Context: Phase 2, task 3.6 of `slim-cli-composition-root`. With `StartRelay` extracted, reorganize the (still `package main`) relay command into a top-to-bottom script that resolves every interactive decision CLI-side and hands `app.StartRelay` fully-resolved options. Resume/mix semantics are subtle and must be preserved exactly.\n\nOutcome: The relay command reads as a script: parse flags → resolve workspace → `config.LoadV2` + print deprecation notes → laps warning/detect → default iterations (laps-aware) → `chooseRelayAgentSpecs` → `cli.ValidateRelayStartupRoutes` → initialized-workspace check → `syncRoleFolders` → when laps enabled: `laps.InstallHooks` + `gitx.CommitSetupFiles` → `app.InspectResume` + resume/mix `user_prompt` decisions → build `RelayStartOptions` → `app.StartRelay`.\n\nFiles \u0026 scope: The relay command file under `cmd/rally/` (still `package main` this phase). Laps hook install stays CLI-side; `app` only receives the resolved `LapsEnabled`.\n\nDesign: PRESERVE these exact semantics — `--new` completes the unfinished relay AND resets agent status (DiscardUnfinishedRelay=true, ResetAgentStatus=true); interactive “Start new” completes the unfinished relay but does NOT reset agent status (DiscardUnfinishedRelay=true, ResetAgentStatus=false); non-interactive `--resume --agent ...` does NOT set OverwriteMixOnResume unless a separate change intentionally alters it. Map each prompt outcome to the resolved boolean fields on `RelayStartOptions`. Do not change any command name, flag, help text, or printed output.\n\nAcceptance: `go build ./...` compiles; `go test -count=1 ./cmd/rally ./internal/app` green; observable relay-start behaviour (resume/new/mix prompts and their effects) is identical to pre-change `runRelay`.",
+      "assignee": "SENIOR",
+      "isDone": false,
+      "order": 589824,
+      "createdAt": "2026-06-30T07:29:04.773595359Z",
+      "updatedAt": "2026-06-30T07:29:04.773595359Z",
+      "completedAt": null
+    },
+    {
+      "id": "rall-9d66",
+      "title": "Unit-test app.StartRelay and assert the seam invariants",
+      "description": "Context: Phase 2, tasks 3.7 and 3.8 of `slim-cli-composition-root`. Dedicated test lap that doubles as a thorough review of the high-risk `StartRelay` extraction and the import-boundary invariant.\n\nOutcome: `app.StartRelay` has focused unit tests driven entirely by resolved options (no stdin reaches `app`), and the app-layer import invariant is asserted.\n\nFiles \u0026 scope: Tests under `internal/app`. Use a temp workspace and captured `Out`/`Err` writers; assert no prompting path exists in `app`.\n\nDesign: Cover the resolved-decision matrix that `StartRelay` consumes (discard/reset/overwrite-mix combinations as far as is testable without a live runner), telemetry result staying local, and that the signal-handling goroutine is race-clean. 3.8 invariant: `go list -f '{{.Imports}}' ./internal/app` contains neither `internal/user_prompt` nor `internal/laps`; `go list -deps ./internal/app` may contain `internal/laps` transitively via `runner` but MUST complete without an import cycle.\n\nAcceptance: `go test -count=1 ./internal/app ./cmd/rally` green; `go test -race -count=1 ./internal/app` green (signal-handling goroutine); the 3.8 import assertions hold.",
+      "assignee": "SENIOR",
+      "isDone": false,
+      "order": 655360,
+      "createdAt": "2026-06-30T07:29:04.773596264Z",
+      "updatedAt": "2026-06-30T07:29:04.773596264Z",
+      "completedAt": null
+    },
+    {
+      "id": "rall-ecb9",
+      "title": "Verify the presentation-neutral app seam (Phase 2)",
+      "description": "Context: Verification of the `internal/app` relay-start seam for `slim-cli-composition-root` (tasks 3.4–3.8). Use the `openspec-verify-change` skill against the change, then focus your report on the seam. This is the highest-risk slice — review the actual lines, not just green tests.\n\nBranch/diff scope: Identify the intended merge target first (ask the user / PR metadata / repo docs / branch config / history; do NOT assume `main`; current branch is `dev`). Treat work before this batch's first lap as pre-existing. Use `git diff \u003ctarget\u003e...HEAD`.\n\nWhat to verify (trace the dependency lines):\n- Import boundary: `go list -f '{{.Imports}}' ./internal/app` lists neither `internal/user_prompt` nor `internal/laps`; `go list -deps ./internal/app` completes with no cycle (laps allowed only transitively via `runner`). Confirm against the 1.3 baseline.\n- Resume semantics preserved exactly: `--new` discards + resets status; interactive “Start new” discards but does NOT reset status; non-interactive `--resume --agent` does not flip OverwriteMixOnResume. Read the actual mapping from prompt outcome → `RelayStartOptions` fields.\n- Telemetry result is local to `StartRelay` (machine id into `runner.Config`, `SetTelemetry(sink)`); no reliance on `activeTelemetry`/`activeMachineID` main globals.\n- `InspectResume` is non-mutating and uses the startup store-migration path; legacy `.rally/relays.jsonl` is visible.\n- `app.StartRelay` does no stdin prompting; laps hook install remains CLI-side.\n- `go test -count=1 ./...` green; `go test -race -count=1 ./internal/app` green.\n\nFollow-ups: substantive gaps → new head lap; only tiny safe one-liners inline; no history rewrites (additive/revert only).\n\nOn success: tick tasks.md boxes 3.4–3.8 for work confirmed correct and thorough.",
+      "assignee": "VERIFY",
+      "isDone": false,
+      "order": 720896,
+      "createdAt": "2026-06-30T07:29:04.773597181Z",
+      "updatedAt": "2026-06-30T07:29:04.773597181Z",
+      "completedAt": null
+    },
+    {
+      "id": "rall-cc7d",
+      "title": "Introduce cli.NewRootCommand and RootOptions",
+      "description": "Context: Phase 3, task 4.1 of `slim-cli-composition-root` — the keystone of the CLI layer. Establish the root-command builder that `cmd/rally/main.go` will collapse onto; subsequent laps move the individual handlers into `internal/cli` to register here.\n\nOutcome: `cli.NewRootCommand(opts RootOptions) *cobra.Command` constructs the full command tree, beside the existing `NewConfigCmd`/`NewRoutesCmd`/`NewHooksCmd`.\n\nFiles \u0026 scope: `internal/cli/root.go`. Add `RootOptions` carrying the build vars (`Version` + `NewRelic{LicenseKey,AppName,HostDisplayName}`) threaded from `package main`. `NewRootCommand` registers `start`/`relay`, `init`, hidden `init-roles`, `instructions`, `routes`, `hooks`, `config`, `version`, `update`, `progress`, and `tail`; wires the `--version`/`-v` flag; and installs the laps-aware dynamic help func (hides `progress` when laps is detected). Thread the `opts` build vars into the telemetry config eventually passed to `app.StartRelay`.\n\nDesign: This lap may temporarily delegate to handlers still defined in `package main` (call across the import edge as needed) so it compiles before the next laps physically move them — OR move them together if cleaner; either way preserve exact command names/flags/help text and the dynamic-help behaviour. Do not redeclare build vars in `internal/cli`; they live in `package main` and arrive via `RootOptions`.\n\nAcceptance: `go build ./...` compiles; `go test -count=1 ./internal/cli ./cmd/rally` green; the constructed root registers exactly the same command set, flags, and help behaviour as before (no command/flag/help diff).",
+      "assignee": "SENIOR",
+      "isDone": false,
+      "order": 786432,
+      "createdAt": "2026-06-30T07:29:04.773597983Z",
+      "updatedAt": "2026-06-30T07:29:04.773597983Z",
+      "completedAt": null
+    },
+    {
+      "id": "rall-badf",
+      "title": "Move the start/relay command and its helpers into internal/cli",
+      "description": "Context: Phase 3, task 4.2 of `slim-cli-composition-root`. Verbatim relocation of the relay command and its immediate helpers out of `package main` into `internal/cli`. This is mechanical but large — the largest mechanical surface of the change.\n\nOutcome: The `start`/`relay` command + handler, relay-flag expansion, workspace resolution, and the telemetry-config mapping live in `internal/cli`; tests move with them.\n\nFiles \u0026 scope: Create `internal/cli/start.go` (the `start`/`relay` command + handler: flag parse → config load → interactive resolution → `app.StartRelay`), `internal/cli/relay_flags.go` (`expandRelayFlag`, `chooseRelayAgentSpecs`). Move `resolveWorkspaceDir` and the telemetry-config mapping (`RootOptions` build vars → `app` telemetry input) into `internal/cli`. Move the corresponding test blocks verbatim from `cmd/rally` (`relay_flags_test.go`, the relevant `main_test.go` telemetry-config and `chooseRelayAgentSpecs` tests) into `internal/cli`.\n\nDesign: Verbatim moves; re-point imports only. Cross off `chooseRelayAgentSpecs` and the telemetry-config test against the 1.4 migration checklist (each appears exactly once after the move). Keep command names/flags/help identical.\n\nAcceptance: `go build ./...` compiles; `go test -count=1 ./internal/cli ./cmd/rally` green; moved tests run under `internal/cli` and no longer under `cmd/rally`.",
+      "assignee": "JUNIOR",
+      "isDone": false,
+      "order": 851968,
+      "createdAt": "2026-06-30T07:29:04.77359879Z",
+      "updatedAt": "2026-06-30T07:29:04.77359879Z",
+      "completedAt": null
+    },
+    {
+      "id": "rall-4724",
+      "title": "Move init/roles/instructions/version/update/tail into internal/cli",
+      "description": "Context: Phase 3, task 4.3 of `slim-cli-composition-root`. The remaining command relocations out of `package main`. Verbatim moves; the only goal is that these handlers and their tests now live in `internal/cli`.\n\nOutcome: `init` + role bootstrap/sync, `instructions`, `version`, `update`, `tail`, and the hidden `init-roles` alias are constructed in `internal/cli`; their tests move with them.\n\nFiles \u0026 scope: Move into `internal/cli`: `init.go` (`runInit`, `initRolesCmd`, `initAllCmd`, `roleBootstrap`, `defaultRoleBootstraps`, `runRolesSetup`, `syncRoleFolders`, `migrateLegacyRoleFiles`, `bootstrapInstructionsFor`), `instructions.go` (`instructions edit`/`show`), `update.go` (`version` + `update`), `tail.go`/`tail_highlight.go`, and the hidden `init-roles` alias. Move the corresponding tests verbatim: `roles_sync_test.go`, the relevant `main_test.go` init/registration blocks, `update_test.go`, `tail_test.go` (and any `relay_flags_test.go` remnants not already moved).\n\nDesign: Verbatim moves; re-point imports. `syncRoleFolders`/`migrateLegacyRoleFiles` stay CLI-side (used by both `init roles` and the start handler). Cross off `syncRoleFolders`, init, `tail`, `init-roles`, and command-registration entries against the 1.4 migration checklist — every pre-change test appears exactly once afterward. Preserve command names/flags/help, including the hidden `init-roles` compatibility alias.\n\nAcceptance: `go build ./...` compiles; `go test -count=1 ./internal/cli ./cmd/rally` green; all moved tests run under `internal/cli`.",
+      "assignee": "JUNIOR",
+      "isDone": false,
+      "order": 917504,
+      "createdAt": "2026-06-30T07:29:04.773607254Z",
+      "updatedAt": "2026-06-30T07:29:04.773607254Z",
+      "completedAt": null
+    },
+    {
+      "id": "rall-05e8",
+      "title": "Slim cmd/rally/main.go to a process entry point",
+      "description": "Context: Phase 3, task 4.4 of `slim-cli-composition-root`. With every handler moved into `internal/cli`, reduce `main.go` to the bare process root.\n\nOutcome: `cmd/rally/main.go` contains only: the `Version` + `DefaultNewRelic*` build vars, `main()`, `startBackgroundUpdateCheck`, the `cli.NewRootCommand(RootOptions{…}).Execute()` call, and exit handling (~40 lines).\n\nFiles \u0026 scope: `cmd/rally/`. Remove the now-drained Phase-1 split files. Confirm the only remaining `package main` files are the entry point, the background update-check, and any tests that must stay in `package main` (e.g. an ldflag/version smoke test).\n\nDesign: Build vars stay in `package main` and thread into `RootOptions`. No behaviour change. After this lap the dependency chain is `cmd/rally → internal/cli → internal/app → internal/relay/runner → internal/relay`.\n\nAcceptance: `go build ./...` compiles; `go test -count=1 ./...` green; `cmd/rally` contains only the entry/update-check (+ permitted tests), with no command implementation or relay-lifecycle body remaining.",
+      "assignee": "JUNIOR",
+      "isDone": false,
+      "order": 983040,
+      "createdAt": "2026-06-30T07:29:04.773608237Z",
+      "updatedAt": "2026-06-30T07:29:04.773608237Z",
+      "completedAt": null
+    },
+    {
+      "id": "rall-a4a5",
+      "title": "Verify the slim composition root (Phase 3)",
+      "description": "Context: Verification of the CLI-layer promotion for `slim-cli-composition-root` (tasks 4.1–4.4). Use the `openspec-verify-change` skill against the change, then focus your report on the command moves and the slimmed entry point.\n\nBranch/diff scope: Identify the intended merge target first (ask the user / PR metadata / repo docs / branch config / history; do NOT assume `main`; branch is `dev`). Treat pre-batch work as baseline. Use `git diff \u003ctarget\u003e...HEAD`.\n\nWhat to verify:\n- Command construction: `start`/`relay`, `init`, hidden `init-roles`, `instructions`, `routes`, `hooks`, `config`, `version`, `update`, `progress`, `tail` are all constructed via `cli.NewRootCommand` and per-command files in `internal/cli` — none implemented in `package main`. The `--version`/`-v` flag and the laps-aware dynamic help (hides `progress` under laps) still behave identically.\n- Test migration: cross-check the 1.4 inventory — every pre-change `cmd/rally` helper/command test (`commitSetupFiles`, `chooseRelayAgentSpecs`, `syncRoleFolders`, telemetry-config, init, `tail`, `init-roles`, registration) now appears exactly once in its new home, none dropped or duplicated.\n- `cmd/rally/main.go` is reduced to build vars + `main()` + `startBackgroundUpdateCheck` + `cli.NewRootCommand(…).Execute()` + exit handling; no command/lifecycle body remains.\n- Dependency direction holds: `internal/cli` imports `internal/app`; `internal/app` does not import `internal/cli`; no import cycle.\n- `go build ./...` compiles; `go test -count=1 ./...` green.\n\nFollow-ups: substantive gaps → new head lap; tiny safe one-liners only inline; no history rewrites.\n\nOn success: tick tasks.md boxes 4.1–4.4 for work confirmed correct and thorough.",
+      "assignee": "VERIFY",
+      "isDone": false,
+      "order": 1048576,
+      "createdAt": "2026-06-30T07:29:04.773609046Z",
+      "updatedAt": "2026-06-30T07:29:04.773609046Z",
+      "completedAt": null
+    },
+    {
+      "id": "rall-1278",
+      "title": "Move config templates beside init and update the README architecture",
+      "description": "Context: Phases 4 and 5 of `slim-cli-composition-root` (tasks 5.1 and 6.1) — the final low-risk implementation work before the full-change verification.\n\nOutcome: The repo/user config seed templates live beside the `init` command, and the README architecture section describes the new layered entry-point model.\n\nFiles \u0026 scope:\n- 5.1 Move `repoConfigTemplate`, `userConfigSeed`, and the `.rally/README.md` body string into `internal/cli/init_templates.go` beside the `init` command. Template content must be BYTE-FOR-BYTE identical (verify via an existing golden test on `rally init` output, or add one if absent).\n- 6.1 Update the README architecture section to the layered model: `cmd/rally` (entry/build vars) → `internal/cli` (commands + prompts + laps hook install) → `internal/app` (`StartRelay` seam) → `internal/relay/runner` (orchestrator) → `internal/relay` (primitives) → `internal/agent` (executors). State the rule that `internal/app` is presentation-neutral and imports neither `internal/user_prompt` nor `internal/laps`.\n\nDesign: 5.1 is a verbatim string move — no template-content edits. 6.1 is docs only.\n\nAcceptance: `go build ./...` compiles; `go test -count=1 ./internal/cli ./cmd/rally` green; the `rally init` golden test passes (templates byte-identical); README architecture section reflects the new layering and the app-layer import rule.",
+      "assignee": "JUNIOR",
+      "isDone": false,
+      "order": 1114112,
+      "createdAt": "2026-06-30T07:29:04.773609874Z",
+      "updatedAt": "2026-06-30T07:29:04.773609874Z",
+      "completedAt": null
+    },
+    {
+      "id": "rall-9827",
+      "title": "Full-change verification of slim-cli-composition-root",
+      "description": "Context: Final verification of `slim-cli-composition-root` (tasks 6.2 and 7.1–7.7) covering the whole structure-only refactor. Run the `openspec-verify-change` skill against the change and inspect the entire diff — this is the gate before archiving.\n\nBranch/diff scope: Identify the intended merge target first (ask the user / PR metadata / repo docs / branch config / history; do NOT assume `main`; branch is `dev`). Identify this batch's first lap/try and treat earlier branch work as pre-existing baseline (flag it if odd, but do not add cleanup laps removing it unless the user asks). Use `git diff \u003ctarget\u003e...HEAD` over the full change.\n\nVerify (trace the real evidence, not just green tests):\n- 7.1 `go test -count=1 ./...` green.\n- 7.2 `go test -race -shuffle=on -count=1 ./internal/app ./internal/cli` green.\n- 7.3 `go build ./...` compiles; `go list -f '{{.Imports}}' ./internal/app` includes neither `internal/user_prompt` nor `internal/laps`; `go list -deps ./internal/app` completes without an import cycle. Confirm the full chain `cmd/rally → internal/cli → internal/app → internal/relay/runner` has no cycle and `internal/release` does not import `internal/app`.\n- 7.4 `internal/config` exported surface byte-identical to the 1.2 baseline (source-file moves only).\n- 7.5 Build/release unchanged: `.goreleaser.yaml` untouched; `go build -ldflags \"-X main.Version=test -X main.DefaultNewRelicLicenseKey=k -X main.DefaultNewRelicAppName=n\"` succeeds and the built `rally version` reflects the injected value.\n- 7.6 Zero behaviour-surface change: no command-name/flag/help, config-schema/semantics, telemetry-field/activation, laps-hook, store-shape, or git-message edits.\n- 7.7 `internal/buildinfo/VERSION` untouched (no version bump); run `just check` if available.\n- 6.2 Confirm the `composition-root-structure` spec scenarios hold: layering + no cycle, presentation-neutral seam, config file-split surface-preserving, slim `main.go`, build-vars-process-scoped, and no behaviour/telemetry/release change.\n\nFollow-ups: substantive gaps → new head lap; only tiny safe one-liners inline; never rewrite git history (additive/revert or ask the user for a recovery branch).\n\nOn success: tick the remaining tasks.md boxes (5.1, 6.1, 6.2, 7.1–7.7) for work confirmed correct and thorough, so the change is ready to archive.",
+      "assignee": "VERIFY",
+      "isDone": false,
+      "order": 1179648,
+      "createdAt": "2026-06-30T07:29:04.77361076Z",
+      "updatedAt": "2026-06-30T07:29:04.77361076Z",
+      "completedAt": null
     }
   ]
 }
