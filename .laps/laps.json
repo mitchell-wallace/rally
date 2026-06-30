@@ -556,11 +556,11 @@
       "title": "Move init/roles/instructions/version/update/tail into internal/cli",
       "description": "Context: Phase 3, task 4.3 of `slim-cli-composition-root`. The remaining command relocations out of `package main`. Verbatim moves; the only goal is that these handlers and their tests now live in `internal/cli`.\n\nOutcome: `init` + role bootstrap/sync, `instructions`, `version`, `update`, `tail`, and the hidden `init-roles` alias are constructed in `internal/cli`; their tests move with them.\n\nFiles \u0026 scope: Move into `internal/cli`: `init.go` (`runInit`, `initRolesCmd`, `initAllCmd`, `roleBootstrap`, `defaultRoleBootstraps`, `runRolesSetup`, `syncRoleFolders`, `migrateLegacyRoleFiles`, `bootstrapInstructionsFor`), `instructions.go` (`instructions edit`/`show`), `update.go` (`version` + `update`), `tail.go`/`tail_highlight.go`, and the hidden `init-roles` alias. Move the corresponding tests verbatim: `roles_sync_test.go`, the relevant `main_test.go` init/registration blocks, `update_test.go`, `tail_test.go` (and any `relay_flags_test.go` remnants not already moved).\n\nDesign: Verbatim moves; re-point imports. `syncRoleFolders`/`migrateLegacyRoleFiles` stay CLI-side (used by both `init roles` and the start handler). Cross off `syncRoleFolders`, init, `tail`, `init-roles`, and command-registration entries against the 1.4 migration checklist — every pre-change test appears exactly once afterward. Preserve command names/flags/help, including the hidden `init-roles` compatibility alias.\n\nAcceptance: `go build ./...` compiles; `go test -count=1 ./internal/cli ./cmd/rally` green; all moved tests run under `internal/cli`.",
       "assignee": "JUNIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 917504,
       "createdAt": "2026-06-30T07:29:04.773607254Z",
-      "updatedAt": "2026-06-30T07:29:04.773607254Z",
-      "completedAt": null
+      "updatedAt": "2026-06-30T14:42:09.635944223Z",
+      "completedAt": "2026-06-30T14:42:09.635944223Z"
     },
     {
       "id": "rall-05e8",
