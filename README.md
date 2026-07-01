@@ -984,11 +984,29 @@ dependency direction:
   drive the run, manage retries/signal handling).
 - `internal/relay` — the primitives: deterministic agent cycling, retries,
   error resilience, freeze detection, graceful stop.
-- `internal/agent` — pluggable executors (Antigravity, Claude, Codex,
-  Opencode, user-defined generic) sharing one prompt builder.
+- `internal/harnessapi` — the executor contract package: the `Executor`
+  interface, `RunOptions`/`TryResult`/`ResolvedAgent`, the shared `BuildPrompt`,
+  and the harness-agnostic reasoning-effort helpers. The most-imported surface in
+  the tree; it depends only on leaf support packages (`internal/agent_prompt`,
+  `internal/reliability`, `internal/textutil`) and never on an adapter.
+- `internal/harness` — executor construction as a registry:
+  `harness.BuildExecutors(harness.Config)` builds the built-in adapters keyed by
+  canonical name plus one `generic` adapter per configured custom harness, from a
+  config-decoupled `Config` so this layer never imports `internal/config`. It is
+  the only harness-layer package that imports the adapter subpackages.
+- `internal/harness/<name>` — one deep module per built-in harness (`claude`,
+  `codex`, `opencode`, `antigravity`, `generic`) plus the replay `fixture`, each
+  exposing `New(...) harnessapi.Executor` over its own concrete `Executor` type
+  and owning its harness CLI-schema parsing and native session-/server-log
+  recovery.
+- `internal/harness/process` — shared subprocess plumbing (process-group setup
+  with graceful group-wide cancellation, the logged-command runner, try-log
+  helpers) importing only `internal/reliability` and the standard library.
 
 The full chain `cmd/rally → internal/cli → internal/app → internal/relay/runner
-→ internal/relay → internal/agent` contains no import cycle. Supporting
+→ internal/relay → internal/harnessapi` contains no import cycle; `internal/app`
+builds the executor map via `internal/harness.BuildExecutors`, keeping concrete
+adapter types out of both `cmd/rally` and `internal/relay/runner`. Supporting
 packages sit beside this spine:
 
 - `internal/store` — append-only JSONL files with in-memory caching and

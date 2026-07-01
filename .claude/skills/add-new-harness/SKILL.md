@@ -15,7 +15,7 @@ Use this when adding a built-in harness like the Antigravity `agy` integration. 
 
 1. **Orient and preserve state**
    - Capture `git status --short --branch` before editing.
-   - Read the current built-in harness patterns in `internal/agent/`, `internal/config/`, `internal/relay/`, `cmd/rally/`, README, and existing real-backend tests.
+   - Read the current built-in harness patterns in `internal/harness/<name>/` (an existing adapter module), `internal/harness/` (the `BuildExecutors` registry), `internal/harnessapi` (the `Executor` contract), `internal/config/`, `internal/relay/`, `cmd/rally/`, README, and existing real-backend tests.
    - If the user asks for delegation, use subagents for bounded sidecar work such as CLI flag discovery or touchpoint mapping. Keep integration and final verification local.
 
 2. **Discover the CLI contract**
@@ -25,7 +25,7 @@ Use this when adding a built-in harness like the Antigravity `agy` integration. 
    - Do not assume familiar flags exist. Verify spelling, argument placement, and whether flags accept `--flag value` or only `--flag=value`.
 
 3. **Implement first-class harness support**
-   - Add a built-in executor with the same `Executor` contract as existing harnesses.
+   - Add a built-in adapter as an `internal/harness/<name>` module: expose `New(...) harnessapi.Executor` over a concrete `Executor` type, keep its harness CLI-schema parsing and native session-/server-log recovery local to the module, and register it by canonical name in `internal/harness.BuildExecutors`.
    - Add canonical harness name and aliases in config resolution, route validation, route runtime, mix parsing, and tests.
    - Add default model support in config structs, init templates, `rally config`, `rally init roles`, named model lookup, and save/load paths.
    - If the CLI lacks a model flag, use the CLI's documented or observed settings mechanism, restore prior settings after each run, and serialize access with a process-level lock.

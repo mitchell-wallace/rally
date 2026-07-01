@@ -873,11 +873,11 @@
       "title": "Phase 6: update README architecture docs and the add-new-harness skill",
       "description": "Context: modularize-harness-adapters tasks.md section 7 (7.1, 7.2). Durable guidance so add a harness reflects the new layout. Depends on the code refactor being complete.\n\nOutcome: The README architecture section and the add-new-harness skill (plus any stray internal/agent references in test-driving-rally and phone-a-friend) describe internal/harnessapi (the contract) and internal/harness/* (adapters plus the registry).\n\nFiles \u0026 scope:\n- README.md: update the bullet that reads 'internal/agent - pluggable executors ...' (~line 987) and the import-chain description (~line 991, currently '... -\u003e internal/relay -\u003e internal/agent') to the new packages: the harnessapi contract, the internal/harness/\u003cname\u003e adapters, and the internal/harness.BuildExecutors registry.\n- .claude/skills/add-new-harness/SKILL.md (~line 18): change 'add a harness' guidance to add an internal/harness/\u003cname\u003e module (New/Executor plus local parsing) and register it in internal/harness.BuildExecutors; refresh its internal/agent references. Sweep .claude/skills/test-driving-rally and .claude/skills/phone-a-friend for stale internal/agent mentions and update them.\n\nAcceptance: git grep -n 'internal/agent' README.md .claude/skills returns only intentional/historical references; the docs read correctly. No code changes. Do not tick tasks.md.",
       "assignee": "JUNIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 851968,
       "createdAt": "2026-07-01T12:04:05.930636319Z",
-      "updatedAt": "2026-07-01T12:04:05.930636319Z",
-      "completedAt": null
+      "updatedAt": "2026-07-01T15:36:43.401559471Z",
+      "completedAt": "2026-07-01T15:36:43.401559471Z"
     },
     {
       "id": "rall-0869",
