@@ -653,11 +653,11 @@
       "title": "Internal import-boundary rules (flagship + composition-root + allow-lists)",
       "description": "Context: Phase 3a — the flagship reason this change exists: keep #1's `runner → relay` edge and #2's composition-root edges one-way. Read design.md Decision 4 and the Internal import-boundary requirement/scenarios in `specs/architecture-guardrails/spec.md`.\n\nOutcome: The checker enforces production-file internal import boundaries that match the CURRENT production graph; the clean tree passes.\n\nFiles \u0026 scope: `tools/archguard/**` only.\n\nDesign: FIRST regenerate the production internal import graph against HEAD (task 1.3): `go list -json ./internal/... ./cmd/...` using `.Imports` ONLY (not `.TestImports`/`.XTestImports`) — v1 internal boundary rules are production-only. Confirm it matches Decision 4's tables; if a production edge has changed, update the rule to match the CURRENT graph before encoding (encode the real graph, not an idealized one). Encode the flagship/composition-root deny edges (`relay ↛ relay/runner`; `relay` \u0026 `relay/runner ↛ config`/`cli`; `release ↛ app`; `app ↛ {cli, user_prompt, laps}`; no `internal/*` imports `cli`) plus the per-package internal allow-lists (lower packages tight; `cli`/`cmd/rally` the broad composition layers — express `cli` as a deny-direction rule, allow-lists for the lower packages). `_test.go` files are NOT boundary violations for internal allow-lists in v1. Diagnostics name the file, the offending import, and the architectural reason.\n\nAcceptance: `archguard --ci` exits 0 on the unmodified tree for all import rules, and current `_test.go` helper imports do not trip boundary rules. Bundle unit tests + a testdata fixture proving the flagship `relay → relay/runner` violation prints the expected diagnostic text. If the real graph diverges from Decision 4, surface it (`laps add head ...` or report) rather than silently widening a rule. Reports tasks 1.3, 4.1, 4.2 — do not tick tasks.md.",
       "assignee": "SENIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 196608,
       "createdAt": "2026-07-01T00:48:39.074253273Z",
-      "updatedAt": "2026-07-01T00:48:39.074253273Z",
-      "completedAt": null
+      "updatedAt": "2026-07-01T04:53:07.876886798Z",
+      "completedAt": "2026-07-01T04:53:07.876886798Z"
     },
     {
       "id": "rall-45c8",
