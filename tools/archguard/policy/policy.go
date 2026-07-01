@@ -8,8 +8,9 @@
 // rules directly, without touching the filesystem walk or the CLI.
 //
 // Concrete rules live in this package: SizeBudget (file-size budgets with a
-// grandfathered baseline) is here now; the import-boundary,
-// dependency-confinement, and testutil-confinement rules land in later laps.
+// grandfathered baseline), ImportBoundary (internal import edges),
+// DependencyConfinement (third-party deps), and TestHelperConfinement
+// (testutil confinement).
 package policy
 
 import (

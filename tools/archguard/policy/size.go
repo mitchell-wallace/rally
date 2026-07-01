@@ -23,9 +23,7 @@ const (
 	testHard = 1000
 )
 
-// SizeBudget enforces file-size budgets with a grandfathered baseline. It is
-// the only v1 size rule; import-boundary, dependency-confinement, and
-// testutil rules land in later laps.
+// SizeBudget enforces file-size budgets with a grandfathered baseline.
 //
 // Grandfather is a path->cap map. A file in the map is exempt from the standard
 // hard budget but must stay at or under its recorded cap. A file not in the map

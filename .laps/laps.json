@@ -664,11 +664,11 @@
       "title": "Dependency confinement + testutil confinement + rule-class fixtures",
       "description": "Context: Phase 3b of `add-architecture-guardrails`, building on lap 3. Read design.md Decision 5 and the Third-party dependency confinement, Test-helper confinement, and Human-readable diagnostics requirements in `specs/architecture-guardrails/spec.md`.\n\nOutcome: The checker confines the listed third-party deps to their owning packages and blocks production imports of `internal/testutil`; every rule class has a diagnostic-asserting fixture.\n\nFiles \u0026 scope: `tools/archguard/**` only.\n\nDesign: FIRST regenerate the third-party dependency scopes against HEAD (task 1.4) for New Relic, `go-toml`, Cobra, huh, and lipgloss; confirm they match Decision 5 (note `cobra` is legitimately used in `internal/progress`). Encode confinement: New Relic → `telemetry`; `go-toml` → `config`; Cobra → {`cmd/rally`, `cli`, `progress`}; huh → {`cli`, `user_prompt`}; lipgloss → {`style`, `cli`}. Dependency confinement is TEST-INCLUSIVE (applies to production AND `_test.go`) — a New Relic import in a non-telemetry test is still a leak. Do NOT add broader terminal deps (e.g. `golang.org/x/term`) in this first pass. testutil confinement is production-only: non-test files MUST NOT import `internal/testutil` (the clean tree passes — no production file imports it today). Add the remaining deliberate `tools/archguard/testdata` fixtures (dep-confinement + testutil) asserting diagnostic TEXT; leave NO deliberate failure in real source.\n\nAcceptance: `archguard --ci` exits 0 on the clean tree. Bundle unit tests: a New Relic import outside `telemetry` fails with the ownership reason; `internal/progress` Cobra usage passes; a production `testutil` import fails and names the file; each rule class's fixture asserts its diagnostic text. If the real tree has a dep import the design table does not anticipate, surface it (`laps add head ...` or report) rather than silently widening a rule. Reports tasks 1.4, 4.3, 4.4, 4.5 — do not tick tasks.md.",
       "assignee": "JUNIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 262144,
       "createdAt": "2026-07-01T00:48:39.074254426Z",
-      "updatedAt": "2026-07-01T00:48:39.074254426Z",
-      "completedAt": null
+      "updatedAt": "2026-07-01T05:04:22.692141713Z",
+      "completedAt": "2026-07-01T05:04:22.692141713Z"
     },
     {
       "id": "rall-c6fe",

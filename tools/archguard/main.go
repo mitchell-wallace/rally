@@ -18,10 +18,10 @@
 //	archguard --ci       print warnings and hard violations, but exit non-zero
 //	                     only on hard violations (warnings never fail CI).
 //
-// The size-budget rule (with its grandfathered baseline) is registered; the
-// import-boundary, dependency-confinement, and testutil rules land in later
-// laps. Until then, `--report` prints the size grandfather map and the other
-// sections remain empty.
+// The registered rules are: file-size budgets (with a grandfathered baseline),
+// the internal import boundaries, third-party dependency confinement, and
+// test-helper confinement. `--report` prints the regeneratable size grandfather
+// map followed by any violations.
 package main
 
 import (
@@ -34,13 +34,15 @@ import (
 	"github.com/mitchell-wallace/rally/tools/archguard/policy"
 )
 
-// rules returns the policy rules the engine enforces, in evaluation order. The
-// size-budget rule is the first concrete rule: later laps append the import-
-// boundary, dependency-confinement, and testutil rules.
+// rules returns the policy rules the engine enforces, in evaluation order:
+// size budgets, internal import boundaries, third-party dependency confinement,
+// and test-helper confinement.
 func rules() []policy.Rule {
 	return []policy.Rule{
 		policy.NewSizeBudget(grandfather),
 		policy.NewImportBoundary(),
+		policy.NewDependencyConfinement(),
+		policy.NewTestHelperConfinement(),
 	}
 }
 
