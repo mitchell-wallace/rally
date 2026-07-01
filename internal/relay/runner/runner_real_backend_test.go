@@ -13,6 +13,9 @@ package runner
 import (
 	"context"
 	"github.com/mitchell-wallace/rally/internal/agent"
+	"github.com/mitchell-wallace/rally/internal/harness/antigravity"
+	"github.com/mitchell-wallace/rally/internal/harness/claude"
+	"github.com/mitchell-wallace/rally/internal/harness/codex"
 	"github.com/mitchell-wallace/rally/internal/harness/generic"
 	"os"
 	"os/exec"
@@ -72,7 +75,7 @@ func TestRealBackend_ClaudeBasicRelay(t *testing.T) {
 
 	s := newTestStore(t, rallyDir)
 	executors := map[string]harnessapi.Executor{
-		"claude": &agent.ClaudeExecutor{Model: "claude-haiku-4-5"},
+		"claude": claude.New("claude-haiku-4-5"),
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
@@ -151,7 +154,7 @@ func TestRealBackend_ClaudeWithLaps(t *testing.T) {
 
 	s := newTestStore(t, rallyDir)
 	executors := map[string]harnessapi.Executor{
-		"claude": &agent.ClaudeExecutor{Model: "claude-haiku-4-5"},
+		"claude": claude.New("claude-haiku-4-5"),
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
@@ -199,7 +202,7 @@ func TestRealBackend_LogScopingPerRepo(t *testing.T) {
 		workspaceDir, rallyDir, _ := setupRealWorkspace(t)
 		s := newTestStore(t, rallyDir)
 		executors := map[string]harnessapi.Executor{
-			"claude": &agent.ClaudeExecutor{Model: "claude-haiku-4-5"},
+			"claude": claude.New("claude-haiku-4-5"),
 		}
 		// Short timeout: if the try fails and the agent is paused, the runner
 		// waits up to PauseDuration (1h) for recovery. Cap that wait tightly so
@@ -265,7 +268,7 @@ func TestRealBackend_CodexRelay(t *testing.T) {
 
 	s := newTestStore(t, rallyDir)
 	executors := map[string]harnessapi.Executor{
-		"codex": &agent.CodexExecutor{Model: "gpt-5.4-mini"},
+		"codex": codex.New("gpt-5.4-mini"),
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
@@ -404,7 +407,7 @@ func TestRealBackend_AntigravityRelay(t *testing.T) {
 
 	s := newTestStore(t, rallyDir)
 	executors := map[string]harnessapi.Executor{
-		"antigravity": &agent.AntigravityExecutor{Model: agent.DefaultAntigravityModel},
+		"antigravity": antigravity.New(antigravity.DefaultModel),
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)

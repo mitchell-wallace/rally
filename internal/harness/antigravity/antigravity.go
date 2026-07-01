@@ -1,12 +1,10 @@
-package agent
+package antigravity
 
 import (
 	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/mitchell-wallace/rally/internal/harness/process"
-	"github.com/mitchell-wallace/rally/internal/harnessapi"
 	"io"
 	"os"
 	"os/exec"
@@ -16,10 +14,14 @@ import (
 	"sync"
 	"time"
 
+	"github.com/mitchell-wallace/rally/internal/harness/process"
+	"github.com/mitchell-wallace/rally/internal/harnessapi"
 	"github.com/mitchell-wallace/rally/internal/reliability"
 )
 
-const DefaultAntigravityModel = "Gemini 3.5 Flash (High)"
+// DefaultModel is the antigravity model Rally selects when a route leaves the
+// model unset. Relocated from agent.DefaultAntigravityModel.
+const DefaultModel = "Gemini 3.5 Flash (High)"
 
 const defaultAntigravityPrintTimeout = 30 * time.Minute
 
@@ -34,22 +36,32 @@ var antigravityGlogPrefixRe = regexp.MustCompile(`^([IWEF])\d{4}\s+\d{2}:\d{2}:\
 
 var antigravitySettingsMu sync.Mutex
 
-type AntigravityExecutor struct {
+// Executor is the concrete antigravity adapter. It shells out to the agy CLI
+// in print mode, parses the JSON/plain-text result, and recovers failure
+// evidence from the in-band stream plus Antigravity's glog on disk.
+type Executor struct {
 	Model        string
 	PrintTimeout time.Duration
 }
 
-func (a *AntigravityExecutor) ResumeSupported() bool        { return true }
-func (a *AntigravityExecutor) RotateSupported() bool        { return false }
-func (a *AntigravityExecutor) LivenessProbeSupported() bool { return false }
-func (a *AntigravityExecutor) RotateModel(string) error {
+// New constructs an antigravity adapter over the concrete Executor, returning
+// the harnessapi.Executor contract. PrintTimeout is left zero so Execute uses
+// the default print timeout.
+func New(model string) harnessapi.Executor {
+	return &Executor{Model: model}
+}
+
+func (a *Executor) ResumeSupported() bool        { return true }
+func (a *Executor) RotateSupported() bool        { return false }
+func (a *Executor) LivenessProbeSupported() bool { return false }
+func (a *Executor) RotateModel(string) error {
 	return fmt.Errorf("rotate not supported by antigravity adapter")
 }
-func (a *AntigravityExecutor) ProbeLiveness(_ context.Context) (bool, error) {
+func (a *Executor) ProbeLiveness(_ context.Context) (bool, error) {
 	return false, fmt.Errorf("liveness probe not supported by antigravity adapter")
 }
 
-func (a *AntigravityExecutor) Execute(ctx context.Context, opts harnessapi.RunOptions) (*harnessapi.TryResult, error) {
+func (a *Executor) Execute(ctx context.Context, opts harnessapi.RunOptions) (*harnessapi.TryResult, error) {
 	prompt := harnessapi.BuildPrompt(opts)
 
 	model := a.Model

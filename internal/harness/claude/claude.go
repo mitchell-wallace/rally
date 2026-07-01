@@ -1,4 +1,4 @@
-package agent
+package claude
 
 import (
 	"bufio"
@@ -6,19 +6,28 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/mitchell-wallace/rally/internal/harness/process"
-	"github.com/mitchell-wallace/rally/internal/harnessapi"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
 
+	"github.com/mitchell-wallace/rally/internal/harness/process"
+	"github.com/mitchell-wallace/rally/internal/harnessapi"
 	"github.com/mitchell-wallace/rally/internal/reliability"
 )
 
-type ClaudeExecutor struct {
+// Executor is the concrete claude adapter. It shells out to the claude CLI in
+// stream-json mode, parses the result event, and recovers failure evidence
+// from the in-band stream and Claude's session-log on disk.
+type Executor struct {
 	Model string
+}
+
+// New constructs a claude adapter over the concrete Executor, returning the
+// harnessapi.Executor contract.
+func New(model string) harnessapi.Executor {
+	return &Executor{Model: model}
 }
 
 const (
@@ -44,7 +53,7 @@ type claudeContentBlock struct {
 	Type string `json:"type"`
 }
 
-func (c *ClaudeExecutor) Execute(ctx context.Context, opts harnessapi.RunOptions) (*harnessapi.TryResult, error) {
+func (c *Executor) Execute(ctx context.Context, opts harnessapi.RunOptions) (*harnessapi.TryResult, error) {
 	prompt := harnessapi.BuildPrompt(opts)
 
 	model := c.Model
@@ -93,13 +102,13 @@ func (c *ClaudeExecutor) Execute(ctx context.Context, opts harnessapi.RunOptions
 	return tr, nil
 }
 
-func (c *ClaudeExecutor) ResumeSupported() bool        { return true }
-func (c *ClaudeExecutor) RotateSupported() bool        { return false }
-func (c *ClaudeExecutor) LivenessProbeSupported() bool { return false }
-func (c *ClaudeExecutor) RotateModel(string) error {
+func (c *Executor) ResumeSupported() bool        { return true }
+func (c *Executor) RotateSupported() bool        { return false }
+func (c *Executor) LivenessProbeSupported() bool { return false }
+func (c *Executor) RotateModel(string) error {
 	return fmt.Errorf("rotate not supported by claude adapter")
 }
-func (c *ClaudeExecutor) ProbeLiveness(_ context.Context) (bool, error) {
+func (c *Executor) ProbeLiveness(_ context.Context) (bool, error) {
 	return false, fmt.Errorf("liveness probe not supported by claude adapter")
 }
 

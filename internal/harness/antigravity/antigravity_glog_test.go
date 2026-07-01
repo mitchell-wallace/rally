@@ -1,8 +1,7 @@
-package agent
+package antigravity
 
 import (
 	"context"
-	"github.com/mitchell-wallace/rally/internal/harnessapi"
 	"os"
 	"path/filepath"
 	"strings"
@@ -10,6 +9,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/mitchell-wallace/rally/internal/harnessapi"
 	"github.com/mitchell-wallace/rally/internal/reliability"
 )
 
@@ -123,7 +123,7 @@ func TestAntigravityExecutor_GlogFallbackWiredOnUnknownFailure(t *testing.T) {
 	}
 	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 
-	exec := &AntigravityExecutor{PrintTimeout: time.Second}
+	exec := &Executor{PrintTimeout: time.Second}
 	tr, err := exec.Execute(context.Background(), harnessapi.RunOptions{Prompt: "do work"})
 	if err == nil {
 		t.Fatal("expected error from antigravity mock")
@@ -162,7 +162,7 @@ exit 1
 	}
 	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 
-	exec := &AntigravityExecutor{PrintTimeout: time.Second}
+	exec := &Executor{PrintTimeout: time.Second}
 	tr, err := exec.Execute(context.Background(), harnessapi.RunOptions{Prompt: "do work"})
 	if err == nil {
 		t.Fatal("expected error from antigravity mock")

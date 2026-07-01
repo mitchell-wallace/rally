@@ -6,9 +6,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/mitchell-wallace/rally/internal/agent"
 	"github.com/mitchell-wallace/rally/internal/agent_prompt"
 	"github.com/mitchell-wallace/rally/internal/config"
+	"github.com/mitchell-wallace/rally/internal/harness/antigravity"
 	"github.com/mitchell-wallace/rally/internal/store"
 	"github.com/spf13/cobra"
 )
@@ -146,7 +146,7 @@ func runRolesSetup(workspaceDir string) error {
 		changedConfig = true
 	}
 	if cfg.Defaults.AntigravityModel == "" && cfg.AntigravityModel == "" {
-		cfg.Defaults.AntigravityModel = agent.DefaultAntigravityModel
+		cfg.Defaults.AntigravityModel = antigravity.DefaultModel
 		changedConfig = true
 	}
 

@@ -1,14 +1,14 @@
-package agent
+package claude
 
 import (
 	"context"
-	"github.com/mitchell-wallace/rally/internal/harnessapi"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"unicode/utf8"
 
+	"github.com/mitchell-wallace/rally/internal/harnessapi"
 	"github.com/mitchell-wallace/rally/internal/reliability"
 )
 
@@ -120,7 +120,7 @@ func TestClaudeExecutor_SessionLogFallbackWiredOnUnknownError(t *testing.T) {
 	}
 	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 
-	exec := &ClaudeExecutor{}
+	exec := &Executor{}
 	tr, err := exec.Execute(context.Background(), harnessapi.RunOptions{
 		Prompt:          "do work",
 		WorkspaceDir:    workspaceDir,
@@ -156,7 +156,7 @@ func TestClaudeExecutor_MissingSessionLogFallsThroughToInBandParse(t *testing.T)
 	}
 	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 
-	exec := &ClaudeExecutor{}
+	exec := &Executor{}
 	tr, err := exec.Execute(context.Background(), harnessapi.RunOptions{
 		Prompt:          "do work",
 		WorkspaceDir:    workspaceDir,

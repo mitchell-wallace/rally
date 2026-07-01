@@ -3,7 +3,6 @@ package agent
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"github.com/mitchell-wallace/rally/internal/harnessapi"
 	"os"
@@ -260,131 +259,6 @@ func TestBuildPrompt_RecoveryClassificationOnlyFromRecoveryRole(t *testing.T) {
 	}
 }
 
-func TestParseClaudeOutput_Valid(t *testing.T) {
-	out := []byte(`{"type":"result","result":{"completed":true,"summary":"ok"}}`)
-	tr, err := parseClaudeResult(out, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	// No resultRaw found case
-	if tr.Completed {
-		// because resultRaw was nil, completed should be false
-		t.Error("expected incomplete when no resultRaw")
-	}
-	if tr.Summary != claudeNoResultSummary {
-		t.Errorf("summary = %q, want %q", tr.Summary, claudeNoResultSummary)
-	}
-
-	// Now with resultRaw
-	tr, err = parseClaudeResult(out, []byte(`{"completed":true,"summary":"ok"}`))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !tr.Completed {
-		t.Error("expected completed")
-	}
-	if tr.Summary != "ok" {
-		t.Errorf("expected summary 'ok', got %q", tr.Summary)
-	}
-}
-
-func TestParseClaudeOutput_Malformed(t *testing.T) {
-	out := []byte(`this is not json`)
-	tr, err := parseClaudeResult(out, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if tr.Completed {
-		t.Error("expected not completed")
-	}
-	if tr.Summary != claudeNoResultSummary {
-		t.Errorf("summary = %q, want %q", tr.Summary, claudeNoResultSummary)
-	}
-	if strings.Contains(tr.Summary, "not json") {
-		t.Errorf("summary leaked raw output: %q", tr.Summary)
-	}
-}
-
-func TestParseClaudeOutput_MissingResultField(t *testing.T) {
-	out := []byte(`{"type":"ping"}`)
-	tr, err := parseClaudeResult(out, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if tr.Completed {
-		t.Error("expected not completed")
-	}
-	if tr.Summary != claudeNoResultSummary {
-		t.Errorf("summary = %q, want %q", tr.Summary, claudeNoResultSummary)
-	}
-}
-
-func TestParseClaudeOutput_CompletedFalse(t *testing.T) {
-	out := []byte(`{"type":"result","result":{"completed":false,"summary":"not done"}}`)
-	tr, err := parseClaudeResult(out, []byte(`{"completed":false,"summary":"not done"}`))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if tr.Completed {
-		t.Error("expected not completed when agent reports false")
-	}
-	if tr.Summary != "not done" {
-		t.Errorf("expected summary 'not done', got %q", tr.Summary)
-	}
-}
-
-func TestParseClaudeOutput_MalformedJSON(t *testing.T) {
-	out := []byte(`some output`)
-	tr, err := parseClaudeResult(out, []byte(`not-json-at-all`))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if tr.Completed {
-		t.Error("expected malformed structured result to remain incomplete")
-	}
-	if tr.Summary != claudeMalformedResultSummary {
-		t.Errorf("summary = %q, want %q", tr.Summary, claudeMalformedResultSummary)
-	}
-	if strings.Contains(tr.Summary, "not-json-at-all") {
-		t.Errorf("summary leaked raw result: %q", tr.Summary)
-	}
-}
-
-func TestParseClaudeOutput_MissingStructuredSummary(t *testing.T) {
-	tr, err := parseClaudeResult(nil, []byte(`{"completed":true}`))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if tr.Completed {
-		t.Error("expected result without summary to remain incomplete")
-	}
-	if tr.Summary != claudeMissingSummary {
-		t.Errorf("summary = %q, want %q", tr.Summary, claudeMissingSummary)
-	}
-}
-
-func TestParseClaudeOutput_BoundsFinalTextFallback(t *testing.T) {
-	finalText := strings.Repeat("start ", 1000) + "useful tail"
-	resultRaw, err := json.Marshal(finalText)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	tr, err := parseClaudeResult(nil, resultRaw)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !tr.Completed {
-		t.Error("expected final assistant text fallback to be completed")
-	}
-	if got := len([]rune(tr.Summary)); got > 1000 {
-		t.Fatalf("summary rune length = %d, want <= %d", got, 1000)
-	}
-	if !strings.Contains(tr.Summary, "useful tail") {
-		t.Errorf("summary = %q, want useful tail", tr.Summary)
-	}
-}
-
 func TestParseOpenCodeOutput_Valid(t *testing.T) {
 	out := []byte(`{"type":"text","part":{"type":"text","text":"{\"completed\":true,\"summary\":\"text1\"}"}}`)
 	tr, err := parseOpenCodeOutput(out, true)
@@ -421,23 +295,15 @@ func TestParseOpenCodeOutput_CapturesSessionID(t *testing.T) {
 // session ID; a harness that does not claim resume support must NOT have one.
 //
 // Adding a new resume-supporting executor without a capture fixture fails this test,
-// forcing the author to prove the session is actually captured end-to-end.
+// forcing the author to prove the session is actually captured end-to-end. The
+// relocated harness adapters (claude/codex/antigravity, now in
+// internal/harness/<name>) carry their own equivalent capture+capability
+// coverage in-package; this in-agent assertion covers opencode while it remains
+// here ahead of its own relocation.
 func TestResumeSupportImpliesSessionCapture(t *testing.T) {
 	// Each extractor feeds a realistic, harness-specific output sample through the
 	// executor's real capture path and returns the captured session ID.
 	captures := map[string]func() string{
-		"claude": func() string {
-			out := []byte(`{"type":"system","session_id":"sess-claude-1"}
-{"type":"result","session_id":"sess-claude-1","result":"{\"completed\":true,\"summary\":\"ok\"}"}`)
-			_, sid, _ := scanClaudeOutput(out)
-			return sid
-		},
-		"codex": func() string {
-			out := []byte(`{"type":"thread.started","thread_id":"codex-sess-1"}
-{"type":"item.completed","item":{"id":"item_0","type":"agent_message","text":"ok"}}`)
-			sid, _ := scanCodexEvents(out)
-			return sid
-		},
 		"opencode": func() string {
 			out := []byte(`{"type":"step_start","sessionID":"ses_oc1","part":{"type":"step-start"}}
 {"type":"text","sessionID":"ses_oc1","part":{"type":"text","text":"{\"completed\":true,\"summary\":\"ok\"}"}}`)
@@ -447,15 +313,9 @@ func TestResumeSupportImpliesSessionCapture(t *testing.T) {
 			}
 			return tr.SessionID
 		},
-		"antigravity": func() string {
-			return scanAntigravityConversationID([]byte("Print mode: conversation=11111111-2222-3333-4444-555555555555\n"))
-		},
 	}
 	executors := map[string]harnessapi.Executor{
-		"claude":      &ClaudeExecutor{},
-		"codex":       &CodexExecutor{},
-		"opencode":    &OpenCodeExecutor{},
-		"antigravity": &AntigravityExecutor{},
+		"opencode": &OpenCodeExecutor{},
 	}
 
 	for name, exec := range executors {
@@ -722,70 +582,6 @@ func TestParseOpenCodeOutput_ErrorSummaryFallbackAndBound(t *testing.T) {
 	})
 }
 
-func TestParseCodexResult_Valid(t *testing.T) {
-	data := []byte(`{"completed":true,"summary":"done"}`)
-	tr, err := parseCodexResult(data)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !tr.Completed {
-		t.Error("expected completed")
-	}
-	if tr.Summary != "done" {
-		t.Errorf("expected summary 'done', got %q", tr.Summary)
-	}
-}
-
-func TestParseCodexResult_CompletedFalse(t *testing.T) {
-	data := []byte(`{"completed":false,"summary":"still going"}`)
-	tr, err := parseCodexResult(data)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if tr.Completed {
-		t.Error("expected not completed when agent reports false")
-	}
-	if tr.Summary != "still going" {
-		t.Errorf("expected summary 'still going', got %q", tr.Summary)
-	}
-}
-
-func TestParseCodexResult_Malformed(t *testing.T) {
-	data := []byte(`not valid json`)
-	tr, err := parseCodexResult(data)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !tr.Completed {
-		t.Error("expected completed fallback for malformed JSON")
-	}
-	if tr.Summary != "not valid json" {
-		t.Errorf("expected raw data in summary, got %q", tr.Summary)
-	}
-}
-
-func TestWriteCodexSchema(t *testing.T) {
-	path, err := writeCodexSchema()
-	if err != nil {
-		t.Fatalf("writeCodexSchema failed: %v", err)
-	}
-	defer os.Remove(path)
-
-	data, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatalf("reading schema file: %v", err)
-	}
-	if len(data) == 0 {
-		t.Error("expected non-empty schema file")
-	}
-	required := []string{"completed", "summary", "remaining_work", "message_addressed", "files_changed"}
-	for _, r := range required {
-		if !strings.Contains(string(data), r) {
-			t.Errorf("schema missing field %q", r)
-		}
-	}
-}
-
 func TestGitHelpers(t *testing.T) {
 	tmp := t.TempDir()
 	mustExec(t, tmp, "git", "init")
@@ -882,79 +678,6 @@ func TestRunLoggedCommandStreamsTryLog(t *testing.T) {
 	}
 	if string(logData) != "first\nsecond\n" {
 		t.Fatalf("unexpected log contents: %q", string(logData))
-	}
-}
-
-func TestClaudeAdapterCapabilities(t *testing.T) {
-	c := &ClaudeExecutor{}
-	if !c.ResumeSupported() {
-		t.Error("ResumeSupported() = false, want true")
-	}
-	if c.RotateSupported() {
-		t.Error("RotateSupported() = true, want false")
-	}
-	if c.LivenessProbeSupported() {
-		t.Error("LivenessProbeSupported() = true, want false")
-	}
-	if err := c.RotateModel("new-model"); err == nil {
-		t.Error("RotateModel() should return error")
-	}
-}
-
-func TestClaudeAdapter_SessionIDCapture(t *testing.T) {
-	out := []byte(`{"type":"system","session_id":"sess-abc-123"}
-{"type":"result","result":{"completed":true,"summary":"ok"}}`)
-	resultRaw, sessionID, _ := scanClaudeOutput(out)
-	if sessionID != "sess-abc-123" {
-		t.Errorf("sessionID = %q, want %q", sessionID, "sess-abc-123")
-	}
-	if resultRaw == nil {
-		t.Error("resultRaw = nil, expected non-nil")
-	}
-}
-
-func TestClaudeAdapter_SessionIDEmptyWhenAbsent(t *testing.T) {
-	out := []byte(`{"type":"result","result":{"completed":true,"summary":"ok"}}`)
-	_, sessionID, _ := scanClaudeOutput(out)
-	if sessionID != "" {
-		t.Errorf("sessionID = %q, want empty", sessionID)
-	}
-}
-
-func TestClaudeAdapter_ScanClaudeOutputNoResult(t *testing.T) {
-	out := []byte(`{"type":"system","session_id":"sess-no-result"}`)
-	resultRaw, sessionID, _ := scanClaudeOutput(out)
-	if sessionID != "sess-no-result" {
-		t.Errorf("sessionID = %q, want %q", sessionID, "sess-no-result")
-	}
-	if resultRaw != nil {
-		t.Error("resultRaw should be nil when no result event")
-	}
-}
-
-func TestClaudeAdapter_CountsToolUseBlocks(t *testing.T) {
-	out := []byte(`{"type":"assistant","message":{"content":[{"type":"text","text":"hi"},{"type":"tool_use","id":"t1","name":"Bash"}]}}
-{"type":"assistant","message":{"content":[{"type":"tool_use","id":"t2","name":"Read"},{"type":"tool_use","id":"t3","name":"Bash"}]}}
-{"type":"result","result":{"completed":true,"summary":"done"}}`)
-	_, _, toolCalls := scanClaudeOutput(out)
-	if toolCalls != 3 {
-		t.Errorf("toolCalls = %d, want 3", toolCalls)
-	}
-}
-
-func TestCodexAdapter_CountsToolItems(t *testing.T) {
-	out := []byte(`{"type":"thread.started","thread_id":"abc"}
-{"type":"item.completed","item":{"type":"command_execution","id":"i1"}}
-{"type":"item.completed","item":{"type":"file_change","id":"i2"}}
-{"type":"item.completed","item":{"type":"agent_message","id":"i3"}}
-{"type":"item.completed","item":{"type":"command_execution","id":"i4"}}
-{"type":"turn.completed"}`)
-	sessionID, toolCalls := scanCodexEvents(out)
-	if sessionID != "abc" {
-		t.Errorf("sessionID = %q, want abc", sessionID)
-	}
-	if toolCalls != 3 {
-		t.Errorf("toolCalls = %d, want 3 (2 command_execution + 1 file_change)", toolCalls)
 	}
 }
 
@@ -1616,138 +1339,6 @@ func TestOpenCodeDiskLog_MaxLinesCap(t *testing.T) {
 	}
 }
 
-func TestParseAntigravityOutput_JSON(t *testing.T) {
-	tr, err := parseAntigravityOutput([]byte(`{"completed":true,"summary":"ok"}`), "agy-session-1")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !tr.Completed {
-		t.Error("expected completed")
-	}
-	if tr.Summary != "ok" {
-		t.Errorf("Summary = %q, want ok", tr.Summary)
-	}
-	if tr.SessionID != "agy-session-1" {
-		t.Errorf("SessionID = %q, want agy-session-1", tr.SessionID)
-	}
-}
-
-func TestParseAntigravityOutput_ResumeUsesLastJSONLine(t *testing.T) {
-	out := []byte("previous response\n{\"completed\":false,\"summary\":\"new response\"}\n")
-	tr, err := parseAntigravityOutput(out, "agy-session-2")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if tr.Completed {
-		t.Error("expected completed=false from last JSON line")
-	}
-	if tr.Summary != "new response" {
-		t.Errorf("Summary = %q, want new response", tr.Summary)
-	}
-}
-
-func TestParseAntigravityOutput_PlainText(t *testing.T) {
-	tr, err := parseAntigravityOutput([]byte("plain summary\n"), "agy-session-3")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !tr.Completed {
-		t.Error("expected plain text to be treated as completed")
-	}
-	if tr.Summary != "plain summary" {
-		t.Errorf("Summary = %q, want plain summary", tr.Summary)
-	}
-}
-
-func TestAntigravityAdapter_SessionIDCapture(t *testing.T) {
-	logData := []byte(`I0521 printmode.go:130] Print mode: conversation=8eb5b287-eadb-4fc6-ae08-ae5f1ae773f3, sending message`)
-	got := scanAntigravityConversationID(logData)
-	if got != "8eb5b287-eadb-4fc6-ae08-ae5f1ae773f3" {
-		t.Errorf("sessionID = %q", got)
-	}
-}
-
-func TestAntigravityExecutor_ExecuteUsesPrintModeAndRestoresModel(t *testing.T) {
-	tmp := t.TempDir()
-	home := filepath.Join(tmp, "home")
-	t.Setenv("HOME", home)
-
-	binDir := filepath.Join(tmp, "bin")
-	if err := os.MkdirAll(binDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	argsPath := filepath.Join(tmp, "args.txt")
-	settingsSnapshotPath := filepath.Join(tmp, "settings-snapshot.json")
-	scriptPath := filepath.Join(binDir, "agy")
-	script := fmt.Sprintf(`#!/bin/sh
-printf '%%s\n' "$@" > %q
-cat "$HOME/.gemini/antigravity-cli/settings.json" > %q
-printf '{"completed":true,"summary":"agy ok"}'
-`, argsPath, settingsSnapshotPath)
-	if err := os.WriteFile(scriptPath, []byte(script), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
-
-	exec := &AntigravityExecutor{Model: DefaultAntigravityModel, PrintTimeout: time.Second}
-	res, err := exec.Execute(context.Background(), harnessapi.RunOptions{Prompt: "do work", LogPath: filepath.Join(tmp, "try.log")})
-	if err != nil {
-		t.Fatalf("Execute failed: %v", err)
-	}
-	if !res.Completed || res.Summary != "agy ok" {
-		t.Fatalf("unexpected result: %+v", res)
-	}
-
-	argsData, err := os.ReadFile(argsPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	args := string(argsData)
-	for _, want := range []string{"--print-timeout=1s", "--dangerously-skip-permissions", "--print", "do work"} {
-		if !strings.Contains(args, want) {
-			t.Errorf("agy args missing %q:\n%s", want, args)
-		}
-	}
-
-	snapshot, err := os.ReadFile(settingsSnapshotPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(string(snapshot), DefaultAntigravityModel) {
-		t.Errorf("settings snapshot missing model %q:\n%s", DefaultAntigravityModel, string(snapshot))
-	}
-
-	settingsPath := filepath.Join(home, ".gemini", "antigravity-cli", "settings.json")
-	if _, err := os.Stat(settingsPath); !os.IsNotExist(err) {
-		t.Errorf("settings file should be restored/removed, stat err = %v", err)
-	}
-}
-
-func TestCodexAdapterCapabilities(t *testing.T) {
-	c := &CodexExecutor{}
-	if !c.ResumeSupported() {
-		t.Error("ResumeSupported() = false, want true")
-	}
-	if c.RotateSupported() {
-		t.Error("RotateSupported() = true, want false")
-	}
-	if !c.LivenessProbeSupported() {
-		t.Error("LivenessProbeSupported() = false, want true")
-	}
-	if err := c.RotateModel("new-model"); err == nil {
-		t.Error("RotateModel() should return error")
-	}
-}
-
-func TestCodexAdapter_SessionIDCapture(t *testing.T) {
-	out := []byte(`{"type":"thread.started","thread_id":"codex-session-123"}
-{"type":"turn.started"}
-{"type":"item.completed","item":{"id":"item_0","type":"agent_message","text":"OK"}}`)
-	if got := scanCodexSessionID(out); got != "codex-session-123" {
-		t.Fatalf("scanCodexSessionID() = %q, want %q", got, "codex-session-123")
-	}
-}
-
 func TestOpenCodeAdapterCapabilities(t *testing.T) {
 	o := &OpenCodeExecutor{Model: "initial-model"}
 	if !o.ResumeSupported() {
@@ -1768,22 +1359,6 @@ func TestOpenCodeAdapter_RotateModel(t *testing.T) {
 	}
 	if o.Model != "new-model" {
 		t.Errorf("Model = %q, want %q", o.Model, "new-model")
-	}
-}
-
-func TestAntigravityAdapterCapabilities(t *testing.T) {
-	a := &AntigravityExecutor{}
-	if !a.ResumeSupported() {
-		t.Error("ResumeSupported() = false, want true")
-	}
-	if a.RotateSupported() {
-		t.Error("RotateSupported() = true, want false")
-	}
-	if a.LivenessProbeSupported() {
-		t.Error("LivenessProbeSupported() = true, want false")
-	}
-	if err := a.RotateModel("new-model"); err == nil {
-		t.Error("RotateModel() should return error")
 	}
 }
 
@@ -1821,149 +1396,6 @@ func testMockBinDir(t *testing.T, binName string) (binDir string, argsPath strin
 	}
 	argsPath = filepath.Join(tmp, "args.txt")
 	return binDir, argsPath
-}
-
-func TestClaudeExecutor_ResumeFlagInArgs(t *testing.T) {
-	binDir, argsPath := testMockBinDir(t, "claude")
-	scriptPath := filepath.Join(binDir, "claude")
-	script := fmt.Sprintf(`#!/bin/sh
-printf '%%s\n' "$@" > %q
-printf '%%s\n' '{"type":"system","session_id":"mock-sess"}'
-printf '%%s\n' '{"type":"result","result":{"completed":true,"summary":"ok"}}'
-`, argsPath)
-	if err := os.WriteFile(scriptPath, []byte(script), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
-
-	tmp := t.TempDir()
-	logPath := filepath.Join(tmp, "try.log")
-	exec := &ClaudeExecutor{}
-	res, err := exec.Execute(context.Background(), harnessapi.RunOptions{
-		Prompt:          "do work",
-		ResumeSessionID: "sess-resume-42",
-		LogPath:         logPath,
-	})
-	if err != nil {
-		t.Fatalf("Execute failed: %v", err)
-	}
-	if !res.Completed {
-		t.Error("expected completed")
-	}
-
-	argsData, err := os.ReadFile(argsPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	args := string(argsData)
-	if !strings.Contains(args, "--resume") || !strings.Contains(args, "sess-resume-42") {
-		t.Errorf("claude args missing --resume sess-resume-42, got:\n%s", args)
-	}
-}
-
-func TestClaudeExecutor_NoResumeFlagWhenSessionIDEmpty(t *testing.T) {
-	binDir, argsPath := testMockBinDir(t, "claude")
-	scriptPath := filepath.Join(binDir, "claude")
-	script := fmt.Sprintf(`#!/bin/sh
-printf '%%s\n' "$@" > %q
-printf '%%s\n' '{"type":"system","session_id":"mock-sess"}'
-printf '%%s\n' '{"type":"result","result":{"completed":true,"summary":"ok"}}'
-`, argsPath)
-	if err := os.WriteFile(scriptPath, []byte(script), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
-
-	tmp := t.TempDir()
-	logPath := filepath.Join(tmp, "try.log")
-	exec := &ClaudeExecutor{}
-	_, err := exec.Execute(context.Background(), harnessapi.RunOptions{
-		Prompt:  "do work",
-		LogPath: logPath,
-	})
-	if err != nil {
-		t.Fatalf("Execute failed: %v", err)
-	}
-
-	argsData, err := os.ReadFile(argsPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if strings.Contains(string(argsData), "--resume") {
-		t.Errorf("claude args should not contain --resume when ResumeSessionID is empty, got:\n%s", string(argsData))
-	}
-}
-
-func TestAntigravityExecutor_ResumeFlagInArgs(t *testing.T) {
-	tmp := t.TempDir()
-	home := filepath.Join(tmp, "home")
-	t.Setenv("HOME", home)
-
-	binDir, argsPath := testMockBinDir(t, "antigravity")
-	scriptPath := filepath.Join(binDir, "agy")
-	script := fmt.Sprintf(`#!/bin/sh
-printf '%%s\n' "$@" > %q
-printf '%%s\n' '{"completed":true,"summary":"agy ok"}'
-`, argsPath)
-	if err := os.WriteFile(scriptPath, []byte(script), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
-
-	logPath := filepath.Join(tmp, "try.log")
-	exec := &AntigravityExecutor{PrintTimeout: time.Second}
-	_, err := exec.Execute(context.Background(), harnessapi.RunOptions{
-		Prompt:          "do work",
-		ResumeSessionID: "conv-abc-123",
-		LogPath:         logPath,
-	})
-	if err != nil {
-		t.Fatalf("Execute failed: %v", err)
-	}
-
-	argsData, err := os.ReadFile(argsPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	args := string(argsData)
-	if !strings.Contains(args, "--conversation=conv-abc-123") {
-		t.Errorf("antigravity args missing conversation flag, got:\n%s", args)
-	}
-}
-
-func TestAntigravityExecutor_NoResumeFlagWhenSessionIDEmpty(t *testing.T) {
-	tmp := t.TempDir()
-	home := filepath.Join(tmp, "home")
-	t.Setenv("HOME", home)
-
-	binDir, argsPath := testMockBinDir(t, "antigravity")
-	scriptPath := filepath.Join(binDir, "agy")
-	script := fmt.Sprintf(`#!/bin/sh
-printf '%%s\n' "$@" > %q
-printf '%%s\n' '{"completed":true,"summary":"agy ok"}'
-`, argsPath)
-	if err := os.WriteFile(scriptPath, []byte(script), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
-
-	logPath := filepath.Join(tmp, "try.log")
-	exec := &AntigravityExecutor{PrintTimeout: time.Second}
-	_, err := exec.Execute(context.Background(), harnessapi.RunOptions{
-		Prompt:  "do work",
-		LogPath: logPath,
-	})
-	if err != nil {
-		t.Fatalf("Execute failed: %v", err)
-	}
-
-	argsData, err := os.ReadFile(argsPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if strings.Contains(string(argsData), "--conversation=") {
-		t.Errorf("antigravity args should not contain --conversation when ResumeSessionID is empty, got:\n%s", string(argsData))
-	}
 }
 
 func TestOpenCodeExecutor_ResumeFlagInArgs(t *testing.T) {
@@ -2028,177 +1460,6 @@ printf '%%s\n' '{"type":"text","part":{"type":"text","text":"%s"}}'
 	}
 	if strings.Contains(string(argsData), "--session") {
 		t.Errorf("opencode args should not contain --session when ResumeSessionID is empty, got:\n%s", string(argsData))
-	}
-}
-
-func TestCodexExecutor_ResumeFlagInArgs(t *testing.T) {
-	binDir, argsPath := testMockBinDir(t, "codex")
-	scriptPath := filepath.Join(binDir, "codex")
-	script := fmt.Sprintf(`#!/bin/sh
-printf '%%s\n' "$@" > %q
-printf '%%s\n' '{"type":"thread.started","thread_id":"codex-mock-sess"}'
-printf '%%s\n' '{"type":"item.completed","item":{"id":"item_0","type":"agent_message","text":"ok"}}'
-next=0
-for i in "$@"; do
-  if [ "$next" = "1" ]; then printf '{"completed":true,"summary":"codex ok"}' > "$i"; break; fi
-  if [ "$i" = "-o" ]; then next=1; fi
-done
-`, argsPath)
-	if err := os.WriteFile(scriptPath, []byte(script), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
-
-	exec := &CodexExecutor{}
-	res, err := exec.Execute(context.Background(), harnessapi.RunOptions{
-		Prompt:          "do work",
-		ResumeSessionID: "sess-resume-77",
-	})
-	if err != nil {
-		t.Fatalf("Execute failed: %v", err)
-	}
-	if !res.Completed {
-		t.Error("expected completed")
-	}
-
-	argsData, err := os.ReadFile(argsPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	args := string(argsData)
-	if !strings.Contains(args, "resume") || !strings.Contains(args, "sess-resume-77") {
-		t.Errorf("codex args missing resume sess-resume-77, got:\n%s", args)
-	}
-}
-
-func TestAntigravityExecutor_EvidenceOnGeminiQuotaError(t *testing.T) {
-	tmp := t.TempDir()
-	home := filepath.Join(tmp, "home")
-	t.Setenv("HOME", home)
-
-	binDir := filepath.Join(tmp, "bin")
-	if err := os.MkdirAll(binDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	scriptPath := filepath.Join(binDir, "agy")
-	script := `#!/bin/sh
-printf 'RESOURCE_EXHAUSTED\nIndividual quota reached\nResets in 1h30m\n'
-exit 1
-`
-	if err := os.WriteFile(scriptPath, []byte(script), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
-
-	exec := &AntigravityExecutor{PrintTimeout: time.Second}
-	tr, err := exec.Execute(context.Background(), harnessapi.RunOptions{Prompt: "do work"})
-	if err == nil {
-		t.Fatal("expected error from antigravity mock")
-	}
-	if tr == nil {
-		t.Fatal("expected harnessapi.TryResult with Evidence, got nil")
-	}
-	if tr.Evidence == nil {
-		t.Fatal("expected Evidence to be populated for RESOURCE_EXHAUSTED")
-	}
-	if tr.Evidence.Category != reliability.CategoryUsageLimit {
-		t.Errorf("Category = %q, want %q", tr.Evidence.Category, reliability.CategoryUsageLimit)
-	}
-	if tr.Evidence.Provider != reliability.ProviderGemini {
-		t.Errorf("Provider = %q, want %q", tr.Evidence.Provider, reliability.ProviderGemini)
-	}
-}
-
-func TestClaudeExecutor_EvidenceOnRateLimitError(t *testing.T) {
-	binDir := filepath.Join(t.TempDir(), "bin")
-	if err := os.MkdirAll(binDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	scriptPath := filepath.Join(binDir, "claude")
-	script := `#!/bin/sh
-printf 'rate_limit_event: five hour window\n'
-exit 1
-`
-	if err := os.WriteFile(scriptPath, []byte(script), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
-
-	exec := &ClaudeExecutor{}
-	tr, err := exec.Execute(context.Background(), harnessapi.RunOptions{Prompt: "do work"})
-	if err == nil {
-		t.Fatal("expected error from claude mock")
-	}
-	if tr == nil {
-		t.Fatal("expected harnessapi.TryResult with Evidence, got nil")
-	}
-	if tr.Evidence == nil {
-		t.Fatal("expected Evidence to be populated for rate_limit_event")
-	}
-	if tr.Evidence.Category != reliability.CategoryUsageLimit {
-		t.Errorf("Category = %q, want %q (five-hour window is a usage limit)", tr.Evidence.Category, reliability.CategoryUsageLimit)
-	}
-	if tr.Evidence.Provider != reliability.ProviderAnthropic {
-		t.Errorf("Provider = %q, want %q", tr.Evidence.Provider, reliability.ProviderAnthropic)
-	}
-}
-
-func TestClaudeExecutor_NoEvidenceOnUnknownError(t *testing.T) {
-	binDir := filepath.Join(t.TempDir(), "bin")
-	if err := os.MkdirAll(binDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	scriptPath := filepath.Join(binDir, "claude")
-	script := `#!/bin/sh
-printf 'something went wrong\n'
-exit 1
-`
-	if err := os.WriteFile(scriptPath, []byte(script), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
-
-	exec := &ClaudeExecutor{}
-	tr, err := exec.Execute(context.Background(), harnessapi.RunOptions{Prompt: "do work"})
-	if err == nil {
-		t.Fatal("expected error from claude mock")
-	}
-	if tr != nil {
-		t.Fatalf("expected nil harnessapi.TryResult for unknown error, got %+v", tr)
-	}
-}
-
-func TestCodexExecutor_EvidenceOnUsageLimitError(t *testing.T) {
-	binDir := filepath.Join(t.TempDir(), "bin")
-	if err := os.MkdirAll(binDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	scriptPath := filepath.Join(binDir, "codex")
-	script := `#!/bin/sh
-printf 'You hit your usage limit. Try again at 3:00 PM\n'
-exit 1
-`
-	if err := os.WriteFile(scriptPath, []byte(script), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
-
-	exec := &CodexExecutor{}
-	tr, err := exec.Execute(context.Background(), harnessapi.RunOptions{Prompt: "do work"})
-	if err == nil {
-		t.Fatal("expected error from codex mock")
-	}
-	if tr == nil {
-		t.Fatal("expected harnessapi.TryResult with Evidence, got nil")
-	}
-	if tr.Evidence == nil {
-		t.Fatal("expected Evidence to be populated for usage limit")
-	}
-	if tr.Evidence.Category != reliability.CategoryUsageLimit {
-		t.Errorf("Category = %q, want %q", tr.Evidence.Category, reliability.CategoryUsageLimit)
-	}
-	if tr.Evidence.Provider != reliability.ProviderOpenAI {
-		t.Errorf("Provider = %q, want %q", tr.Evidence.Provider, reliability.ProviderOpenAI)
 	}
 }
 
@@ -2270,114 +1531,7 @@ exit 1
 	}
 }
 
-func TestCodexExecutor_NoResumeFlagWhenSessionIDEmpty(t *testing.T) {
-	binDir, argsPath := testMockBinDir(t, "codex")
-	scriptPath := filepath.Join(binDir, "codex")
-	script := fmt.Sprintf(`#!/bin/sh
-printf '%%s\n' "$@" > %q
-printf '%%s\n' '{"type":"thread.started","thread_id":"codex-mock-sess"}'
-printf '%%s\n' '{"type":"item.completed","item":{"id":"item_0","type":"agent_message","text":"ok"}}'
-next=0
-for i in "$@"; do
-  if [ "$next" = "1" ]; then printf '{"completed":true,"summary":"codex ok"}' > "$i"; break; fi
-  if [ "$i" = "-o" ]; then next=1; fi
-done
-`, argsPath)
-	if err := os.WriteFile(scriptPath, []byte(script), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
-
-	exec := &CodexExecutor{}
-	_, err := exec.Execute(context.Background(), harnessapi.RunOptions{
-		Prompt: "do work",
-	})
-	if err != nil {
-		t.Fatalf("Execute failed: %v", err)
-	}
-
-	argsData, err := os.ReadFile(argsPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if strings.Contains(string(argsData), "resume") {
-		t.Errorf("codex args should not contain resume when ResumeSessionID is empty, got:\n%s", string(argsData))
-	}
-}
-
 // --- Harness-specific effort injection integration tests ---
-
-func TestCodexExecutor_EffortFlagInArgs(t *testing.T) {
-	binDir, argsPath := testMockBinDir(t, "codex")
-	scriptPath := filepath.Join(binDir, "codex")
-	script := fmt.Sprintf(`#!/bin/sh
-printf '%%s\n' "$@" > %q
-printf '%%s\n' '{"type":"thread.started","thread_id":"codex-eff-sess"}'
-printf '%%s\n' '{"type":"item.completed","item":{"id":"item_0","type":"agent_message","text":"ok"}}'
-next=0
-for i in "$@"; do
-  if [ "$next" = "1" ]; then printf '{"completed":true,"summary":"codex ok"}' > "$i"; break; fi
-  if [ "$i" = "-o" ]; then next=1; fi
-done
-`, argsPath)
-	if err := os.WriteFile(scriptPath, []byte(script), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
-
-	exec := &CodexExecutor{}
-	_, err := exec.Execute(context.Background(), harnessapi.RunOptions{
-		Prompt:          "do work",
-		ReasoningEffort: "high",
-	})
-	if err != nil {
-		t.Fatalf("Execute failed: %v", err)
-	}
-
-	argsData, err := os.ReadFile(argsPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	args := string(argsData)
-	if !strings.Contains(args, "-c") || !strings.Contains(args, "model_reasoning_effort=high") {
-		t.Errorf("codex args missing -c model_reasoning_effort=high, got:\n%s", args)
-	}
-}
-
-func TestClaudeExecutor_EffortFlagInArgs(t *testing.T) {
-	binDir, argsPath := testMockBinDir(t, "claude")
-	scriptPath := filepath.Join(binDir, "claude")
-	script := fmt.Sprintf(`#!/bin/sh
-printf '%%s\n' "$@" > %q
-printf '%%s\n' '{"type":"system","session_id":"mock-eff-sess"}'
-printf '%%s\n' '{"type":"result","result":{"completed":true,"summary":"ok"}}'
-`, argsPath)
-	if err := os.WriteFile(scriptPath, []byte(script), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
-
-	tmp := t.TempDir()
-	logPath := filepath.Join(tmp, "try.log")
-	exec := &ClaudeExecutor{}
-	_, err := exec.Execute(context.Background(), harnessapi.RunOptions{
-		Prompt:          "do work",
-		ReasoningEffort: "xhigh",
-		LogPath:         logPath,
-	})
-	if err != nil {
-		t.Fatalf("Execute failed: %v", err)
-	}
-
-	argsData, err := os.ReadFile(argsPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	args := string(argsData)
-	if !strings.Contains(args, "--effort") || !strings.Contains(args, "xhigh") {
-		t.Errorf("claude args missing --effort xhigh, got:\n%s", args)
-	}
-}
 
 func TestOpenCodeExecutor_EffortFlagInArgs(t *testing.T) {
 	binDir, argsPath := testMockBinDir(t, "opencode")
@@ -2411,140 +1565,7 @@ printf '%%s\n' '{"type":"text","part":{"type":"text","text":"%s"}}'
 	}
 }
 
-func TestAntigravityExecutor_EffortSkippedInArgs(t *testing.T) {
-	tmp := t.TempDir()
-	home := filepath.Join(tmp, "home")
-	t.Setenv("HOME", home)
-
-	binDir, argsPath := testMockBinDir(t, "antigravity")
-	scriptPath := filepath.Join(binDir, "agy")
-	script := fmt.Sprintf(`#!/bin/sh
-printf '%%s\n' "$@" > %q
-printf '%%s\n' '{"completed":true,"summary":"agy ok"}'
-`, argsPath)
-	if err := os.WriteFile(scriptPath, []byte(script), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
-
-	logPath := filepath.Join(tmp, "try.log")
-	exec := &AntigravityExecutor{PrintTimeout: time.Second}
-	_, err := exec.Execute(context.Background(), harnessapi.RunOptions{
-		Prompt:          "do work",
-		ReasoningEffort: "high",
-		LogPath:         logPath,
-	})
-	if err != nil {
-		t.Fatalf("Execute failed: %v", err)
-	}
-
-	argsData, err := os.ReadFile(argsPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	args := string(argsData)
-	// Antigravity resolves reasoning via model aliases/names only; no CLI flag.
-	if strings.Contains(args, "--effort") || strings.Contains(args, "model_reasoning_effort") || strings.Contains(args, "--variant") {
-		t.Errorf("antigravity args should not contain effort flag, but got:\n%s", args)
-	}
-
-	logData, err := os.ReadFile(logPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(string(logData), "antigravity has no reasoning-effort flag") {
-		t.Errorf("expected unsupported-harness warning in try log, got:\n%s", string(logData))
-	}
-}
-
 // --- Route explicit model wins + effort coexistence ---
-
-func TestCodexExecutor_ExplicitModelWinsWithEffort(t *testing.T) {
-	binDir, argsPath := testMockBinDir(t, "codex")
-	scriptPath := filepath.Join(binDir, "codex")
-	script := fmt.Sprintf(`#!/bin/sh
-printf '%%s\n' "$@" > %q
-printf '%%s\n' '{"type":"thread.started","thread_id":"codex-model-sess"}'
-next=0
-for i in "$@"; do
-  if [ "$next" = "1" ]; then printf '{"completed":true,"summary":"codex ok"}' > "$i"; break; fi
-  if [ "$i" = "-o" ]; then next=1; fi
-done
-`, argsPath)
-	if err := os.WriteFile(scriptPath, []byte(script), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
-
-	exec := &CodexExecutor{Model: "gpt-5.5-default"}
-	_, err := exec.Execute(context.Background(), harnessapi.RunOptions{
-		Prompt:          "do work",
-		Model:           "gpt-5.5-extra-high",
-		ReasoningEffort: "xhigh",
-	})
-	if err != nil {
-		t.Fatalf("Execute failed: %v", err)
-	}
-
-	argsData, err := os.ReadFile(argsPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	args := string(argsData)
-	// opts.Model must override the executor's default model.
-	if !strings.Contains(args, "gpt-5.5-extra-high") {
-		t.Errorf("expected opts.Model to win, got:\n%s", args)
-	}
-	if strings.Contains(args, "gpt-5.5-default") {
-		t.Errorf("executor default model should be overridden, got:\n%s", args)
-	}
-	// Effort should still be injected alongside the explicit model.
-	if !strings.Contains(args, "model_reasoning_effort=xhigh") {
-		t.Errorf("effort flag should be present alongside explicit model, got:\n%s", args)
-	}
-}
-
-func TestClaudeExecutor_ExplicitModelWinsWithEffort(t *testing.T) {
-	binDir, argsPath := testMockBinDir(t, "claude")
-	scriptPath := filepath.Join(binDir, "claude")
-	script := fmt.Sprintf(`#!/bin/sh
-printf '%%s\n' "$@" > %q
-printf '%%s\n' '{"type":"system","session_id":"mock-model-sess"}'
-printf '%%s\n' '{"type":"result","result":{"completed":true,"summary":"ok"}}'
-`, argsPath)
-	if err := os.WriteFile(scriptPath, []byte(script), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
-
-	tmp := t.TempDir()
-	logPath := filepath.Join(tmp, "try.log")
-	exec := &ClaudeExecutor{Model: "claude-opus-default"}
-	_, err := exec.Execute(context.Background(), harnessapi.RunOptions{
-		Prompt:          "do work",
-		Model:           "claude-opus-4-8",
-		ReasoningEffort: "max",
-		LogPath:         logPath,
-	})
-	if err != nil {
-		t.Fatalf("Execute failed: %v", err)
-	}
-
-	argsData, err := os.ReadFile(argsPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	args := string(argsData)
-	if !strings.Contains(args, "claude-opus-4-8") {
-		t.Errorf("expected opts.Model to win, got:\n%s", args)
-	}
-	if strings.Contains(args, "claude-opus-default") {
-		t.Errorf("executor default model should be overridden, got:\n%s", args)
-	}
-	if !strings.Contains(args, "--effort") || !strings.Contains(args, "max") {
-		t.Errorf("effort flag should be present alongside explicit model, got:\n%s", args)
-	}
-}
 
 func TestOpenCodeExecutor_ExplicitModelWinsWithEffort(t *testing.T) {
 	binDir, argsPath := testMockBinDir(t, "opencode")
@@ -2585,70 +1606,14 @@ printf '%%s\n' '{"type":"text","part":{"type":"text","text":"%s"}}'
 	}
 }
 
-// TestExecutors_PopulateResolvedModel verifies every executor populates
-// harnessapi.TryResult.ResolvedModel with the model actually passed to the CLI: the
-// executor's configured default for a bare-alias route (opts.Model empty), and
-// the per-try opts.Model override when set. This is the source the runner uses
-// for the runner-tag fallback (tasks.md §2.2/§2.3/§2.5).
+// TestExecutors_PopulateResolvedModel verifies the opencode executor populates
+// harnessapi.TryResult.ResolvedModel with the model actually passed to the CLI:
+// the executor's configured default for a bare-alias route (opts.Model empty),
+// and the per-try opts.Model override when set. This is the source the runner
+// uses for the runner-tag fallback (tasks.md §2.2/§2.3/§2.5). The relocated
+// claude/codex/antigravity adapters each carry their own
+// TestExecutor_PopulateResolvedModel in internal/harness/<name>.
 func TestExecutors_PopulateResolvedModel(t *testing.T) {
-	t.Run("codex", func(t *testing.T) {
-		binDir, _ := testMockBinDir(t, "codex")
-		scriptPath := filepath.Join(binDir, "codex")
-		script := `#!/bin/sh
-printf '%s\n' '{"type":"thread.started","thread_id":"codex-sess"}'
-next=0
-for i in "$@"; do
-  if [ "$next" = "1" ]; then printf '{"completed":true,"summary":"ok"}' > "$i"; break; fi
-  if [ "$i" = "-o" ]; then next=1; fi
-done
-`
-		if err := os.WriteFile(scriptPath, []byte(script), 0o755); err != nil {
-			t.Fatal(err)
-		}
-		t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
-
-		exec := &CodexExecutor{Model: "gpt-5.4"}
-		if res, err := exec.Execute(context.Background(), harnessapi.RunOptions{Prompt: "do work"}); err != nil {
-			t.Fatalf("Execute failed: %v", err)
-		} else if res.ResolvedModel != "gpt-5.4" {
-			t.Errorf("ResolvedModel = %q, want default %q", res.ResolvedModel, "gpt-5.4")
-		}
-
-		exec = &CodexExecutor{Model: "gpt-5.4"}
-		if res, err := exec.Execute(context.Background(), harnessapi.RunOptions{Prompt: "do work", Model: "gpt-5.4-mini"}); err != nil {
-			t.Fatalf("Execute failed: %v", err)
-		} else if res.ResolvedModel != "gpt-5.4-mini" {
-			t.Errorf("ResolvedModel = %q, want opts override %q", res.ResolvedModel, "gpt-5.4-mini")
-		}
-	})
-
-	t.Run("claude", func(t *testing.T) {
-		binDir, _ := testMockBinDir(t, "claude")
-		scriptPath := filepath.Join(binDir, "claude")
-		script := `#!/bin/sh
-printf '%s\n' '{"type":"system","session_id":"claude-sess"}'
-printf '%s\n' '{"type":"result","result":{"completed":true,"summary":"ok"}}'
-`
-		if err := os.WriteFile(scriptPath, []byte(script), 0o755); err != nil {
-			t.Fatal(err)
-		}
-		t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
-
-		exec := &ClaudeExecutor{Model: "sonnet-4"}
-		if res, err := exec.Execute(context.Background(), harnessapi.RunOptions{Prompt: "do work"}); err != nil {
-			t.Fatalf("Execute failed: %v", err)
-		} else if res.ResolvedModel != "sonnet-4" {
-			t.Errorf("ResolvedModel = %q, want default %q", res.ResolvedModel, "sonnet-4")
-		}
-
-		exec = &ClaudeExecutor{Model: "sonnet-4"}
-		if res, err := exec.Execute(context.Background(), harnessapi.RunOptions{Prompt: "do work", Model: "haiku-4"}); err != nil {
-			t.Fatalf("Execute failed: %v", err)
-		} else if res.ResolvedModel != "haiku-4" {
-			t.Errorf("ResolvedModel = %q, want opts override %q", res.ResolvedModel, "haiku-4")
-		}
-	})
-
 	t.Run("opencode", func(t *testing.T) {
 		binDir, _ := testMockBinDir(t, "opencode")
 		scriptPath := filepath.Join(binDir, "opencode")
@@ -2672,37 +1637,6 @@ printf '%s\n' '{"type":"text","part":{"type":"text","text":"{\"completed\":true,
 			t.Fatalf("Execute failed: %v", err)
 		} else if res.ResolvedModel != "zai-coding-plan/glm-5.1" {
 			t.Errorf("ResolvedModel = %q, want opts override %q", res.ResolvedModel, "zai-coding-plan/glm-5.1")
-		}
-	})
-
-	t.Run("antigravity", func(t *testing.T) {
-		tmp := t.TempDir()
-		t.Setenv("HOME", filepath.Join(tmp, "home"))
-		binDir := filepath.Join(tmp, "bin")
-		if err := os.MkdirAll(binDir, 0o755); err != nil {
-			t.Fatal(err)
-		}
-		scriptPath := filepath.Join(binDir, "agy")
-		script := `#!/bin/sh
-printf '%s\n' '{"completed":true,"summary":"ok"}'
-`
-		if err := os.WriteFile(scriptPath, []byte(script), 0o755); err != nil {
-			t.Fatal(err)
-		}
-		t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
-
-		exec := &AntigravityExecutor{Model: "Gemini 3.5 Flash (High)", PrintTimeout: time.Second}
-		if res, err := exec.Execute(context.Background(), harnessapi.RunOptions{Prompt: "do work"}); err != nil {
-			t.Fatalf("Execute failed: %v", err)
-		} else if res.ResolvedModel != "Gemini 3.5 Flash (High)" {
-			t.Errorf("ResolvedModel = %q, want default %q", res.ResolvedModel, "Gemini 3.5 Flash (High)")
-		}
-
-		exec = &AntigravityExecutor{Model: "Gemini 3.5 Flash (High)", PrintTimeout: time.Second}
-		if res, err := exec.Execute(context.Background(), harnessapi.RunOptions{Prompt: "do work", Model: "Gemini 3 Pro"}); err != nil {
-			t.Fatalf("Execute failed: %v", err)
-		} else if res.ResolvedModel != "Gemini 3 Pro" {
-			t.Errorf("ResolvedModel = %q, want opts override %q", res.ResolvedModel, "Gemini 3 Pro")
 		}
 	})
 }

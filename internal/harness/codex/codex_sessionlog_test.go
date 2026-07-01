@@ -1,14 +1,14 @@
-package agent
+package codex
 
 import (
 	"context"
-	"github.com/mitchell-wallace/rally/internal/harnessapi"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/mitchell-wallace/rally/internal/harnessapi"
 	"github.com/mitchell-wallace/rally/internal/reliability"
 )
 
@@ -293,7 +293,7 @@ func TestCodexExecutor_NoSessionLogEvidenceWiredOnSilentExit1(t *testing.T) {
 	workspaceDir := filepath.Join(t.TempDir(), "ws")
 	os.MkdirAll(workspaceDir, 0o755)
 
-	exec := &CodexExecutor{}
+	exec := &Executor{}
 	tr, err := exec.Execute(context.Background(), harnessapi.RunOptions{Prompt: "do work", WorkspaceDir: workspaceDir})
 	if err == nil {
 		t.Fatal("expected error from codex mock")
@@ -338,7 +338,7 @@ func TestCodexExecutor_SessionLogEvidenceWiredOnMatchingLog(t *testing.T) {
 	}
 	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 
-	exec := &CodexExecutor{}
+	exec := &Executor{}
 	tr, err := exec.Execute(context.Background(), harnessapi.RunOptions{Prompt: "do work", WorkspaceDir: workspaceDir})
 	if err == nil {
 		t.Fatal("expected error from codex mock")

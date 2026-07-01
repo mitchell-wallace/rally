@@ -1,4 +1,4 @@
-package agent
+package codex
 
 import (
 	"bufio"
@@ -6,8 +6,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/mitchell-wallace/rally/internal/harness/process"
-	"github.com/mitchell-wallace/rally/internal/harnessapi"
 	"io"
 	"os"
 	"os/exec"
@@ -15,14 +13,26 @@ import (
 	"sync"
 	"time"
 
+	"github.com/mitchell-wallace/rally/internal/harness/process"
+	"github.com/mitchell-wallace/rally/internal/harnessapi"
 	"github.com/mitchell-wallace/rally/internal/reliability"
 )
 
-type CodexExecutor struct {
+// Executor is the concrete codex adapter. It shells out to the codex CLI in
+// --json mode, parses the structured report file, counts tool invocations from
+// the event stream, and recovers failure evidence from the in-band stream plus
+// codex's rollout session log on disk.
+type Executor struct {
 	Model string
 
 	mu              sync.RWMutex
 	activeSessionID string
+}
+
+// New constructs a codex adapter over the concrete Executor, returning the
+// harnessapi.Executor contract.
+func New(model string) harnessapi.Executor {
+	return &Executor{Model: model}
 }
 
 type codexJSONEvent struct {
@@ -95,25 +105,25 @@ func scanCodexEvents(out []byte) (sessionID string, toolCalls int) {
 	return sessionID, toolCalls
 }
 
-func (c *CodexExecutor) setActiveSessionID(sessionID string) {
+func (c *Executor) setActiveSessionID(sessionID string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.activeSessionID = sessionID
 }
 
-func (c *CodexExecutor) currentSessionID() string {
+func (c *Executor) currentSessionID() string {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	return c.activeSessionID
 }
 
-func (c *CodexExecutor) ResumeSupported() bool        { return true }
-func (c *CodexExecutor) RotateSupported() bool        { return false }
-func (c *CodexExecutor) LivenessProbeSupported() bool { return true }
-func (c *CodexExecutor) RotateModel(string) error {
+func (c *Executor) ResumeSupported() bool        { return true }
+func (c *Executor) RotateSupported() bool        { return false }
+func (c *Executor) LivenessProbeSupported() bool { return true }
+func (c *Executor) RotateModel(string) error {
 	return fmt.Errorf("rotate not supported by codex adapter")
 }
-func (c *CodexExecutor) ProbeLiveness(ctx context.Context) (bool, error) {
+func (c *Executor) ProbeLiveness(ctx context.Context) (bool, error) {
 	sessionID := c.currentSessionID()
 	if sessionID == "" {
 		return false, fmt.Errorf("codex probe missing session id")
@@ -153,7 +163,7 @@ func (c *CodexExecutor) ProbeLiveness(ctx context.Context) (bool, error) {
 	return strings.TrimSpace(string(reportData)) == "OK", nil
 }
 
-func (c *CodexExecutor) Execute(ctx context.Context, opts harnessapi.RunOptions) (*harnessapi.TryResult, error) {
+func (c *Executor) Execute(ctx context.Context, opts harnessapi.RunOptions) (*harnessapi.TryResult, error) {
 	tryStart := time.Now()
 	prompt := harnessapi.BuildPrompt(opts)
 	c.setActiveSessionID(opts.ResumeSessionID)

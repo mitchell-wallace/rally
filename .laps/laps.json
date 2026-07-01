@@ -796,11 +796,11 @@
       "title": "Phase 3b: move claude, codex, and antigravity adapters into internal/harness/*",
       "description": "Context: modularize-harness-adapters tasks.md section 4 (task 4.3, plus 4.5 confinement checks and the 4.6 carve for these three); design.md Decisions 4, 7. Same mechanical module-move pattern as Phase 3a, applied to the three session-/glog-parsing built-ins. Depends on Phase 3a establishing the pattern.\n\nOutcome: internal/harness/{claude,codex,antigravity} each exist, exposing New(...) harnessapi.Executor over a concrete Executor; their native parsing/log-recovery and tests are relocated; DefaultAntigravityModel is relocated; consumers updated; tree and tests green.\n\nFiles \u0026 scope (for each adapter: move code + its native parsing + its tests, carve its cases out of agent_test.go, and update its construction site in internal/app/executors.go to \u003charness\u003e.New):\n- claude: claude.go + claude_sessionlog_test.go to internal/harness/claude; claude.New(model). Uses harnessapi.BoundedFinalText/ApplyReasoningEffort/EmitReasoningWarning and process.RunLoggedCommand.\n- codex: codex.go + codex_sessionlog.go + codex_sessionlog_test.go to internal/harness/codex; codex.New(model). Keep the session-log evidence recovery and the cmd.Stderr = cmd.Stdout merge idiom.\n- antigravity: antigravity.go + antigravity_glog_test.go to internal/harness/antigravity; antigravity.New(model). RELOCATE DefaultAntigravityModel to antigravity.DefaultModel and update internal/cli/init_roles.go (~line 149) and the real-backend test internal/relay/runner/runner_real_backend_test.go to import antigravity.DefaultModel.\n- Carve claude/codex/antigravity cases out of agent_test.go into their packages (joining the *_sessionlog_test.go / *_glog_test.go). Keep each relocated _test.go under the 1000-line archguard cap by splitting per concern; no duplicate tests.\n\nDesign: Pure relocation - no CLI flag, parsing, evidence, bounded-summary, or reasoning-injection behaviour change. Per-harness parsing stays local (Decision 7); the internal/reliability per-harness parsers (ParseClaudeError etc.) STAY in internal/reliability and adapters keep calling them. Each package's internal imports are limited to harnessapi, harness/process, reliability.\n\nAcceptance: go test -count=1 ./internal/harness/... ./internal/relay/... ./internal/app ./cmd/rally; go build ./...; go vet; gofmt clean. Confirm per-package import confinement via go list. archguard --ci still expected RED until Phase 5. Do not tick tasks.md.",
       "assignee": "JUNIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 393216,
       "createdAt": "2026-07-01T12:04:05.930631191Z",
-      "updatedAt": "2026-07-01T12:04:05.930631191Z",
-      "completedAt": null
+      "updatedAt": "2026-07-01T14:29:59.812131742Z",
+      "completedAt": "2026-07-01T14:29:59.812131742Z"
     },
     {
       "id": "rall-57a9",

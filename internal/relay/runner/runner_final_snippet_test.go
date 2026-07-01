@@ -3,7 +3,7 @@ package runner
 import (
 	"context"
 	"errors"
-	"github.com/mitchell-wallace/rally/internal/agent"
+	"github.com/mitchell-wallace/rally/internal/harness/claude"
 	"io"
 	"os"
 	"path/filepath"
@@ -187,7 +187,7 @@ func TestRunOneNonOpenCodeInvalidStructuredResultDoesNotPersistTranscript(t *tes
 			script: "#!/bin/sh\n" +
 				"printf '%s\\n' '{\"type\":\"assistant\",\"message\":{\"content\":[{\"type\":\"text\",\"text\":\"" + rawTranscript + "\"}]}}'\n",
 			wantSummary: "claude produced no structured result",
-			newExecutor: func() harnessapi.Executor { return &agent.ClaudeExecutor{} },
+			newExecutor: func() harnessapi.Executor { return claude.New("") },
 		},
 		{
 			name:    "claude result missing summary",
@@ -195,7 +195,7 @@ func TestRunOneNonOpenCodeInvalidStructuredResultDoesNotPersistTranscript(t *tes
 			script: "#!/bin/sh\n" +
 				"printf '%s\\n' '{\"type\":\"result\",\"result\":{\"transcript\":\"" + rawTranscript + "\"}}'\n",
 			wantSummary: "claude structured result contained no summary",
-			newExecutor: func() harnessapi.Executor { return &agent.ClaudeExecutor{} },
+			newExecutor: func() harnessapi.Executor { return claude.New("") },
 		},
 	}
 
