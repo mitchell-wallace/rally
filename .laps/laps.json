@@ -818,11 +818,11 @@
       "title": "Verify Phase 2-3: process package and all adapters modularized",
       "description": "Use the openspec-verify-change skill against modularize-harness-adapters, focused on sections 3-4. This closes the natural slice boundary all adapters modularized.\n\nVerify: internal/harness/process is minimal (its only direct internal import is reliability); all six adapters (claude, codex, opencode, antigravity, generic, fixture) live under internal/harness/\u003cname\u003e with New/Executor; each adapter's direct internal imports are within {harnessapi, harness/process, reliability} (fixture within {harnessapi}) via go list -f '{{.Imports}}'; per-harness parsing is local with no cross-adapter helper leak; DefaultAntigravityModel is now antigravity.DefaultModel and init_roles.go plus the real-backend test are updated; the agent_test.go monolith is fully carved, TestGitHelpers now lives in internal/gitx, every relocated test appears exactly once, and each _test.go is under 1000 lines; opencode is split into responsibility-named files under budget. Trace one adapter's evidence path end to end (the opencode server-log recovery is the richest) to confirm behaviour is preserved - not just that tests are green. Confirm go build, go test -count=1 across the moved packages, go vet, and gofmt -l . (empty).\n\narchguard: go run ./tools/archguard --ci is STILL expected RED until Phase 5 (policy tables not yet swapped). Do NOT gate on it; note it.\n\nBranch-target awareness: resolve the merge target (user/PR/repo docs/branch config/history; not assumed main) and diff \u003ctarget\u003e...HEAD. Treat pre-batch branch work as pre-existing. Do NOT rewrite git history; substantive gaps become focused head laps.\n\ntasks.md: check off section 3 (3.1, 3.2) and section 4 (4.1-4.6) boxes verified correct and complete. Fix only tiny safe one-liners; anything larger is a new head lap.",
       "assignee": "VERIFY",
-      "isDone": false,
+      "isDone": true,
       "order": 524288,
       "createdAt": "2026-07-01T12:04:05.930632724Z",
-      "updatedAt": "2026-07-01T12:04:05.930632724Z",
-      "completedAt": null
+      "updatedAt": "2026-07-01T14:55:54.393136456Z",
+      "completedAt": "2026-07-01T14:55:54.393136456Z"
     },
     {
       "id": "rall-1905",
