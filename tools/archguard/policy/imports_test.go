@@ -126,25 +126,38 @@ func TestImportBoundaryFlagshipEdgesComplete(t *testing.T) {
 	}
 }
 
-// TestImportBoundaryAllowListMatchesDecision4 pins the per-package production
-// allow-list to the OpenSpec Decision 4 table. This guards against accidentally
-// broadening the current-graph baseline while the self-check below only proves
-// that the encoded edges pass.
-func TestImportBoundaryAllowListMatchesDecision4(t *testing.T) {
+// TestImportBoundaryAllowListMatchesProductionGraph pins the per-package
+// production allow-list. This guards against accidentally broadening the
+// encoded graph while the self-check below only proves that the encoded edges
+// pass. The harness-layer rows (harnessapi, harness/process, the adapters, the
+// registry) and the `agent` → `harnessapi` consumer swaps come from
+// modularize-harness-adapters Decision 8; the remaining rows are the original
+// add-architecture-guardrails Decision 4 baseline.
+func TestImportBoundaryAllowListMatchesProductionGraph(t *testing.T) {
 	want := map[string]map[string]bool{
-		"agent":                  {"agent_prompt": true, "reliability": true, "textutil": true},
-		"config":                 {"agent": true, "routing": true, "store": true},
-		"routing":                {"agent": true},
+		// Harness layer (Decision 8).
+		"harnessapi":          {"agent_prompt": true, "reliability": true, "textutil": true},
+		"harness/process":     {"reliability": true},
+		"harness/claude":      {"harnessapi": true, "harness/process": true, "reliability": true},
+		"harness/codex":       {"harnessapi": true, "harness/process": true, "reliability": true},
+		"harness/opencode":    {"harnessapi": true, "harness/process": true, "reliability": true},
+		"harness/antigravity": {"harnessapi": true, "harness/process": true, "reliability": true},
+		"harness/generic":     {"harnessapi": true, "harness/process": true, "reliability": true},
+		"harness/fixture":     {"harnessapi": true},
+		"harness":             {"harnessapi": true, "harness/antigravity": true, "harness/claude": true, "harness/codex": true, "harness/generic": true, "harness/opencode": true},
+		// Consumers (agent -> harnessapi per Decision 8).
+		"config":                 {"harnessapi": true, "routing": true, "store": true},
+		"routing":                {"harnessapi": true},
 		"store":                  {"reliability": true, "textutil": true},
 		"reliability":            {"monitor": true},
 		"laps":                   {"release": true},
 		"progress":               {"laps": true, "store": true},
 		"telemetry":              {"buildinfo": true},
 		"release":                {"buildinfo": true},
+		"relay":                  {"harnessapi": true, "store": true},
+		"relay/runner":           {"harnessapi": true, "agent_prompt": true, "gitx": true, "keyboard": true, "laps": true, "monitor": true, "progress": true, "relay": true, "reliability": true, "routing": true, "store": true, "style": true, "telemetry": true, "textutil": true, "user_prompt/roleloader": true},
+		"app":                    {"harnessapi": true, "harness": true, "config": true, "relay": true, "relay/runner": true, "routing": true, "store": true, "telemetry": true},
 		"user_prompt/roleloader": {"store": true},
-		"relay":                  {"agent": true, "store": true},
-		"relay/runner":           {"agent": true, "agent_prompt": true, "gitx": true, "keyboard": true, "laps": true, "monitor": true, "progress": true, "relay": true, "reliability": true, "routing": true, "store": true, "style": true, "telemetry": true, "textutil": true, "user_prompt/roleloader": true},
-		"app":                    {"agent": true, "config": true, "relay": true, "relay/runner": true, "routing": true, "store": true, "telemetry": true},
 	}
 	if !reflect.DeepEqual(allowList, want) {
 		t.Errorf("allowList:\n got %+v\nwant %+v", allowList, want)
@@ -180,21 +193,60 @@ func TestImportBoundaryCLIDenyDirection(t *testing.T) {
 
 // TestImportBoundaryAllowListRejectsDisallowedImport confirms a non-flagship,
 // non-cli import that the package's allow-list does not permit still fails with
-// the generic allow-list reason.
+// the generic allow-list reason (the importing package is not part of the
+// harness layer, so it does not get the confinement diagnostic).
 func TestImportBoundaryAllowListRejectsDisallowedImport(t *testing.T) {
 	r := NewImportBoundary()
-	// store may import {reliability, textutil}; importing agent is disallowed.
-	got := r.Check([]FileInfo{importFileInfo("store", "agent")})
+	// store may import {reliability, textutil}; importing harnessapi is
+	// disallowed, and store is not a harness-layer package.
+	got := r.Check([]FileInfo{importFileInfo("store", "harnessapi")})
 	if len(got) != 1 || got[0].Severity != Hard {
 		t.Fatalf("want one hard violation, got %+v", got)
 	}
 	if got[0].Category != "import boundary" {
 		t.Errorf("Category = %q, want import boundary", got[0].Category)
 	}
-	wantReason := "imports " + importPath("agent") +
-		" — imports internal/agent but internal/store may not depend on it; the per-package internal allow-list in design.md Decision 4 is exhaustive"
+	wantReason := "imports " + importPath("harnessapi") +
+		" — imports internal/harnessapi but internal/store may not depend on it; the per-package internal allow-list in design.md Decision 4 is exhaustive"
 	if got[0].Reason != wantReason {
 		t.Errorf("Reason:\n got %q\nwant %q", got[0].Reason, wantReason)
+	}
+}
+
+// TestImportBoundaryAdapterConfinementDiagnostic confirms a harness-layer
+// package importing outside its tight allow-list raises the architectural
+// confinement reason from Decision 8 (not the generic allow-list reason): an
+// adapter must not depend on relay/runtime/presentation.
+func TestImportBoundaryAdapterConfinementDiagnostic(t *testing.T) {
+	r := NewImportBoundary()
+	// harness/claude may import {harnessapi, harness/process, reliability};
+	// importing relay is a confinement breach.
+	got := r.Check([]FileInfo{importFileInfo("harness/claude", "relay")})
+	if len(got) != 1 || got[0].Severity != Hard {
+		t.Fatalf("want one hard violation, got %+v", got)
+	}
+	if got[0].Category != "import boundary" {
+		t.Errorf("Category = %q, want import boundary", got[0].Category)
+	}
+	// The confinement diagnostic must name the offending import, the confined
+	// package, and the architectural intent — and must NOT use the generic
+	// "Decision 4 is exhaustive" reason.
+	rendered := got[0].String()
+	for _, want := range []string{
+		"imports " + importPath("relay"),
+		"internal/harness/claude is confined to its tight harness-layer allow-list",
+		"harness adapters (and their contract/registry) must not depend on relay/runtime/presentation",
+		"they execute and return typed evidence",
+	} {
+		if !strings.Contains(rendered, want) {
+			t.Errorf("rendered diagnostic missing %q\n got %q", want, rendered)
+		}
+	}
+	if strings.Contains(got[0].Reason, "Decision 4 is exhaustive") {
+		t.Errorf("confinement breach must not use the generic allow-list reason, got %q", got[0].Reason)
+	}
+	if !HasHard(got) {
+		t.Error("HasHard = false, want true (adapter confinement breach must fail CI)")
 	}
 }
 

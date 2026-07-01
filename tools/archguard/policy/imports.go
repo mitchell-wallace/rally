@@ -23,9 +23,15 @@ import (
 //     graph). A package not listed is a leaf and may import no internal package.
 //
 // The allow-lists already cover the flagship edges (e.g. relay's allow-list is
-// {agent, store}, so runner/config/cli are all out); the flagship check exists
-// only to raise a clearer reason for those invariants, so a given offending
-// import produces exactly one violation — the most specific one.
+// {harnessapi, store}, so runner/config/cli are all out); the flagship check
+// exists only to raise a clearer reason for those invariants, so a given
+// offending import produces exactly one violation — the most specific one.
+//
+// The harness-layer allow-lists (the contract, the process support package,
+// each adapter, and the registry) come from modularize-harness-adapters
+// Decision 8 and are deliberately tight: a harness package that reaches for
+// relay/runtime/presentation is a confinement breach and raises the
+// adapter-confinement diagnostic rather than the generic allow-list reason.
 
 // moduleInternalPrefix is the import-path prefix of every internal package.
 // archguard is stdlib-only and dependency-free, so the module path is a compile
@@ -100,21 +106,37 @@ var flagshipDeny = []denyEdge{
 // deny-by-target rule below).
 //
 // The map is encoded from the production graph at the design baseline and
-// verified against HEAD via task 1.3 (go list .Imports); it matches the current
-// tree exactly, so the committed baseline is green by construction.
+// verified against HEAD (go list .Imports): it matches the current tree's
+// direct internal imports, so the committed baseline is green by construction.
+// The harness-layer rows (harnessapi, harness/process, the adapters, and the
+// registry) follow modularize-harness-adapters Decision 8; the remaining rows
+// are the original add-architecture-guardrails Decision 4 baseline with `agent`
+// swapped to `harnessapi` in the consumers that now depend on the contract.
 var allowList = map[string]map[string]bool{
-	"agent":                  {"agent_prompt": true, "reliability": true, "textutil": true},
-	"config":                 {"agent": true, "routing": true, "store": true},
-	"routing":                {"agent": true},
+	// Harness layer (Decision 8): the contract, process support, each adapter,
+	// and the registry. These tight sets are what the adapter-confinement
+	// invariant rests on — see isHarnessLayer / allowListDisallow.
+	"harnessapi":          {"agent_prompt": true, "reliability": true, "textutil": true},
+	"harness/process":     {"reliability": true},
+	"harness/claude":      {"harnessapi": true, "harness/process": true, "reliability": true},
+	"harness/codex":       {"harnessapi": true, "harness/process": true, "reliability": true},
+	"harness/opencode":    {"harnessapi": true, "harness/process": true, "reliability": true},
+	"harness/antigravity": {"harnessapi": true, "harness/process": true, "reliability": true},
+	"harness/generic":     {"harnessapi": true, "harness/process": true, "reliability": true},
+	"harness/fixture":     {"harnessapi": true},
+	"harness":             {"harnessapi": true, "harness/antigravity": true, "harness/claude": true, "harness/codex": true, "harness/generic": true, "harness/opencode": true},
+	// Consumers (agent -> harnessapi per Decision 8).
+	"config":                 {"harnessapi": true, "routing": true, "store": true},
+	"routing":                {"harnessapi": true},
 	"store":                  {"reliability": true, "textutil": true},
 	"reliability":            {"monitor": true},
 	"laps":                   {"release": true},
 	"progress":               {"laps": true, "store": true},
 	"telemetry":              {"buildinfo": true},
 	"release":                {"buildinfo": true},
-	"relay":                  {"agent": true, "store": true},
-	"relay/runner":           {"agent": true, "agent_prompt": true, "gitx": true, "keyboard": true, "laps": true, "monitor": true, "progress": true, "relay": true, "reliability": true, "routing": true, "store": true, "style": true, "telemetry": true, "textutil": true, "user_prompt/roleloader": true},
-	"app":                    {"agent": true, "config": true, "relay": true, "relay/runner": true, "routing": true, "store": true, "telemetry": true},
+	"relay":                  {"harnessapi": true, "store": true},
+	"relay/runner":           {"harnessapi": true, "agent_prompt": true, "gitx": true, "keyboard": true, "laps": true, "monitor": true, "progress": true, "relay": true, "reliability": true, "routing": true, "store": true, "style": true, "telemetry": true, "textutil": true, "user_prompt/roleloader": true},
+	"app":                    {"harnessapi": true, "harness": true, "config": true, "relay": true, "relay/runner": true, "routing": true, "store": true, "telemetry": true},
 	"user_prompt/roleloader": {"store": true},
 }
 
@@ -137,11 +159,18 @@ func (*ImportBoundary) Name() string { return "import boundary" }
 // deny-direction, or the importing package's allow-list. An offending import
 // yields exactly one violation (the most specific reason), anchored at line 1
 // of the offending file.
+//
+// _test.go files are skipped deliberately: v1 internal boundaries are
+// production-only. This exemption is load-bearing for the harness layer, whose
+// tests legitimately reach across the production boundary to shared test
+// fixtures and parser helpers (e.g. an adapter's _test.go importing
+// internal/reliability's parsers or internal/harness/fixture), so the
+// confinement invariant is enforced on the shipped code, not the test wiring.
 func (*ImportBoundary) Check(files []FileInfo) []Violation {
 	var vs []Violation
 	for _, f := range files {
 		if f.IsTest {
-			continue // v1 internal boundaries are production-only.
+			continue // v1 internal boundaries are production-only (see above).
 		}
 		from := internalName(f.Package)
 		if from == "" {
@@ -206,9 +235,28 @@ func allowListReason(from, to string) (string, bool) {
 	return allowListDisallow(from, to), true
 }
 
-// allowListDisallow renders the generic allow-list violation reason for an
-// import that the importing package's allow-list does not permit.
+// isHarnessLayer reports whether the internal-name key is part of the harness
+// layer: the contract (harnessapi), the process support package, any adapter
+// (harness/<name>), or the top-level registry. These packages carry the
+// adapter-confinement invariant (Decision 8): they must not depend on
+// relay/runtime/presentation, so a disallowed import from one of them raises
+// the architectural confinement reason instead of the generic allow-list one.
+func isHarnessLayer(key string) bool {
+	return key == "harnessapi" || key == "harness" || strings.HasPrefix(key, "harness/")
+}
+
+// allowListDisallow renders the allow-list violation reason for an import that
+// the importing package's allow-list does not permit. A harness-layer package
+// gets the architectural adapter-confinement reason (it must stay isolated from
+// relay/runtime/presentation); every other package gets the generic reason that
+// points at the exhaustive allow-list.
 func allowListDisallow(from, to string) string {
+	if isHarnessLayer(from) {
+		return fmt.Sprintf(
+			"imports internal/%s but internal/%s is confined to its tight harness-layer allow-list; harness adapters (and their contract/registry) must not depend on relay/runtime/presentation — they execute and return typed evidence",
+			to, from,
+		)
+	}
 	return fmt.Sprintf(
 		"imports internal/%s but internal/%s may not depend on it; the per-package internal allow-list in design.md Decision 4 is exhaustive",
 		to, from,
