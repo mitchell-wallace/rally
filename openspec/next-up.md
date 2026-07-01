@@ -42,33 +42,24 @@ and risk-of-drift, not final scope. Last reviewed 2026-07-01.
   `InspectResume` / `BuildExecutors`), resolving interactive start-of-run
   decisions CLI-side; broke the `release → app` metadata edge; added the
   `composition-root-structure` spec.
+- **add-architecture-guardrails** (`2026-07-01`) — the `tools/archguard` checker
+  (file-size budgets with grandfathered caps, import-boundary and
+  dependency-confinement rules, test-helper confinement) wired into `just check`
+  and the CI `lint` job. Enforces #1's one-way `runner → relay` edge and #2's
+  composition-root edges; tooling-and-CI only (no runtime change, no version bump);
+  added the `architecture-guardrails` spec.
 
 ## Order
 
 The runner is the spine of this sequence: #1 gave it its own package
-(`internal/relay/runner`) and the one-way `runner → relay` boundary, and #2
-layered the composition root (`cmd/rally → internal/cli → internal/app`) above
-it. The queued changes #3–#8 build on those edges rather than on a monolithic
-runner: a guardrail (#3) that holds the boundaries, then the deep-module
-decompositions (#4 harness adapters, #5 presentation boundary, #6 run/try loop,
-#7 remaining source files, #8 test files).
-
-3. **add-architecture-guardrails** _(implemented; pending archive)_
-   Add the `tools/archguard` checker (file-size budgets with grandfathered caps,
-   import-boundary rules, dependency confinement, test-helper confinement) plus a
-   `just arch-check` recipe folded into `just check` and an `archguard` step in the
-   CI `lint` job. Tooling-and-CI only — no runtime change, no version bump, no
-   release; stdlib-only so no new dependency. Flagship import rules are #1's
-   one-way `runner → relay` edge (relay must not import runner) and #2's
-   composition-root edges (`release ↛ app`; `app ↛ {cli, user_prompt, laps}`;
-   nothing imports `cli` but `cmd/rally`). Baselined against the current tree
-   (2026-07-01) so the gate enforces from day one with a green baseline; warnings
-   (500/700) stay advisory while hard budgets (800/1,000) and grandfather caps
-   ratchet down as #4+ split the remaining outliers (e.g. `opencode.go` 801,
-   `run_one.go` 1,510). Note: #4/#5 only own the harness + presentation seams; the
-   runner orchestration core (`run_one.go` + its tests), `config`, `store`, and
-   `monitor` outliers have no owning change yet and need follow-up splits. Adds the
-   `architecture-guardrails` spec.
+(`internal/relay/runner`) and the one-way `runner → relay` boundary, #2 layered
+the composition root (`cmd/rally → internal/cli → internal/app`) above it, and #3
+added the `tools/archguard` guardrail that holds those edges one-way. The queued
+changes #4–#8 build on that structure rather than on a monolithic runner: the
+deep-module decompositions (#4 harness adapters, #5 presentation boundary, #6
+run/try loop, #7 remaining source files, #8 test files), each ratcheting #3's
+budgets down as it splits its outliers (e.g. `opencode.go` 801, `run_one.go`
+1,510).
 
 4. **modularize-harness-adapters** _(proposed)_
    Give future first-class harnesses a clean place to grow (draft **Option B**,
