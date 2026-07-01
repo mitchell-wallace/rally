@@ -719,11 +719,11 @@
       "title": "Restore tooling-only diff scope for add-architecture-guardrails",
       "description": "Whole-diff verify against origin/dev found one branch-scope contract gap: git diff origin/dev...HEAD still includes internal/relay/relay_test.go (format-only preflight cleanup from relay-3 run 2), so the branch as-is does not satisfy the change requirement that the tooling-only diff touch only tools/archguard/**, justfile, CI workflow, and docs. Resolve this additively without rewriting history: either land/rebase the preflight formatting fix outside this change's merge surface or otherwise make the final merge diff for add-architecture-guardrails exclude internal/relay/relay_test.go while keeping gofmt -l . green. Re-run git diff origin/dev...HEAD, gofmt -l ., go run ./tools/archguard --ci, and just check after the branch-scope cleanup.",
       "assignee": "SENIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 393216,
       "createdAt": "2026-07-01T05:41:25.542047742Z",
-      "updatedAt": "2026-07-01T05:41:25.542047742Z",
-      "completedAt": null
+      "updatedAt": "2026-07-01T05:44:11.587850878Z",
+      "completedAt": "2026-07-01T05:44:11.587850878Z"
     },
     {
       "id": "work-01c7",
