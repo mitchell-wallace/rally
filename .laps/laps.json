@@ -632,10 +632,20 @@
       "title": "File-size budgets with grandfathered baseline",
       "description": "Context: Phase 2 of `add-architecture-guardrails`, building on lap 1's policy-engine seam. Read design.md Decision 3 and the file-size scenarios in `specs/architecture-guardrails/spec.md`.\n\nOutcome: The checker enforces file-size budgets with a grandfather map regenerated from HEAD, and `archguard --report` prints the current over-budget files as a paste-ready map. The baseline is green by construction.\n\nFiles \u0026 scope: `tools/archguard/**` only.\n\nDesign: production `.go` warn 500 / hard 800; `_test.go` warn 700 / hard 1000; generated exempt (must carry `// Code generated`). Grandfather semantics: a file in the map is exempt from the standard hard budget but FAILS if it exceeds its OWN recorded cap; a file NOT in the map fails if it exceeds the standard hard budget (that is how a new oversize file is caught). Warnings (500/700) print but NEVER set the exit code. Regenerate the size baseline against HEAD (task 1.2) via `archguard --report` — do NOT trust the 2026-07-01 figures in design.md; caps = current actual line counts. Diagnostics per design.md format (report size vs cap; “ratchet the cap down, never up”).\n\nAcceptance: Paste the regenerated grandfather map; `archguard --ci` exits 0 on the clean tree; a scratch one-line bump to a grandfathered file makes `--ci` fail (then revert). Bundle unit tests + size testdata fixtures: a new oversize non-grandfathered file fails with file+count+budget; a grandfathered file over its cap fails with size-vs-cap; a 500–800 non-grandfathered file warns but `--ci` exits 0; the clean baseline passes. Reports tasks 1.2, 3.1, 3.2 — do not tick tasks.md.",
       "assignee": "JUNIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 131072,
       "createdAt": "2026-07-01T00:48:39.074248417Z",
-      "updatedAt": "2026-07-01T00:48:39.074248417Z",
+      "updatedAt": "2026-07-01T02:24:37.813524784Z",
+      "completedAt": "2026-07-01T02:24:37.813524784Z"
+    },
+    {
+      "id": "work-a31f",
+      "title": "Implement production internal ...",
+      "description": "Implement production internal import-boundary rule in tools/archguard/policy/imports.go (flagship deny edges relay-\u003erunner, relay/runner-\u003econfig/cli, release-\u003eapp, app-\u003e{cli,user_prompt,laps}, no-internal-imports-cli deny-direction rule, per-package production allow-lists matching current HEAD graph), wire into rules(), add testdata fixture + policy/imports_test.go proving flagship relay-\u003erelay/runner diagnostic text; verify archguard --ci exits 0 on clean tree. Covers tasks 1.3, 4.1, 4.2.",
+      "isDone": false,
+      "order": 131072,
+      "createdAt": "2026-07-01T03:41:24.493394527Z",
+      "updatedAt": "2026-07-01T03:41:24.493394527Z",
       "completedAt": null
     },
     {
