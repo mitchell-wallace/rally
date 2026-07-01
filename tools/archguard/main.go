@@ -40,6 +40,7 @@ import (
 func rules() []policy.Rule {
 	return []policy.Rule{
 		policy.NewSizeBudget(grandfather),
+		policy.NewImportBoundary(),
 	}
 }
 
