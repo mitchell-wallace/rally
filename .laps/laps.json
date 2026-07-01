@@ -697,11 +697,11 @@
       "title": "Wire arch-check into just + CI, and document the policy",
       "description": "Context: Phase 4 plus docs. Read design.md Decision 6, the Local and CI wiring requirement in `specs/architecture-guardrails/spec.md`, and tasks 5.1, 5.2, 6.2. Today the `justfile` recipe is `check: vet` with a `gofmt -l .` assertion in the body, and the CI `lint` job in `.github/workflows/test.yml` runs `go vet` and a formatting check.\n\nOutcome: `just arch-check` runs the checker in advisory mode; `just check` invokes it after its formatting assertion; the `lint` CI job runs `archguard --ci`; and the policy is briefly documented.\n\nFiles \u0026 scope: `justfile`, `.github/workflows/test.yml`, and README/architecture docs. Do NOT touch `tools/archguard` logic or any runtime file.\n\nDesign: `just arch-check` → `go run ./tools/archguard` (advisory: warnings + hard). Add `just arch-check` INSIDE the `check` recipe body AFTER the `gofmt -l .` assertion (not as a Just dependency that would run before formatting), preserving the `check: vet` ordering so a local `just check` is a faithful mirror of CI. Add an `archguard` step to the existing `lint` job running `go run ./tools/archguard --ci` — no new job, no new required check beyond `lint`, and the trigger surface (push to `dev`/`main`, PRs) unchanged. Docs (6.2): a brief README/architecture note on `just arch-check` and the budget/boundary policy, pointing at `tools/archguard` as the source of truth for caps and rules.\n\nAcceptance: `just check` is green and now runs arch-check; `just arch-check` runs; the workflow diff adds only the one step; the README section is added. Reports tasks 5.1, 5.2, 6.2 — do not tick tasks.md.",
       "assignee": "JUNIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 393216,
       "createdAt": "2026-07-01T00:48:39.074256053Z",
-      "updatedAt": "2026-07-01T00:48:39.074256053Z",
-      "completedAt": null
+      "updatedAt": "2026-07-01T05:36:02.438105089Z",
+      "completedAt": "2026-07-01T05:36:02.438105089Z"
     },
     {
       "id": "rall-eac5",

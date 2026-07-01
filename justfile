@@ -30,6 +30,10 @@ fmt:
 vet:
     go vet ./...
 
+# Run the architecture guardrail checker (advisory: warnings + hard violations)
+arch-check:
+    go run ./tools/archguard
+
 # Check formatting and static analysis
 check: vet
     @echo "==> Checking formatting..."
@@ -39,6 +43,7 @@ check: vet
         echo "$unformatted" >&2; \
         exit 1; \
     fi
+    just arch-check
     @echo "✅ All checks passed!"
 
 # Run tests with the race detector enabled

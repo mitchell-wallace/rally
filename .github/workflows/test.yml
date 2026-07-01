@@ -93,6 +93,9 @@ jobs:
             exit 1
           fi
 
+      - name: archguard
+        run: go run ./tools/archguard --ci
+
   tidy:
     runs-on: ubuntu-latest
     steps:

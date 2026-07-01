@@ -1000,6 +1000,34 @@ packages sit beside this spine:
 - `internal/release` — release/update metadata (`BinaryName`, `ReleaseOwner`,
   `ReleaseRepo`); deliberately does not import `internal/app`.
 
+### Architecture guardrails
+
+Rally enforces its dependency direction and file-size discipline with a
+dependency-free checker at `tools/archguard`, which is the source of truth for
+the caps and rules below. Run it locally with `just arch-check` (advisory:
+prints size warnings and hard violations), or as part of `just check`, which
+runs it after the formatting assertion. The CI `lint` job runs it in `--ci`
+mode, which prints warnings but only fails the build on hard violations.
+
+The policy the checker enforces:
+
+- **File-size budgets** — production `.go` warns at 500 lines and hard-fails at
+  800; `_test.go` warns at 700 and hard-fails at 1,000. Files over the hard cap
+  today are recorded in a grandfather map (each pinned to its current line count)
+  that may only ratchet down, never up; generated files are exempt.
+- **Internal import boundaries** — production files may only walk the layered
+  spine downward: the flagship edges (`relay` ↛ `relay/runner`; `relay`/
+  `relay/runner` ↛ `config`/`cli`; `release` ↛ `app`; `app` ↛
+  `cli`/`user_prompt`/`laps`) and the `no internal/* imports internal/cli` rule
+  are held one-way, with tight per-package allow-lists for the lower packages.
+- **Third-party dependency confinement** — New Relic (`telemetry`), `go-toml`
+  (`config`), Cobra (`cmd/rally`/`cli`/`progress`), `huh` (`cli`/`user_prompt`),
+  and `lipgloss` (`style`/`cli`) are confined to their owning packages.
+- **Test-helper confinement** — non-test files may not import `internal/testutil`.
+
+Regenerate the size baseline with `go run ./tools/archguard --report` and see
+`tools/archguard` for the exact caps and the committed grandfather map.
+
 ## Development
 
 We use `just` as a command runner for local development.
@@ -1013,7 +1041,8 @@ Common recipes include:
 - `just build`: Build the `rally` binary into `bin/`.
 - `just test`: Run the deterministic test suite.
 - `just test-real`: Reproduce the CI `test` job with opt-in real-agent tests.
-- `just check`: Check code formatting (`gofmt`) and run static analysis (`go vet`).
+- `just check`: Check code formatting (`gofmt`) and run static analysis (`go vet`), then the architecture guardrails (`arch-check`).
+- `just arch-check`: Run the `tools/archguard` checker (advisory: size warnings + hard import/size failures).
 - `just test-race`: Run the race-detector suite.
 - `just tidy-check`: Verify `go mod tidy` does not change `go.mod` or `go.sum`.
 - `just audit`: Run `govulncheck ./...` after installing `golang.org/x/vuln/cmd/govulncheck@latest`.
@@ -1046,7 +1075,7 @@ contains these jobs:
 
 - `test`: Go tests with real-agent coverage enabled where local prerequisites exist.
 - `race`: `go test -race -shuffle=on -count=1 ./...`.
-- `lint`: `go vet ./...` plus a `gofmt -l .` assertion.
+- `lint`: `go vet ./...`, a `gofmt -l .` assertion, and `tools/archguard --ci` (hard architecture violations only; size warnings are advisory).
 - `tidy`: `go mod tidy` plus a `go.mod`/`go.sum` drift check.
 - `audit`: `govulncheck ./...`, advisory only (`continue-on-error`).
 
