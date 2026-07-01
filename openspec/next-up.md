@@ -53,7 +53,7 @@ runner: a guardrail (#3) that holds the boundaries, then the deep-module
 decompositions (#4 harness adapters, #5 presentation boundary, #6 run/try loop,
 #7 remaining source files, #8 test files).
 
-3. **add-architecture-guardrails** _(proposed)_
+3. **add-architecture-guardrails** _(implemented; pending archive)_
    Add the `tools/archguard` checker (file-size budgets with grandfathered caps,
    import-boundary rules, dependency confinement, test-helper confinement) plus a
    `just arch-check` recipe folded into `just check` and an `archguard` step in the
@@ -70,11 +70,22 @@ decompositions (#4 harness adapters, #5 presentation boundary, #6 run/try loop,
    `monitor` outliers have no owning change yet and need follow-up splits. Adds the
    `architecture-guardrails` spec.
 
-4. **modularize-harness-adapters** _(draft)_
-   Give future first-class harnesses a clean place to grow: a small executor API,
-   one module per built-in harness (the deep-module move), shared process/log
-   support, and a registry whose `map[string]agent.Executor` output feeds
-   `runner.NewRunner` at the composition root.
+4. **modularize-harness-adapters** _(proposed)_
+   Give future first-class harnesses a clean place to grow (draft **Option B**,
+   chosen for cleaner terminology over churn): a dedicated `internal/harnessapi`
+   contract package (`Executor`/`RunOptions`/`TryResult`/`ResolvedAgent` + shared
+   `BuildPrompt`/reasoning helpers), one deep module per built-in harness under
+   `internal/harness/<name>` (each owning its CLI parsing and log recovery), a
+   shared `internal/harness/process` support package, and a top-level
+   `internal/harness.BuildExecutors(harness.Config)` registry (narrow,
+   config-decoupled input) whose `map[string]harnessapi.Executor` output feeds
+   `runner.NewRunner` via a thin `app.BuildExecutors` mapper. `internal/agent` is
+   removed (no shim). Behaviour-preserving except six same-package helpers that
+   become exported to cross the new boundaries. Consumes #3's guardrail (adds the
+   harness allow-lists, ratchets away the `opencode.go` 801 cap) and keeps the
+   `reliability` parsers in place. Adds the `harness-module-structure` spec; hands
+   #5 a harness layer that already cannot import presentation packages; sets up the
+   parked `extract-prompt-builder`.
 
 5. **separate-runtime-presentation-boundary** _(draft)_
    Prepare for multiple presentation surfaces by introducing runtime events and
@@ -122,6 +133,12 @@ decompositions (#4 harness adapters, #5 presentation boundary, #6 run/try loop,
   architectural guardrail baseline is in place. Keep separate from the file-size
   and import-boundary policy so static-analysis backlog does not block the
   modularization sequence.
+- **extract-prompt-builder** _(draft)_ — give prompt construction its own module,
+  isolated from the harness executor contract (`BuildPrompt` moves to
+  `internal/harnessapi` under #4; this later change lifts it out entirely). Not a
+  priority while the builder stays simple; worth it once prompt-assembly logic
+  grows more distinct concerns. Sequence after `rename-rally-roles` and
+  `build-new-tui`.
 
 ## Carried-over principles
 

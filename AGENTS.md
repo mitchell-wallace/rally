@@ -134,6 +134,26 @@ In short:
   run start (excluding `.rally/`/`.laps/`), reminding the agent to review
   and commit those changes first.
 
+## Skill-directed actions (commits and subagents)
+
+When a skill checked into this repo (or one the user names directly) instructs
+you to make a **local commit** or **spawn a subagent** as part of its workflow,
+do so — its presence in the codebase or the user's clear reference to it is the
+authorization. You do not need to stop and ask; that would just re-litigate a
+decision the repo has already made. This overrides the general "commit only when
+asked / don't spawn subagents unless asked" defaults *for actions the invoked
+skill actually prescribes*.
+
+The exception is anything that leaves this machine:
+
+- **`git push` still requires explicit approval** — a skill that commits does not
+  thereby authorize a push. Ask first, unless the user's request is itself a call
+  to publish (e.g. invoking the release workflow / `rally-release`, which
+  implicitly approves the pushes that workflow performs).
+- Other outward-facing actions (opening PRs, posting to external services) keep
+  their normal confirm-first treatment unless the skill or user clearly scopes
+  them in.
+
 ## Releasing
 
 Rally uses GoReleaser via GitHub Actions to publish releases. The workflow
