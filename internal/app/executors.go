@@ -3,13 +3,14 @@ package app
 import (
 	"github.com/mitchell-wallace/rally/internal/agent"
 	"github.com/mitchell-wallace/rally/internal/config"
+	"github.com/mitchell-wallace/rally/internal/harnessapi"
 )
 
 // BuildExecutors assembles the executor registry for a relay run: the built-in
 // harnesses (antigravity/claude/codex/opencode) keyed by their canonical names,
 // plus a GenericExecutor for each generic harness configured with a command.
-func BuildExecutors(cfg config.V2Config) map[string]agent.Executor {
-	executors := map[string]agent.Executor{
+func BuildExecutors(cfg config.V2Config) map[string]harnessapi.Executor {
+	executors := map[string]harnessapi.Executor{
 		"antigravity": &agent.AntigravityExecutor{Model: cfg.AntigravityModel},
 		"claude":      &agent.ClaudeExecutor{Model: cfg.ClaudeModel},
 		"codex":       &agent.CodexExecutor{Model: cfg.CodexModel},

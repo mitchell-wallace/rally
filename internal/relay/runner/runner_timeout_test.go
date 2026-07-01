@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mitchell-wallace/rally/internal/agent"
+	"github.com/mitchell-wallace/rally/internal/harnessapi"
 	"github.com/mitchell-wallace/rally/internal/keyboard"
 )
 
@@ -28,7 +28,7 @@ func timeoutTry(attemptCtx context.Context, sessionID string) <-chan tryResult {
 	go func() {
 		<-attemptCtx.Done()
 		tryCh <- tryResult{
-			result: &agent.TryResult{Completed: false, SessionID: sessionID},
+			result: &harnessapi.TryResult{Completed: false, SessionID: sessionID},
 			err:    attemptCtx.Err(),
 		}
 	}()
@@ -132,7 +132,7 @@ func TestActionLoopUnderBudgetCompletesNormally(t *testing.T) {
 	attemptCtx, cancelAttempt := context.WithCancel(context.Background())
 	defer cancelAttempt()
 	tryCh := make(chan tryResult, 1)
-	tryCh <- tryResult{result: &agent.TryResult{Completed: true, Summary: "ok"}}
+	tryCh <- tryResult{result: &harnessapi.TryResult{Completed: true, Summary: "ok"}}
 
 	done := runLoopAsync(r, actionLoopDeps{
 		tryCh:         tryCh,
@@ -207,7 +207,7 @@ func TestActionLoopStallPrecedesTimeout(t *testing.T) {
 	}
 
 	// The stalled attempt then completes on its own.
-	tryCh <- tryResult{result: &agent.TryResult{Completed: false, Summary: "stalled then done"}}
+	tryCh <- tryResult{result: &harnessapi.TryResult{Completed: false, Summary: "stalled then done"}}
 	var out actionLoopResult
 	select {
 	case out = <-done:

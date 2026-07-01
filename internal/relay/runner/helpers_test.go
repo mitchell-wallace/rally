@@ -3,6 +3,7 @@ package runner
 import (
 	"context"
 	"fmt"
+	"github.com/mitchell-wallace/rally/internal/agent"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -11,13 +12,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mitchell-wallace/rally/internal/agent"
+	"github.com/mitchell-wallace/rally/internal/harnessapi"
 	"github.com/mitchell-wallace/rally/internal/store"
 	"github.com/mitchell-wallace/rally/internal/testutil"
 )
 
 type funcExecutor struct {
-	fn              func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error)
+	fn              func(ctx context.Context, opts harnessapi.RunOptions) (*harnessapi.TryResult, error)
 	resumeSupported bool
 	rotateSupported bool
 	probeSupported  bool
@@ -26,7 +27,7 @@ type funcExecutor struct {
 	rotateCalls     []string
 }
 
-func (f *funcExecutor) Execute(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+func (f *funcExecutor) Execute(ctx context.Context, opts harnessapi.RunOptions) (*harnessapi.TryResult, error) {
 	return f.fn(ctx, opts)
 }
 
@@ -92,7 +93,7 @@ func newTestStore(t *testing.T, dir string) *store.Store {
 	return s
 }
 
-func testResolver(spec string) (agent.ResolvedAgent, error) {
+func testResolver(spec string) (harnessapi.ResolvedAgent, error) {
 	aliases := map[string]string{
 		"ag": "antigravity", "agy": "antigravity", "antigravity": "antigravity",
 		"cc": "claude", "claude": "claude",
@@ -102,27 +103,27 @@ func testResolver(spec string) (agent.ResolvedAgent, error) {
 	parts := strings.SplitN(spec, ":", 2)
 	harness, ok := aliases[parts[0]]
 	if !ok {
-		return agent.ResolvedAgent{}, fmt.Errorf("unknown agent alias %q", parts[0])
+		return harnessapi.ResolvedAgent{}, fmt.Errorf("unknown agent alias %q", parts[0])
 	}
 	if len(parts) == 2 {
 		if _, err := strconv.Atoi(parts[1]); err == nil {
-			return agent.ResolvedAgent{Harness: harness}, nil
+			return harnessapi.ResolvedAgent{Harness: harness}, nil
 		}
-		return agent.ResolvedAgent{Harness: harness, Model: parts[1]}, nil
+		return harnessapi.ResolvedAgent{Harness: harness, Model: parts[1]}, nil
 	}
-	return agent.ResolvedAgent{Harness: harness}, nil
+	return harnessapi.ResolvedAgent{Harness: harness}, nil
 }
 
 const cheapTestModel = "opencode/big-pickle"
 
-func cheapTestResolver(spec string) (agent.ResolvedAgent, error) {
+func cheapTestResolver(spec string) (harnessapi.ResolvedAgent, error) {
 	if spec == "op:dsf" {
-		return agent.ResolvedAgent{Harness: "opencode", Model: cheapTestModel}, nil
+		return harnessapi.ResolvedAgent{Harness: "opencode", Model: cheapTestModel}, nil
 	}
 	return testResolver(spec)
 }
 
-func NewFixtureExecutor(t *testing.T, dir, diffPath, outputPath string, delay time.Duration) agent.Executor {
+func NewFixtureExecutor(t *testing.T, dir, diffPath, outputPath string, delay time.Duration) harnessapi.Executor {
 	t.Helper()
 	return &agent.FixtureExecutor{
 		DiffPath:   diffPath,

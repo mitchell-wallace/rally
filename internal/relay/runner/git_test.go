@@ -3,13 +3,14 @@ package runner
 import (
 	"context"
 	"fmt"
+	"github.com/mitchell-wallace/rally/internal/agent"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/mitchell-wallace/rally/internal/agent"
+	"github.com/mitchell-wallace/rally/internal/harnessapi"
 	"github.com/mitchell-wallace/rally/internal/store"
 )
 
@@ -130,7 +131,7 @@ func TestCommitHashTracking_AgentCommitted(t *testing.T) {
 		OutputPath: outputPath,
 		Dir:        workspaceDir,
 	}
-	executors := map[string]agent.Executor{"claude": exec}
+	executors := map[string]harnessapi.Executor{"claude": exec}
 
 	r := NewRunner(s, Config{
 		WorkspaceDir:     workspaceDir,
@@ -160,7 +161,7 @@ func TestCommitHashTracking_AutoCommitted(t *testing.T) {
 
 	s := newTestStore(t, rallyDir)
 	exec := &funcExecutor{
-		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+		fn: func(ctx context.Context, opts harnessapi.RunOptions) (*harnessapi.TryResult, error) {
 			// Create a file but don't commit it
 			f, err := os.Create(filepath.Join(workspaceDir, "auto.txt"))
 			if err != nil {
@@ -168,10 +169,10 @@ func TestCommitHashTracking_AutoCommitted(t *testing.T) {
 			}
 			f.WriteString("auto")
 			f.Close()
-			return &agent.TryResult{Completed: true}, nil
+			return &harnessapi.TryResult{Completed: true}, nil
 		},
 	}
-	executors := map[string]agent.Executor{"claude": exec}
+	executors := map[string]harnessapi.Executor{"claude": exec}
 
 	r := NewRunner(s, Config{
 		WorkspaceDir:     workspaceDir,
@@ -207,7 +208,7 @@ func TestCommitHistoryTracking_MultipleAgentCommits(t *testing.T) {
 
 	s := newTestStore(t, rallyDir)
 	exec := &funcExecutor{
-		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+		fn: func(ctx context.Context, opts harnessapi.RunOptions) (*harnessapi.TryResult, error) {
 			// Make three distinct commits within a single try.
 			for i := 1; i <= 3; i++ {
 				name := fmt.Sprintf("file%d.txt", i)
@@ -217,10 +218,10 @@ func TestCommitHistoryTracking_MultipleAgentCommits(t *testing.T) {
 				runGit(t, workspaceDir, "add", ".")
 				runGit(t, workspaceDir, "commit", "-m", fmt.Sprintf("commit %d", i), "--no-verify")
 			}
-			return &agent.TryResult{Completed: true}, nil
+			return &harnessapi.TryResult{Completed: true}, nil
 		},
 	}
-	executors := map[string]agent.Executor{"claude": exec}
+	executors := map[string]harnessapi.Executor{"claude": exec}
 
 	r := NewRunner(s, Config{
 		WorkspaceDir:     workspaceDir,
@@ -316,11 +317,11 @@ func TestCommitHashTracking_NoChanges(t *testing.T) {
 
 	s := newTestStore(t, rallyDir)
 	exec := &funcExecutor{
-		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
-			return &agent.TryResult{Completed: true}, nil
+		fn: func(ctx context.Context, opts harnessapi.RunOptions) (*harnessapi.TryResult, error) {
+			return &harnessapi.TryResult{Completed: true}, nil
 		},
 	}
-	executors := map[string]agent.Executor{"claude": exec}
+	executors := map[string]harnessapi.Executor{"claude": exec}
 
 	r := NewRunner(s, Config{
 		WorkspaceDir:     workspaceDir,

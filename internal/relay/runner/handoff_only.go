@@ -9,9 +9,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/mitchell-wallace/rally/internal/agent"
 	"github.com/mitchell-wallace/rally/internal/agent_prompt"
 	"github.com/mitchell-wallace/rally/internal/gitx"
+	"github.com/mitchell-wallace/rally/internal/harnessapi"
 	"github.com/mitchell-wallace/rally/internal/progress"
 	"github.com/mitchell-wallace/rally/internal/reliability"
 	"github.com/mitchell-wallace/rally/internal/store"
@@ -24,7 +24,7 @@ import (
 // was missing. The reason is persisted on the resolving handoff_timeout try so
 // recovery routing and operator triage can tell a no-resume harness from a
 // no-session attempt (task 4.3).
-func noHandoffResumeReason(exec agent.Executor, sessionID string) string {
+func noHandoffResumeReason(exec harnessapi.Executor, sessionID string) string {
 	if exec == nil || !exec.ResumeSupported() {
 		return "run timeout; harness cannot resume for handoff"
 	}
@@ -34,7 +34,7 @@ func noHandoffResumeReason(exec agent.Executor, sessionID string) string {
 	return "run timeout"
 }
 
-func buildHandoffOnlyPrompt(opts agent.RunOptions) string {
+func buildHandoffOnlyPrompt(opts harnessapi.RunOptions) string {
 	var b strings.Builder
 	if opts.Persona != "" {
 		fmt.Fprintf(&b, "Persona: %s\n\n", opts.Persona)
@@ -70,7 +70,7 @@ func (r *Runner) runBoundedHandoffOnly(
 	ctx context.Context,
 	relay *store.RelayRecord,
 	runIndex int,
-	picked agent.ResolvedAgent,
+	picked harnessapi.ResolvedAgent,
 	task runTask,
 	rc telemetry.RallyContext,
 	roleInstructions string,
@@ -81,7 +81,7 @@ func (r *Runner) runBoundedHandoffOnly(
 	runID string,
 	runStartDirtySnapshot map[string]string,
 	log io.Writer,
-) (reliability.TryOutcome, *agent.TryResult, bool, bool, error) {
+) (reliability.TryOutcome, *harnessapi.TryResult, bool, bool, error) {
 	startedAt := time.Now().UTC()
 
 	// Persist the captured session id so the resume-capable harness re-attaches to
@@ -91,7 +91,7 @@ func (r *Runner) runBoundedHandoffOnly(
 		_ = progress.SaveRunState(r.cfg.WorkspaceDir, rs)
 	}
 
-	opts := agent.RunOptions{
+	opts := harnessapi.RunOptions{
 		Persona:          picked.Harness,
 		Model:            picked.Model,
 		ReasoningEffort:  picked.ReasoningEffort,
@@ -146,7 +146,7 @@ func (r *Runner) runBoundedHandoffOnly(
 	}()
 
 	var (
-		result   *agent.TryResult
+		result   *harnessapi.TryResult
 		execErr  error
 		timedOut bool
 	)
@@ -170,7 +170,7 @@ func (r *Runner) runBoundedHandoffOnly(
 
 	summary := r.normalizeFinalSnippet(runID, tryLogPath, summaryEntryCountBeforeRun, result, execErr)
 	if result == nil {
-		result = &agent.TryResult{}
+		result = &harnessapi.TryResult{}
 	}
 	result.Summary = summary
 

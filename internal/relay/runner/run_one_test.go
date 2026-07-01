@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mitchell-wallace/rally/internal/agent"
+	"github.com/mitchell-wallace/rally/internal/harnessapi"
 	"github.com/mitchell-wallace/rally/internal/laps"
 	"github.com/mitchell-wallace/rally/internal/progress"
 	"github.com/mitchell-wallace/rally/internal/reliability"
@@ -28,19 +28,19 @@ func TestRetryWithinRun(t *testing.T) {
 	s := newTestStore(t, rallyDir)
 	attempt := 0
 	exec := &funcExecutor{
-		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+		fn: func(ctx context.Context, opts harnessapi.RunOptions) (*harnessapi.TryResult, error) {
 			attempt++
 			if attempt < 3 {
-				return &agent.TryResult{Completed: false, Summary: "fail"}, nil
+				return &harnessapi.TryResult{Completed: false, Summary: "fail"}, nil
 			}
 			// Create a file so the successful try is not a no-op failure.
 			f, _ := os.Create(filepath.Join(workspaceDir, fmt.Sprintf("success-%d.txt", attempt)))
 			f.WriteString("changed")
 			f.Close()
-			return &agent.TryResult{Completed: true, Summary: "success"}, nil
+			return &harnessapi.TryResult{Completed: true, Summary: "success"}, nil
 		},
 	}
-	executors := map[string]agent.Executor{"claude": exec}
+	executors := map[string]harnessapi.Executor{"claude": exec}
 
 	r := NewRunner(s, Config{
 		WorkspaceDir:     workspaceDir,
@@ -85,22 +85,22 @@ func TestResumeRetryPassesSessionID(t *testing.T) {
 	var capturedSessionIDs []string
 	exec := &funcExecutor{
 		resumeSupported: true,
-		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+		fn: func(ctx context.Context, opts harnessapi.RunOptions) (*harnessapi.TryResult, error) {
 			attempt++
 			capturedSessionIDs = append(capturedSessionIDs, opts.ResumeSessionID)
 			if attempt < 3 {
 				f, _ := os.Create(filepath.Join(workspaceDir, fmt.Sprintf("attempt-%d.txt", attempt)))
 				f.WriteString("changed")
 				f.Close()
-				return &agent.TryResult{Completed: false, Summary: "fail", SessionID: fmt.Sprintf("session-%d", attempt)}, nil
+				return &harnessapi.TryResult{Completed: false, Summary: "fail", SessionID: fmt.Sprintf("session-%d", attempt)}, nil
 			}
 			f, _ := os.Create(filepath.Join(workspaceDir, "success.txt"))
 			f.WriteString("changed")
 			f.Close()
-			return &agent.TryResult{Completed: true, Summary: "success"}, nil
+			return &harnessapi.TryResult{Completed: true, Summary: "success"}, nil
 		},
 	}
-	executors := map[string]agent.Executor{"claude": exec}
+	executors := map[string]harnessapi.Executor{"claude": exec}
 
 	r := NewRunner(s, Config{
 		WorkspaceDir:     workspaceDir,
@@ -139,17 +139,17 @@ func TestRunOneFreezeRetryResumesAndRecovers(t *testing.T) {
 	var resumeIDs []string
 	exec := &funcExecutor{
 		resumeSupported: true,
-		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+		fn: func(ctx context.Context, opts harnessapi.RunOptions) (*harnessapi.TryResult, error) {
 			attempt++
 			resumeIDs = append(resumeIDs, opts.ResumeSessionID)
 			if attempt == 1 {
 				<-freezeCh
-				return &agent.TryResult{Completed: false, Summary: "freeze", SessionID: "sess-freeze"}, nil
+				return &harnessapi.TryResult{Completed: false, Summary: "freeze", SessionID: "sess-freeze"}, nil
 			}
 			f, _ := os.Create(filepath.Join(workspaceDir, "success.txt"))
 			f.WriteString("changed")
 			f.Close()
-			return &agent.TryResult{Completed: true, Summary: "success"}, nil
+			return &harnessapi.TryResult{Completed: true, Summary: "success"}, nil
 		},
 	}
 
@@ -158,7 +158,7 @@ func TestRunOneFreezeRetryResumesAndRecovers(t *testing.T) {
 		DataDir:          t.TempDir(),
 		AgentMixSpecs:    []string{"cc:1"},
 		TargetIterations: 1,
-	}, map[string]agent.Executor{"claude": exec})
+	}, map[string]harnessapi.Executor{"claude": exec})
 
 	controllerCount := 0
 	r.stallControllerFactory = func(logPath string) reliability.StallController {
@@ -190,7 +190,7 @@ func TestRunOneFreezeRetryResumesAndRecovers(t *testing.T) {
 		context.Background(),
 		&store.RelayRecord{ID: 1, TargetIterations: 1},
 		0,
-		agent.ResolvedAgent{Harness: "claude"},
+		harnessapi.ResolvedAgent{Harness: "claude"},
 		runTask{Name: "relay run", Prompt: "freeze test"},
 		nil,
 		nil,
@@ -248,7 +248,7 @@ func TestResumeRetryPreservesRunState(t *testing.T) {
 	attempt := 0
 	exec := &funcExecutor{
 		resumeSupported: true,
-		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+		fn: func(ctx context.Context, opts harnessapi.RunOptions) (*harnessapi.TryResult, error) {
 			attempt++
 			if attempt == 1 {
 				if err := progress.RecordLap(workspaceDir, "lap-1"); err != nil {
@@ -257,15 +257,15 @@ func TestResumeRetryPreservesRunState(t *testing.T) {
 				if err := progress.SetHandoff(workspaceDir); err != nil {
 					t.Errorf("SetHandoff error: %v", err)
 				}
-				return &agent.TryResult{Completed: false, Summary: "fail", SessionID: "sess-1"}, nil
+				return &harnessapi.TryResult{Completed: false, Summary: "fail", SessionID: "sess-1"}, nil
 			}
 			f, _ := os.Create(filepath.Join(workspaceDir, "success.txt"))
 			f.WriteString("changed")
 			f.Close()
-			return &agent.TryResult{Completed: true, Summary: "success"}, nil
+			return &harnessapi.TryResult{Completed: true, Summary: "success"}, nil
 		},
 	}
-	executors := map[string]agent.Executor{"claude": exec}
+	executors := map[string]harnessapi.Executor{"claude": exec}
 
 	r := NewRunner(s, Config{
 		WorkspaceDir:     workspaceDir,
@@ -305,7 +305,7 @@ func TestFreshStartRetryClearsRunState(t *testing.T) {
 	var capturedSessionIDs []string
 	exec := &funcExecutor{
 		resumeSupported: false,
-		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+		fn: func(ctx context.Context, opts harnessapi.RunOptions) (*harnessapi.TryResult, error) {
 			attempt++
 			capturedSessionIDs = append(capturedSessionIDs, opts.ResumeSessionID)
 			if attempt == 1 {
@@ -315,15 +315,15 @@ func TestFreshStartRetryClearsRunState(t *testing.T) {
 				if err := progress.SetHandoff(workspaceDir); err != nil {
 					t.Errorf("SetHandoff error: %v", err)
 				}
-				return &agent.TryResult{Completed: false, Summary: "fail", SessionID: "sess-1"}, nil
+				return &harnessapi.TryResult{Completed: false, Summary: "fail", SessionID: "sess-1"}, nil
 			}
 			f, _ := os.Create(filepath.Join(workspaceDir, "success.txt"))
 			f.WriteString("changed")
 			f.Close()
-			return &agent.TryResult{Completed: true, Summary: "success"}, nil
+			return &harnessapi.TryResult{Completed: true, Summary: "success"}, nil
 		},
 	}
-	executors := map[string]agent.Executor{"claude": exec}
+	executors := map[string]harnessapi.Executor{"claude": exec}
 
 	r := NewRunner(s, Config{
 		WorkspaceDir:     workspaceDir,
@@ -363,13 +363,13 @@ func TestResumeRetryMidHandoffPreservesFlag(t *testing.T) {
 	var runStateAtAttempt2 *progress.RunState
 	exec := &funcExecutor{
 		resumeSupported: true,
-		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+		fn: func(ctx context.Context, opts harnessapi.RunOptions) (*harnessapi.TryResult, error) {
 			attempt++
 			if attempt == 1 {
 				if err := progress.SetHandoff(workspaceDir); err != nil {
 					t.Errorf("SetHandoff error: %v", err)
 				}
-				return &agent.TryResult{Completed: false, Summary: "crashed mid-handoff", SessionID: "sess-crash"}, nil
+				return &harnessapi.TryResult{Completed: false, Summary: "crashed mid-handoff", SessionID: "sess-crash"}, nil
 			}
 			if attempt == 2 {
 				rs, err := progress.LoadRunState(workspaceDir)
@@ -381,10 +381,10 @@ func TestResumeRetryMidHandoffPreservesFlag(t *testing.T) {
 			f, _ := os.Create(filepath.Join(workspaceDir, "success.txt"))
 			f.WriteString("changed")
 			f.Close()
-			return &agent.TryResult{Completed: true, Summary: "success"}, nil
+			return &harnessapi.TryResult{Completed: true, Summary: "success"}, nil
 		},
 	}
-	executors := map[string]agent.Executor{"claude": exec}
+	executors := map[string]harnessapi.Executor{"claude": exec}
 
 	r := NewRunner(s, Config{
 		WorkspaceDir:     workspaceDir,
@@ -424,13 +424,13 @@ func TestFreshStartRetryMidHandoffClearsFlag(t *testing.T) {
 	var runStateAtAttempt2 *progress.RunState
 	exec := &funcExecutor{
 		resumeSupported: false,
-		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+		fn: func(ctx context.Context, opts harnessapi.RunOptions) (*harnessapi.TryResult, error) {
 			attempt++
 			if attempt == 1 {
 				if err := progress.SetHandoff(workspaceDir); err != nil {
 					t.Errorf("SetHandoff error: %v", err)
 				}
-				return &agent.TryResult{Completed: false, Summary: "crashed mid-handoff", SessionID: "sess-crash"}, nil
+				return &harnessapi.TryResult{Completed: false, Summary: "crashed mid-handoff", SessionID: "sess-crash"}, nil
 			}
 			if attempt == 2 {
 				rs, err := progress.LoadRunState(workspaceDir)
@@ -442,10 +442,10 @@ func TestFreshStartRetryMidHandoffClearsFlag(t *testing.T) {
 			f, _ := os.Create(filepath.Join(workspaceDir, "success.txt"))
 			f.WriteString("changed")
 			f.Close()
-			return &agent.TryResult{Completed: true, Summary: "success"}, nil
+			return &harnessapi.TryResult{Completed: true, Summary: "success"}, nil
 		},
 	}
-	executors := map[string]agent.Executor{"claude": exec}
+	executors := map[string]harnessapi.Executor{"claude": exec}
 
 	r := NewRunner(s, Config{
 		WorkspaceDir:     workspaceDir,
@@ -484,7 +484,7 @@ func TestExplicitSkipStartsFresh(t *testing.T) {
 	var capturedSessionIDs []string
 	exec := &funcExecutor{
 		resumeSupported: true,
-		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+		fn: func(ctx context.Context, opts harnessapi.RunOptions) (*harnessapi.TryResult, error) {
 			runCount++
 			capturedSessionIDs = append(capturedSessionIDs, opts.ResumeSessionID)
 
@@ -492,7 +492,7 @@ func TestExplicitSkipStartsFresh(t *testing.T) {
 				if opts.LogPath != "" {
 					_ = os.WriteFile(opts.LogPath, []byte("exec: some-cli not found\n"), 0o644)
 				}
-				return &agent.TryResult{
+				return &harnessapi.TryResult{
 					Completed: false,
 					Summary:   "harness missing",
 					SessionID: "sess-run1-should-discard",
@@ -502,10 +502,10 @@ func TestExplicitSkipStartsFresh(t *testing.T) {
 			f, _ := os.Create(filepath.Join(workspaceDir, fmt.Sprintf("run%d.txt", runCount)))
 			f.WriteString("changed")
 			f.Close()
-			return &agent.TryResult{Completed: true, Summary: "success"}, nil
+			return &harnessapi.TryResult{Completed: true, Summary: "success"}, nil
 		},
 	}
-	executors := map[string]agent.Executor{"claude": exec, "codex": exec}
+	executors := map[string]harnessapi.Executor{"claude": exec, "codex": exec}
 
 	r := NewRunner(s, Config{
 		WorkspaceDir:     workspaceDir,
@@ -553,11 +553,11 @@ func TestResumeReusesSessionIDOnNextAttempt(t *testing.T) {
 	var capturedSessionIDs []string
 	exec := &funcExecutor{
 		resumeSupported: true,
-		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+		fn: func(ctx context.Context, opts harnessapi.RunOptions) (*harnessapi.TryResult, error) {
 			attempt++
 			capturedSessionIDs = append(capturedSessionIDs, opts.ResumeSessionID)
 			if attempt < 3 {
-				return &agent.TryResult{
+				return &harnessapi.TryResult{
 					Completed: false,
 					Summary:   fmt.Sprintf("attempt %d failed", attempt),
 					SessionID: fmt.Sprintf("sess-attempt-%d", attempt),
@@ -566,10 +566,10 @@ func TestResumeReusesSessionIDOnNextAttempt(t *testing.T) {
 			f, _ := os.Create(filepath.Join(workspaceDir, "success.txt"))
 			f.WriteString("changed")
 			f.Close()
-			return &agent.TryResult{Completed: true, Summary: "success"}, nil
+			return &harnessapi.TryResult{Completed: true, Summary: "success"}, nil
 		},
 	}
-	executors := map[string]agent.Executor{"claude": exec}
+	executors := map[string]harnessapi.Executor{"claude": exec}
 
 	r := NewRunner(s, Config{
 		WorkspaceDir:     workspaceDir,
@@ -611,11 +611,11 @@ func TestIncompleteRunLeavesChangesUncommitted(t *testing.T) {
 
 	s := newTestStore(t, rallyDir)
 	exec := &funcExecutor{
-		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+		fn: func(ctx context.Context, opts harnessapi.RunOptions) (*harnessapi.TryResult, error) {
 			if err := os.WriteFile(filepath.Join(workspaceDir, "partial.txt"), []byte("partial"), 0o644); err != nil {
 				return nil, err
 			}
-			return &agent.TryResult{Completed: true, Summary: "changed but did not finalize"}, nil
+			return &harnessapi.TryResult{Completed: true, Summary: "changed but did not finalize"}, nil
 		},
 	}
 
@@ -627,7 +627,7 @@ func TestIncompleteRunLeavesChangesUncommitted(t *testing.T) {
 		RetryBudget:      1,
 		LapsEnabled:      true,
 		Resolver:         cheapTestResolver,
-	}, map[string]agent.Executor{"opencode": exec})
+	}, map[string]harnessapi.Executor{"opencode": exec})
 
 	_ = r.Run(context.Background())
 
@@ -666,19 +666,19 @@ func TestIncompleteRetryPromptGuidance(t *testing.T) {
 	attempt := 0
 	var retryPrompt string
 	exec := &funcExecutor{
-		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+		fn: func(ctx context.Context, opts harnessapi.RunOptions) (*harnessapi.TryResult, error) {
 			attempt++
 			if attempt == 1 {
 				if err := os.WriteFile(filepath.Join(workspaceDir, "partial.txt"), []byte("partial"), 0o644); err != nil {
 					return nil, err
 				}
-				return &agent.TryResult{Completed: true, Summary: "partial"}, nil
+				return &harnessapi.TryResult{Completed: true, Summary: "partial"}, nil
 			}
 			retryPrompt = opts.TaskPrompt
 			if err := progress.RecordLap(workspaceDir, "lap-1"); err != nil {
 				return nil, err
 			}
-			return &agent.TryResult{Completed: true, Summary: "done"}, nil
+			return &harnessapi.TryResult{Completed: true, Summary: "done"}, nil
 		},
 	}
 
@@ -690,7 +690,7 @@ func TestIncompleteRetryPromptGuidance(t *testing.T) {
 		RetryBudget:      2,
 		LapsEnabled:      true,
 		Resolver:         cheapTestResolver,
-	}, map[string]agent.Executor{"opencode": exec})
+	}, map[string]harnessapi.Executor{"opencode": exec})
 
 	if err := r.Run(context.Background()); err != nil {
 		t.Fatalf("Run error = %v", err)
@@ -714,9 +714,9 @@ func TestIncompleteDoesNotCountTowardFailureCascade(t *testing.T) {
 
 	s := newTestStore(t, rallyDir)
 	exec := &funcExecutor{
-		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+		fn: func(ctx context.Context, opts harnessapi.RunOptions) (*harnessapi.TryResult, error) {
 			_ = os.WriteFile(filepath.Join(workspaceDir, "partial.txt"), []byte("partial"), 0o644)
-			return &agent.TryResult{Completed: true, Summary: "partial"}, nil
+			return &harnessapi.TryResult{Completed: true, Summary: "partial"}, nil
 		},
 	}
 	r := NewRunner(s, Config{
@@ -727,7 +727,7 @@ func TestIncompleteDoesNotCountTowardFailureCascade(t *testing.T) {
 		RetryBudget:      1,
 		LapsEnabled:      true,
 		Resolver:         cheapTestResolver,
-	}, map[string]agent.Executor{"opencode": exec})
+	}, map[string]harnessapi.Executor{"opencode": exec})
 
 	_ = r.Run(context.Background())
 
@@ -760,8 +760,8 @@ func TestIncompleteLeftoverAware_NoOpInheritingLeftovers(t *testing.T) {
 
 	s := newTestStore(t, rallyDir)
 	exec := &funcExecutor{
-		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
-			return &agent.TryResult{Completed: false, Summary: "no-op"}, nil
+		fn: func(ctx context.Context, opts harnessapi.RunOptions) (*harnessapi.TryResult, error) {
+			return &harnessapi.TryResult{Completed: false, Summary: "no-op"}, nil
 		},
 	}
 
@@ -773,7 +773,7 @@ func TestIncompleteLeftoverAware_NoOpInheritingLeftovers(t *testing.T) {
 		RetryBudget:      1,
 		LapsEnabled:      true,
 		Resolver:         cheapTestResolver,
-	}, map[string]agent.Executor{"opencode": exec})
+	}, map[string]harnessapi.Executor{"opencode": exec})
 
 	_ = r.Run(context.Background())
 
@@ -804,11 +804,11 @@ func TestIncompleteLeftoverAware_OwnUnfinalizedChanges(t *testing.T) {
 
 	s := newTestStore(t, rallyDir)
 	exec := &funcExecutor{
-		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+		fn: func(ctx context.Context, opts harnessapi.RunOptions) (*harnessapi.TryResult, error) {
 			if err := os.WriteFile(filepath.Join(workspaceDir, "new.txt"), []byte("new"), 0o644); err != nil {
 				return nil, err
 			}
-			return &agent.TryResult{Completed: true, Summary: "changed but did not finalize"}, nil
+			return &harnessapi.TryResult{Completed: true, Summary: "changed but did not finalize"}, nil
 		},
 	}
 
@@ -820,7 +820,7 @@ func TestIncompleteLeftoverAware_OwnUnfinalizedChanges(t *testing.T) {
 		RetryBudget:      1,
 		LapsEnabled:      true,
 		Resolver:         cheapTestResolver,
-	}, map[string]agent.Executor{"opencode": exec})
+	}, map[string]harnessapi.Executor{"opencode": exec})
 
 	_ = r.Run(context.Background())
 
@@ -856,12 +856,12 @@ func TestIncompleteLeftoverAware_TouchingInheritedLeftover(t *testing.T) {
 
 	s := newTestStore(t, rallyDir)
 	exec := &funcExecutor{
-		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+		fn: func(ctx context.Context, opts harnessapi.RunOptions) (*harnessapi.TryResult, error) {
 			cmd := exec.Command("git", "-C", workspaceDir, "add", "leftover.txt")
 			if err := cmd.Run(); err != nil {
 				return nil, err
 			}
-			return &agent.TryResult{Completed: true, Summary: "staged leftover but did not finalize"}, nil
+			return &harnessapi.TryResult{Completed: true, Summary: "staged leftover but did not finalize"}, nil
 		},
 	}
 
@@ -873,7 +873,7 @@ func TestIncompleteLeftoverAware_TouchingInheritedLeftover(t *testing.T) {
 		RetryBudget:      1,
 		LapsEnabled:      true,
 		Resolver:         cheapTestResolver,
-	}, map[string]agent.Executor{"opencode": exec})
+	}, map[string]harnessapi.Executor{"opencode": exec})
 
 	_ = r.Run(context.Background())
 
@@ -904,8 +904,8 @@ func TestIncompleteLeftoverAware_NoChangeNoFinalize(t *testing.T) {
 
 	s := newTestStore(t, rallyDir)
 	exec := &funcExecutor{
-		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
-			return &agent.TryResult{Completed: false, Summary: "did nothing"}, nil
+		fn: func(ctx context.Context, opts harnessapi.RunOptions) (*harnessapi.TryResult, error) {
+			return &harnessapi.TryResult{Completed: false, Summary: "did nothing"}, nil
 		},
 	}
 
@@ -917,7 +917,7 @@ func TestIncompleteLeftoverAware_NoChangeNoFinalize(t *testing.T) {
 		RetryBudget:      1,
 		LapsEnabled:      true,
 		Resolver:         cheapTestResolver,
-	}, map[string]agent.Executor{"opencode": exec})
+	}, map[string]harnessapi.Executor{"opencode": exec})
 
 	_ = r.Run(context.Background())
 
@@ -943,12 +943,12 @@ func TestStallRecovery_VerifyRoleExcluded(t *testing.T) {
 	s := newTestStore(t, rallyDir)
 	stallCh := make(chan struct{})
 	exec := &funcExecutor{
-		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+		fn: func(ctx context.Context, opts harnessapi.RunOptions) (*harnessapi.TryResult, error) {
 			os.WriteFile(filepath.Join(workspaceDir, "fix.txt"), []byte("trivial fix"), 0o644)
 			runGit(t, workspaceDir, "add", "fix.txt")
 			runGit(t, workspaceDir, "commit", "-m", "trivial fix", "--no-verify")
 			<-stallCh
-			return &agent.TryResult{Completed: false, Summary: "stalled"}, nil
+			return &harnessapi.TryResult{Completed: false, Summary: "stalled"}, nil
 		},
 	}
 
@@ -958,7 +958,7 @@ func TestStallRecovery_VerifyRoleExcluded(t *testing.T) {
 		AgentMixSpecs:    []string{"cc:1"},
 		TargetIterations: 1,
 		RetryBudget:      1,
-	}, map[string]agent.Executor{"claude": exec})
+	}, map[string]harnessapi.Executor{"claude": exec})
 
 	r.stallControllerFactory = func(string) reliability.StallController {
 		triggered := false
@@ -982,7 +982,7 @@ func TestStallRecovery_VerifyRoleExcluded(t *testing.T) {
 		context.Background(),
 		&store.RelayRecord{ID: 1, TargetIterations: 1},
 		0,
-		agent.ResolvedAgent{Harness: "claude"},
+		harnessapi.ResolvedAgent{Harness: "claude"},
 		runTask{Name: "verify task", Prompt: "check correctness", Assignee: "verify", LapID: "lap-1", IsLapsBacked: true, LapsRemaining: 1},
 		nil,
 		nil,
@@ -1011,12 +1011,12 @@ func TestStallRecovery_ImplementationRoleRecovers(t *testing.T) {
 	s := newTestStore(t, rallyDir)
 	stallCh := make(chan struct{})
 	exec := &funcExecutor{
-		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+		fn: func(ctx context.Context, opts harnessapi.RunOptions) (*harnessapi.TryResult, error) {
 			os.WriteFile(filepath.Join(workspaceDir, "impl.txt"), []byte("implementation"), 0o644)
 			runGit(t, workspaceDir, "add", "impl.txt")
 			runGit(t, workspaceDir, "commit", "-m", "implementation work", "--no-verify")
 			<-stallCh
-			return &agent.TryResult{Completed: false, Summary: "stalled"}, nil
+			return &harnessapi.TryResult{Completed: false, Summary: "stalled"}, nil
 		},
 	}
 
@@ -1026,7 +1026,7 @@ func TestStallRecovery_ImplementationRoleRecovers(t *testing.T) {
 		AgentMixSpecs:    []string{"cc:1"},
 		TargetIterations: 1,
 		RetryBudget:      1,
-	}, map[string]agent.Executor{"claude": exec})
+	}, map[string]harnessapi.Executor{"claude": exec})
 
 	r.stallControllerFactory = func(string) reliability.StallController {
 		triggered := false
@@ -1050,7 +1050,7 @@ func TestStallRecovery_ImplementationRoleRecovers(t *testing.T) {
 		context.Background(),
 		&store.RelayRecord{ID: 1, TargetIterations: 1},
 		0,
-		agent.ResolvedAgent{Harness: "claude"},
+		harnessapi.ResolvedAgent{Harness: "claude"},
 		runTask{Name: "senior task", Prompt: "implement feature", Assignee: "senior", LapID: "lap-1", IsLapsBacked: true, LapsRemaining: 1},
 		nil,
 		nil,
@@ -1078,13 +1078,13 @@ func TestStallRecovery_VerifyStalledWithCommits_StaysFailed(t *testing.T) {
 	s := newTestStore(t, rallyDir)
 	freezeCh := make(chan struct{})
 	exec := &funcExecutor{
-		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+		fn: func(ctx context.Context, opts harnessapi.RunOptions) (*harnessapi.TryResult, error) {
 			// Create a file so there are changes to auto-commit
 			f, _ := os.Create(filepath.Join(workspaceDir, "verify-fix.txt"))
 			f.WriteString("trivial fix")
 			f.Close()
 			<-freezeCh
-			return &agent.TryResult{Completed: false, Summary: "stalled"}, nil
+			return &harnessapi.TryResult{Completed: false, Summary: "stalled"}, nil
 		},
 	}
 
@@ -1094,7 +1094,7 @@ func TestStallRecovery_VerifyStalledWithCommits_StaysFailed(t *testing.T) {
 		AgentMixSpecs:    []string{"cc:1"},
 		TargetIterations: 1,
 		RetryBudget:      1, // only 1 attempt
-	}, map[string]agent.Executor{"claude": exec})
+	}, map[string]harnessapi.Executor{"claude": exec})
 
 	controllerCount := 0
 	r.stallControllerFactory = func(logPath string) reliability.StallController {
@@ -1123,7 +1123,7 @@ func TestStallRecovery_VerifyStalledWithCommits_StaysFailed(t *testing.T) {
 		context.Background(),
 		&store.RelayRecord{ID: 1, TargetIterations: 1},
 		0,
-		agent.ResolvedAgent{Harness: "claude"},
+		harnessapi.ResolvedAgent{Harness: "claude"},
 		runTask{Name: "verify run", Prompt: "verify test", Assignee: "verify"},
 		nil,
 		nil,
@@ -1162,12 +1162,12 @@ func TestStallRecovery_ImplementationStalledWithCommits_Recovers(t *testing.T) {
 	s := newTestStore(t, rallyDir)
 	freezeCh := make(chan struct{})
 	exec := &funcExecutor{
-		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+		fn: func(ctx context.Context, opts harnessapi.RunOptions) (*harnessapi.TryResult, error) {
 			f, _ := os.Create(filepath.Join(workspaceDir, "impl-fix.txt"))
 			f.WriteString("implementation fix")
 			f.Close()
 			<-freezeCh
-			return &agent.TryResult{Completed: false, Summary: "stalled"}, nil
+			return &harnessapi.TryResult{Completed: false, Summary: "stalled"}, nil
 		},
 	}
 
@@ -1177,7 +1177,7 @@ func TestStallRecovery_ImplementationStalledWithCommits_Recovers(t *testing.T) {
 		AgentMixSpecs:    []string{"cc:1"},
 		TargetIterations: 1,
 		RetryBudget:      1,
-	}, map[string]agent.Executor{"claude": exec})
+	}, map[string]harnessapi.Executor{"claude": exec})
 
 	controllerCount := 0
 	r.stallControllerFactory = func(logPath string) reliability.StallController {
@@ -1206,7 +1206,7 @@ func TestStallRecovery_ImplementationStalledWithCommits_Recovers(t *testing.T) {
 		context.Background(),
 		&store.RelayRecord{ID: 1, TargetIterations: 1},
 		0,
-		agent.ResolvedAgent{Harness: "claude"},
+		harnessapi.ResolvedAgent{Harness: "claude"},
 		runTask{Name: "impl run", Prompt: "impl test", Assignee: "senior"},
 		nil,
 		nil,
@@ -1253,7 +1253,7 @@ func TestRunOneLapPinIgnoresStaleSummaryEntriesForSameRunID(t *testing.T) {
 
 	s := newTestStore(t, rallyDir)
 	exec := &funcExecutor{
-		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+		fn: func(ctx context.Context, opts harnessapi.RunOptions) (*harnessapi.TryResult, error) {
 			if err := os.WriteFile(filepath.Join(workspaceDir, "current.txt"), []byte("done"), 0o644); err != nil {
 				return nil, err
 			}
@@ -1265,7 +1265,7 @@ func TestRunOneLapPinIgnoresStaleSummaryEntriesForSameRunID(t *testing.T) {
 			if err := progress.SaveRunState(workspaceDir, rs); err != nil {
 				return nil, err
 			}
-			return &agent.TryResult{Completed: true, Summary: "current lap done"}, nil
+			return &harnessapi.TryResult{Completed: true, Summary: "current lap done"}, nil
 		},
 	}
 
@@ -1277,13 +1277,13 @@ func TestRunOneLapPinIgnoresStaleSummaryEntriesForSameRunID(t *testing.T) {
 		RetryBudget:      1,
 		LapsEnabled:      true,
 		Resolver:         cheapTestResolver,
-	}, map[string]agent.Executor{"opencode": exec})
+	}, map[string]harnessapi.Executor{"opencode": exec})
 
 	res, err := r.runOne(
 		context.Background(),
 		&store.RelayRecord{ID: 1, TargetIterations: 1},
 		0,
-		agent.ResolvedAgent{Harness: "opencode", Model: cheapTestModel},
+		harnessapi.ResolvedAgent{Harness: "opencode", Model: cheapTestModel},
 		runTask{Name: "pinned task", Prompt: "do work", Assignee: "senior", LapID: "current-lap", IsLapsBacked: true, LapsRemaining: 1},
 		nil,
 		nil,
@@ -1321,11 +1321,11 @@ func TestLapPinWrongLapWarningInRunOne(t *testing.T) {
 
 	s := newTestStore(t, rallyDir)
 	exec := &funcExecutor{
-		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+		fn: func(ctx context.Context, opts harnessapi.RunOptions) (*harnessapi.TryResult, error) {
 			rs, _ := progress.LoadRunState(workspaceDir)
 			rs.RecordedLaps = []string{"other-lap"}
 			progress.SaveRunState(workspaceDir, rs)
-			return &agent.TryResult{Completed: true, Summary: "wrong lap"}, nil
+			return &harnessapi.TryResult{Completed: true, Summary: "wrong lap"}, nil
 		},
 	}
 
@@ -1337,13 +1337,13 @@ func TestLapPinWrongLapWarningInRunOne(t *testing.T) {
 		RetryBudget:      1,
 		LapsEnabled:      true,
 		Resolver:         cheapTestResolver,
-	}, map[string]agent.Executor{"opencode": exec})
+	}, map[string]harnessapi.Executor{"opencode": exec})
 
 	res, err := r.runOne(
 		context.Background(),
 		&store.RelayRecord{ID: 1, TargetIterations: 1},
 		0,
-		agent.ResolvedAgent{Harness: "opencode", Model: cheapTestModel},
+		harnessapi.ResolvedAgent{Harness: "opencode", Model: cheapTestModel},
 		runTask{Name: "pinned task", Prompt: "do work", Assignee: "senior", LapID: "lap-1", IsLapsBacked: true, LapsRemaining: 1},
 		nil,
 		nil,
@@ -1379,11 +1379,11 @@ func TestLapPinMultiLapWarningInRunOne(t *testing.T) {
 
 	s := newTestStore(t, rallyDir)
 	exec := &funcExecutor{
-		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+		fn: func(ctx context.Context, opts harnessapi.RunOptions) (*harnessapi.TryResult, error) {
 			rs, _ := progress.LoadRunState(workspaceDir)
 			rs.RecordedLaps = []string{"lap-1", "lap-2"}
 			progress.SaveRunState(workspaceDir, rs)
-			return &agent.TryResult{Completed: true, Summary: "multi lap"}, nil
+			return &harnessapi.TryResult{Completed: true, Summary: "multi lap"}, nil
 		},
 	}
 
@@ -1395,13 +1395,13 @@ func TestLapPinMultiLapWarningInRunOne(t *testing.T) {
 		RetryBudget:      1,
 		LapsEnabled:      true,
 		Resolver:         cheapTestResolver,
-	}, map[string]agent.Executor{"opencode": exec})
+	}, map[string]harnessapi.Executor{"opencode": exec})
 
 	res, err := r.runOne(
 		context.Background(),
 		&store.RelayRecord{ID: 1, TargetIterations: 1},
 		0,
-		agent.ResolvedAgent{Harness: "opencode", Model: cheapTestModel},
+		harnessapi.ResolvedAgent{Harness: "opencode", Model: cheapTestModel},
 		runTask{Name: "pinned task", Prompt: "do work", Assignee: "senior", LapID: "lap-1", IsLapsBacked: true, LapsRemaining: 1},
 		nil,
 		nil,
@@ -1445,11 +1445,11 @@ func TestLapPinMismatchCompletesWhenPinnedLapAlreadyDone(t *testing.T) {
 
 	s := newTestStore(t, rallyDir)
 	exec := &funcExecutor{
-		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+		fn: func(ctx context.Context, opts harnessapi.RunOptions) (*harnessapi.TryResult, error) {
 			rs, _ := progress.LoadRunState(workspaceDir)
 			rs.RecordedLaps = []string{"other-lap"}
 			progress.SaveRunState(workspaceDir, rs)
-			return &agent.TryResult{Completed: true, Summary: "wrong lap but pinned done"}, nil
+			return &harnessapi.TryResult{Completed: true, Summary: "wrong lap but pinned done"}, nil
 		},
 	}
 
@@ -1461,13 +1461,13 @@ func TestLapPinMismatchCompletesWhenPinnedLapAlreadyDone(t *testing.T) {
 		RetryBudget:      1,
 		LapsEnabled:      true,
 		Resolver:         cheapTestResolver,
-	}, map[string]agent.Executor{"opencode": exec})
+	}, map[string]harnessapi.Executor{"opencode": exec})
 
 	res, err := r.runOne(
 		context.Background(),
 		&store.RelayRecord{ID: 1, TargetIterations: 1},
 		0,
-		agent.ResolvedAgent{Harness: "opencode", Model: cheapTestModel},
+		harnessapi.ResolvedAgent{Harness: "opencode", Model: cheapTestModel},
 		runTask{Name: "pinned task", Prompt: "do work", Assignee: "senior", LapID: "lap-1", IsLapsBacked: true, LapsRemaining: 1},
 		nil,
 		nil,
@@ -1512,7 +1512,7 @@ func TestLapPinMismatchClearsFailureClass(t *testing.T) {
 	s := newTestStore(t, rallyDir)
 	callCount := 0
 	exec := &funcExecutor{
-		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+		fn: func(ctx context.Context, opts harnessapi.RunOptions) (*harnessapi.TryResult, error) {
 			callCount++
 			if opts.LogPath != "" {
 				_ = os.WriteFile(opts.LogPath, []byte("fork/exec failed\n"), 0o644)
@@ -1522,7 +1522,7 @@ func TestLapPinMismatchClearsFailureClass(t *testing.T) {
 				rs.RecordedLaps = []string{"wrong-lap"}
 				progress.SaveRunState(workspaceDir, rs)
 			}
-			return &agent.TryResult{Completed: false, Summary: "failed"}, nil
+			return &harnessapi.TryResult{Completed: false, Summary: "failed"}, nil
 		},
 	}
 
@@ -1534,13 +1534,13 @@ func TestLapPinMismatchClearsFailureClass(t *testing.T) {
 		RetryBudget:      3,
 		LapsEnabled:      true,
 		Resolver:         cheapTestResolver,
-	}, map[string]agent.Executor{"opencode": exec})
+	}, map[string]harnessapi.Executor{"opencode": exec})
 
 	res, _ := r.runOne(
 		context.Background(),
 		&store.RelayRecord{ID: 1, TargetIterations: 1},
 		0,
-		agent.ResolvedAgent{Harness: "opencode", Model: cheapTestModel},
+		harnessapi.ResolvedAgent{Harness: "opencode", Model: cheapTestModel},
 		runTask{Name: "pinned task", Prompt: "do work", Assignee: "senior", LapID: "lap-1", IsLapsBacked: true, LapsRemaining: 1},
 		nil,
 		nil,
@@ -1583,12 +1583,12 @@ func TestRunOneHonorsExecutorEvidence(t *testing.T) {
 
 			s := newTestStore(t, rallyDir)
 			exec := &funcExecutor{
-				fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+				fn: func(ctx context.Context, opts harnessapi.RunOptions) (*harnessapi.TryResult, error) {
 					// Log tail would classify as harness_launch (infra) on its own.
 					if opts.LogPath != "" {
 						_ = os.WriteFile(opts.LogPath, []byte("fork/exec /bin/agent: failed\n"), 0o644)
 					}
-					return &agent.TryResult{
+					return &harnessapi.TryResult{
 						Completed: false,
 						Summary:   "failed",
 						Evidence:  &reliability.FailureEvidence{Category: tt.category},
@@ -1604,13 +1604,13 @@ func TestRunOneHonorsExecutorEvidence(t *testing.T) {
 				RetryBudget:      1,
 				LapsEnabled:      true,
 				Resolver:         cheapTestResolver,
-			}, map[string]agent.Executor{"opencode": exec})
+			}, map[string]harnessapi.Executor{"opencode": exec})
 
 			res, err := r.runOne(
 				context.Background(),
 				&store.RelayRecord{ID: 1, TargetIterations: 1},
 				0,
-				agent.ResolvedAgent{Harness: "opencode", Model: cheapTestModel},
+				harnessapi.ResolvedAgent{Harness: "opencode", Model: cheapTestModel},
 				runTask{Name: "task", Prompt: "do work", Assignee: "senior"},
 				nil,
 				nil,
@@ -1657,14 +1657,14 @@ func TestRunOneEvidenceBeatsIncompleteClassification(t *testing.T) {
 
 	s := newTestStore(t, rallyDir)
 	exec := &funcExecutor{
-		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+		fn: func(ctx context.Context, opts harnessapi.RunOptions) (*harnessapi.TryResult, error) {
 			if opts.LogPath != "" {
 				_ = os.WriteFile(opts.LogPath, []byte("fork/exec /bin/agent: failed\n"), 0o644)
 			}
 			// Produce an unfinalized task-file change so runOne computes the
 			// incomplete context; executor evidence must still take priority.
 			_ = os.WriteFile(filepath.Join(workspaceDir, "work.txt"), []byte("dirty\n"), 0o644)
-			return &agent.TryResult{
+			return &harnessapi.TryResult{
 				Completed: false,
 				Summary:   "failed",
 				Evidence:  &reliability.FailureEvidence{Category: reliability.CategoryUsageLimit},
@@ -1680,13 +1680,13 @@ func TestRunOneEvidenceBeatsIncompleteClassification(t *testing.T) {
 		RetryBudget:      1,
 		LapsEnabled:      true,
 		Resolver:         cheapTestResolver,
-	}, map[string]agent.Executor{"opencode": exec})
+	}, map[string]harnessapi.Executor{"opencode": exec})
 
 	res, err := r.runOne(
 		context.Background(),
 		&store.RelayRecord{ID: 1, TargetIterations: 1},
 		0,
-		agent.ResolvedAgent{Harness: "opencode", Model: cheapTestModel},
+		harnessapi.ResolvedAgent{Harness: "opencode", Model: cheapTestModel},
 		runTask{Name: "lap task", Prompt: "do work", Assignee: "senior", IsLapsBacked: true},
 		nil,
 		nil,
@@ -1752,7 +1752,7 @@ func TestRunOneTerminalCategorySingleAttempt(t *testing.T) {
 			s := newTestStore(t, rallyDir)
 			callCount := 0
 			exec := &funcExecutor{
-				fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+				fn: func(ctx context.Context, opts harnessapi.RunOptions) (*harnessapi.TryResult, error) {
 					callCount++
 					if opts.LogPath != "" {
 						_ = os.WriteFile(opts.LogPath, []byte("failed\n"), 0o644)
@@ -1761,7 +1761,7 @@ func TestRunOneTerminalCategorySingleAttempt(t *testing.T) {
 					if tt.wantReset {
 						ev.ResetAfter = resetAfter
 					}
-					return &agent.TryResult{Completed: false, Summary: "failed", Evidence: ev}, nil
+					return &harnessapi.TryResult{Completed: false, Summary: "failed", Evidence: ev}, nil
 				},
 			}
 
@@ -1773,7 +1773,7 @@ func TestRunOneTerminalCategorySingleAttempt(t *testing.T) {
 				RetryBudget:      budget,
 				LapsEnabled:      true,
 				Resolver:         cheapTestResolver,
-			}, map[string]agent.Executor{"opencode": exec})
+			}, map[string]harnessapi.Executor{"opencode": exec})
 			// sleepFunc is a no-op so any (unexpected) wait+resume cooldown does
 			// not slow the test; the assertion is on attempt count.
 			r.sleepFunc = func(time.Duration) {}
@@ -1782,7 +1782,7 @@ func TestRunOneTerminalCategorySingleAttempt(t *testing.T) {
 				context.Background(),
 				&store.RelayRecord{ID: 1, TargetIterations: 1},
 				0,
-				agent.ResolvedAgent{Harness: "opencode", Model: cheapTestModel},
+				harnessapi.ResolvedAgent{Harness: "opencode", Model: cheapTestModel},
 				runTask{Name: "task", Prompt: "do work", Assignee: "senior"},
 				nil,
 				nil,
@@ -1920,13 +1920,13 @@ func TestRunBenchesOpencodeUsageLimitQuotaScopeNotAgentError(t *testing.T) {
 			s := newTestStore(t, rallyDir)
 			execCalls := 0
 			exec := &funcExecutor{
-				fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+				fn: func(ctx context.Context, opts harnessapi.RunOptions) (*harnessapi.TryResult, error) {
 					execCalls++
 					ev := &reliability.FailureEvidence{Category: tt.category}
 					if tt.category == reliability.CategoryUsageLimit {
 						ev.ResetAfter = time.Hour
 					}
-					return &agent.TryResult{Completed: false, Summary: "failed", Evidence: ev}, nil
+					return &harnessapi.TryResult{Completed: false, Summary: "failed", Evidence: ev}, nil
 				},
 			}
 
@@ -1938,7 +1938,7 @@ func TestRunBenchesOpencodeUsageLimitQuotaScopeNotAgentError(t *testing.T) {
 				RetryBudget:      1,
 				LapsEnabled:      true,
 				Resolver:         testResolver,
-			}, map[string]agent.Executor{"opencode": exec})
+			}, map[string]harnessapi.Executor{"opencode": exec})
 
 			if err := r.Run(context.Background()); err != nil {
 				t.Fatalf("Run error = %v", err)
@@ -1996,14 +1996,14 @@ func TestLapPinNormalPassThroughInRunOne(t *testing.T) {
 
 	s := newTestStore(t, rallyDir)
 	exec := &funcExecutor{
-		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+		fn: func(ctx context.Context, opts harnessapi.RunOptions) (*harnessapi.TryResult, error) {
 			rs, _ := progress.LoadRunState(workspaceDir)
 			rs.RecordedLaps = []string{"lap-1"}
 			progress.SaveRunState(workspaceDir, rs)
 			os.WriteFile(filepath.Join(workspaceDir, "work.txt"), []byte("done"), 0o644)
 			runGit(t, workspaceDir, "add", "work.txt")
 			runGit(t, workspaceDir, "commit", "-m", "completed work", "--no-verify")
-			return &agent.TryResult{Completed: true, Summary: "done"}, nil
+			return &harnessapi.TryResult{Completed: true, Summary: "done"}, nil
 		},
 	}
 
@@ -2015,13 +2015,13 @@ func TestLapPinNormalPassThroughInRunOne(t *testing.T) {
 		RetryBudget:      1,
 		LapsEnabled:      true,
 		Resolver:         cheapTestResolver,
-	}, map[string]agent.Executor{"opencode": exec})
+	}, map[string]harnessapi.Executor{"opencode": exec})
 
 	res, err := r.runOne(
 		context.Background(),
 		&store.RelayRecord{ID: 1, TargetIterations: 1},
 		0,
-		agent.ResolvedAgent{Harness: "opencode", Model: cheapTestModel},
+		harnessapi.ResolvedAgent{Harness: "opencode", Model: cheapTestModel},
 		runTask{Name: "pinned task", Prompt: "do work", Assignee: "senior", LapID: "lap-1", IsLapsBacked: true, LapsRemaining: 1},
 		nil,
 		nil,
@@ -2063,12 +2063,12 @@ func TestLapAttemptRecordedInTryRecord(t *testing.T) {
 
 	s := newTestStore(t, rallyDir)
 	exec := &funcExecutor{
-		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+		fn: func(ctx context.Context, opts harnessapi.RunOptions) (*harnessapi.TryResult, error) {
 			progress.RecordLap(workspaceDir, "lap-1")
 			os.WriteFile(filepath.Join(workspaceDir, "work.txt"), []byte("done"), 0o644)
 			runGit(t, workspaceDir, "add", "work.txt")
 			runGit(t, workspaceDir, "commit", "-m", "completed work", "--no-verify")
-			return &agent.TryResult{Completed: true, Summary: "done"}, nil
+			return &harnessapi.TryResult{Completed: true, Summary: "done"}, nil
 		},
 	}
 
@@ -2080,13 +2080,13 @@ func TestLapAttemptRecordedInTryRecord(t *testing.T) {
 		RetryBudget:      1,
 		LapsEnabled:      true,
 		Resolver:         cheapTestResolver,
-	}, map[string]agent.Executor{"opencode": exec})
+	}, map[string]harnessapi.Executor{"opencode": exec})
 
 	res, err := r.runOne(
 		context.Background(),
 		&store.RelayRecord{ID: 1, TargetIterations: 1},
 		0,
-		agent.ResolvedAgent{Harness: "opencode", Model: cheapTestModel},
+		harnessapi.ResolvedAgent{Harness: "opencode", Model: cheapTestModel},
 		runTask{Name: "pinned task", Prompt: "do work", Assignee: "senior", LapID: "lap-1", IsLapsBacked: true, LapsRemaining: 1},
 		nil,
 		nil,
@@ -2150,12 +2150,12 @@ func TestLeftoverWorkGuidance_DirtyTree(t *testing.T) {
 	s := newTestStore(t, rallyDir)
 	var capturedPrompt string
 	exec := &funcExecutor{
-		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
-			capturedPrompt = agent.BuildPrompt(opts)
+		fn: func(ctx context.Context, opts harnessapi.RunOptions) (*harnessapi.TryResult, error) {
+			capturedPrompt = harnessapi.BuildPrompt(opts)
 			if err := progress.RecordLap(workspaceDir, "lap-1"); err != nil {
 				return nil, err
 			}
-			return &agent.TryResult{Completed: true, Summary: "done"}, nil
+			return &harnessapi.TryResult{Completed: true, Summary: "done"}, nil
 		},
 	}
 
@@ -2167,7 +2167,7 @@ func TestLeftoverWorkGuidance_DirtyTree(t *testing.T) {
 		RetryBudget:      1,
 		LapsEnabled:      true,
 		Resolver:         cheapTestResolver,
-	}, map[string]agent.Executor{"opencode": exec})
+	}, map[string]harnessapi.Executor{"opencode": exec})
 
 	if err := r.Run(context.Background()); err != nil {
 		t.Fatalf("Run error = %v", err)
@@ -2198,8 +2198,8 @@ func TestLeftoverWorkGuidance_CleanTree(t *testing.T) {
 	s := newTestStore(t, rallyDir)
 	var capturedPrompt string
 	exec := &funcExecutor{
-		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
-			capturedPrompt = agent.BuildPrompt(opts)
+		fn: func(ctx context.Context, opts harnessapi.RunOptions) (*harnessapi.TryResult, error) {
+			capturedPrompt = harnessapi.BuildPrompt(opts)
 			// Produce a real user-file change so the run is not flagged as
 			// "no changes made". The leftover-work check already ran at run
 			// start (captured in opts), so this write does not affect it.
@@ -2209,7 +2209,7 @@ func TestLeftoverWorkGuidance_CleanTree(t *testing.T) {
 			if err := progress.RecordLap(workspaceDir, "lap-1"); err != nil {
 				return nil, err
 			}
-			return &agent.TryResult{Completed: true, Summary: "done"}, nil
+			return &harnessapi.TryResult{Completed: true, Summary: "done"}, nil
 		},
 	}
 
@@ -2221,7 +2221,7 @@ func TestLeftoverWorkGuidance_CleanTree(t *testing.T) {
 		RetryBudget:      1,
 		LapsEnabled:      true,
 		Resolver:         cheapTestResolver,
-	}, map[string]agent.Executor{"opencode": exec})
+	}, map[string]harnessapi.Executor{"opencode": exec})
 
 	if err := r.Run(context.Background()); err != nil {
 		t.Fatalf("Run error = %v", err)
@@ -2253,8 +2253,8 @@ func TestLeftoverWorkGuidance_OnlyRallyDirty(t *testing.T) {
 	s := newTestStore(t, rallyDir)
 	var capturedPrompt string
 	exec := &funcExecutor{
-		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
-			capturedPrompt = agent.BuildPrompt(opts)
+		fn: func(ctx context.Context, opts harnessapi.RunOptions) (*harnessapi.TryResult, error) {
+			capturedPrompt = harnessapi.BuildPrompt(opts)
 			// Produce a real user-file change so the run is not flagged as
 			// "no changes made". The leftover-work check already ran at run
 			// start (captured in opts), so this write does not affect it.
@@ -2264,7 +2264,7 @@ func TestLeftoverWorkGuidance_OnlyRallyDirty(t *testing.T) {
 			if err := progress.RecordLap(workspaceDir, "lap-1"); err != nil {
 				return nil, err
 			}
-			return &agent.TryResult{Completed: true, Summary: "done"}, nil
+			return &harnessapi.TryResult{Completed: true, Summary: "done"}, nil
 		},
 	}
 
@@ -2276,7 +2276,7 @@ func TestLeftoverWorkGuidance_OnlyRallyDirty(t *testing.T) {
 		RetryBudget:      1,
 		LapsEnabled:      true,
 		Resolver:         cheapTestResolver,
-	}, map[string]agent.Executor{"opencode": exec})
+	}, map[string]harnessapi.Executor{"opencode": exec})
 
 	if err := r.Run(context.Background()); err != nil {
 		t.Fatalf("Run error = %v", err)
@@ -2302,18 +2302,18 @@ func TestIncompleteRetryCarriesFinalizationGuidance(t *testing.T) {
 	attempt := 0
 	var retryPrompt string
 	exec := &funcExecutor{
-		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+		fn: func(ctx context.Context, opts harnessapi.RunOptions) (*harnessapi.TryResult, error) {
 			attempt++
 			if attempt == 1 {
 				_ = os.WriteFile(filepath.Join(workspaceDir, "partial.txt"), []byte("partial"), 0o644)
-				return &agent.TryResult{Completed: true, Summary: "partial"}, nil
+				return &harnessapi.TryResult{Completed: true, Summary: "partial"}, nil
 			}
 			retryPrompt = opts.TaskPrompt
 			if err := progress.RecordLap(workspaceDir, "lap-1"); err != nil {
 				return nil, err
 			}
 			_ = os.WriteFile(filepath.Join(workspaceDir, "done.txt"), []byte("done"), 0o644)
-			return &agent.TryResult{Completed: true, Summary: "done"}, nil
+			return &harnessapi.TryResult{Completed: true, Summary: "done"}, nil
 		},
 	}
 
@@ -2325,7 +2325,7 @@ func TestIncompleteRetryCarriesFinalizationGuidance(t *testing.T) {
 		RetryBudget:      3,
 		LapsEnabled:      true,
 		Resolver:         cheapTestResolver,
-	}, map[string]agent.Executor{"opencode": exec})
+	}, map[string]harnessapi.Executor{"opencode": exec})
 
 	if err := r.Run(context.Background()); err != nil {
 		t.Fatalf("Run error = %v", err)

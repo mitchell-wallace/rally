@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/mitchell-wallace/rally/internal/agent"
+	"github.com/mitchell-wallace/rally/internal/harnessapi"
 	"github.com/mitchell-wallace/rally/internal/laps"
 	"github.com/mitchell-wallace/rally/internal/progress"
 	"github.com/mitchell-wallace/rally/internal/reliability"
@@ -26,17 +26,17 @@ func TestInstructionsPassedToExecutor(t *testing.T) {
 	var receivedTaskPrompt string
 	changeCounter := 0
 	exec := &funcExecutor{
-		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+		fn: func(ctx context.Context, opts harnessapi.RunOptions) (*harnessapi.TryResult, error) {
 			receivedInstructions = opts.Instructions
 			receivedTaskPrompt = opts.TaskPrompt
 			changeCounter++
 			f, _ := os.OpenFile(filepath.Join(workspaceDir, "changes.txt"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
 			fmt.Fprintf(f, "change %d\n", changeCounter)
 			f.Close()
-			return &agent.TryResult{Completed: true}, nil
+			return &harnessapi.TryResult{Completed: true}, nil
 		},
 	}
-	executors := map[string]agent.Executor{"claude": exec}
+	executors := map[string]harnessapi.Executor{"claude": exec}
 
 	r := NewRunner(s, Config{
 		WorkspaceDir:     workspaceDir,
@@ -71,7 +71,7 @@ func TestLapsHeadTaskPassedToExecutor(t *testing.T) {
 	var receivedTaskPrompt string
 	changeCounter := 0
 	exec := &funcExecutor{
-		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+		fn: func(ctx context.Context, opts harnessapi.RunOptions) (*harnessapi.TryResult, error) {
 			receivedTaskName = opts.TaskName
 			receivedRequirements = opts.TaskRequirements
 			receivedTaskPrompt = opts.TaskPrompt
@@ -82,10 +82,10 @@ func TestLapsHeadTaskPassedToExecutor(t *testing.T) {
 			f, _ := os.OpenFile(filepath.Join(workspaceDir, "changes.txt"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
 			fmt.Fprintf(f, "change %d\n", changeCounter)
 			f.Close()
-			return &agent.TryResult{Completed: true}, nil
+			return &harnessapi.TryResult{Completed: true}, nil
 		},
 	}
-	executors := map[string]agent.Executor{"claude": exec}
+	executors := map[string]harnessapi.Executor{"claude": exec}
 
 	oldHeadPull := headPullLap
 	headPullLap = func(context.Context, string) (laps.Lap, error) {
@@ -134,15 +134,15 @@ func TestLapsInstructionsFileUsed(t *testing.T) {
 	s := newTestStore(t, rallyDir)
 	var receivedInstructions string
 	exec := &funcExecutor{
-		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+		fn: func(ctx context.Context, opts harnessapi.RunOptions) (*harnessapi.TryResult, error) {
 			receivedInstructions = opts.Instructions
 			f, _ := os.OpenFile(filepath.Join(workspaceDir, "changes.txt"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
 			fmt.Fprintf(f, "change\n")
 			f.Close()
-			return &agent.TryResult{Completed: true}, nil
+			return &harnessapi.TryResult{Completed: true}, nil
 		},
 	}
-	executors := map[string]agent.Executor{"claude": exec}
+	executors := map[string]harnessapi.Executor{"claude": exec}
 
 	oldHeadPull := headPullLap
 	headPullLap = func(context.Context, string) (laps.Lap, error) {
@@ -178,15 +178,15 @@ func TestLapsInstructionsFileFallsBackToDefault(t *testing.T) {
 	s := newTestStore(t, rallyDir)
 	var receivedInstructions string
 	exec := &funcExecutor{
-		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+		fn: func(ctx context.Context, opts harnessapi.RunOptions) (*harnessapi.TryResult, error) {
 			receivedInstructions = opts.Instructions
 			f, _ := os.OpenFile(filepath.Join(workspaceDir, "changes.txt"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
 			fmt.Fprintf(f, "change\n")
 			f.Close()
-			return &agent.TryResult{Completed: true}, nil
+			return &harnessapi.TryResult{Completed: true}, nil
 		},
 	}
-	executors := map[string]agent.Executor{"claude": exec}
+	executors := map[string]harnessapi.Executor{"claude": exec}
 
 	oldHeadPull := headPullLap
 	headPullLap = func(context.Context, string) (laps.Lap, error) {
@@ -225,15 +225,15 @@ func TestLapsInstructionsNotUsedInNoBackendMode(t *testing.T) {
 	s := newTestStore(t, rallyDir)
 	var receivedInstructions string
 	exec := &funcExecutor{
-		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+		fn: func(ctx context.Context, opts harnessapi.RunOptions) (*harnessapi.TryResult, error) {
 			receivedInstructions = opts.Instructions
 			f, _ := os.OpenFile(filepath.Join(workspaceDir, "changes.txt"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
 			fmt.Fprintf(f, "change\n")
 			f.Close()
-			return &agent.TryResult{Completed: true}, nil
+			return &harnessapi.TryResult{Completed: true}, nil
 		},
 	}
-	executors := map[string]agent.Executor{"claude": exec}
+	executors := map[string]harnessapi.Executor{"claude": exec}
 
 	r := NewRunner(s, Config{
 		WorkspaceDir:         workspaceDir,
@@ -264,15 +264,15 @@ func TestLapsInstructionsUnconfiguredUsesDefault(t *testing.T) {
 	s := newTestStore(t, rallyDir)
 	var receivedInstructions string
 	exec := &funcExecutor{
-		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+		fn: func(ctx context.Context, opts harnessapi.RunOptions) (*harnessapi.TryResult, error) {
 			receivedInstructions = opts.Instructions
 			f, _ := os.OpenFile(filepath.Join(workspaceDir, "changes.txt"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
 			fmt.Fprintf(f, "change\n")
 			f.Close()
-			return &agent.TryResult{Completed: true}, nil
+			return &harnessapi.TryResult{Completed: true}, nil
 		},
 	}
-	executors := map[string]agent.Executor{"claude": exec}
+	executors := map[string]harnessapi.Executor{"claude": exec}
 
 	oldHeadPull := headPullLap
 	headPullLap = func(context.Context, string) (laps.Lap, error) {
@@ -313,15 +313,15 @@ func TestRoleInstructionsLoadedForAssignee(t *testing.T) {
 	s := newTestStore(t, rallyDir)
 	var receivedRoleInstructions string
 	exec := &funcExecutor{
-		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+		fn: func(ctx context.Context, opts harnessapi.RunOptions) (*harnessapi.TryResult, error) {
 			receivedRoleInstructions = opts.RoleInstructions
 			f, _ := os.OpenFile(filepath.Join(workspaceDir, "changes.txt"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
 			fmt.Fprintf(f, "change\n")
 			f.Close()
-			return &agent.TryResult{Completed: true}, nil
+			return &harnessapi.TryResult{Completed: true}, nil
 		},
 	}
-	executors := map[string]agent.Executor{"claude": exec}
+	executors := map[string]harnessapi.Executor{"claude": exec}
 
 	oldHeadPull := headPullLap
 	headPullLap = func(context.Context, string) (laps.Lap, error) {
@@ -358,15 +358,15 @@ func TestRoleInstructionsMissingFileIsSilent(t *testing.T) {
 	s := newTestStore(t, rallyDir)
 	var receivedRoleInstructions string
 	exec := &funcExecutor{
-		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+		fn: func(ctx context.Context, opts harnessapi.RunOptions) (*harnessapi.TryResult, error) {
 			receivedRoleInstructions = opts.RoleInstructions
 			f, _ := os.OpenFile(filepath.Join(workspaceDir, "changes.txt"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
 			fmt.Fprintf(f, "change\n")
 			f.Close()
-			return &agent.TryResult{Completed: true}, nil
+			return &harnessapi.TryResult{Completed: true}, nil
 		},
 	}
-	executors := map[string]agent.Executor{"claude": exec}
+	executors := map[string]harnessapi.Executor{"claude": exec}
 
 	oldHeadPull := headPullLap
 	headPullLap = func(context.Context, string) (laps.Lap, error) {
@@ -407,15 +407,15 @@ func TestRoleInstructionsSkippedInNoBackendMode(t *testing.T) {
 	s := newTestStore(t, rallyDir)
 	var receivedRoleInstructions string
 	exec := &funcExecutor{
-		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+		fn: func(ctx context.Context, opts harnessapi.RunOptions) (*harnessapi.TryResult, error) {
 			receivedRoleInstructions = opts.RoleInstructions
 			f, _ := os.OpenFile(filepath.Join(workspaceDir, "changes.txt"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
 			fmt.Fprintf(f, "change\n")
 			f.Close()
-			return &agent.TryResult{Completed: true}, nil
+			return &harnessapi.TryResult{Completed: true}, nil
 		},
 	}
-	executors := map[string]agent.Executor{"claude": exec}
+	executors := map[string]harnessapi.Executor{"claude": exec}
 
 	r := NewRunner(s, Config{
 		WorkspaceDir:     workspaceDir,
@@ -448,15 +448,15 @@ func TestFallbackInstructionsUsedInNoBackendMode(t *testing.T) {
 	s := newTestStore(t, rallyDir)
 	var receivedTaskPrompt string
 	exec := &funcExecutor{
-		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+		fn: func(ctx context.Context, opts harnessapi.RunOptions) (*harnessapi.TryResult, error) {
 			receivedTaskPrompt = opts.TaskPrompt
 			f, _ := os.OpenFile(filepath.Join(workspaceDir, "changes.txt"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
 			fmt.Fprintf(f, "change\n")
 			f.Close()
-			return &agent.TryResult{Completed: true}, nil
+			return &harnessapi.TryResult{Completed: true}, nil
 		},
 	}
-	executors := map[string]agent.Executor{"claude": exec}
+	executors := map[string]harnessapi.Executor{"claude": exec}
 
 	r := NewRunner(s, Config{
 		WorkspaceDir:      workspaceDir,
@@ -488,15 +488,15 @@ func TestFallbackInstructionsIgnoredWhenCLIPromptProvided(t *testing.T) {
 	s := newTestStore(t, rallyDir)
 	var receivedTaskPrompt string
 	exec := &funcExecutor{
-		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+		fn: func(ctx context.Context, opts harnessapi.RunOptions) (*harnessapi.TryResult, error) {
 			receivedTaskPrompt = opts.TaskPrompt
 			f, _ := os.OpenFile(filepath.Join(workspaceDir, "changes.txt"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
 			fmt.Fprintf(f, "change\n")
 			f.Close()
-			return &agent.TryResult{Completed: true}, nil
+			return &harnessapi.TryResult{Completed: true}, nil
 		},
 	}
-	executors := map[string]agent.Executor{"claude": exec}
+	executors := map[string]harnessapi.Executor{"claude": exec}
 
 	r := NewRunner(s, Config{
 		WorkspaceDir:      workspaceDir,
@@ -533,15 +533,15 @@ func TestFallbackInstructionsIgnoredInLapsMode(t *testing.T) {
 	s := newTestStore(t, rallyDir)
 	var receivedTaskPrompt string
 	exec := &funcExecutor{
-		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+		fn: func(ctx context.Context, opts harnessapi.RunOptions) (*harnessapi.TryResult, error) {
 			receivedTaskPrompt = opts.TaskPrompt
 			f, _ := os.OpenFile(filepath.Join(workspaceDir, "changes.txt"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
 			fmt.Fprintf(f, "change\n")
 			f.Close()
-			return &agent.TryResult{Completed: true}, nil
+			return &harnessapi.TryResult{Completed: true}, nil
 		},
 	}
-	executors := map[string]agent.Executor{"claude": exec}
+	executors := map[string]harnessapi.Executor{"claude": exec}
 
 	r := NewRunner(s, Config{
 		WorkspaceDir:      workspaceDir,
@@ -571,15 +571,15 @@ func TestFallbackInstructionsMissingFileUsesBuiltInDefault(t *testing.T) {
 	s := newTestStore(t, rallyDir)
 	var receivedTaskPrompt string
 	exec := &funcExecutor{
-		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+		fn: func(ctx context.Context, opts harnessapi.RunOptions) (*harnessapi.TryResult, error) {
 			receivedTaskPrompt = opts.TaskPrompt
 			f, _ := os.OpenFile(filepath.Join(workspaceDir, "changes.txt"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
 			fmt.Fprintf(f, "change\n")
 			f.Close()
-			return &agent.TryResult{Completed: true}, nil
+			return &harnessapi.TryResult{Completed: true}, nil
 		},
 	}
-	executors := map[string]agent.Executor{"claude": exec}
+	executors := map[string]harnessapi.Executor{"claude": exec}
 
 	r := NewRunner(s, Config{
 		WorkspaceDir:      workspaceDir,
@@ -608,15 +608,15 @@ func TestFallbackInstructionsUnconfiguredUsesBuiltInDefault(t *testing.T) {
 	s := newTestStore(t, rallyDir)
 	var receivedTaskPrompt string
 	exec := &funcExecutor{
-		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+		fn: func(ctx context.Context, opts harnessapi.RunOptions) (*harnessapi.TryResult, error) {
 			receivedTaskPrompt = opts.TaskPrompt
 			f, _ := os.OpenFile(filepath.Join(workspaceDir, "changes.txt"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
 			fmt.Fprintf(f, "change\n")
 			f.Close()
-			return &agent.TryResult{Completed: true}, nil
+			return &harnessapi.TryResult{Completed: true}, nil
 		},
 	}
-	executors := map[string]agent.Executor{"claude": exec}
+	executors := map[string]harnessapi.Executor{"claude": exec}
 
 	r := NewRunner(s, Config{
 		WorkspaceDir:     workspaceDir,

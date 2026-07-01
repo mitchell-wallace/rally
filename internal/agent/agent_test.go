@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/mitchell-wallace/rally/internal/harnessapi"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -19,7 +20,7 @@ import (
 )
 
 func TestBuildPrompt_AllFields(t *testing.T) {
-	opts := RunOptions{
+	opts := harnessapi.RunOptions{
 		Persona:          "Expert Go developer",
 		TaskName:         "Refactor store layer",
 		TaskRequirements: "Use generics for JSONL records.",
@@ -29,7 +30,7 @@ func TestBuildPrompt_AllFields(t *testing.T) {
 		PreviousSummary:  "Added basic cache.",
 		RecentTryContext: "Try #5 failed with timeout.",
 	}
-	p := BuildPrompt(opts)
+	p := harnessapi.BuildPrompt(opts)
 	if p == "" {
 		t.Fatal("expected non-empty prompt")
 	}
@@ -54,22 +55,22 @@ func TestBuildPrompt_AllFields(t *testing.T) {
 }
 
 func TestBuildPrompt_ExplicitOverride(t *testing.T) {
-	opts := RunOptions{
+	opts := harnessapi.RunOptions{
 		Prompt:  "CUSTOM PROMPT",
 		Persona: "ignored",
 	}
-	p := BuildPrompt(opts)
+	p := harnessapi.BuildPrompt(opts)
 	if p != "CUSTOM PROMPT" {
 		t.Fatalf("expected explicit prompt, got %q", p)
 	}
 }
 
 func TestBuildPrompt_PreviousSummary(t *testing.T) {
-	opts := RunOptions{
+	opts := harnessapi.RunOptions{
 		TaskName:        "Foo",
 		PreviousSummary: "Bar",
 	}
-	p := BuildPrompt(opts)
+	p := harnessapi.BuildPrompt(opts)
 	if !strings.Contains(p, "Previous Summary:") {
 		t.Error("expected Previous Summary section")
 	}
@@ -79,10 +80,10 @@ func TestBuildPrompt_PreviousSummary(t *testing.T) {
 }
 
 func TestBuildPrompt_Instructions(t *testing.T) {
-	opts := RunOptions{
+	opts := harnessapi.RunOptions{
 		Instructions: "Always use TDD.",
 	}
-	p := BuildPrompt(opts)
+	p := harnessapi.BuildPrompt(opts)
 	if !strings.Contains(p, "## Project Instructions") {
 		t.Error("expected ## Project Instructions section")
 	}
@@ -92,12 +93,12 @@ func TestBuildPrompt_Instructions(t *testing.T) {
 }
 
 func TestBuildPrompt_RoleInstructionsBetweenProjectInstructionsAndTask(t *testing.T) {
-	opts := RunOptions{
+	opts := harnessapi.RunOptions{
 		Instructions:     "Base instructions.",
 		RoleInstructions: "Role instructions.",
 		TaskPrompt:       "Task body.",
 	}
-	p := BuildPrompt(opts)
+	p := harnessapi.BuildPrompt(opts)
 
 	projectIndex := strings.Index(p, "## Project Instructions\nBase instructions.")
 	roleIndex := strings.Index(p, "## Role Instructions\nRole instructions.")
@@ -111,10 +112,10 @@ func TestBuildPrompt_RoleInstructionsBetweenProjectInstructionsAndTask(t *testin
 }
 
 func TestBuildPrompt_TaskPrompt(t *testing.T) {
-	opts := RunOptions{
+	opts := harnessapi.RunOptions{
 		TaskPrompt: "Fix the race condition.",
 	}
-	p := BuildPrompt(opts)
+	p := harnessapi.BuildPrompt(opts)
 	if !strings.Contains(p, "## Task") {
 		t.Error("expected ## Task section")
 	}
@@ -124,12 +125,12 @@ func TestBuildPrompt_TaskPrompt(t *testing.T) {
 }
 
 func TestBuildPrompt_SharedGuidanceIncludedWhenLapsEnabled(t *testing.T) {
-	opts := RunOptions{
+	opts := harnessapi.RunOptions{
 		TaskName:         "Do the thing",
 		RoleInstructions: "Role instructions.",
 		LapsEnabled:      true,
 	}
-	p := BuildPrompt(opts)
+	p := harnessapi.BuildPrompt(opts)
 
 	// The shared general/ snippets must always be composed into a laps-driven
 	// agent prompt, sourced verbatim from the embedded agent_prompt package.
@@ -149,7 +150,7 @@ func TestBuildPrompt_SharedGuidanceIncludedWhenLapsEnabled(t *testing.T) {
 }
 
 func TestBuildPrompt_VerifyExitGuidanceOmitsHandoff(t *testing.T) {
-	p := BuildPrompt(RunOptions{
+	p := harnessapi.BuildPrompt(harnessapi.RunOptions{
 		Role:             "verify",
 		RoleInstructions: "Do not call `laps handoff`.",
 		LapsEnabled:      true,
@@ -170,11 +171,11 @@ func TestBuildPrompt_VerifyExitGuidanceOmitsHandoff(t *testing.T) {
 }
 
 func TestBuildPrompt_SharedGuidanceOmittedInNoBackendMode(t *testing.T) {
-	opts := RunOptions{
+	opts := harnessapi.RunOptions{
 		TaskName:    "Do the thing",
 		LapsEnabled: false,
 	}
-	p := BuildPrompt(opts)
+	p := harnessapi.BuildPrompt(opts)
 
 	// No-backend behavior is preserved: the laps-specific shared snippets are
 	// not injected, and the documented `rally progress` exit action remains.
@@ -190,25 +191,25 @@ func TestBuildPrompt_SharedGuidanceOmittedInNoBackendMode(t *testing.T) {
 }
 
 func TestBuildPrompt_ExplicitOverrideSkipsSharedGuidance(t *testing.T) {
-	opts := RunOptions{
+	opts := harnessapi.RunOptions{
 		Prompt:      "CUSTOM PROMPT",
 		LapsEnabled: true,
 	}
-	p := BuildPrompt(opts)
+	p := harnessapi.BuildPrompt(opts)
 	if p != "CUSTOM PROMPT" {
 		t.Fatalf("explicit override not preserved verbatim, got %q", p)
 	}
 }
 
 func TestBuildPrompt_SharedGuidanceOrdering(t *testing.T) {
-	opts := RunOptions{
+	opts := harnessapi.RunOptions{
 		Persona:          "claude",
 		TaskName:         "Do the thing",
 		RoleInstructions: "Role instructions.",
 		TaskPrompt:       "Task body.",
 		LapsEnabled:      true,
 	}
-	p := BuildPrompt(opts)
+	p := harnessapi.BuildPrompt(opts)
 
 	headlessIndex := strings.Index(p, agent_prompt.Headless())
 	finalizeIndex := strings.Index(p, agent_prompt.Finalize())
@@ -234,7 +235,7 @@ func TestBuildPrompt_RecoveryClassificationOnlyFromRecoveryRole(t *testing.T) {
 	if !ok {
 		t.Fatal("missing recovery role")
 	}
-	recoveryPrompt := BuildPrompt(RunOptions{
+	recoveryPrompt := harnessapi.BuildPrompt(harnessapi.RunOptions{
 		RoleInstructions: recoveryRole,
 		LapsEnabled:      true,
 	})
@@ -247,7 +248,7 @@ func TestBuildPrompt_RecoveryClassificationOnlyFromRecoveryRole(t *testing.T) {
 		if !ok {
 			t.Fatalf("missing %s role", role)
 		}
-		prompt := BuildPrompt(RunOptions{
+		prompt := harnessapi.BuildPrompt(harnessapi.RunOptions{
 			RoleInstructions: roleInstructions,
 			LapsEnabled:      true,
 		})
@@ -303,7 +304,7 @@ func TestFixtureExecutor_RoundTrip(t *testing.T) {
 		Delay:      10 * time.Millisecond,
 	}
 
-	res, err := fex.Execute(context.Background(), RunOptions{})
+	res, err := fex.Execute(context.Background(), harnessapi.RunOptions{})
 	if err != nil {
 		t.Fatalf("fixture execute failed: %v", err)
 	}
@@ -321,7 +322,7 @@ func TestFixtureExecutor_RoundTrip(t *testing.T) {
 	}
 
 	// second execution should skip re-application because diff already applied
-	res2, err := fex.Execute(context.Background(), RunOptions{})
+	res2, err := fex.Execute(context.Background(), harnessapi.RunOptions{})
 	if err != nil {
 		t.Fatalf("second execute failed: %v", err)
 	}
@@ -434,7 +435,7 @@ func TestParseClaudeOutput_MissingStructuredSummary(t *testing.T) {
 }
 
 func TestParseClaudeOutput_BoundsFinalTextFallback(t *testing.T) {
-	finalText := strings.Repeat("start ", executorFinalTextRuneLimit) + "useful tail"
+	finalText := strings.Repeat("start ", 1000) + "useful tail"
 	resultRaw, err := json.Marshal(finalText)
 	if err != nil {
 		t.Fatal(err)
@@ -447,8 +448,8 @@ func TestParseClaudeOutput_BoundsFinalTextFallback(t *testing.T) {
 	if !tr.Completed {
 		t.Error("expected final assistant text fallback to be completed")
 	}
-	if got := len([]rune(tr.Summary)); got > executorFinalTextRuneLimit {
-		t.Fatalf("summary rune length = %d, want <= %d", got, executorFinalTextRuneLimit)
+	if got := len([]rune(tr.Summary)); got > 1000 {
+		t.Fatalf("summary rune length = %d, want <= %d", got, 1000)
 	}
 	if !strings.Contains(tr.Summary, "useful tail") {
 		t.Errorf("summary = %q, want useful tail", tr.Summary)
@@ -521,8 +522,7 @@ func TestResumeSupportImpliesSessionCapture(t *testing.T) {
 			return scanAntigravityConversationID([]byte("Print mode: conversation=11111111-2222-3333-4444-555555555555\n"))
 		},
 	}
-
-	executors := map[string]Executor{
+	executors := map[string]harnessapi.Executor{
 		"claude":      &ClaudeExecutor{},
 		"codex":       &CodexExecutor{},
 		"opencode":    &OpenCodeExecutor{},
@@ -959,7 +959,7 @@ func TestRunLoggedCommandStreamsTryLog(t *testing.T) {
 }
 
 func TestAdapterCapabilityDefaults(t *testing.T) {
-	adapters := map[string]Executor{
+	adapters := map[string]harnessapi.Executor{
 		"generic": &GenericExecutor{},
 		"fixture": &FixtureExecutor{},
 	}
@@ -1092,7 +1092,7 @@ exit 7
 	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 
 	exec := &OpenCodeExecutor{}
-	tr, err := exec.Execute(context.Background(), RunOptions{Prompt: "do work"})
+	tr, err := exec.Execute(context.Background(), harnessapi.RunOptions{Prompt: "do work"})
 	if err == nil {
 		t.Fatal("expected non-zero exit error")
 	}
@@ -1146,12 +1146,12 @@ exit 1
 	}
 
 	exec := &OpenCodeExecutor{Model: "opencode-go/kimi"}
-	tr, err := exec.Execute(context.Background(), RunOptions{Prompt: "do work", WorkspaceDir: workspaceDir})
+	tr, err := exec.Execute(context.Background(), harnessapi.RunOptions{Prompt: "do work", WorkspaceDir: workspaceDir})
 	if err == nil {
 		t.Fatal("expected error from opencode mock")
 	}
 	if tr == nil {
-		t.Fatal("expected TryResult, got nil")
+		t.Fatal("expected harnessapi.TryResult, got nil")
 	}
 	if tr.Summary != "opencode error: Unexpected server error. Check server logs for details. (err_generic)" {
 		t.Fatalf("Summary = %q, want generic UnknownError summary", tr.Summary)
@@ -1221,12 +1221,12 @@ exit 1
 	}
 
 	exec := &OpenCodeExecutor{Model: "opencode-go/kimi"}
-	tr, err := exec.Execute(context.Background(), RunOptions{Prompt: "do work", WorkspaceDir: workspaceDir})
+	tr, err := exec.Execute(context.Background(), harnessapi.RunOptions{Prompt: "do work", WorkspaceDir: workspaceDir})
 	if err == nil {
 		t.Fatal("expected error from opencode mock")
 	}
 	if tr == nil {
-		t.Fatal("expected TryResult, got nil")
+		t.Fatal("expected harnessapi.TryResult, got nil")
 	}
 	if tr.Evidence == nil {
 		t.Fatal("expected provider/window fallback usage-limit evidence")
@@ -1472,12 +1472,12 @@ exit 1
 	}
 
 	exec := &OpenCodeExecutor{Model: "opencode-go/kimi"}
-	tr, err := exec.Execute(context.Background(), RunOptions{Prompt: "do work", WorkspaceDir: workspaceDir})
+	tr, err := exec.Execute(context.Background(), harnessapi.RunOptions{Prompt: "do work", WorkspaceDir: workspaceDir})
 	if err == nil {
 		t.Fatal("expected error from opencode mock")
 	}
 	if tr == nil {
-		t.Fatal("expected TryResult, got nil")
+		t.Fatal("expected harnessapi.TryResult, got nil")
 	}
 	if tr.Evidence == nil {
 		t.Fatal("expected usage-limit evidence from existing stream-error path")
@@ -1527,12 +1527,12 @@ exit 1
 	}
 
 	exec := &OpenCodeExecutor{Model: "opencode-go/kimi"}
-	tr, err := exec.Execute(context.Background(), RunOptions{Prompt: "do work", WorkspaceDir: workspaceDir})
+	tr, err := exec.Execute(context.Background(), harnessapi.RunOptions{Prompt: "do work", WorkspaceDir: workspaceDir})
 	if err == nil {
 		t.Fatal("expected error from opencode mock")
 	}
 	if tr == nil {
-		t.Fatal("expected TryResult, got nil")
+		t.Fatal("expected harnessapi.TryResult, got nil")
 	}
 	if tr.Evidence == nil {
 		t.Fatal("expected evidence")
@@ -1587,12 +1587,12 @@ exit 1
 	}
 
 	exec := &OpenCodeExecutor{Model: "opencode-go/kimi"}
-	tr, err := exec.Execute(context.Background(), RunOptions{Prompt: "do work", WorkspaceDir: workspaceDir})
+	tr, err := exec.Execute(context.Background(), harnessapi.RunOptions{Prompt: "do work", WorkspaceDir: workspaceDir})
 	if err == nil {
 		t.Fatal("expected error from opencode mock")
 	}
 	if tr == nil {
-		t.Fatal("expected TryResult, got nil")
+		t.Fatal("expected harnessapi.TryResult, got nil")
 	}
 	if tr.Evidence == nil {
 		t.Fatal("expected disk-log evidence for budget-killed try")
@@ -1644,12 +1644,12 @@ exit 1
 	}
 
 	exec := &OpenCodeExecutor{Model: "opencode-go/kimi"}
-	tr, err := exec.Execute(context.Background(), RunOptions{Prompt: "do work", WorkspaceDir: workspaceDir})
+	tr, err := exec.Execute(context.Background(), harnessapi.RunOptions{Prompt: "do work", WorkspaceDir: workspaceDir})
 	if err == nil {
 		t.Fatal("expected error from opencode mock")
 	}
 	if tr == nil {
-		t.Fatal("expected TryResult, got nil")
+		t.Fatal("expected harnessapi.TryResult, got nil")
 	}
 	if tr.Evidence == nil {
 		t.Fatal("expected disk-log evidence")
@@ -1794,7 +1794,7 @@ printf '{"completed":true,"summary":"agy ok"}'
 	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 
 	exec := &AntigravityExecutor{Model: DefaultAntigravityModel, PrintTimeout: time.Second}
-	res, err := exec.Execute(context.Background(), RunOptions{Prompt: "do work", LogPath: filepath.Join(tmp, "try.log")})
+	res, err := exec.Execute(context.Background(), harnessapi.RunOptions{Prompt: "do work", LogPath: filepath.Join(tmp, "try.log")})
 	if err != nil {
 		t.Fatalf("Execute failed: %v", err)
 	}
@@ -1905,12 +1905,12 @@ func TestTailString(t *testing.T) {
 }
 
 func TestTryResultSessionIDField(t *testing.T) {
-	tr := &TryResult{Completed: true, Summary: "test", SessionID: "sess-123"}
+	tr := &harnessapi.TryResult{Completed: true, Summary: "test", SessionID: "sess-123"}
 	if tr.SessionID != "sess-123" {
 		t.Errorf("SessionID = %q, want %q", tr.SessionID, "sess-123")
 	}
 
-	trZero := &TryResult{Completed: true}
+	trZero := &harnessapi.TryResult{Completed: true}
 	if trZero.SessionID != "" {
 		t.Errorf("SessionID = %q, want empty string", trZero.SessionID)
 	}
@@ -1943,7 +1943,7 @@ printf '%%s\n' '{"type":"result","result":{"completed":true,"summary":"ok"}}'
 	tmp := t.TempDir()
 	logPath := filepath.Join(tmp, "try.log")
 	exec := &ClaudeExecutor{}
-	res, err := exec.Execute(context.Background(), RunOptions{
+	res, err := exec.Execute(context.Background(), harnessapi.RunOptions{
 		Prompt:          "do work",
 		ResumeSessionID: "sess-resume-42",
 		LogPath:         logPath,
@@ -1981,7 +1981,7 @@ printf '%%s\n' '{"type":"result","result":{"completed":true,"summary":"ok"}}'
 	tmp := t.TempDir()
 	logPath := filepath.Join(tmp, "try.log")
 	exec := &ClaudeExecutor{}
-	_, err := exec.Execute(context.Background(), RunOptions{
+	_, err := exec.Execute(context.Background(), harnessapi.RunOptions{
 		Prompt:  "do work",
 		LogPath: logPath,
 	})
@@ -2016,7 +2016,7 @@ printf '%%s\n' '{"completed":true,"summary":"agy ok"}'
 
 	logPath := filepath.Join(tmp, "try.log")
 	exec := &AntigravityExecutor{PrintTimeout: time.Second}
-	_, err := exec.Execute(context.Background(), RunOptions{
+	_, err := exec.Execute(context.Background(), harnessapi.RunOptions{
 		Prompt:          "do work",
 		ResumeSessionID: "conv-abc-123",
 		LogPath:         logPath,
@@ -2053,7 +2053,7 @@ printf '%%s\n' '{"completed":true,"summary":"agy ok"}'
 
 	logPath := filepath.Join(tmp, "try.log")
 	exec := &AntigravityExecutor{PrintTimeout: time.Second}
-	_, err := exec.Execute(context.Background(), RunOptions{
+	_, err := exec.Execute(context.Background(), harnessapi.RunOptions{
 		Prompt:  "do work",
 		LogPath: logPath,
 	})
@@ -2084,7 +2084,7 @@ printf '%%s\n' '{"type":"text","part":{"type":"text","text":"%s"}}'
 	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 
 	exec := &OpenCodeExecutor{}
-	res, err := exec.Execute(context.Background(), RunOptions{
+	res, err := exec.Execute(context.Background(), harnessapi.RunOptions{
 		Prompt:          "do work",
 		ResumeSessionID: "ses-resume-99",
 	})
@@ -2119,7 +2119,7 @@ printf '%%s\n' '{"type":"text","part":{"type":"text","text":"%s"}}'
 	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 
 	exec := &OpenCodeExecutor{}
-	_, err := exec.Execute(context.Background(), RunOptions{
+	_, err := exec.Execute(context.Background(), harnessapi.RunOptions{
 		Prompt: "do work",
 	})
 	if err != nil {
@@ -2154,7 +2154,7 @@ done
 	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 
 	exec := &CodexExecutor{}
-	res, err := exec.Execute(context.Background(), RunOptions{
+	res, err := exec.Execute(context.Background(), harnessapi.RunOptions{
 		Prompt:          "do work",
 		ResumeSessionID: "sess-resume-77",
 	})
@@ -2195,12 +2195,12 @@ exit 1
 	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 
 	exec := &AntigravityExecutor{PrintTimeout: time.Second}
-	tr, err := exec.Execute(context.Background(), RunOptions{Prompt: "do work"})
+	tr, err := exec.Execute(context.Background(), harnessapi.RunOptions{Prompt: "do work"})
 	if err == nil {
 		t.Fatal("expected error from antigravity mock")
 	}
 	if tr == nil {
-		t.Fatal("expected TryResult with Evidence, got nil")
+		t.Fatal("expected harnessapi.TryResult with Evidence, got nil")
 	}
 	if tr.Evidence == nil {
 		t.Fatal("expected Evidence to be populated for RESOURCE_EXHAUSTED")
@@ -2229,12 +2229,12 @@ exit 1
 	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 
 	exec := &ClaudeExecutor{}
-	tr, err := exec.Execute(context.Background(), RunOptions{Prompt: "do work"})
+	tr, err := exec.Execute(context.Background(), harnessapi.RunOptions{Prompt: "do work"})
 	if err == nil {
 		t.Fatal("expected error from claude mock")
 	}
 	if tr == nil {
-		t.Fatal("expected TryResult with Evidence, got nil")
+		t.Fatal("expected harnessapi.TryResult with Evidence, got nil")
 	}
 	if tr.Evidence == nil {
 		t.Fatal("expected Evidence to be populated for rate_limit_event")
@@ -2263,12 +2263,12 @@ exit 1
 	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 
 	exec := &ClaudeExecutor{}
-	tr, err := exec.Execute(context.Background(), RunOptions{Prompt: "do work"})
+	tr, err := exec.Execute(context.Background(), harnessapi.RunOptions{Prompt: "do work"})
 	if err == nil {
 		t.Fatal("expected error from claude mock")
 	}
 	if tr != nil {
-		t.Fatalf("expected nil TryResult for unknown error, got %+v", tr)
+		t.Fatalf("expected nil harnessapi.TryResult for unknown error, got %+v", tr)
 	}
 }
 
@@ -2288,12 +2288,12 @@ exit 1
 	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 
 	exec := &CodexExecutor{}
-	tr, err := exec.Execute(context.Background(), RunOptions{Prompt: "do work"})
+	tr, err := exec.Execute(context.Background(), harnessapi.RunOptions{Prompt: "do work"})
 	if err == nil {
 		t.Fatal("expected error from codex mock")
 	}
 	if tr == nil {
-		t.Fatal("expected TryResult with Evidence, got nil")
+		t.Fatal("expected harnessapi.TryResult with Evidence, got nil")
 	}
 	if tr.Evidence == nil {
 		t.Fatal("expected Evidence to be populated for usage limit")
@@ -2322,12 +2322,12 @@ exit 1
 	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 
 	exec := &OpenCodeExecutor{Model: "anthropic/claude-4"}
-	tr, err := exec.Execute(context.Background(), RunOptions{Prompt: "do work"})
+	tr, err := exec.Execute(context.Background(), harnessapi.RunOptions{Prompt: "do work"})
 	if err == nil {
 		t.Fatal("expected error from opencode mock")
 	}
 	if tr == nil {
-		t.Fatal("expected TryResult, got nil")
+		t.Fatal("expected harnessapi.TryResult, got nil")
 	}
 	if tr.Evidence == nil {
 		t.Fatal("expected Evidence to be populated for rate limit error event")
@@ -2356,12 +2356,12 @@ exit 1
 	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 
 	exec := &OpenCodeExecutor{Model: "openai/gpt-4o"}
-	tr, err := exec.Execute(context.Background(), RunOptions{Prompt: "do work"})
+	tr, err := exec.Execute(context.Background(), harnessapi.RunOptions{Prompt: "do work"})
 	if err == nil {
 		t.Fatal("expected error from opencode mock")
 	}
 	if tr == nil {
-		t.Fatal("expected TryResult, got nil")
+		t.Fatal("expected harnessapi.TryResult, got nil")
 	}
 	if tr.Evidence == nil {
 		t.Fatal("expected Evidence to be populated for usage limit error event")
@@ -2393,7 +2393,7 @@ done
 	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 
 	exec := &CodexExecutor{}
-	_, err := exec.Execute(context.Background(), RunOptions{
+	_, err := exec.Execute(context.Background(), harnessapi.RunOptions{
 		Prompt: "do work",
 	})
 	if err != nil {
@@ -2430,7 +2430,7 @@ done
 	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 
 	exec := &CodexExecutor{}
-	_, err := exec.Execute(context.Background(), RunOptions{
+	_, err := exec.Execute(context.Background(), harnessapi.RunOptions{
 		Prompt:          "do work",
 		ReasoningEffort: "high",
 	})
@@ -2464,7 +2464,7 @@ printf '%%s\n' '{"type":"result","result":{"completed":true,"summary":"ok"}}'
 	tmp := t.TempDir()
 	logPath := filepath.Join(tmp, "try.log")
 	exec := &ClaudeExecutor{}
-	_, err := exec.Execute(context.Background(), RunOptions{
+	_, err := exec.Execute(context.Background(), harnessapi.RunOptions{
 		Prompt:          "do work",
 		ReasoningEffort: "xhigh",
 		LogPath:         logPath,
@@ -2497,7 +2497,7 @@ printf '%%s\n' '{"type":"text","part":{"type":"text","text":"%s"}}'
 	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 
 	exec := &OpenCodeExecutor{}
-	_, err := exec.Execute(context.Background(), RunOptions{
+	_, err := exec.Execute(context.Background(), harnessapi.RunOptions{
 		Prompt:          "do work",
 		ReasoningEffort: "max",
 	})
@@ -2533,7 +2533,7 @@ printf '%%s\n' '{"completed":true,"summary":"agy ok"}'
 
 	logPath := filepath.Join(tmp, "try.log")
 	exec := &AntigravityExecutor{PrintTimeout: time.Second}
-	_, err := exec.Execute(context.Background(), RunOptions{
+	_, err := exec.Execute(context.Background(), harnessapi.RunOptions{
 		Prompt:          "do work",
 		ReasoningEffort: "high",
 		LogPath:         logPath,
@@ -2581,7 +2581,7 @@ done
 	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 
 	exec := &CodexExecutor{Model: "gpt-5.5-default"}
-	_, err := exec.Execute(context.Background(), RunOptions{
+	_, err := exec.Execute(context.Background(), harnessapi.RunOptions{
 		Prompt:          "do work",
 		Model:           "gpt-5.5-extra-high",
 		ReasoningEffort: "xhigh",
@@ -2624,7 +2624,7 @@ printf '%%s\n' '{"type":"result","result":{"completed":true,"summary":"ok"}}'
 	tmp := t.TempDir()
 	logPath := filepath.Join(tmp, "try.log")
 	exec := &ClaudeExecutor{Model: "claude-opus-default"}
-	_, err := exec.Execute(context.Background(), RunOptions{
+	_, err := exec.Execute(context.Background(), harnessapi.RunOptions{
 		Prompt:          "do work",
 		Model:           "claude-opus-4-8",
 		ReasoningEffort: "max",
@@ -2664,7 +2664,7 @@ printf '%%s\n' '{"type":"text","part":{"type":"text","text":"%s"}}'
 	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 
 	exec := &OpenCodeExecutor{Model: "zai-coding-plan/glm-default"}
-	_, err := exec.Execute(context.Background(), RunOptions{
+	_, err := exec.Execute(context.Background(), harnessapi.RunOptions{
 		Prompt:          "do work",
 		Model:           "zai-coding-plan/glm-5.1",
 		ReasoningEffort: "low",
@@ -2690,7 +2690,7 @@ printf '%%s\n' '{"type":"text","part":{"type":"text","text":"%s"}}'
 }
 
 // TestExecutors_PopulateResolvedModel verifies every executor populates
-// TryResult.ResolvedModel with the model actually passed to the CLI: the
+// harnessapi.TryResult.ResolvedModel with the model actually passed to the CLI: the
 // executor's configured default for a bare-alias route (opts.Model empty), and
 // the per-try opts.Model override when set. This is the source the runner uses
 // for the runner-tag fallback (tasks.md §2.2/§2.3/§2.5).
@@ -2712,14 +2712,14 @@ done
 		t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 
 		exec := &CodexExecutor{Model: "gpt-5.4"}
-		if res, err := exec.Execute(context.Background(), RunOptions{Prompt: "do work"}); err != nil {
+		if res, err := exec.Execute(context.Background(), harnessapi.RunOptions{Prompt: "do work"}); err != nil {
 			t.Fatalf("Execute failed: %v", err)
 		} else if res.ResolvedModel != "gpt-5.4" {
 			t.Errorf("ResolvedModel = %q, want default %q", res.ResolvedModel, "gpt-5.4")
 		}
 
 		exec = &CodexExecutor{Model: "gpt-5.4"}
-		if res, err := exec.Execute(context.Background(), RunOptions{Prompt: "do work", Model: "gpt-5.4-mini"}); err != nil {
+		if res, err := exec.Execute(context.Background(), harnessapi.RunOptions{Prompt: "do work", Model: "gpt-5.4-mini"}); err != nil {
 			t.Fatalf("Execute failed: %v", err)
 		} else if res.ResolvedModel != "gpt-5.4-mini" {
 			t.Errorf("ResolvedModel = %q, want opts override %q", res.ResolvedModel, "gpt-5.4-mini")
@@ -2739,14 +2739,14 @@ printf '%s\n' '{"type":"result","result":{"completed":true,"summary":"ok"}}'
 		t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 
 		exec := &ClaudeExecutor{Model: "sonnet-4"}
-		if res, err := exec.Execute(context.Background(), RunOptions{Prompt: "do work"}); err != nil {
+		if res, err := exec.Execute(context.Background(), harnessapi.RunOptions{Prompt: "do work"}); err != nil {
 			t.Fatalf("Execute failed: %v", err)
 		} else if res.ResolvedModel != "sonnet-4" {
 			t.Errorf("ResolvedModel = %q, want default %q", res.ResolvedModel, "sonnet-4")
 		}
 
 		exec = &ClaudeExecutor{Model: "sonnet-4"}
-		if res, err := exec.Execute(context.Background(), RunOptions{Prompt: "do work", Model: "haiku-4"}); err != nil {
+		if res, err := exec.Execute(context.Background(), harnessapi.RunOptions{Prompt: "do work", Model: "haiku-4"}); err != nil {
 			t.Fatalf("Execute failed: %v", err)
 		} else if res.ResolvedModel != "haiku-4" {
 			t.Errorf("ResolvedModel = %q, want opts override %q", res.ResolvedModel, "haiku-4")
@@ -2765,14 +2765,14 @@ printf '%s\n' '{"type":"text","part":{"type":"text","text":"{\"completed\":true,
 		t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 
 		exec := &OpenCodeExecutor{Model: "anthropic/claude-4"}
-		if res, err := exec.Execute(context.Background(), RunOptions{Prompt: "do work"}); err != nil {
+		if res, err := exec.Execute(context.Background(), harnessapi.RunOptions{Prompt: "do work"}); err != nil {
 			t.Fatalf("Execute failed: %v", err)
 		} else if res.ResolvedModel != "anthropic/claude-4" {
 			t.Errorf("ResolvedModel = %q, want default %q", res.ResolvedModel, "anthropic/claude-4")
 		}
 
 		exec = &OpenCodeExecutor{Model: "anthropic/claude-4"}
-		if res, err := exec.Execute(context.Background(), RunOptions{Prompt: "do work", Model: "zai-coding-plan/glm-5.1"}); err != nil {
+		if res, err := exec.Execute(context.Background(), harnessapi.RunOptions{Prompt: "do work", Model: "zai-coding-plan/glm-5.1"}); err != nil {
 			t.Fatalf("Execute failed: %v", err)
 		} else if res.ResolvedModel != "zai-coding-plan/glm-5.1" {
 			t.Errorf("ResolvedModel = %q, want opts override %q", res.ResolvedModel, "zai-coding-plan/glm-5.1")
@@ -2796,14 +2796,14 @@ printf '%s\n' '{"completed":true,"summary":"ok"}'
 		t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 
 		exec := &AntigravityExecutor{Model: "Gemini 3.5 Flash (High)", PrintTimeout: time.Second}
-		if res, err := exec.Execute(context.Background(), RunOptions{Prompt: "do work"}); err != nil {
+		if res, err := exec.Execute(context.Background(), harnessapi.RunOptions{Prompt: "do work"}); err != nil {
 			t.Fatalf("Execute failed: %v", err)
 		} else if res.ResolvedModel != "Gemini 3.5 Flash (High)" {
 			t.Errorf("ResolvedModel = %q, want default %q", res.ResolvedModel, "Gemini 3.5 Flash (High)")
 		}
 
 		exec = &AntigravityExecutor{Model: "Gemini 3.5 Flash (High)", PrintTimeout: time.Second}
-		if res, err := exec.Execute(context.Background(), RunOptions{Prompt: "do work", Model: "Gemini 3 Pro"}); err != nil {
+		if res, err := exec.Execute(context.Background(), harnessapi.RunOptions{Prompt: "do work", Model: "Gemini 3 Pro"}); err != nil {
 			t.Fatalf("Execute failed: %v", err)
 		} else if res.ResolvedModel != "Gemini 3 Pro" {
 			t.Errorf("ResolvedModel = %q, want opts override %q", res.ResolvedModel, "Gemini 3 Pro")

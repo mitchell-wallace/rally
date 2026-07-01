@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/mitchell-wallace/rally/internal/agent"
+	"github.com/mitchell-wallace/rally/internal/harnessapi"
 	relaycore "github.com/mitchell-wallace/rally/internal/relay"
 	"github.com/mitchell-wallace/rally/internal/reliability"
 	"github.com/mitchell-wallace/rally/internal/store"
@@ -181,7 +181,7 @@ func lapPinMismatchDiagnosticEvent(baseTags map[string]string, rc telemetry.Rall
 // the verbatim active/probation/frozen/benched vocabulary, for the agent_state
 // tag on captured failures. It reads persisted state from the store so it
 // reflects the runner's standing at capture time.
-func (r *Runner) agentStateName(picked agent.ResolvedAgent) string {
+func (r *Runner) agentStateName(picked harnessapi.ResolvedAgent) string {
 	res := r.resilience
 	if res == nil {
 		res = relaycore.NewResilience(r.store)
@@ -219,7 +219,7 @@ func firstNonEmpty(values ...string) string {
 	return ""
 }
 
-func resolvedRunnerModel(result *agent.TryResult, picked agent.ResolvedAgent) string {
+func resolvedRunnerModel(result *harnessapi.TryResult, picked harnessapi.ResolvedAgent) string {
 	if result == nil {
 		return firstNonEmpty(picked.Model)
 	}

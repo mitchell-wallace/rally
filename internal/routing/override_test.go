@@ -5,20 +5,20 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/mitchell-wallace/rally/internal/agent"
+	"github.com/mitchell-wallace/rally/internal/harnessapi"
 )
 
-func overrideResolver(spec string) (agent.ResolvedAgent, error) {
+func overrideResolver(spec string) (harnessapi.ResolvedAgent, error) {
 	switch spec {
 	case "op:z":
-		return agent.ResolvedAgent{Harness: "opencode", Model: "zai-coding-plan/glm-5.1"}, nil
+		return harnessapi.ResolvedAgent{Harness: "opencode", Model: "zai-coding-plan/glm-5.1"}, nil
 	case "op:gk":
-		return agent.ResolvedAgent{Harness: "opencode", Model: "google/model-2.5-pro"}, nil
+		return harnessapi.ResolvedAgent{Harness: "opencode", Model: "google/model-2.5-pro"}, nil
 	}
 
 	parts := strings.SplitN(spec, ":", 2)
 	if len(parts) == 0 || parts[0] == "" {
-		return agent.ResolvedAgent{}, fmt.Errorf("unknown agent alias %q", spec)
+		return harnessapi.ResolvedAgent{}, fmt.Errorf("unknown agent alias %q", spec)
 	}
 
 	aliases := map[string]string{
@@ -34,12 +34,12 @@ func overrideResolver(spec string) (agent.ResolvedAgent, error) {
 	}
 	harness, ok := aliases[parts[0]]
 	if !ok {
-		return agent.ResolvedAgent{}, fmt.Errorf("unknown agent alias %q", parts[0])
+		return harnessapi.ResolvedAgent{}, fmt.Errorf("unknown agent alias %q", parts[0])
 	}
 	if len(parts) == 1 {
-		return agent.ResolvedAgent{Harness: harness}, nil
+		return harnessapi.ResolvedAgent{Harness: harness}, nil
 	}
-	return agent.ResolvedAgent{Harness: harness, Model: parts[1]}, nil
+	return harnessapi.ResolvedAgent{Harness: harness, Model: parts[1]}, nil
 }
 
 func TestBuildOverrideRoute_ResolvesDirectEntries(t *testing.T) {

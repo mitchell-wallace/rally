@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/mitchell-wallace/rally/internal/agent"
+	"github.com/mitchell-wallace/rally/internal/harnessapi"
 	"github.com/mitchell-wallace/rally/internal/store"
 	"github.com/mitchell-wallace/rally/internal/telemetry"
 )
@@ -28,13 +28,13 @@ func TestRelay_LeftoverSummaryFailoverCommitsAndEmitsDiagnostic(t *testing.T) {
 
 	s := newTestStore(t, rallyDir)
 	exec := &funcExecutor{
-		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+		fn: func(ctx context.Context, opts harnessapi.RunOptions) (*harnessapi.TryResult, error) {
 			// Commits work but never finalizes (no laps wrapup), so a stub
 			// summary.jsonl is written after the run loop and left uncommitted.
 			os.WriteFile(filepath.Join(workspaceDir, "work.txt"), []byte("x"), 0o644)
 			runGit(t, workspaceDir, "add", ".")
 			runGit(t, workspaceDir, "commit", "-m", "work: done", "--no-verify")
-			return &agent.TryResult{Completed: true}, nil
+			return &harnessapi.TryResult{Completed: true}, nil
 		},
 	}
 	r := NewRunner(s, Config{
@@ -42,7 +42,7 @@ func TestRelay_LeftoverSummaryFailoverCommitsAndEmitsDiagnostic(t *testing.T) {
 		DataDir:          t.TempDir(),
 		AgentMixSpecs:    []string{"cc:1"},
 		TargetIterations: 1,
-	}, map[string]agent.Executor{"claude": exec})
+	}, map[string]harnessapi.Executor{"claude": exec})
 	sink := &capturingSink{}
 	r.SetTelemetry(sink)
 

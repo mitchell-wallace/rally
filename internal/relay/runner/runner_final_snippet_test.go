@@ -3,13 +3,14 @@ package runner
 import (
 	"context"
 	"errors"
+	"github.com/mitchell-wallace/rally/internal/agent"
 	"io"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
-	"github.com/mitchell-wallace/rally/internal/agent"
+	"github.com/mitchell-wallace/rally/internal/harnessapi"
 	"github.com/mitchell-wallace/rally/internal/progress"
 	"github.com/mitchell-wallace/rally/internal/store"
 )
@@ -30,7 +31,7 @@ func TestRunOneFinalSnippetUsesRecordedWrapupSummary(t *testing.T) {
 	attempt := 0
 	retryPreviousSummary := ""
 	exec := &funcExecutor{
-		fn: func(_ context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+		fn: func(_ context.Context, opts harnessapi.RunOptions) (*harnessapi.TryResult, error) {
 			attempt++
 			if attempt == 1 {
 				if err := progress.AppendRunEntry(workspaceDir, progress.RunEntry{
@@ -46,7 +47,7 @@ func TestRunOneFinalSnippetUsesRecordedWrapupSummary(t *testing.T) {
 			} else {
 				retryPreviousSummary = opts.PreviousSummary
 			}
-			return &agent.TryResult{Completed: false, Summary: executorSummary}, nil
+			return &harnessapi.TryResult{Completed: false, Summary: executorSummary}, nil
 		},
 	}
 	r := NewRunner(s, Config{
@@ -54,13 +55,13 @@ func TestRunOneFinalSnippetUsesRecordedWrapupSummary(t *testing.T) {
 		DataDir:      t.TempDir(),
 		RetryBudget:  2,
 		LapsEnabled:  true,
-	}, map[string]agent.Executor{"claude": exec})
+	}, map[string]harnessapi.Executor{"claude": exec})
 
 	_, err := r.runOne(
 		context.Background(),
 		&store.RelayRecord{ID: 1, TargetIterations: 1},
 		0,
-		agent.ResolvedAgent{Harness: "claude"},
+		harnessapi.ResolvedAgent{Harness: "claude"},
 		runTask{Name: "wrapup task", LapID: "lap-1", IsLapsBacked: true},
 		nil,
 		nil,
@@ -113,25 +114,25 @@ func TestRunOneFinalSnippetExecutorFallbackConsistentAcrossRetryAndRecords(t *te
 	attempt := 0
 	retryPreviousSummary := ""
 	exec := &funcExecutor{
-		fn: func(_ context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+		fn: func(_ context.Context, opts harnessapi.RunOptions) (*harnessapi.TryResult, error) {
 			attempt++
 			if attempt == 2 {
 				retryPreviousSummary = opts.PreviousSummary
 			}
-			return &agent.TryResult{Completed: false, Summary: executorSummary}, nil
+			return &harnessapi.TryResult{Completed: false, Summary: executorSummary}, nil
 		},
 	}
 	r := NewRunner(s, Config{
 		WorkspaceDir: workspaceDir,
 		DataDir:      t.TempDir(),
 		RetryBudget:  2,
-	}, map[string]agent.Executor{"claude": exec})
+	}, map[string]harnessapi.Executor{"claude": exec})
 
 	_, err := r.runOne(
 		context.Background(),
 		&store.RelayRecord{ID: 1, TargetIterations: 1},
 		0,
-		agent.ResolvedAgent{Harness: "claude"},
+		harnessapi.ResolvedAgent{Harness: "claude"},
 		runTask{Name: "retry task"},
 		nil,
 		nil,
@@ -178,7 +179,7 @@ func TestRunOneNonOpenCodeInvalidStructuredResultDoesNotPersistTranscript(t *tes
 		harness     string
 		script      string
 		wantSummary string
-		newExecutor func() agent.Executor
+		newExecutor func() harnessapi.Executor
 	}{
 		{
 			name:    "claude missing result event",
@@ -186,7 +187,7 @@ func TestRunOneNonOpenCodeInvalidStructuredResultDoesNotPersistTranscript(t *tes
 			script: "#!/bin/sh\n" +
 				"printf '%s\\n' '{\"type\":\"assistant\",\"message\":{\"content\":[{\"type\":\"text\",\"text\":\"" + rawTranscript + "\"}]}}'\n",
 			wantSummary: "claude produced no structured result",
-			newExecutor: func() agent.Executor { return &agent.ClaudeExecutor{} },
+			newExecutor: func() harnessapi.Executor { return &agent.ClaudeExecutor{} },
 		},
 		{
 			name:    "claude result missing summary",
@@ -194,7 +195,7 @@ func TestRunOneNonOpenCodeInvalidStructuredResultDoesNotPersistTranscript(t *tes
 			script: "#!/bin/sh\n" +
 				"printf '%s\\n' '{\"type\":\"result\",\"result\":{\"transcript\":\"" + rawTranscript + "\"}}'\n",
 			wantSummary: "claude structured result contained no summary",
-			newExecutor: func() agent.Executor { return &agent.ClaudeExecutor{} },
+			newExecutor: func() harnessapi.Executor { return &agent.ClaudeExecutor{} },
 		},
 	}
 
@@ -220,7 +221,7 @@ func TestRunOneNonOpenCodeInvalidStructuredResultDoesNotPersistTranscript(t *tes
 			retryPreviousSummary := ""
 			delegate := tc.newExecutor()
 			exec := &funcExecutor{
-				fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+				fn: func(ctx context.Context, opts harnessapi.RunOptions) (*harnessapi.TryResult, error) {
 					attempt++
 					if attempt == 2 {
 						retryPreviousSummary = opts.PreviousSummary
@@ -232,13 +233,13 @@ func TestRunOneNonOpenCodeInvalidStructuredResultDoesNotPersistTranscript(t *tes
 				WorkspaceDir: workspaceDir,
 				DataDir:      t.TempDir(),
 				RetryBudget:  2,
-			}, map[string]agent.Executor{tc.harness: exec})
+			}, map[string]harnessapi.Executor{tc.harness: exec})
 
 			_, err := r.runOne(
 				context.Background(),
 				&store.RelayRecord{ID: 1, TargetIterations: 1},
 				0,
-				agent.ResolvedAgent{Harness: tc.harness},
+				harnessapi.ResolvedAgent{Harness: tc.harness},
 				runTask{Name: "missing structured result task"},
 				nil,
 				nil,
@@ -308,24 +309,24 @@ func TestRunOneFinalSnippetUsesBoundedLogTailFallback(t *testing.T) {
 		strings.Repeat("x", finalSnippetFallbackRuneLimit*2) +
 		"\nuseful tail"
 	exec := &funcExecutor{
-		fn: func(_ context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+		fn: func(_ context.Context, opts harnessapi.RunOptions) (*harnessapi.TryResult, error) {
 			if err := os.WriteFile(opts.LogPath, []byte(logBody), 0o644); err != nil {
 				return nil, err
 			}
-			return &agent.TryResult{Completed: false}, nil
+			return &harnessapi.TryResult{Completed: false}, nil
 		},
 	}
 	r := NewRunner(s, Config{
 		WorkspaceDir: workspaceDir,
 		DataDir:      t.TempDir(),
 		RetryBudget:  1,
-	}, map[string]agent.Executor{"claude": exec})
+	}, map[string]harnessapi.Executor{"claude": exec})
 
 	_, err := r.runOne(
 		context.Background(),
 		&store.RelayRecord{ID: 1, TargetIterations: 1},
 		0,
-		agent.ResolvedAgent{Harness: "claude"},
+		harnessapi.ResolvedAgent{Harness: "claude"},
 		runTask{Name: "fallback task"},
 		nil,
 		nil,
@@ -402,7 +403,7 @@ func TestNormalizeFinalSnippetIgnoresOlderRunSummaryEntry(t *testing.T) {
 		"relay-1-run-1",
 		"",
 		entryCountBefore,
-		&agent.TryResult{Summary: "current executor summary"},
+		&harnessapi.TryResult{Summary: "current executor summary"},
 		nil,
 	)
 	if got != "current executor summary" {

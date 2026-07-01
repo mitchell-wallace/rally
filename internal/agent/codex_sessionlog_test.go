@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"github.com/mitchell-wallace/rally/internal/harnessapi"
 	"os"
 	"path/filepath"
 	"strings"
@@ -196,7 +197,7 @@ func TestCodexSessionLog_RawSignalExcludesVerboseAndSensitivePayloads(t *testing
 
 // §4.6 (d): a missing/unreadable session dir is not an error — the function
 // returns (nil, err) so the executor falls through to the existing
-// safe_exec_error path (nil TryResult.Evidence on no usable evidence).
+// safe_exec_error path (nil harnessapi.TryResult.Evidence on no usable evidence).
 func TestCodexSessionLog_MissingSessionsDirIsNotAnError(t *testing.T) {
 	t.Setenv("CODEX_HOME", filepath.Join(t.TempDir(), "does-not-exist"))
 	workspaceDir := filepath.Join(t.TempDir(), "ws")
@@ -272,7 +273,7 @@ func TestCodexSessionLog_NewestMatchWins(t *testing.T) {
 }
 
 // End-to-end: a real codex mock that exits 1 with no in-band signal wires the
-// codex_no_session_log evidence onto the returned TryResult when no session log
+// codex_no_session_log evidence onto the returned harnessapi.TryResult when no session log
 // matches (the executor-level error path).
 func TestCodexExecutor_NoSessionLogEvidenceWiredOnSilentExit1(t *testing.T) {
 	sessionsRoot := t.TempDir()
@@ -293,12 +294,12 @@ func TestCodexExecutor_NoSessionLogEvidenceWiredOnSilentExit1(t *testing.T) {
 	os.MkdirAll(workspaceDir, 0o755)
 
 	exec := &CodexExecutor{}
-	tr, err := exec.Execute(context.Background(), RunOptions{Prompt: "do work", WorkspaceDir: workspaceDir})
+	tr, err := exec.Execute(context.Background(), harnessapi.RunOptions{Prompt: "do work", WorkspaceDir: workspaceDir})
 	if err == nil {
 		t.Fatal("expected error from codex mock")
 	}
 	if tr == nil {
-		t.Fatal("expected TryResult with codex_no_session_log Evidence, got nil")
+		t.Fatal("expected harnessapi.TryResult with codex_no_session_log Evidence, got nil")
 	}
 	if tr.Evidence == nil {
 		t.Fatal("expected Evidence on silent exit-1, got nil (would fall through to safe_exec_error)")
@@ -312,7 +313,7 @@ func TestCodexExecutor_NoSessionLogEvidenceWiredOnSilentExit1(t *testing.T) {
 }
 
 // End-to-end: a codex mock that exits 1 silently, but whose session log matches
-// the workspace, yields codex_session_log evidence on the returned TryResult.
+// the workspace, yields codex_session_log evidence on the returned harnessapi.TryResult.
 func TestCodexExecutor_SessionLogEvidenceWiredOnMatchingLog(t *testing.T) {
 	sessionsRoot := t.TempDir()
 	t.Setenv("CODEX_HOME", sessionsRoot)
@@ -338,12 +339,12 @@ func TestCodexExecutor_SessionLogEvidenceWiredOnMatchingLog(t *testing.T) {
 	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 
 	exec := &CodexExecutor{}
-	tr, err := exec.Execute(context.Background(), RunOptions{Prompt: "do work", WorkspaceDir: workspaceDir})
+	tr, err := exec.Execute(context.Background(), harnessapi.RunOptions{Prompt: "do work", WorkspaceDir: workspaceDir})
 	if err == nil {
 		t.Fatal("expected error from codex mock")
 	}
 	if tr == nil || tr.Evidence == nil {
-		t.Fatalf("expected TryResult with codex_session_log Evidence, got %+v", tr)
+		t.Fatalf("expected harnessapi.TryResult with codex_session_log Evidence, got %+v", tr)
 	}
 	if tr.Evidence.Source != "codex_session_log" {
 		t.Errorf("Evidence.Source = %q, want codex_session_log", tr.Evidence.Source)

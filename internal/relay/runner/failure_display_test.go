@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mitchell-wallace/rally/internal/agent"
+	"github.com/mitchell-wallace/rally/internal/harnessapi"
 	"github.com/mitchell-wallace/rally/internal/reliability"
 	"github.com/mitchell-wallace/rally/internal/store"
 )
@@ -68,11 +68,11 @@ func TestCategorizedTryRecordCarriesCategoryAndDisplayReason(t *testing.T) {
 
 			s := newTestStore(t, rallyDir)
 			exec := &funcExecutor{
-				fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+				fn: func(ctx context.Context, opts harnessapi.RunOptions) (*harnessapi.TryResult, error) {
 					if opts.LogPath != "" {
 						_ = os.WriteFile(opts.LogPath, []byte("failed\n"), 0o644)
 					}
-					return &agent.TryResult{Completed: false, Summary: "failed", Evidence: tt.evidence}, nil
+					return &harnessapi.TryResult{Completed: false, Summary: "failed", Evidence: tt.evidence}, nil
 				},
 			}
 
@@ -84,13 +84,13 @@ func TestCategorizedTryRecordCarriesCategoryAndDisplayReason(t *testing.T) {
 				RetryBudget:      1,
 				LapsEnabled:      true,
 				Resolver:         cheapTestResolver,
-			}, map[string]agent.Executor{"opencode": exec})
+			}, map[string]harnessapi.Executor{"opencode": exec})
 
 			_, err := r.runOne(
 				context.Background(),
 				&store.RelayRecord{ID: 1, TargetIterations: 1},
 				0,
-				agent.ResolvedAgent{Harness: "opencode", Model: cheapTestModel},
+				harnessapi.ResolvedAgent{Harness: "opencode", Model: cheapTestModel},
 				runTask{Name: "task", Prompt: "do work", Assignee: "senior"},
 				nil, nil, false, false, nil, nil,
 				io.Discard,

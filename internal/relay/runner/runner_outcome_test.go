@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mitchell-wallace/rally/internal/agent"
 	"github.com/mitchell-wallace/rally/internal/gitx"
+	"github.com/mitchell-wallace/rally/internal/harnessapi"
 	"github.com/mitchell-wallace/rally/internal/keyboard"
 	"github.com/mitchell-wallace/rally/internal/progress"
 	"github.com/mitchell-wallace/rally/internal/reliability"
@@ -76,7 +76,7 @@ func TestRunOneRecordsHandoffRequestedOutcome(t *testing.T) {
 
 	s := newTestStore(t, rallyDir)
 	exec := &funcExecutor{
-		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+		fn: func(ctx context.Context, opts harnessapi.RunOptions) (*harnessapi.TryResult, error) {
 			if err := os.WriteFile(filepath.Join(workspaceDir, "work.txt"), []byte("done\n"), 0o644); err != nil {
 				return nil, err
 			}
@@ -91,7 +91,7 @@ func TestRunOneRecordsHandoffRequestedOutcome(t *testing.T) {
 			}); err != nil {
 				return nil, err
 			}
-			return &agent.TryResult{Completed: true, Summary: "executor summary"}, nil
+			return &harnessapi.TryResult{Completed: true, Summary: "executor summary"}, nil
 		},
 	}
 
@@ -103,13 +103,13 @@ func TestRunOneRecordsHandoffRequestedOutcome(t *testing.T) {
 		RetryBudget:      1,
 		LapsEnabled:      true,
 		Resolver:         cheapTestResolver,
-	}, map[string]agent.Executor{"opencode": exec})
+	}, map[string]harnessapi.Executor{"opencode": exec})
 
 	res, err := r.runOne(
 		context.Background(),
 		&store.RelayRecord{ID: 1, TargetIterations: 1},
 		0,
-		agent.ResolvedAgent{Harness: "opencode", Model: cheapTestModel},
+		harnessapi.ResolvedAgent{Harness: "opencode", Model: cheapTestModel},
 		runTask{Name: "task", Prompt: "do work", Assignee: "senior", ResolvedRoute: "senior", LapID: "lap-1", IsLapsBacked: true, LapsRemaining: 1},
 		nil,
 		nil,
@@ -179,7 +179,7 @@ func TestRunOneCleanHandoffDoesNotSetDirtyRecoveryMetadata(t *testing.T) {
 
 	s := newTestStore(t, rallyDir)
 	exec := &funcExecutor{
-		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+		fn: func(ctx context.Context, opts harnessapi.RunOptions) (*harnessapi.TryResult, error) {
 			if err := progress.AppendRunEntry(workspaceDir, progress.RunEntry{
 				RunID:   "relay-1-run-1",
 				Summary: "blocked cleanly",
@@ -191,7 +191,7 @@ func TestRunOneCleanHandoffDoesNotSetDirtyRecoveryMetadata(t *testing.T) {
 			}); err != nil {
 				return nil, err
 			}
-			return &agent.TryResult{Completed: true, Summary: "executor summary"}, nil
+			return &harnessapi.TryResult{Completed: true, Summary: "executor summary"}, nil
 		},
 	}
 
@@ -203,13 +203,13 @@ func TestRunOneCleanHandoffDoesNotSetDirtyRecoveryMetadata(t *testing.T) {
 		RetryBudget:      1,
 		LapsEnabled:      true,
 		Resolver:         cheapTestResolver,
-	}, map[string]agent.Executor{"opencode": exec})
+	}, map[string]harnessapi.Executor{"opencode": exec})
 
 	res, err := r.runOne(
 		context.Background(),
 		&store.RelayRecord{ID: 1, TargetIterations: 1},
 		0,
-		agent.ResolvedAgent{Harness: "opencode", Model: cheapTestModel},
+		harnessapi.ResolvedAgent{Harness: "opencode", Model: cheapTestModel},
 		runTask{Name: "task", Prompt: "do work", Assignee: "senior", ResolvedRoute: "senior", LapID: "lap-1", IsLapsBacked: true, LapsRemaining: 1},
 		nil,
 		nil,
@@ -256,13 +256,13 @@ func TestRunOneRetryThenDirtyHandoffUsesRunScopedDirtyDetection(t *testing.T) {
 	s := newTestStore(t, rallyDir)
 	attempts := 0
 	exec := &funcExecutor{
-		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+		fn: func(ctx context.Context, opts harnessapi.RunOptions) (*harnessapi.TryResult, error) {
 			attempts++
 			if attempts == 1 {
 				if err := os.WriteFile(filepath.Join(workspaceDir, "work.txt"), []byte("partial\n"), 0o644); err != nil {
 					return nil, err
 				}
-				return &agent.TryResult{Completed: false, Summary: "partial"}, nil
+				return &harnessapi.TryResult{Completed: false, Summary: "partial"}, nil
 			}
 			if err := progress.AppendRunEntry(workspaceDir, progress.RunEntry{
 				RunID:   "relay-1-run-1",
@@ -275,7 +275,7 @@ func TestRunOneRetryThenDirtyHandoffUsesRunScopedDirtyDetection(t *testing.T) {
 			}); err != nil {
 				return nil, err
 			}
-			return &agent.TryResult{Completed: true, Summary: "handoff recorded"}, nil
+			return &harnessapi.TryResult{Completed: true, Summary: "handoff recorded"}, nil
 		},
 	}
 
@@ -287,13 +287,13 @@ func TestRunOneRetryThenDirtyHandoffUsesRunScopedDirtyDetection(t *testing.T) {
 		RetryBudget:      2,
 		LapsEnabled:      true,
 		Resolver:         cheapTestResolver,
-	}, map[string]agent.Executor{"opencode": exec})
+	}, map[string]harnessapi.Executor{"opencode": exec})
 
 	res, err := r.runOne(
 		context.Background(),
 		&store.RelayRecord{ID: 1, TargetIterations: 1},
 		0,
-		agent.ResolvedAgent{Harness: "opencode", Model: cheapTestModel},
+		harnessapi.ResolvedAgent{Harness: "opencode", Model: cheapTestModel},
 		runTask{Name: "task", Prompt: "do work", Assignee: "senior", ResolvedRoute: "senior", LapID: "lap-1", IsLapsBacked: true, LapsRemaining: 1},
 		nil,
 		nil,
@@ -382,16 +382,16 @@ func TestRunOneOperatorCancellationPersistsCancelledNotFailed(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			var attempts int32
 			exec := &funcExecutor{
-				fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+				fn: func(ctx context.Context, opts harnessapi.RunOptions) (*harnessapi.TryResult, error) {
 					atomic.AddInt32(&attempts, 1)
 					<-ctx.Done()
 					if tt.cleanExit {
-						return &agent.TryResult{
+						return &harnessapi.TryResult{
 							Completed: true,
 							Summary:   "agent finished cleanly after SIGINT",
 						}, nil
 					}
-					return &agent.TryResult{
+					return &harnessapi.TryResult{
 						Completed:     false,
 						Summary:       "operator cancelled the try",
 						RemainingWork: "none",
@@ -491,10 +491,10 @@ func TestRunOneOperatorCancellationPersistsCancelledNotFailed(t *testing.T) {
 func TestRunGracefulStopCancellationPersistsAndStopsRelay(t *testing.T) {
 	var attempts int32
 	exec := &funcExecutor{
-		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+		fn: func(ctx context.Context, opts harnessapi.RunOptions) (*harnessapi.TryResult, error) {
 			atomic.AddInt32(&attempts, 1)
 			<-ctx.Done()
-			return &agent.TryResult{Completed: false, Summary: "operator stopped the relay"}, ctx.Err()
+			return &harnessapi.TryResult{Completed: false, Summary: "operator stopped the relay"}, ctx.Err()
 		},
 	}
 	r, s, _ := newTimeoutTestRunner(t, exec, Config{
@@ -579,7 +579,7 @@ func TestRunOneRecoveryEffectiveAssigneeUsesRecoveryPromptAndKeepsLapAssignee(t 
 	s := newTestStore(t, rallyDir)
 	var gotRoleInstructions string
 	exec := &funcExecutor{
-		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+		fn: func(ctx context.Context, opts harnessapi.RunOptions) (*harnessapi.TryResult, error) {
 			gotRoleInstructions = opts.RoleInstructions
 			if err := os.WriteFile(filepath.Join(workspaceDir, "done.txt"), []byte("done\n"), 0o644); err != nil {
 				return nil, err
@@ -587,7 +587,7 @@ func TestRunOneRecoveryEffectiveAssigneeUsesRecoveryPromptAndKeepsLapAssignee(t 
 			if err := progress.RecordLap(workspaceDir, "lap-1"); err != nil {
 				return nil, err
 			}
-			return &agent.TryResult{Completed: true, Summary: "done"}, nil
+			return &harnessapi.TryResult{Completed: true, Summary: "done"}, nil
 		},
 	}
 
@@ -599,13 +599,13 @@ func TestRunOneRecoveryEffectiveAssigneeUsesRecoveryPromptAndKeepsLapAssignee(t 
 		RetryBudget:      1,
 		LapsEnabled:      true,
 		Resolver:         cheapTestResolver,
-	}, map[string]agent.Executor{"opencode": exec})
+	}, map[string]harnessapi.Executor{"opencode": exec})
 
 	res, err := r.runOne(
 		context.Background(),
 		&store.RelayRecord{ID: 1, TargetIterations: 1},
 		0,
-		agent.ResolvedAgent{Harness: "opencode", Model: cheapTestModel},
+		harnessapi.ResolvedAgent{Harness: "opencode", Model: cheapTestModel},
 		runTask{Name: "task", Prompt: "do work", Assignee: "senior", EffectiveAssignee: "recovery", ResolvedRoute: "recovery", LapID: "lap-1", IsLapsBacked: true, LapsRemaining: 1},
 		nil,
 		nil,
@@ -743,11 +743,11 @@ func TestRunOneRecoveryClassificationPersistence(t *testing.T) {
 
 			s := newTestStore(t, rallyDir)
 			exec := &funcExecutor{
-				fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+				fn: func(ctx context.Context, opts harnessapi.RunOptions) (*harnessapi.TryResult, error) {
 					if err := tt.recordWrapup(workspaceDir); err != nil {
 						return nil, err
 					}
-					return &agent.TryResult{Completed: true, Summary: "executor summary"}, nil
+					return &harnessapi.TryResult{Completed: true, Summary: "executor summary"}, nil
 				},
 			}
 			r := NewRunner(s, Config{
@@ -758,13 +758,13 @@ func TestRunOneRecoveryClassificationPersistence(t *testing.T) {
 				RetryBudget:      1,
 				LapsEnabled:      true,
 				Resolver:         cheapTestResolver,
-			}, map[string]agent.Executor{"opencode": exec})
+			}, map[string]harnessapi.Executor{"opencode": exec})
 
 			res, err := r.runOne(
 				context.Background(),
 				&store.RelayRecord{ID: 1, TargetIterations: 1},
 				0,
-				agent.ResolvedAgent{Harness: "opencode", Model: cheapTestModel},
+				harnessapi.ResolvedAgent{Harness: "opencode", Model: cheapTestModel},
 				tt.task,
 				nil,
 				nil,
@@ -817,7 +817,7 @@ func TestRunOneLapPinMismatchIsWarningOnly(t *testing.T) {
 
 			s := newTestStore(t, rallyDir)
 			exec := &funcExecutor{
-				fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+				fn: func(ctx context.Context, opts harnessapi.RunOptions) (*harnessapi.TryResult, error) {
 					rs, err := progress.LoadRunState(workspaceDir)
 					if err != nil {
 						return nil, err
@@ -826,7 +826,7 @@ func TestRunOneLapPinMismatchIsWarningOnly(t *testing.T) {
 					if err := progress.SaveRunState(workspaceDir, rs); err != nil {
 						return nil, err
 					}
-					return &agent.TryResult{Completed: true, Summary: "completed a different lap"}, nil
+					return &harnessapi.TryResult{Completed: true, Summary: "completed a different lap"}, nil
 				},
 			}
 
@@ -838,13 +838,13 @@ func TestRunOneLapPinMismatchIsWarningOnly(t *testing.T) {
 				RetryBudget:      1,
 				LapsEnabled:      true,
 				Resolver:         cheapTestResolver,
-			}, map[string]agent.Executor{"opencode": exec})
+			}, map[string]harnessapi.Executor{"opencode": exec})
 
 			res, err := r.runOne(
 				context.Background(),
 				&store.RelayRecord{ID: 1, TargetIterations: 1},
 				0,
-				agent.ResolvedAgent{Harness: "opencode", Model: cheapTestModel},
+				harnessapi.ResolvedAgent{Harness: "opencode", Model: cheapTestModel},
 				runTask{Name: "pinned task", Prompt: "do work", Assignee: "senior", ResolvedRoute: "senior", LapID: "lap-1", IsLapsBacked: true, LapsRemaining: 1},
 				nil,
 				nil,
@@ -929,11 +929,11 @@ func TestRunOneIncompleteAndOrdinaryFailedDoNotSetDirtyHandoff(t *testing.T) {
 		{
 			name: "incomplete-alone",
 			exec: func(workspaceDir string) *funcExecutor {
-				return &funcExecutor{fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+				return &funcExecutor{fn: func(ctx context.Context, opts harnessapi.RunOptions) (*harnessapi.TryResult, error) {
 					if err := os.WriteFile(filepath.Join(workspaceDir, "work.txt"), []byte("partial\n"), 0o644); err != nil {
 						return nil, err
 					}
-					return &agent.TryResult{Completed: false, Summary: "partial"}, nil
+					return &harnessapi.TryResult{Completed: false, Summary: "partial"}, nil
 				}}
 			},
 			wantOutcome: reliability.OutcomeIncomplete,
@@ -941,8 +941,8 @@ func TestRunOneIncompleteAndOrdinaryFailedDoNotSetDirtyHandoff(t *testing.T) {
 		{
 			name: "ordinary-failed",
 			exec: func(workspaceDir string) *funcExecutor {
-				return &funcExecutor{fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
-					return &agent.TryResult{Completed: false, Summary: "failed"}, nil
+				return &funcExecutor{fn: func(ctx context.Context, opts harnessapi.RunOptions) (*harnessapi.TryResult, error) {
+					return &harnessapi.TryResult{Completed: false, Summary: "failed"}, nil
 				}}
 			},
 			wantOutcome: reliability.OutcomeFailed,
@@ -968,13 +968,13 @@ func TestRunOneIncompleteAndOrdinaryFailedDoNotSetDirtyHandoff(t *testing.T) {
 				RetryBudget:      1,
 				LapsEnabled:      true,
 				Resolver:         cheapTestResolver,
-			}, map[string]agent.Executor{"opencode": tt.exec(workspaceDir)})
+			}, map[string]harnessapi.Executor{"opencode": tt.exec(workspaceDir)})
 
 			res, err := r.runOne(
 				context.Background(),
 				&store.RelayRecord{ID: 1, TargetIterations: 1},
 				0,
-				agent.ResolvedAgent{Harness: "opencode", Model: cheapTestModel},
+				harnessapi.ResolvedAgent{Harness: "opencode", Model: cheapTestModel},
 				runTask{Name: "task", Prompt: "do work", Assignee: "senior", ResolvedRoute: "senior", LapID: "lap-1", IsLapsBacked: true, LapsRemaining: 1},
 				nil,
 				nil,

@@ -12,6 +12,7 @@ package runner
 
 import (
 	"context"
+	"github.com/mitchell-wallace/rally/internal/agent"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -19,7 +20,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mitchell-wallace/rally/internal/agent"
+	"github.com/mitchell-wallace/rally/internal/harnessapi"
 	"github.com/mitchell-wallace/rally/internal/laps"
 	"github.com/mitchell-wallace/rally/internal/store"
 	"github.com/mitchell-wallace/rally/internal/testutil"
@@ -69,7 +70,7 @@ func TestRealBackend_ClaudeBasicRelay(t *testing.T) {
 	workspaceDir, rallyDir, dataDir := setupRealWorkspace(t)
 
 	s := newTestStore(t, rallyDir)
-	executors := map[string]agent.Executor{
+	executors := map[string]harnessapi.Executor{
 		"claude": &agent.ClaudeExecutor{Model: "claude-haiku-4-5"},
 	}
 
@@ -148,7 +149,7 @@ func TestRealBackend_ClaudeWithLaps(t *testing.T) {
 	}
 
 	s := newTestStore(t, rallyDir)
-	executors := map[string]agent.Executor{
+	executors := map[string]harnessapi.Executor{
 		"claude": &agent.ClaudeExecutor{Model: "claude-haiku-4-5"},
 	}
 
@@ -196,7 +197,7 @@ func TestRealBackend_LogScopingPerRepo(t *testing.T) {
 		t.Helper()
 		workspaceDir, rallyDir, _ := setupRealWorkspace(t)
 		s := newTestStore(t, rallyDir)
-		executors := map[string]agent.Executor{
+		executors := map[string]harnessapi.Executor{
 			"claude": &agent.ClaudeExecutor{Model: "claude-haiku-4-5"},
 		}
 		// Short timeout: if the try fails and the agent is paused, the runner
@@ -262,7 +263,7 @@ func TestRealBackend_CodexRelay(t *testing.T) {
 	workspaceDir, rallyDir, dataDir := setupRealWorkspace(t)
 
 	s := newTestStore(t, rallyDir)
-	executors := map[string]agent.Executor{
+	executors := map[string]harnessapi.Executor{
 		"codex": &agent.CodexExecutor{Model: "gpt-5.4-mini"},
 	}
 
@@ -313,7 +314,7 @@ func TestRealBackend_OpenCodeRelay(t *testing.T) {
 	workspaceDir, rallyDir, dataDir := setupRealWorkspace(t)
 
 	s := newTestStore(t, rallyDir)
-	executors := map[string]agent.Executor{
+	executors := map[string]harnessapi.Executor{
 		"opencode": &agent.OpenCodeExecutor{Model: "opencode/big-pickle"},
 	}
 
@@ -401,7 +402,7 @@ func TestRealBackend_AntigravityRelay(t *testing.T) {
 	workspaceDir, rallyDir, dataDir := setupRealWorkspace(t)
 
 	s := newTestStore(t, rallyDir)
-	executors := map[string]agent.Executor{
+	executors := map[string]harnessapi.Executor{
 		"antigravity": &agent.AntigravityExecutor{Model: agent.DefaultAntigravityModel},
 	}
 
@@ -469,17 +470,17 @@ func TestRealBackend_ResilienceRetryBudget(t *testing.T) {
 	// log file, so we write an infra-pattern line ("rate limit") to opts.LogPath
 	// in addition to returning the failing TryResult.
 	failExec := &funcExecutor{
-		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+		fn: func(ctx context.Context, opts harnessapi.RunOptions) (*harnessapi.TryResult, error) {
 			if opts.LogPath != "" {
 				if f, err := os.OpenFile(opts.LogPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644); err == nil {
 					_, _ = f.WriteString("error: rate limit exceeded (429 too many requests)\n")
 					_ = f.Close()
 				}
 			}
-			return &agent.TryResult{Completed: false, Summary: "intentional rate-limit failure for retry test"}, nil
+			return &harnessapi.TryResult{Completed: false, Summary: "intentional rate-limit failure for retry test"}, nil
 		},
 	}
-	executors := map[string]agent.Executor{"claude": failExec}
+	executors := map[string]harnessapi.Executor{"claude": failExec}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -495,8 +496,8 @@ func TestRealBackend_ResilienceRetryBudget(t *testing.T) {
 		// to claude:default and matches the GetAgentStatus query below — the
 		// store requires a non-empty model, and the relay records pause state
 		// per harness+model.
-		Resolver: func(spec string) (agent.ResolvedAgent, error) {
-			return agent.ResolvedAgent{Harness: "claude", Model: "default"}, nil
+		Resolver: func(spec string) (harnessapi.ResolvedAgent, error) {
+			return harnessapi.ResolvedAgent{Harness: "claude", Model: "default"}, nil
 		},
 	}, executors)
 	// Stub the rate-limit cooldown sleep so both attempts run immediately within
@@ -504,7 +505,7 @@ func TestRealBackend_ResilienceRetryBudget(t *testing.T) {
 	// would block ~1m between attempts and only one try would execute.
 	r.sleepFunc = func(time.Duration) {}
 
-	// The relay should exhaust retries and pause the agent. After pausing, the
+	// The relay should exhaust retries and pause the harnessapi. After pausing, the
 	// relay waits for recovery until the context deadline, so Run returns
 	// context.DeadlineExceeded here — that is the expected resilience behaviour.
 	_ = r.Run(ctx)
@@ -545,7 +546,7 @@ func TestRealBackend_CustomHarnessRelay(t *testing.T) {
 
 	s := newTestStore(t, rallyDir)
 	modelFlag := "--model"
-	executors := map[string]agent.Executor{
+	executors := map[string]harnessapi.Executor{
 		"mycode": &agent.GenericExecutor{
 			Command:        []string{"opencode", "run", "$PROMPT", "--format", "json"},
 			ModelFlag:      &modelFlag,
@@ -567,7 +568,7 @@ func TestRealBackend_CustomHarnessRelay(t *testing.T) {
 		RetryBudget:      1,
 		StallThreshold:   60 * time.Second,
 		TaskPrompt:       "Create a file called custom-harness-e2e.txt with the text 'custom harness ok'. Do not create any other files.",
-		Resolver: func(spec string) (agent.ResolvedAgent, error) {
+		Resolver: func(spec string) (harnessapi.ResolvedAgent, error) {
 			// Resolve "mycode" as a custom harness with its default model.
 			parts := strings.SplitN(spec, ":", 2)
 			if parts[0] == "mycode" {
@@ -575,9 +576,9 @@ func TestRealBackend_CustomHarnessRelay(t *testing.T) {
 				if len(parts) == 2 {
 					model = parts[1]
 				}
-				return agent.ResolvedAgent{Harness: "mycode", Model: model}, nil
+				return harnessapi.ResolvedAgent{Harness: "mycode", Model: model}, nil
 			}
-			return agent.ResolvedAgent{Harness: parts[0]}, nil
+			return harnessapi.ResolvedAgent{Harness: parts[0]}, nil
 		},
 	}, executors)
 

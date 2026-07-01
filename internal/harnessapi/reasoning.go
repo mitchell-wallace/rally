@@ -1,4 +1,4 @@
-package agent
+package harnessapi
 
 import (
 	"fmt"
@@ -11,13 +11,13 @@ import (
 // documents. The sets come from spike-1 (release-0-10-0): codex and claude
 // publish a fixed enum, while opencode treats the value as a provider-specific
 // "variant" with no fixed set (so it is intentionally absent here). Antigravity
-// has no effort flag and is handled separately in applyReasoningEffort.
+// has no effort flag and is handled separately in ApplyReasoningEffort.
 var knownReasoningEfforts = map[string]map[string]bool{
 	"codex":  {"none": true, "minimal": true, "low": true, "medium": true, "high": true, "xhigh": true},
 	"claude": {"low": true, "medium": true, "high": true, "xhigh": true, "max": true},
 }
 
-// applyReasoningEffort appends the harness-specific flag(s) that inject a
+// ApplyReasoningEffort appends the harness-specific flag(s) that inject a
 // resolved reasoning/variant effort onto args, returning the updated args and
 // an optional human-readable warning.
 //
@@ -32,7 +32,7 @@ var knownReasoningEfforts = map[string]map[string]bool{
 // silently ignore unsupported values and codex defers rejection to the API, so
 // rally must not pre-emptively fail a run on an effort token it does not
 // recognise. An empty effort is a no-op.
-func applyReasoningEffort(args []string, harness, effort string) ([]string, string) {
+func ApplyReasoningEffort(args []string, harness, effort string) ([]string, string) {
 	effort = strings.TrimSpace(effort)
 	if effort == "" {
 		return args, ""
@@ -93,10 +93,10 @@ func sortedEffortValues(set map[string]bool) []string {
 	return values
 }
 
-// emitReasoningWarning surfaces a non-fatal reasoning-effort warning to the
+// EmitReasoningWarning surfaces a non-fatal reasoning-effort warning to the
 // operator (stderr) and, when a try log path is set, records it in the log for
 // later inspection.
-func emitReasoningWarning(logPath, warning string) {
+func EmitReasoningWarning(logPath, warning string) {
 	if warning == "" {
 		return
 	}

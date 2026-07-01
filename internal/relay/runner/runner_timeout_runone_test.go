@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mitchell-wallace/rally/internal/agent"
+	"github.com/mitchell-wallace/rally/internal/harnessapi"
 	"github.com/mitchell-wallace/rally/internal/progress"
 	"github.com/mitchell-wallace/rally/internal/reliability"
 	"github.com/mitchell-wallace/rally/internal/store"
@@ -31,11 +31,11 @@ import (
 // chosen by perAttempt: a nil entry means "block until the attempt context is
 // cancelled" (i.e. let a wall-clock bound end it); a non-nil entry runs that
 // function to produce a normal result. attempts counts invocations.
-func blockingTimeoutExecutor(perAttempt []func(int) (*agent.TryResult, error), attempts *int32) *funcExecutor {
+func blockingTimeoutExecutor(perAttempt []func(int) (*harnessapi.TryResult, error), attempts *int32) *funcExecutor {
 	return &funcExecutor{
-		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+		fn: func(ctx context.Context, opts harnessapi.RunOptions) (*harnessapi.TryResult, error) {
 			n := int(atomic.AddInt32(attempts, 1))
-			var behavior func(int) (*agent.TryResult, error)
+			var behavior func(int) (*harnessapi.TryResult, error)
 			if n-1 < len(perAttempt) {
 				behavior = perAttempt[n-1]
 			}
@@ -43,7 +43,7 @@ func blockingTimeoutExecutor(perAttempt []func(int) (*agent.TryResult, error), a
 				// Slow attempt: only returns once the timeout cancels the context,
 				// mirroring how the real execute goroutine surfaces a cancelled try.
 				<-ctx.Done()
-				return &agent.TryResult{Completed: false}, ctx.Err()
+				return &harnessapi.TryResult{Completed: false}, ctx.Err()
 			}
 			return behavior(n)
 		},
@@ -52,12 +52,12 @@ func blockingTimeoutExecutor(perAttempt []func(int) (*agent.TryResult, error), a
 
 func rateLimitErrorExecutor(attempts *int32) *funcExecutor {
 	return &funcExecutor{
-		fn: func(_ context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+		fn: func(_ context.Context, opts harnessapi.RunOptions) (*harnessapi.TryResult, error) {
 			atomic.AddInt32(attempts, 1)
 			if opts.LogPath != "" {
 				_ = os.WriteFile(opts.LogPath, []byte("rate limit\n"), 0o644)
 			}
-			return &agent.TryResult{Completed: false}, errors.New("rate limit")
+			return &harnessapi.TryResult{Completed: false}, errors.New("rate limit")
 		},
 	}
 }
@@ -145,7 +145,7 @@ func waitForAttempts(t *testing.T, attempts *int32, want int32) {
 // newTimeoutTestRunner builds a runner over a real git workspace with a single
 // executor wired in, suitable for driving runOne directly. The console writer is
 // discarded so footer/monitor output does not pollute test logs.
-func newTimeoutTestRunner(t *testing.T, exec agent.Executor, cfg Config) (*Runner, *store.Store, string) {
+func newTimeoutTestRunner(t *testing.T, exec harnessapi.Executor, cfg Config) (*Runner, *store.Store, string) {
 	t.Helper()
 	workspaceDir := t.TempDir()
 	rallyDir := store.RallyDir(workspaceDir)
@@ -163,7 +163,7 @@ func newTimeoutTestRunner(t *testing.T, exec agent.Executor, cfg Config) (*Runne
 	if cfg.Resolver == nil {
 		cfg.Resolver = cheapTestResolver
 	}
-	r := NewRunner(s, cfg, map[string]agent.Executor{"opencode": exec})
+	r := NewRunner(s, cfg, map[string]harnessapi.Executor{"opencode": exec})
 	r.out = io.Discard
 	return r, s, workspaceDir
 }
@@ -196,7 +196,7 @@ func driveRunOneTask(t *testing.T, r *Runner, task runTask) runOutcome {
 		context.Background(),
 		&store.RelayRecord{ID: 1, TargetIterations: 1},
 		0,
-		agent.ResolvedAgent{Harness: "opencode", Model: cheapTestModel},
+		harnessapi.ResolvedAgent{Harness: "opencode", Model: cheapTestModel},
 		task,
 		nil, nil, false, false, nil, nil,
 		io.Discard,
@@ -437,18 +437,18 @@ func TestRunOneRunBudgetIsCumulativeAcrossRetries(t *testing.T) {
 func TestRunOneTryCapKillWithExecutorEvidenceKeepsEvidenceCategory(t *testing.T) {
 	var attempts int32
 	var workspaceDir string
-	complete := func(n int) (*agent.TryResult, error) {
+	complete := func(n int) (*harnessapi.TryResult, error) {
 		if err := os.WriteFile(filepath.Join(workspaceDir, "work.txt"), []byte("done\n"), 0o644); err != nil {
 			return nil, err
 		}
-		return &agent.TryResult{Completed: true, Summary: "ok"}, nil
+		return &harnessapi.TryResult{Completed: true, Summary: "ok"}, nil
 	}
 	exec := &funcExecutor{
-		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+		fn: func(ctx context.Context, opts harnessapi.RunOptions) (*harnessapi.TryResult, error) {
 			n := int(atomic.AddInt32(&attempts, 1))
 			if n == 1 {
 				<-ctx.Done()
-				return &agent.TryResult{
+				return &harnessapi.TryResult{
 					Completed: false,
 					Evidence: &reliability.FailureEvidence{
 						Category: reliability.CategoryHarnessLaunch,
@@ -497,16 +497,16 @@ func TestRunOneTryCapKillWithExecutorEvidenceKeepsEvidenceCategory(t *testing.T)
 func TestRunOneTryCapRetriesWithinBudget(t *testing.T) {
 	var attempts int32
 	var workspaceDir string
-	complete := func(n int) (*agent.TryResult, error) {
+	complete := func(n int) (*harnessapi.TryResult, error) {
 		// Make a file change so the completed attempt has visible work and does
 		// not trip the "no changes made" guard.
 		if err := os.WriteFile(filepath.Join(workspaceDir, "work.txt"), []byte("done\n"), 0o644); err != nil {
 			return nil, err
 		}
-		return &agent.TryResult{Completed: true, Summary: "second attempt ok"}, nil
+		return &harnessapi.TryResult{Completed: true, Summary: "second attempt ok"}, nil
 	}
 	// Attempt 1 blocks (nil → capped by the try timer); attempt 2 completes.
-	exec := blockingTimeoutExecutor([]func(int) (*agent.TryResult, error){nil, complete}, &attempts)
+	exec := blockingTimeoutExecutor([]func(int) (*harnessapi.TryResult, error){nil, complete}, &attempts)
 
 	r, s, ws := newTimeoutTestRunner(t, exec, Config{
 		RetryBudget: 3,
@@ -554,13 +554,13 @@ func TestRunOneTryCapRetriesWithinBudget(t *testing.T) {
 func TestRunOneUnderBudgetCompletesNormally(t *testing.T) {
 	var attempts int32
 	var workspaceDir string
-	complete := func(n int) (*agent.TryResult, error) {
+	complete := func(n int) (*harnessapi.TryResult, error) {
 		if err := os.WriteFile(filepath.Join(workspaceDir, "work.txt"), []byte("done\n"), 0o644); err != nil {
 			return nil, err
 		}
-		return &agent.TryResult{Completed: true, Summary: "ok"}, nil
+		return &harnessapi.TryResult{Completed: true, Summary: "ok"}, nil
 	}
-	exec := blockingTimeoutExecutor([]func(int) (*agent.TryResult, error){complete}, &attempts)
+	exec := blockingTimeoutExecutor([]func(int) (*harnessapi.TryResult, error){complete}, &attempts)
 
 	r, s, ws := newTimeoutTestRunner(t, exec, Config{
 		RetryBudget: 3,
@@ -606,13 +606,13 @@ func TestRunOneStallPrecedesHardTimeout(t *testing.T) {
 	var attempts int32
 	stalled := make(chan struct{})
 	exec := &funcExecutor{
-		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+		fn: func(ctx context.Context, opts harnessapi.RunOptions) (*harnessapi.TryResult, error) {
 			atomic.AddInt32(&attempts, 1)
 			select {
 			case <-stalled:
-				return &agent.TryResult{Completed: false, Summary: "stalled"}, nil
+				return &harnessapi.TryResult{Completed: false, Summary: "stalled"}, nil
 			case <-ctx.Done():
-				return &agent.TryResult{Completed: false}, ctx.Err()
+				return &harnessapi.TryResult{Completed: false}, ctx.Err()
 			}
 		},
 	}
@@ -662,13 +662,13 @@ func TestRunOneRunBudgetResumableContinuationRecordsSeparateHandoffTry(t *testin
 	var resumeIDs []string
 	exec := &funcExecutor{
 		resumeSupported: true,
-		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+		fn: func(ctx context.Context, opts harnessapi.RunOptions) (*harnessapi.TryResult, error) {
 			n := int(atomic.AddInt32(&attempts, 1))
 			prompts = append(prompts, opts.Prompt)
 			resumeIDs = append(resumeIDs, opts.ResumeSessionID)
 			if n == 1 {
 				<-ctx.Done()
-				return &agent.TryResult{Completed: false, SessionID: "sess-run-budget"}, ctx.Err()
+				return &harnessapi.TryResult{Completed: false, SessionID: "sess-run-budget"}, ctx.Err()
 			}
 			if opts.ResumeSessionID != "sess-run-budget" {
 				t.Errorf("handoff continuation ResumeSessionID = %q, want sess-run-budget", opts.ResumeSessionID)
@@ -687,7 +687,7 @@ func TestRunOneRunBudgetResumableContinuationRecordsSeparateHandoffTry(t *testin
 			}); err != nil {
 				return nil, err
 			}
-			return &agent.TryResult{Completed: true, Summary: "handoff recorded"}, nil
+			return &harnessapi.TryResult{Completed: true, Summary: "handoff recorded"}, nil
 		},
 	}
 	r, s, ws := newTimeoutTestRunner(t, exec, Config{
@@ -749,10 +749,10 @@ func TestRunOneRunBudgetResumeSupportedWithoutSessionRecordsSingleHandoffTimeout
 	var attempts int32
 	exec := &funcExecutor{
 		resumeSupported: true,
-		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+		fn: func(ctx context.Context, opts harnessapi.RunOptions) (*harnessapi.TryResult, error) {
 			atomic.AddInt32(&attempts, 1)
 			<-ctx.Done()
-			return &agent.TryResult{Completed: false}, ctx.Err()
+			return &harnessapi.TryResult{Completed: false}, ctx.Err()
 		},
 	}
 	r, s, _ := newTimeoutTestRunner(t, exec, Config{
@@ -792,11 +792,11 @@ func TestRunOneBoundedHandoffOnlyPartialHandoffRecordsHandoffTimeout(t *testing.
 	var workspaceDir string
 	exec := &funcExecutor{
 		resumeSupported: true,
-		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+		fn: func(ctx context.Context, opts harnessapi.RunOptions) (*harnessapi.TryResult, error) {
 			n := int(atomic.AddInt32(&attempts, 1))
 			if n == 1 {
 				<-ctx.Done()
-				return &agent.TryResult{Completed: false, SessionID: "sess-partial"}, ctx.Err()
+				return &harnessapi.TryResult{Completed: false, SessionID: "sess-partial"}, ctx.Err()
 			}
 			rs, err := progress.LoadRunState(workspaceDir)
 			if err != nil {
@@ -806,7 +806,7 @@ func TestRunOneBoundedHandoffOnlyPartialHandoffRecordsHandoffTimeout(t *testing.
 			if err := progress.SaveRunState(workspaceDir, rs); err != nil {
 				return nil, err
 			}
-			return &agent.TryResult{Completed: true, Summary: "handoff command ran but wrapup did not"}, nil
+			return &harnessapi.TryResult{Completed: true, Summary: "handoff command ran but wrapup did not"}, nil
 		},
 	}
 	r, s, ws := newTimeoutTestRunner(t, exec, Config{
@@ -848,13 +848,13 @@ func TestRunOneBoundedHandoffOnlyFailedContinuationRecordsHandoffTimeout(t *test
 	var attempts int32
 	exec := &funcExecutor{
 		resumeSupported: true,
-		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+		fn: func(ctx context.Context, opts harnessapi.RunOptions) (*harnessapi.TryResult, error) {
 			n := int(atomic.AddInt32(&attempts, 1))
 			if n == 1 {
 				<-ctx.Done()
-				return &agent.TryResult{Completed: false, SessionID: "sess-failed"}, ctx.Err()
+				return &harnessapi.TryResult{Completed: false, SessionID: "sess-failed"}, ctx.Err()
 			}
-			return &agent.TryResult{Completed: false, Summary: "handoff failed"}, nil
+			return &harnessapi.TryResult{Completed: false, Summary: "handoff failed"}, nil
 		},
 	}
 	r, s, _ := newTimeoutTestRunner(t, exec, Config{
@@ -895,13 +895,13 @@ func TestRunOneBoundedHandoffOnlyTimeoutRecordsHandoffTimeout(t *testing.T) {
 	var attempts int32
 	exec := &funcExecutor{
 		resumeSupported: true,
-		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+		fn: func(ctx context.Context, opts harnessapi.RunOptions) (*harnessapi.TryResult, error) {
 			n := int(atomic.AddInt32(&attempts, 1))
 			<-ctx.Done()
 			if n == 1 {
-				return &agent.TryResult{Completed: false, SessionID: "sess-timeout"}, ctx.Err()
+				return &harnessapi.TryResult{Completed: false, SessionID: "sess-timeout"}, ctx.Err()
 			}
-			return &agent.TryResult{Completed: false, Summary: "handoff timed out"}, ctx.Err()
+			return &harnessapi.TryResult{Completed: false, Summary: "handoff timed out"}, ctx.Err()
 		},
 	}
 	r, s, _ := newTimeoutTestRunner(t, exec, Config{

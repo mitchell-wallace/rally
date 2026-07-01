@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/mitchell-wallace/rally/internal/harnessapi"
 	"io"
 	"os"
 	"os/exec"
@@ -55,10 +56,10 @@ func writeCodexSchema() (string, error) {
 	return f.Name(), nil
 }
 
-func parseCodexResult(reportData []byte) (*TryResult, error) {
-	var tr TryResult
+func parseCodexResult(reportData []byte) (*harnessapi.TryResult, error) {
+	var tr harnessapi.TryResult
 	if err := json.Unmarshal(reportData, &tr); err != nil {
-		return &TryResult{Completed: true, Summary: string(reportData)}, nil
+		return &harnessapi.TryResult{Completed: true, Summary: string(reportData)}, nil
 	}
 	return &tr, nil
 }
@@ -151,9 +152,9 @@ func (c *CodexExecutor) ProbeLiveness(ctx context.Context) (bool, error) {
 	return strings.TrimSpace(string(reportData)) == "OK", nil
 }
 
-func (c *CodexExecutor) Execute(ctx context.Context, opts RunOptions) (*TryResult, error) {
+func (c *CodexExecutor) Execute(ctx context.Context, opts harnessapi.RunOptions) (*harnessapi.TryResult, error) {
 	tryStart := time.Now()
-	prompt := BuildPrompt(opts)
+	prompt := harnessapi.BuildPrompt(opts)
 	c.setActiveSessionID(opts.ResumeSessionID)
 
 	schemaPath, err := writeCodexSchema()
@@ -180,8 +181,8 @@ func (c *CodexExecutor) Execute(ctx context.Context, opts RunOptions) (*TryResul
 	}
 	if opts.ReasoningEffort != "" {
 		var warning string
-		args, warning = applyReasoningEffort(args, "codex", opts.ReasoningEffort)
-		defer emitReasoningWarning(opts.LogPath, warning)
+		args, warning = harnessapi.ApplyReasoningEffort(args, "codex", opts.ReasoningEffort)
+		defer harnessapi.EmitReasoningWarning(opts.LogPath, warning)
 	}
 	if opts.ResumeSessionID != "" {
 		args = append(args, "resume", opts.ResumeSessionID)
@@ -198,7 +199,7 @@ func (c *CodexExecutor) Execute(ctx context.Context, opts RunOptions) (*TryResul
 		os.Remove(reportPath)
 		execErr := fmt.Errorf("codex exec failed: %w\noutput: %s", err, string(out))
 		if ev := reliability.ParseCodexError(string(out)); ev != nil {
-			return &TryResult{Evidence: ev, ResolvedModel: model}, execErr
+			return &harnessapi.TryResult{Evidence: ev, ResolvedModel: model}, execErr
 		}
 		// No parser-matchable in-band signal (the silent exit-1 burst wrote
 		// nothing to either stream). Enrich from codex's rollout session log:
@@ -208,7 +209,7 @@ func (c *CodexExecutor) Execute(ctx context.Context, opts RunOptions) (*TryResul
 		// the launch within budget. A missing/unreadable sessions dir is not an
 		// error here — fall through to the runner's safe_exec_error path.
 		if ev, sessErr := codexSessionLogEvidence(opts.WorkspaceDir, tryStart, time.Now()); sessErr == nil && ev != nil {
-			return &TryResult{Evidence: ev, ResolvedModel: model}, execErr
+			return &harnessapi.TryResult{Evidence: ev, ResolvedModel: model}, execErr
 		}
 		return nil, execErr
 	}

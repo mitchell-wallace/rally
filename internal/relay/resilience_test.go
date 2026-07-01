@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mitchell-wallace/rally/internal/agent"
+	"github.com/mitchell-wallace/rally/internal/harnessapi"
 	"github.com/mitchell-wallace/rally/internal/store"
 )
 
@@ -492,7 +492,7 @@ func TestResilience_SelectActiveAgent_SkipsPausedAndFrozen(t *testing.T) {
 	}
 
 	mix := AgentMix{
-		Cycle: []agent.ResolvedAgent{
+		Cycle: []harnessapi.ResolvedAgent{
 			{Harness: "claude", Model: "test"},
 			{Harness: "codex", Model: "test"},
 			{Harness: "antigravity", Model: "test"},
@@ -520,7 +520,7 @@ func TestResilience_SelectActiveAgent_CyclesThroughActive(t *testing.T) {
 	r := testResilience(s, now)
 
 	mix := AgentMix{
-		Cycle: []agent.ResolvedAgent{
+		Cycle: []harnessapi.ResolvedAgent{
 			{Harness: "claude", Model: "test"},
 			{Harness: "codex", Model: "test"},
 		},
@@ -573,7 +573,7 @@ func TestResilience_SelectActiveAgent_AllFrozenError(t *testing.T) {
 	}
 
 	mix := AgentMix{
-		Cycle: []agent.ResolvedAgent{
+		Cycle: []harnessapi.ResolvedAgent{
 			{Harness: "claude", Model: "test"},
 			{Harness: "codex", Model: "test"},
 		},
@@ -604,7 +604,7 @@ func TestResilience_SelectActiveAgent_PausedButExpired_ReturnsAsRetry(t *testing
 	}
 
 	mix := AgentMix{
-		Cycle: []agent.ResolvedAgent{
+		Cycle: []harnessapi.ResolvedAgent{
 			{Harness: "claude", Model: "sonnet"},
 		},
 	}
@@ -640,7 +640,7 @@ func TestResilience_SelectActiveAgent_PausedNotExpired_SkipsAgent(t *testing.T) 
 	}
 
 	mix := AgentMix{
-		Cycle: []agent.ResolvedAgent{
+		Cycle: []harnessapi.ResolvedAgent{
 			{Harness: "claude", Model: "sonnet"},
 			{Harness: "codex", Model: "test"},
 		},
@@ -878,7 +878,7 @@ func TestResilience_SelectActiveAgent_AllFrozenButDecayable(t *testing.T) {
 	}
 
 	mix := AgentMix{
-		Cycle: []agent.ResolvedAgent{
+		Cycle: []harnessapi.ResolvedAgent{
 			{Harness: "claude", Model: "test"},
 			{Harness: "codex", Model: "test"},
 		},

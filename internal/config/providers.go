@@ -5,7 +5,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/mitchell-wallace/rally/internal/agent"
+	"github.com/mitchell-wallace/rally/internal/harnessapi"
 	"github.com/mitchell-wallace/rally/internal/routing"
 )
 
@@ -50,7 +50,7 @@ type providerRunnerKey struct {
 type resolvedProvider struct {
 	Name     string
 	Disabled bool
-	Runners  []agent.ResolvedAgent
+	Runners  []harnessapi.ResolvedAgent
 }
 
 // parseProviders converts the raw [providers] table (decoded as a generic map so
@@ -230,9 +230,9 @@ func (c V2Config) resolveProviders() ([]resolvedProvider, error) {
 // against a real runner, skipped for Excludes where such a spec simply matches
 // nothing. requireWildcardMatch controls whether a wildcard that expands to zero
 // models is an error (Models) or a harmless no-op (Excludes).
-func (c V2Config) resolveProviderMembers(providerName string, specs []string, requireConcrete, requireWildcardMatch bool) ([]agent.ResolvedAgent, error) {
+func (c V2Config) resolveProviderMembers(providerName string, specs []string, requireConcrete, requireWildcardMatch bool) ([]harnessapi.ResolvedAgent, error) {
 	seen := map[providerRunnerKey]bool{}
-	out := make([]agent.ResolvedAgent, 0, len(specs))
+	out := make([]harnessapi.ResolvedAgent, 0, len(specs))
 	for _, spec := range specs {
 		resolvedList, err := c.resolveProviderSpec(spec, requireWildcardMatch)
 		if err != nil {
@@ -268,7 +268,7 @@ func (c V2Config) resolveProviderMembers(providerName string, specs []string, re
 // matches configured model strings with that suffix. Ambiguous, undefined, or
 // (for Models) empty matches are hard errors so quota groups never silently
 // mis-bucket a runner.
-func (c V2Config) resolveProviderSpec(spec string, requireWildcardMatch bool) ([]agent.ResolvedAgent, error) {
+func (c V2Config) resolveProviderSpec(spec string, requireWildcardMatch bool) ([]harnessapi.ResolvedAgent, error) {
 	if strings.Contains(spec, "*") {
 		return c.resolveProviderWildcardSpec(spec, requireWildcardMatch)
 	}
@@ -276,10 +276,10 @@ func (c V2Config) resolveProviderSpec(spec string, requireWildcardMatch bool) ([
 	if err != nil {
 		return nil, err
 	}
-	return []agent.ResolvedAgent{resolved}, nil
+	return []harnessapi.ResolvedAgent{resolved}, nil
 }
 
-func (c V2Config) resolveProviderConcreteSpec(spec string) (agent.ResolvedAgent, error) {
+func (c V2Config) resolveProviderConcreteSpec(spec string) (harnessapi.ResolvedAgent, error) {
 	if strings.Contains(spec, ":") {
 		return c.ResolveAgent(spec)
 	}
@@ -296,7 +296,7 @@ func (c V2Config) resolveProviderConcreteSpec(spec string) (agent.ResolvedAgent,
 	matches := c.lookupBareModelAlias(spec)
 	switch len(matches) {
 	case 0:
-		return agent.ResolvedAgent{}, fmt.Errorf("unknown model alias %q; qualify it as harness:model (e.g. cx:%s)", spec, spec)
+		return harnessapi.ResolvedAgent{}, fmt.Errorf("unknown model alias %q; qualify it as harness:model (e.g. cx:%s)", spec, spec)
 	case 1:
 		return matches[0], nil
 	default:
@@ -305,11 +305,11 @@ func (c V2Config) resolveProviderConcreteSpec(spec string) (agent.ResolvedAgent,
 			labels[i] = runnerLabel(m)
 		}
 		sort.Strings(labels)
-		return agent.ResolvedAgent{}, fmt.Errorf("ambiguous model alias %q matches %s; qualify it as harness:alias", spec, strings.Join(labels, ", "))
+		return harnessapi.ResolvedAgent{}, fmt.Errorf("ambiguous model alias %q matches %s; qualify it as harness:alias", spec, strings.Join(labels, ", "))
 	}
 }
 
-func (c V2Config) resolveProviderWildcardSpec(spec string, requireMatch bool) ([]agent.ResolvedAgent, error) {
+func (c V2Config) resolveProviderWildcardSpec(spec string, requireMatch bool) ([]harnessapi.ResolvedAgent, error) {
 	if strings.Count(spec, "*") != 1 {
 		return nil, fmt.Errorf("unsupported wildcard %q; use harness:*, harness:prefix/*, harness:*suffix, prefix/*, or *suffix", spec)
 	}
@@ -404,9 +404,9 @@ func (c V2Config) resolveProviderWildcardHarness(spec, harnessSpec string) (stri
 	return "", "", fmt.Errorf("provider wildcard %q references unknown harness %q", spec, harnessSpec)
 }
 
-func (c V2Config) expandProviderHarnessModels(spec, harness, preferredAlias string, filter modelFilter, requireMatch bool) ([]agent.ResolvedAgent, error) {
+func (c V2Config) expandProviderHarnessModels(spec, harness, preferredAlias string, filter modelFilter, requireMatch bool) ([]harnessapi.ResolvedAgent, error) {
 	seen := map[providerRunnerKey]bool{}
-	var matches []agent.ResolvedAgent
+	var matches []harnessapi.ResolvedAgent
 	add := func(model string) {
 		model = strings.TrimSpace(model)
 		if model == "" || !filter(model) {
@@ -417,7 +417,7 @@ func (c V2Config) expandProviderHarnessModels(spec, harness, preferredAlias stri
 			return
 		}
 		seen[key] = true
-		matches = append(matches, agent.ResolvedAgent{Harness: harness, Model: model})
+		matches = append(matches, harnessapi.ResolvedAgent{Harness: harness, Model: model})
 	}
 
 	add(c.defaultModelForHarness(harness))
@@ -440,9 +440,9 @@ func (c V2Config) expandProviderHarnessModels(spec, harness, preferredAlias stri
 	return matches, nil
 }
 
-func (c V2Config) expandProviderModels(spec string, filter modelFilter, requireMatch bool) ([]agent.ResolvedAgent, error) {
+func (c V2Config) expandProviderModels(spec string, filter modelFilter, requireMatch bool) ([]harnessapi.ResolvedAgent, error) {
 	seen := map[providerRunnerKey]bool{}
-	var matches []agent.ResolvedAgent
+	var matches []harnessapi.ResolvedAgent
 	add := func(harness, model string) {
 		model = strings.TrimSpace(model)
 		if model == "" || !filter(model) {
@@ -453,7 +453,7 @@ func (c V2Config) expandProviderModels(spec string, filter modelFilter, requireM
 			return
 		}
 		seen[key] = true
-		matches = append(matches, agent.ResolvedAgent{Harness: harness, Model: model})
+		matches = append(matches, harnessapi.ResolvedAgent{Harness: harness, Model: model})
 	}
 
 	for _, harness := range builtInHarnessNames() {
@@ -501,7 +501,7 @@ func sortedMapKeys(m map[string]string) []string {
 	return keys
 }
 
-func sortResolvedAgents(agents []agent.ResolvedAgent) {
+func sortResolvedAgents(agents []harnessapi.ResolvedAgent) {
 	sort.Slice(agents, func(i, j int) bool {
 		if agents[i].Harness == agents[j].Harness {
 			return agents[i].Model < agents[j].Model
@@ -518,9 +518,9 @@ func builtInHarnessNames() []string {
 // model alias named alias under [harness.<h>.models]. Distinctness is by the
 // canonical harness + model string, so `cx`/`codex` aliases pointing at the same
 // model collapse to one match.
-func (c V2Config) lookupBareModelAlias(alias string) []agent.ResolvedAgent {
+func (c V2Config) lookupBareModelAlias(alias string) []harnessapi.ResolvedAgent {
 	seen := map[providerRunnerKey]bool{}
-	var matches []agent.ResolvedAgent
+	var matches []harnessapi.ResolvedAgent
 	for hkey, hc := range c.Harnesses {
 		if isRemovedGeminiAlias(hkey) {
 			continue
@@ -538,7 +538,7 @@ func (c V2Config) lookupBareModelAlias(alias string) []agent.ResolvedAgent {
 			continue
 		}
 		seen[key] = true
-		matches = append(matches, agent.ResolvedAgent{Harness: harness, Model: modelStr})
+		matches = append(matches, harnessapi.ResolvedAgent{Harness: harness, Model: modelStr})
 	}
 	return matches
 }
@@ -613,7 +613,7 @@ func toAnySlice(in []string) []interface{} {
 	return out
 }
 
-func runnerLabel(a agent.ResolvedAgent) string {
+func runnerLabel(a harnessapi.ResolvedAgent) string {
 	if a.Model == "" {
 		return a.Harness
 	}

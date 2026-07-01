@@ -4,7 +4,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/mitchell-wallace/rally/internal/agent"
+	"github.com/mitchell-wallace/rally/internal/harnessapi"
 	"github.com/mitchell-wallace/rally/internal/progress"
 )
 
@@ -17,7 +17,7 @@ const (
 // normalizeFinalSnippet selects the one summary value used by retry prompts,
 // try records, and synthesized summary entries. An explicit progress wrapup is
 // authoritative; executor summaries are the next-best structured source.
-func (r *Runner) normalizeFinalSnippet(runID, tryLogPath string, summaryEntryCountBefore int, result *agent.TryResult, execErr error) string {
+func (r *Runner) normalizeFinalSnippet(runID, tryLogPath string, summaryEntryCountBefore int, result *harnessapi.TryResult, execErr error) string {
 	if summary := recordedWrapupSummaryForRun(r.cfg.WorkspaceDir, runID, summaryEntryCountBefore); summary != "" {
 		return summary
 	}

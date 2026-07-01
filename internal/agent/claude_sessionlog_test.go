@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"github.com/mitchell-wallace/rally/internal/harnessapi"
 	"os"
 	"path/filepath"
 	"strings"
@@ -120,7 +121,7 @@ func TestClaudeExecutor_SessionLogFallbackWiredOnUnknownError(t *testing.T) {
 	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 
 	exec := &ClaudeExecutor{}
-	tr, err := exec.Execute(context.Background(), RunOptions{
+	tr, err := exec.Execute(context.Background(), harnessapi.RunOptions{
 		Prompt:          "do work",
 		WorkspaceDir:    workspaceDir,
 		ResumeSessionID: sessionID,
@@ -129,7 +130,7 @@ func TestClaudeExecutor_SessionLogFallbackWiredOnUnknownError(t *testing.T) {
 		t.Fatal("expected error from claude mock")
 	}
 	if tr == nil || tr.Evidence == nil {
-		t.Fatalf("expected TryResult with claude_session_log Evidence, got %+v", tr)
+		t.Fatalf("expected harnessapi.TryResult with claude_session_log Evidence, got %+v", tr)
 	}
 	if tr.Evidence.Source != claudeSessionLogSource {
 		t.Errorf("Evidence.Source = %q, want %q", tr.Evidence.Source, claudeSessionLogSource)
@@ -156,7 +157,7 @@ func TestClaudeExecutor_MissingSessionLogFallsThroughToInBandParse(t *testing.T)
 	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 
 	exec := &ClaudeExecutor{}
-	tr, err := exec.Execute(context.Background(), RunOptions{
+	tr, err := exec.Execute(context.Background(), harnessapi.RunOptions{
 		Prompt:          "do work",
 		WorkspaceDir:    workspaceDir,
 		ResumeSessionID: "missing-session",
@@ -165,7 +166,7 @@ func TestClaudeExecutor_MissingSessionLogFallsThroughToInBandParse(t *testing.T)
 		t.Fatal("expected error from claude mock")
 	}
 	if tr != nil {
-		t.Fatalf("expected nil TryResult when in-band parse and session fallback miss, got %+v", tr)
+		t.Fatalf("expected nil harnessapi.TryResult when in-band parse and session fallback miss, got %+v", tr)
 	}
 }
 

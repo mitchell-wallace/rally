@@ -9,8 +9,8 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/mitchell-wallace/rally/internal/agent"
 	"github.com/mitchell-wallace/rally/internal/config"
+	"github.com/mitchell-wallace/rally/internal/harnessapi"
 	"github.com/mitchell-wallace/rally/internal/relay"
 	"github.com/mitchell-wallace/rally/internal/relay/runner"
 	"github.com/mitchell-wallace/rally/internal/routing"
@@ -119,10 +119,10 @@ func StartRelay(ctx context.Context, opts RelayStartOptions) error {
 		OverwriteMixOnResume:   opts.OverwriteMixOnResume,
 	}
 
-	runnerCfg.Resolver = func(spec string) (agent.ResolvedAgent, error) {
+	runnerCfg.Resolver = func(spec string) (harnessapi.ResolvedAgent, error) {
 		ra, err := opts.Config.ResolveAgent(spec)
 		if err != nil {
-			return agent.ResolvedAgent{}, err
+			return harnessapi.ResolvedAgent{}, err
 		}
 		return ra, nil
 	}

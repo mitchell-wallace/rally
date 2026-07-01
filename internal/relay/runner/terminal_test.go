@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mitchell-wallace/rally/internal/agent"
+	"github.com/mitchell-wallace/rally/internal/harnessapi"
 	"github.com/mitchell-wallace/rally/internal/keyboard"
 	"github.com/mitchell-wallace/rally/internal/store"
 	"github.com/mitchell-wallace/rally/internal/style"
@@ -231,11 +231,11 @@ func TestRunFooterCadenceExhausted(t *testing.T) {
 
 	s := newTestStore(t, rallyDir)
 	exec := &funcExecutor{
-		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
-			return &agent.TryResult{Completed: false, Summary: "nope"}, nil
+		fn: func(ctx context.Context, opts harnessapi.RunOptions) (*harnessapi.TryResult, error) {
+			return &harnessapi.TryResult{Completed: false, Summary: "nope"}, nil
 		},
 	}
-	executors := map[string]agent.Executor{"claude": exec}
+	executors := map[string]harnessapi.Executor{"claude": exec}
 
 	var buf bytes.Buffer
 	r := NewRunner(s, Config{
@@ -281,18 +281,18 @@ func TestRunFooterCadenceRecovery(t *testing.T) {
 	s := newTestStore(t, rallyDir)
 	attempt := 0
 	exec := &funcExecutor{
-		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+		fn: func(ctx context.Context, opts harnessapi.RunOptions) (*harnessapi.TryResult, error) {
 			attempt++
 			if attempt < 3 {
-				return &agent.TryResult{Completed: false, Summary: "fail"}, nil
+				return &harnessapi.TryResult{Completed: false, Summary: "fail"}, nil
 			}
 			f, _ := os.Create(filepath.Join(workspaceDir, fmt.Sprintf("ok-%d.txt", attempt)))
 			f.WriteString("changed")
 			f.Close()
-			return &agent.TryResult{Completed: true, Summary: "success"}, nil
+			return &harnessapi.TryResult{Completed: true, Summary: "success"}, nil
 		},
 	}
-	executors := map[string]agent.Executor{"claude": exec}
+	executors := map[string]harnessapi.Executor{"claude": exec}
 
 	var buf bytes.Buffer
 	r := NewRunner(s, Config{
@@ -329,18 +329,18 @@ func TestRunHeaderDoesNotExceedTargetAfterFailedRun(t *testing.T) {
 	s := newTestStore(t, rallyDir)
 	attempt := 0
 	exec := &funcExecutor{
-		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+		fn: func(ctx context.Context, opts harnessapi.RunOptions) (*harnessapi.TryResult, error) {
 			attempt++
 			if attempt == 1 {
-				return &agent.TryResult{Completed: false, Summary: "first runner failed"}, nil
+				return &harnessapi.TryResult{Completed: false, Summary: "first runner failed"}, nil
 			}
 			f, _ := os.Create(filepath.Join(workspaceDir, fmt.Sprintf("ok-%d.txt", attempt)))
 			f.WriteString("changed")
 			f.Close()
-			return &agent.TryResult{Completed: true, Summary: "success"}, nil
+			return &harnessapi.TryResult{Completed: true, Summary: "success"}, nil
 		},
 	}
-	executors := map[string]agent.Executor{
+	executors := map[string]harnessapi.Executor{
 		"antigravity": exec,
 		"claude":      exec,
 		"codex":       exec,
@@ -384,11 +384,11 @@ func TestRunFooterSingleAttemptColoursImmediately(t *testing.T) {
 
 	s := newTestStore(t, rallyDir)
 	exec := &funcExecutor{
-		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
-			return &agent.TryResult{Completed: false, Summary: "nope"}, nil
+		fn: func(ctx context.Context, opts harnessapi.RunOptions) (*harnessapi.TryResult, error) {
+			return &harnessapi.TryResult{Completed: false, Summary: "nope"}, nil
 		},
 	}
-	executors := map[string]agent.Executor{"claude": exec}
+	executors := map[string]harnessapi.Executor{"claude": exec}
 
 	var buf bytes.Buffer
 	r := NewRunner(s, Config{

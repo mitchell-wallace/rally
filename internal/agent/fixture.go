@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/mitchell-wallace/rally/internal/harnessapi"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -27,7 +28,7 @@ func (f *FixtureExecutor) ProbeLiveness(_ context.Context) (bool, error) {
 	return false, fmt.Errorf("liveness probe not supported by fixture adapter")
 }
 
-func (f *FixtureExecutor) Execute(ctx context.Context, opts RunOptions) (*TryResult, error) {
+func (f *FixtureExecutor) Execute(ctx context.Context, opts harnessapi.RunOptions) (*harnessapi.TryResult, error) {
 	dir := f.Dir
 	if dir == "" && f.DiffPath != "" {
 		dir = filepath.Dir(f.DiffPath)
@@ -75,12 +76,12 @@ func (f *FixtureExecutor) Execute(ctx context.Context, opts RunOptions) (*TryRes
 		if err != nil {
 			return nil, fmt.Errorf("fixture output read failed: %w", err)
 		}
-		var tr TryResult
+		var tr harnessapi.TryResult
 		if err := json.Unmarshal(data, &tr); err != nil {
 			return nil, fmt.Errorf("fixture output parse failed: %w", err)
 		}
 		return &tr, nil
 	}
 
-	return &TryResult{Completed: true}, nil
+	return &harnessapi.TryResult{Completed: true}, nil
 }

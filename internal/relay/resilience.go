@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/mitchell-wallace/rally/internal/agent"
+	"github.com/mitchell-wallace/rally/internal/harnessapi"
 	"github.com/mitchell-wallace/rally/internal/store"
 )
 
@@ -37,7 +37,7 @@ func (k ResilienceKey) String() string {
 }
 
 // KeyFromAgent constructs a ResilienceKey from a ResolvedAgent.
-func KeyFromAgent(a agent.ResolvedAgent) ResilienceKey {
+func KeyFromAgent(a harnessapi.ResolvedAgent) ResilienceKey {
 	return ResilienceKey{Harness: a.Harness, Model: a.Model}
 }
 
@@ -116,10 +116,10 @@ func (r *Resilience) GetState(key ResilienceKey) (AgentState, time.Time) {
 
 // SelectActiveAgent returns the agent to use for the next run, the new runIndex
 // to advance to, and whether the selected agent is undergoing an hourly retry.
-func (r *Resilience) SelectActiveAgent(mix AgentMix, runIndex int) (agent.ResolvedAgent, int, bool, error) {
+func (r *Resilience) SelectActiveAgent(mix AgentMix, runIndex int) (harnessapi.ResolvedAgent, int, bool, error) {
 	cycleLen := len(mix.Cycle)
 	if cycleLen == 0 {
-		return agent.ResolvedAgent{Harness: "claude"}, runIndex + 1, false, nil
+		return harnessapi.ResolvedAgent{Harness: "claude"}, runIndex + 1, false, nil
 	}
 
 	allFrozen := true
@@ -144,7 +144,7 @@ func (r *Resilience) SelectActiveAgent(mix AgentMix, runIndex int) (agent.Resolv
 		}
 	}
 	if allFrozen {
-		return agent.ResolvedAgent{}, runIndex, false, fmt.Errorf("all agents frozen")
+		return harnessapi.ResolvedAgent{}, runIndex, false, fmt.Errorf("all agents frozen")
 	}
 
 	// Look for an agent starting at runIndex
@@ -166,9 +166,9 @@ func (r *Resilience) SelectActiveAgent(mix AgentMix, runIndex int) (agent.Resolv
 	}
 
 	if !anyActive && !anyProbation {
-		return agent.ResolvedAgent{}, runIndex, false, fmt.Errorf("all agents paused")
+		return harnessapi.ResolvedAgent{}, runIndex, false, fmt.Errorf("all agents paused")
 	}
-	return agent.ResolvedAgent{}, runIndex, false, fmt.Errorf("no active agent found")
+	return harnessapi.ResolvedAgent{}, runIndex, false, fmt.Errorf("no active agent found")
 }
 
 func (r *Resilience) PauseAgent(key ResilienceKey, relayID int) error {

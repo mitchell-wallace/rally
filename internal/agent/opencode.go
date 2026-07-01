@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/mitchell-wallace/rally/internal/harnessapi"
 	"io"
 	"os"
 	"os/exec"
@@ -27,7 +28,6 @@ const (
 	openCodeErrorRefLimit       = 96
 	openCodeServerLogTailBytes  = int64(1 << 20)
 	openCodeServerLogWindowPad  = 30 * time.Second
-
 	// openCodeDiskLogSource is the Source value for evidence derived from the
 	// opencode server log when no in-band evidence is available.
 	openCodeDiskLogSource = "opencode_disk_log"
@@ -68,8 +68,8 @@ func (o *OpenCodeExecutor) ProbeLiveness(_ context.Context) (bool, error) {
 	return false, fmt.Errorf("liveness probe not supported by opencode adapter")
 }
 
-func (o *OpenCodeExecutor) Execute(ctx context.Context, opts RunOptions) (*TryResult, error) {
-	prompt := BuildPrompt(opts)
+func (o *OpenCodeExecutor) Execute(ctx context.Context, opts harnessapi.RunOptions) (*harnessapi.TryResult, error) {
+	prompt := harnessapi.BuildPrompt(opts)
 
 	model := o.Model
 	if opts.Model != "" {
@@ -82,8 +82,8 @@ func (o *OpenCodeExecutor) Execute(ctx context.Context, opts RunOptions) (*TryRe
 	}
 	if opts.ReasoningEffort != "" {
 		var warning string
-		args, warning = applyReasoningEffort(args, "opencode", opts.ReasoningEffort)
-		defer emitReasoningWarning(opts.LogPath, warning)
+		args, warning = harnessapi.ApplyReasoningEffort(args, "opencode", opts.ReasoningEffort)
+		defer harnessapi.EmitReasoningWarning(opts.LogPath, warning)
 	}
 	// opencode uses a client/server model: `opencode run` connects to a server
 	// process that resolves relative file paths against ITS cwd, not the client's
@@ -126,7 +126,7 @@ func defaultOpenCodeServerLogPath() string {
 	return filepath.Join(home, ".local", "share", "opencode", "log", "opencode.log")
 }
 
-func attachOpenCodeFailureEvidence(tr *TryResult, out []byte, runErr error, opts RunOptions, model string, startedAt, endedAt time.Time) {
+func attachOpenCodeFailureEvidence(tr *harnessapi.TryResult, out []byte, runErr error, opts harnessapi.RunOptions, model string, startedAt, endedAt time.Time) {
 	if tr == nil || !openCodeNeedsFailureEvidence(tr, runErr) {
 		return
 	}
@@ -140,7 +140,7 @@ func attachOpenCodeFailureEvidence(tr *TryResult, out []byte, runErr error, opts
 	}
 }
 
-func openCodeNeedsFailureEvidence(tr *TryResult, runErr error) bool {
+func openCodeNeedsFailureEvidence(tr *harnessapi.TryResult, runErr error) bool {
 	if runErr != nil || tr.Completed {
 		return runErr != nil
 	}
@@ -156,7 +156,7 @@ type openCodeServerLogEntry struct {
 	fields map[string]string
 }
 
-func openCodeServerLogFailureEvidence(opts RunOptions, tr *TryResult, model string, startedAt, endedAt time.Time) *reliability.FailureEvidence {
+func openCodeServerLogFailureEvidence(opts harnessapi.RunOptions, tr *harnessapi.TryResult, model string, startedAt, endedAt time.Time) *reliability.FailureEvidence {
 	data, err := readOpenCodeServerLogTail()
 	if err != nil || len(data) == 0 {
 		return nil
@@ -661,7 +661,7 @@ func parseOpenCodeQuotedLogValue(line string, i int) (string, int) {
 	return b.String(), i
 }
 
-func parseOpenCodeOutput(out []byte, processSucceeded bool) (*TryResult, error) {
+func parseOpenCodeOutput(out []byte, processSucceeded bool) (*harnessapi.TryResult, error) {
 	var textParts []string
 	toolCalls := 0
 	sawJSONEvent := false
@@ -707,7 +707,7 @@ func parseOpenCodeOutput(out []byte, processSucceeded bool) (*TryResult, error) 
 	cleanCompletion := processSucceeded && !scanFailed && !sawErrorEvent && (combined != "" || sawStepFinish)
 
 	if sawErrorEvent {
-		return &TryResult{
+		return &harnessapi.TryResult{
 			Completed: false,
 			Summary:   formatOpenCodeError(eventError),
 			ToolCalls: toolCalls,
@@ -715,7 +715,7 @@ func parseOpenCodeOutput(out []byte, processSucceeded bool) (*TryResult, error) 
 		}, nil
 	}
 	if combined == "" {
-		return &TryResult{
+		return &harnessapi.TryResult{
 			Completed: cleanCompletion,
 			Summary:   openCodeNoTextSummary(out, sawJSONEvent, sawStepFinish, scanFailed, processSucceeded),
 			ToolCalls: toolCalls,
@@ -723,9 +723,9 @@ func parseOpenCodeOutput(out []byte, processSucceeded bool) (*TryResult, error) 
 		}, nil
 	}
 
-	var tr TryResult
+	var tr harnessapi.TryResult
 	if err := json.Unmarshal([]byte(combined), &tr); err != nil {
-		return &TryResult{
+		return &harnessapi.TryResult{
 			Completed: cleanCompletion,
 			Summary:   combined,
 			ToolCalls: toolCalls,

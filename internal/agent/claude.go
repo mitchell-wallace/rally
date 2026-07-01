@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/mitchell-wallace/rally/internal/harnessapi"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -42,8 +43,8 @@ type claudeContentBlock struct {
 	Type string `json:"type"`
 }
 
-func (c *ClaudeExecutor) Execute(ctx context.Context, opts RunOptions) (*TryResult, error) {
-	prompt := BuildPrompt(opts)
+func (c *ClaudeExecutor) Execute(ctx context.Context, opts harnessapi.RunOptions) (*harnessapi.TryResult, error) {
+	prompt := harnessapi.BuildPrompt(opts)
 
 	model := c.Model
 	if opts.Model != "" {
@@ -56,8 +57,8 @@ func (c *ClaudeExecutor) Execute(ctx context.Context, opts RunOptions) (*TryResu
 	}
 	if opts.ReasoningEffort != "" {
 		var warning string
-		args, warning = applyReasoningEffort(args, "claude", opts.ReasoningEffort)
-		defer emitReasoningWarning(opts.LogPath, warning)
+		args, warning = harnessapi.ApplyReasoningEffort(args, "claude", opts.ReasoningEffort)
+		defer harnessapi.EmitReasoningWarning(opts.LogPath, warning)
 	}
 	if opts.ResumeSessionID != "" {
 		args = append(args, "--resume", opts.ResumeSessionID)
@@ -72,10 +73,10 @@ func (c *ClaudeExecutor) Execute(ctx context.Context, opts RunOptions) (*TryResu
 	if err != nil {
 		execErr := fmt.Errorf("claude exec failed: %w\noutput: %s", err, string(out))
 		if ev := reliability.ParseClaudeError(string(out)); ev != nil {
-			return &TryResult{Evidence: ev, ResolvedModel: model}, execErr
+			return &harnessapi.TryResult{Evidence: ev, ResolvedModel: model}, execErr
 		}
 		if ev := claudeSessionLogFailureEvidence(opts.WorkspaceDir, opts.ResumeSessionID); ev != nil {
-			return &TryResult{Evidence: ev, ResolvedModel: model}, execErr
+			return &harnessapi.TryResult{Evidence: ev, ResolvedModel: model}, execErr
 		}
 		return nil, execErr
 	}
@@ -131,12 +132,12 @@ func scanClaudeOutput(out []byte) (resultRaw []byte, sessionID string, toolCalls
 	return resultRaw, sessionID, toolCalls
 }
 
-func parseClaudeResult(_ []byte, resultRaw []byte) (*TryResult, error) {
+func parseClaudeResult(_ []byte, resultRaw []byte) (*harnessapi.TryResult, error) {
 	if strings.TrimSpace(string(resultRaw)) == "" {
-		return &TryResult{Completed: false, Summary: claudeNoResultSummary}, nil
+		return &harnessapi.TryResult{Completed: false, Summary: claudeNoResultSummary}, nil
 	}
 
-	var tr TryResult
+	var tr harnessapi.TryResult
 	if err := json.Unmarshal(resultRaw, &tr); err == nil {
 		if strings.TrimSpace(tr.Summary) == "" {
 			tr.Completed = false
@@ -146,11 +147,11 @@ func parseClaudeResult(_ []byte, resultRaw []byte) (*TryResult, error) {
 	}
 
 	// Claude may return the final assistant message as a JSON string instead
-	// of the requested TryResult object. That string is final text, not the
+	// of the requested harnessapi.TryResult object. That string is final text, not the
 	// stream-json transcript, so retain a bounded version as a useful fallback.
 	var finalText string
 	if err := json.Unmarshal(resultRaw, &finalText); err == nil {
-		var nested TryResult
+		var nested harnessapi.TryResult
 		if err := json.Unmarshal([]byte(finalText), &nested); err == nil {
 			if strings.TrimSpace(nested.Summary) == "" {
 				nested.Completed = false
@@ -158,12 +159,12 @@ func parseClaudeResult(_ []byte, resultRaw []byte) (*TryResult, error) {
 			}
 			return &nested, nil
 		}
-		if summary := boundedExecutorFinalText(finalText); summary != "" {
-			return &TryResult{Completed: true, Summary: summary}, nil
+		if summary := harnessapi.BoundedFinalText(finalText); summary != "" {
+			return &harnessapi.TryResult{Completed: true, Summary: summary}, nil
 		}
 	}
 
-	return &TryResult{Completed: false, Summary: claudeMalformedResultSummary}, nil
+	return &harnessapi.TryResult{Completed: false, Summary: claudeMalformedResultSummary}, nil
 }
 
 func claudeSessionLogFailureEvidence(workspaceDir, sessionID string) *reliability.FailureEvidence {

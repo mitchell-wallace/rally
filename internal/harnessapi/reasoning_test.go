@@ -1,4 +1,4 @@
-package agent
+package harnessapi
 
 import (
 	"slices"
@@ -18,7 +18,7 @@ func TestApplyReasoningEffort_SupportedHarnesses(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.harness, func(t *testing.T) {
-			args, warning := applyReasoningEffort([]string{"run"}, tc.harness, tc.effort)
+			args, warning := ApplyReasoningEffort([]string{"run"}, tc.harness, tc.effort)
 			if warning != "" {
 				t.Fatalf("warning = %q, want none for a documented value", warning)
 			}
@@ -31,7 +31,7 @@ func TestApplyReasoningEffort_SupportedHarnesses(t *testing.T) {
 }
 
 func TestApplyReasoningEffort_UnknownValueWarnsNotFails(t *testing.T) {
-	args, warning := applyReasoningEffort([]string{"exec"}, "codex", "bogus")
+	args, warning := ApplyReasoningEffort([]string{"exec"}, "codex", "bogus")
 	// The value is still injected — rally must not pre-empt the provider's own
 	// validation (spike-1: codex defers rejection to the API).
 	want := []string{"exec", "-c", "model_reasoning_effort=bogus"}
@@ -49,7 +49,7 @@ func TestApplyReasoningEffort_UnknownValueWarnsNotFails(t *testing.T) {
 func TestApplyReasoningEffort_OpencodeVariantNotValidated(t *testing.T) {
 	// opencode variants are provider-specific; an unrecognised value is injected
 	// without a warning because there is no enumerable set to check against.
-	args, warning := applyReasoningEffort([]string{"run"}, "opencode", "wibble")
+	args, warning := ApplyReasoningEffort([]string{"run"}, "opencode", "wibble")
 	if warning != "" {
 		t.Fatalf("warning = %q, want none for provider-specific variant", warning)
 	}
@@ -62,7 +62,7 @@ func TestApplyReasoningEffort_UnsupportedHarnessesWarnAndSkip(t *testing.T) {
 	for _, harness := range []string{"antigravity"} {
 		t.Run(harness, func(t *testing.T) {
 			base := []string{"--prompt", "hi"}
-			args, warning := applyReasoningEffort(base, harness, "high")
+			args, warning := ApplyReasoningEffort(base, harness, "high")
 			if !slices.Equal(args, base) {
 				t.Fatalf("args = %v, want unchanged (injection skipped)", args)
 			}
@@ -77,7 +77,7 @@ func TestApplyReasoningEffort_UnsupportedHarnessesWarnAndSkip(t *testing.T) {
 }
 
 func TestApplyReasoningEffort_UnknownHarnessWarnsAndSkips(t *testing.T) {
-	args, warning := applyReasoningEffort([]string{"go"}, "droid", "high")
+	args, warning := ApplyReasoningEffort([]string{"go"}, "droid", "high")
 	if !slices.Equal(args, []string{"go"}) {
 		t.Fatalf("args = %v, want unchanged for unknown harness", args)
 	}
@@ -88,7 +88,7 @@ func TestApplyReasoningEffort_UnknownHarnessWarnsAndSkips(t *testing.T) {
 
 func TestApplyReasoningEffort_EmptyEffortNoop(t *testing.T) {
 	for _, harness := range []string{"codex", "antigravity"} {
-		args, warning := applyReasoningEffort([]string{"x"}, harness, "  ")
+		args, warning := ApplyReasoningEffort([]string{"x"}, harness, "  ")
 		if warning != "" {
 			t.Fatalf("[%s] warning = %q, want none for empty effort", harness, warning)
 		}

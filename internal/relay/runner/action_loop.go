@@ -6,7 +6,7 @@ import (
 	"io"
 	"time"
 
-	"github.com/mitchell-wallace/rally/internal/agent"
+	"github.com/mitchell-wallace/rally/internal/harnessapi"
 	"github.com/mitchell-wallace/rally/internal/keyboard"
 	"github.com/mitchell-wallace/rally/internal/reliability"
 )
@@ -37,7 +37,7 @@ func (r *Runner) drainTimedOut(d actionLoopDeps, out *actionLoopResult, runBudge
 // tryResult carries one attempt's executor outcome from the execute goroutine
 // back to the action loop.
 type tryResult struct {
-	result *agent.TryResult
+	result *harnessapi.TryResult
 	err    error
 }
 
@@ -86,7 +86,7 @@ type actionLoopDeps struct {
 
 // actionLoopResult is the outcome of one pass through the action loop.
 type actionLoopResult struct {
-	result         *agent.TryResult
+	result         *harnessapi.TryResult
 	execErr        error
 	actionTaken    bool
 	stallTriggered bool

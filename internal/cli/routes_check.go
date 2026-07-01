@@ -10,10 +10,10 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/mitchell-wallace/rally/internal/agent"
 	"github.com/mitchell-wallace/rally/internal/agent_prompt"
 	"github.com/mitchell-wallace/rally/internal/config"
 	"github.com/mitchell-wallace/rally/internal/gitx"
+	"github.com/mitchell-wallace/rally/internal/harnessapi"
 	"github.com/mitchell-wallace/rally/internal/routing"
 	"github.com/mitchell-wallace/rally/internal/user_prompt/roleloader"
 	"github.com/spf13/cobra"
@@ -372,7 +372,7 @@ func validateReasoning(cfg config.V2Config) ([]string, error) {
 }
 
 func reasoningTokenRecognised(cfg config.V2Config, token string) bool {
-	if agent.IsKnownReasoningEffort(token) {
+	if harnessapi.IsKnownReasoningEffort(token) {
 		return true
 	}
 	for _, hc := range cfg.Harnesses {

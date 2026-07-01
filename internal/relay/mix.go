@@ -5,12 +5,12 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/mitchell-wallace/rally/internal/agent"
+	"github.com/mitchell-wallace/rally/internal/harnessapi"
 )
 
 // Resolver converts a mix token (e.g. "cc", "op:z", "opencode:provider/model")
-// into an agent.ResolvedAgent. The config layer provides the concrete implementation.
-type Resolver func(spec string) (agent.ResolvedAgent, error)
+// into an harnessapi.ResolvedAgent. The config layer provides the concrete implementation.
+type Resolver func(spec string) (harnessapi.ResolvedAgent, error)
 
 // Weights and Order are keyed by harness alias (not by (harness, model) tuple).
 // Weighting is per-harness: if claude is weighted 2, all models under claude
@@ -19,7 +19,7 @@ type Resolver func(spec string) (agent.ResolvedAgent, error)
 type AgentMix struct {
 	Weights map[string]int
 	Order   []string
-	Cycle   []agent.ResolvedAgent
+	Cycle   []harnessapi.ResolvedAgent
 	Label   string
 }
 
@@ -149,13 +149,13 @@ func ParseAgentMix(specs []string, resolver Resolver) (AgentMix, error) {
 	// Using the original spec for named-model entries is critical for round-trip
 	// correctness: a resolved string like "claude-opus-4-7" looks like a named-model
 	// key to the resolver, so the label must carry the short alias ("cc:opus").
-	cycle := []agent.ResolvedAgent{}
+	cycle := []harnessapi.ResolvedAgent{}
 	labelParts := []string{}
 	for _, harness := range order {
 		// Collect named-model entries for this harness: specs with a non-numeric
 		// right side (not a bare alias or weight entry).
 		namedSpecs := []string{}
-		namedResolved := []agent.ResolvedAgent{}
+		namedResolved := []harnessapi.ResolvedAgent{}
 		if resolver != nil {
 			for _, spec := range specs {
 				parts := strings.SplitN(spec, ":", 2)
@@ -181,7 +181,7 @@ func ParseAgentMix(specs []string, resolver Resolver) (AgentMix, error) {
 		} else {
 			defaultModel := harnessDefaultModel[harness]
 			for i := 0; i < weights[harness]; i++ {
-				cycle = append(cycle, agent.ResolvedAgent{Harness: harness, Model: defaultModel})
+				cycle = append(cycle, harnessapi.ResolvedAgent{Harness: harness, Model: defaultModel})
 				labelParts = append(labelParts, harness)
 			}
 		}

@@ -8,7 +8,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/mitchell-wallace/rally/internal/agent"
+	"github.com/mitchell-wallace/rally/internal/harnessapi"
 	relaycore "github.com/mitchell-wallace/rally/internal/relay"
 	"github.com/mitchell-wallace/rally/internal/reliability"
 	"github.com/mitchell-wallace/rally/internal/routing"
@@ -52,7 +52,7 @@ type Config struct {
 type Runner struct {
 	store      *store.Store
 	cfg        Config
-	executors  map[string]agent.Executor
+	executors  map[string]harnessapi.Executor
 	stopFlag   atomic.Bool
 	skipFlag   atomic.Bool
 	log        io.WriteCloser
@@ -125,7 +125,7 @@ func (r *Runner) tel() telemetry.Sink {
 	return r.telemetry
 }
 
-func NewRunner(s *store.Store, cfg Config, executors map[string]agent.Executor) *Runner {
+func NewRunner(s *store.Store, cfg Config, executors map[string]harnessapi.Executor) *Runner {
 	return &Runner{
 		store:     s,
 		cfg:       cfg,

@@ -5,12 +5,12 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/mitchell-wallace/rally/internal/agent"
+	"github.com/mitchell-wallace/rally/internal/harnessapi"
 )
 
 const roleRefSpecPrefix = "__route_ref__:"
 
-type AgentResolver func(spec string) (agent.ResolvedAgent, error)
+type AgentResolver func(spec string) (harnessapi.ResolvedAgent, error)
 
 type OverrideRoute struct {
 	Route

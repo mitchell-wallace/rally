@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mitchell-wallace/rally/internal/agent"
+	"github.com/mitchell-wallace/rally/internal/harnessapi"
 	"github.com/mitchell-wallace/rally/internal/progress"
 	"github.com/mitchell-wallace/rally/internal/store"
 )
@@ -24,7 +24,7 @@ func TestRunWritesActiveTryMetadataBeforeExecutor(t *testing.T) {
 	var activeAtExecutor progress.RunState
 	var executorErr error
 	exec := &funcExecutor{
-		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+		fn: func(ctx context.Context, opts harnessapi.RunOptions) (*harnessapi.TryResult, error) {
 			rs, err := progress.LoadRunState(workspaceDir)
 			if err != nil {
 				executorErr = fmt.Errorf("load run-state in executor: %w", err)
@@ -41,7 +41,7 @@ func TestRunWritesActiveTryMetadataBeforeExecutor(t *testing.T) {
 				executorErr = fmt.Errorf("write workspace file: %w", err)
 				return nil, executorErr
 			}
-			return &agent.TryResult{Completed: true, Summary: "done"}, nil
+			return &harnessapi.TryResult{Completed: true, Summary: "done"}, nil
 		},
 	}
 
@@ -50,7 +50,7 @@ func TestRunWritesActiveTryMetadataBeforeExecutor(t *testing.T) {
 		DataDir:          t.TempDir(),
 		AgentMixSpecs:    []string{"cc:1"},
 		TargetIterations: 1,
-	}, map[string]agent.Executor{"claude": exec})
+	}, map[string]harnessapi.Executor{"claude": exec})
 	r.out = io.Discard
 
 	if err := r.Run(context.Background()); err != nil {

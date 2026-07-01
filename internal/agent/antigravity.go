@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/mitchell-wallace/rally/internal/harnessapi"
 	"io"
 	"os"
 	"os/exec"
@@ -47,8 +48,8 @@ func (a *AntigravityExecutor) ProbeLiveness(_ context.Context) (bool, error) {
 	return false, fmt.Errorf("liveness probe not supported by antigravity adapter")
 }
 
-func (a *AntigravityExecutor) Execute(ctx context.Context, opts RunOptions) (*TryResult, error) {
-	prompt := BuildPrompt(opts)
+func (a *AntigravityExecutor) Execute(ctx context.Context, opts harnessapi.RunOptions) (*harnessapi.TryResult, error) {
+	prompt := harnessapi.BuildPrompt(opts)
 
 	model := a.Model
 	if opts.Model != "" {
@@ -93,8 +94,8 @@ func (a *AntigravityExecutor) Execute(ctx context.Context, opts RunOptions) (*Tr
 	}
 	if opts.ReasoningEffort != "" {
 		var warning string
-		args, warning = applyReasoningEffort(args, "antigravity", opts.ReasoningEffort)
-		defer emitReasoningWarning(opts.LogPath, warning)
+		args, warning = harnessapi.ApplyReasoningEffort(args, "antigravity", opts.ReasoningEffort)
+		defer harnessapi.EmitReasoningWarning(opts.LogPath, warning)
 	}
 	args = append(args, "--print", prompt)
 
@@ -113,10 +114,10 @@ func (a *AntigravityExecutor) Execute(ctx context.Context, opts RunOptions) (*Tr
 		execErr := fmt.Errorf("antigravity exec failed: %w\noutput: %s\nlog: %s", runErr, string(out), tailString(string(agyLogData), 4096))
 		errorText := string(out) + "\n" + string(agyLogData)
 		if ev := reliability.ParseAntigravityError(errorText); ev != nil {
-			return &TryResult{Evidence: ev, ResolvedModel: model}, execErr
+			return &harnessapi.TryResult{Evidence: ev, ResolvedModel: model}, execErr
 		}
 		if ev := antigravityGlogFailureEvidence(); ev != nil {
-			return &TryResult{Evidence: ev, ResolvedModel: model}, execErr
+			return &harnessapi.TryResult{Evidence: ev, ResolvedModel: model}, execErr
 		}
 		return nil, execErr
 	}
@@ -129,10 +130,10 @@ func (a *AntigravityExecutor) Execute(ctx context.Context, opts RunOptions) (*Tr
 	return tr, nil
 }
 
-func parseAntigravityOutput(out []byte, sessionID string) (*TryResult, error) {
+func parseAntigravityOutput(out []byte, sessionID string) (*harnessapi.TryResult, error) {
 	text := strings.TrimSpace(string(out))
 	if text == "" {
-		return &TryResult{Completed: false, SessionID: sessionID}, nil
+		return &harnessapi.TryResult{Completed: false, SessionID: sessionID}, nil
 	}
 
 	if tr, ok := parseTryResultJSON(text); ok {
@@ -147,11 +148,11 @@ func parseAntigravityOutput(out []byte, sessionID string) (*TryResult, error) {
 		}
 	}
 
-	return &TryResult{Completed: true, Summary: text, SessionID: sessionID}, nil
+	return &harnessapi.TryResult{Completed: true, Summary: text, SessionID: sessionID}, nil
 }
 
-func parseTryResultJSON(text string) (*TryResult, bool) {
-	var tr TryResult
+func parseTryResultJSON(text string) (*harnessapi.TryResult, bool) {
+	var tr harnessapi.TryResult
 	if err := json.Unmarshal([]byte(text), &tr); err != nil {
 		return nil, false
 	}

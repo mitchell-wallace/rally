@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"github.com/mitchell-wallace/rally/internal/harnessapi"
 	"os"
 	"path/filepath"
 	"strings"
@@ -123,12 +124,12 @@ func TestAntigravityExecutor_GlogFallbackWiredOnUnknownFailure(t *testing.T) {
 	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 
 	exec := &AntigravityExecutor{PrintTimeout: time.Second}
-	tr, err := exec.Execute(context.Background(), RunOptions{Prompt: "do work"})
+	tr, err := exec.Execute(context.Background(), harnessapi.RunOptions{Prompt: "do work"})
 	if err == nil {
 		t.Fatal("expected error from antigravity mock")
 	}
 	if tr == nil || tr.Evidence == nil {
-		t.Fatalf("expected TryResult with antigravity_glog Evidence, got %+v", tr)
+		t.Fatalf("expected harnessapi.TryResult with antigravity_glog Evidence, got %+v", tr)
 	}
 	if tr.Evidence.Source != antigravityGlogSource {
 		t.Errorf("Evidence.Source = %q, want %q", tr.Evidence.Source, antigravityGlogSource)
@@ -162,12 +163,12 @@ exit 1
 	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 
 	exec := &AntigravityExecutor{PrintTimeout: time.Second}
-	tr, err := exec.Execute(context.Background(), RunOptions{Prompt: "do work"})
+	tr, err := exec.Execute(context.Background(), harnessapi.RunOptions{Prompt: "do work"})
 	if err == nil {
 		t.Fatal("expected error from antigravity mock")
 	}
 	if tr == nil || tr.Evidence == nil {
-		t.Fatalf("expected TryResult with temp-log Evidence, got %+v", tr)
+		t.Fatalf("expected harnessapi.TryResult with temp-log Evidence, got %+v", tr)
 	}
 	if tr.Evidence.Category != reliability.CategoryUsageLimit {
 		t.Errorf("Evidence.Category = %q, want %q", tr.Evidence.Category, reliability.CategoryUsageLimit)

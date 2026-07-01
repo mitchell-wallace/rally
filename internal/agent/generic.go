@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"github.com/mitchell-wallace/rally/internal/harnessapi"
 	"io"
 	"os/exec"
 	"strings"
@@ -28,12 +29,12 @@ func (g *GenericExecutor) ProbeLiveness(_ context.Context) (bool, error) {
 	return false, fmt.Errorf("liveness probe not supported by generic adapter")
 }
 
-func (g *GenericExecutor) Execute(ctx context.Context, opts RunOptions) (*TryResult, error) {
+func (g *GenericExecutor) Execute(ctx context.Context, opts harnessapi.RunOptions) (*harnessapi.TryResult, error) {
 	if g.OutputStrategy != "" && g.OutputStrategy != "tail" {
 		return nil, fmt.Errorf("generic harness: unsupported output_strategy %q", g.OutputStrategy)
 	}
 
-	prompt := BuildPrompt(opts)
+	prompt := harnessapi.BuildPrompt(opts)
 	outputLines := g.OutputLines
 	if outputLines <= 0 {
 		outputLines = 40
@@ -86,8 +87,8 @@ func (g *GenericExecutor) runGenericCommand(
 	promptInArgs bool, // true when $PROMPT was substituted; stdin not used
 	tailStream string,
 	outputLines int,
-	opts RunOptions,
-) (*TryResult, error) {
+	opts harnessapi.RunOptions,
+) (*harnessapi.TryResult, error) {
 	logFile, err := openTryLog(opts.LogPath)
 	if err != nil {
 		return nil, err
@@ -130,7 +131,7 @@ func (g *GenericExecutor) runGenericCommand(
 	summary := tailLines(string(selected), outputLines)
 	completed := waitErr == nil
 
-	return &TryResult{Completed: completed, Summary: summary}, nil
+	return &harnessapi.TryResult{Completed: completed, Summary: summary}, nil
 }
 
 func tailLines(s string, n int) string {

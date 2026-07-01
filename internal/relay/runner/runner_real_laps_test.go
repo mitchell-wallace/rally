@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/mitchell-wallace/rally/internal/agent"
+	"github.com/mitchell-wallace/rally/internal/harnessapi"
 	"github.com/mitchell-wallace/rally/internal/laps"
 	"github.com/mitchell-wallace/rally/internal/progress"
 	"github.com/mitchell-wallace/rally/internal/store"
@@ -34,7 +34,7 @@ func TestRunnerUsesRealLapsHeadTask(t *testing.T) {
 	var receivedTaskPrompt string
 	changeCounter := 0
 	exec := &funcExecutor{
-		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+		fn: func(ctx context.Context, opts harnessapi.RunOptions) (*harnessapi.TryResult, error) {
 			receivedTaskName = opts.TaskName
 			receivedRequirements = opts.TaskRequirements
 			receivedTaskPrompt = opts.TaskPrompt
@@ -52,10 +52,10 @@ func TestRunnerUsesRealLapsHeadTask(t *testing.T) {
 			f, _ := os.OpenFile(filepath.Join(workspaceDir, "changes.txt"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
 			fmt.Fprintf(f, "change %d\n", changeCounter)
 			f.Close()
-			return &agent.TryResult{Completed: true}, nil
+			return &harnessapi.TryResult{Completed: true}, nil
 		},
 	}
-	executors := map[string]agent.Executor{"claude": exec}
+	executors := map[string]harnessapi.Executor{"claude": exec}
 
 	r := NewRunner(s, Config{
 		WorkspaceDir:     workspaceDir,

@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/mitchell-wallace/rally/internal/agent"
+	"github.com/mitchell-wallace/rally/internal/harnessapi"
 	relaycore "github.com/mitchell-wallace/rally/internal/relay"
 	"github.com/mitchell-wallace/rally/internal/routing"
 	"github.com/mitchell-wallace/rally/internal/store"
@@ -27,7 +27,7 @@ type routeRuntime struct {
 	reasoningResolver routing.RoleReasoningResolver
 	providers         *routing.ProviderIndex
 	store             *store.Store
-	lastAgent         map[string]agent.ResolvedAgent
+	lastAgent         map[string]harnessapi.ResolvedAgent
 	warnings          []string
 }
 
@@ -80,8 +80,8 @@ func (r *routeRuntime) Warnings() []string {
 }
 
 type routeSelection struct {
-	Agent             agent.ResolvedAgent
-	PreviousAgent     *agent.ResolvedAgent
+	Agent             harnessapi.ResolvedAgent
+	PreviousAgent     *harnessapi.ResolvedAgent
 	Route             routing.Route
 	Entry             *routing.EntryState
 	Scheduler         *routing.Scheduler
@@ -228,7 +228,7 @@ func newResolvedRouteRuntimeWithReasoning(routeSpecs map[string][]string, resolv
 		resolver:          resolver,
 		reasoning:         reasoning,
 		reasoningResolver: reasoningResolver,
-		lastAgent:         make(map[string]agent.ResolvedAgent, len(schedulers)),
+		lastAgent:         make(map[string]harnessapi.ResolvedAgent, len(schedulers)),
 		warnings:          warnings,
 	}, nil
 }
@@ -308,7 +308,7 @@ func (r *routeRuntime) next(task runTask, resilience *relaycore.Resilience) (rou
 	hourlyRetry := st == relaycore.StatePaused && !resilience.NowFunc().Before(since.Add(resilience.PauseDuration))
 	probation := st == relaycore.StateProbation
 
-	var previousAgent *agent.ResolvedAgent
+	var previousAgent *harnessapi.ResolvedAgent
 	routeKey := strings.ToLower(route.Name)
 	if scheduled.Prev != nil && scheduled.Prev.Position != entry.Position {
 		if last, ok := r.lastAgent[routeKey]; ok {
@@ -612,10 +612,10 @@ func (r *routeRuntime) resilienceKeyForEntry(entry routing.ParsedEntry, role str
 	return relaycore.KeyFromAgent(resolved), nil
 }
 
-func (r *routeRuntime) resolvedEntryAgent(entry routing.ParsedEntry, role string) (agent.ResolvedAgent, error) {
+func (r *routeRuntime) resolvedEntryAgent(entry routing.ParsedEntry, role string) (harnessapi.ResolvedAgent, error) {
 	picked, err := resolveAgentSpec(entry.Spec, nil)
 	if err != nil {
-		return agent.ResolvedAgent{}, err
+		return harnessapi.ResolvedAgent{}, err
 	}
 	return routing.ApplyRoleReasoningFallback(picked, entry, role, r.reasoning, r.reasoningResolver)
 }
@@ -693,7 +693,7 @@ func resolveRouteEntries(entries []routing.ParsedEntry, resolver relaycore.Resol
 	return resolved, nil
 }
 
-func resolveAgentSpec(spec string, resolver relaycore.Resolver) (agent.ResolvedAgent, error) {
+func resolveAgentSpec(spec string, resolver relaycore.Resolver) (harnessapi.ResolvedAgent, error) {
 	if resolver != nil {
 		return resolver(spec)
 	}
@@ -711,14 +711,14 @@ func resolveAgentSpec(spec string, resolver relaycore.Resolver) (agent.ResolvedA
 		harness = mapped
 	}
 
-	resolved := agent.ResolvedAgent{Harness: harness}
+	resolved := harnessapi.ResolvedAgent{Harness: harness}
 	if len(parts) == 2 {
 		resolved.Model = parts[1]
 	}
 	return resolved, nil
 }
 
-func agentRouteSpec(resolved agent.ResolvedAgent) string {
+func agentRouteSpec(resolved harnessapi.ResolvedAgent) string {
 	spec := resolved.Harness
 	if resolved.Model != "" {
 		spec += ":" + resolved.Model

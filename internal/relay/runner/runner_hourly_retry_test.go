@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mitchell-wallace/rally/internal/agent"
+	"github.com/mitchell-wallace/rally/internal/harnessapi"
 	"github.com/mitchell-wallace/rally/internal/store"
 )
 
@@ -25,7 +25,7 @@ func TestHourlyRetryBudgetHonored(t *testing.T) {
 
 	callCount := 0
 	execExecutor := &funcExecutor{
-		fn: func(ctxRun context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+		fn: func(ctxRun context.Context, opts harnessapi.RunOptions) (*harnessapi.TryResult, error) {
 			callCount++
 			if opts.LogPath != "" {
 				_ = os.WriteFile(opts.LogPath, []byte("argument list too long\n"), 0o644)
@@ -33,10 +33,10 @@ func TestHourlyRetryBudgetHonored(t *testing.T) {
 			if callCount >= 3 {
 				cancel() // exit the relay loop
 			}
-			return &agent.TryResult{Completed: false, Summary: "infra fail"}, nil
+			return &harnessapi.TryResult{Completed: false, Summary: "infra fail"}, nil
 		},
 	}
-	executors := map[string]agent.Executor{"opencode": execExecutor}
+	executors := map[string]harnessapi.Executor{"opencode": execExecutor}
 
 	baseTime := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	r := NewRunner(s, Config{
@@ -82,22 +82,22 @@ func TestHourlyRetryTransientFailureDoesNotBurnFreezeLife(t *testing.T) {
 
 	callCount := 0
 	execExecutor := &funcExecutor{
-		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+		fn: func(ctx context.Context, opts harnessapi.RunOptions) (*harnessapi.TryResult, error) {
 			callCount++
 			if callCount < 3 {
 				if opts.LogPath != "" {
 					_ = os.WriteFile(opts.LogPath, []byte("argument list too long\n"), 0o644)
 				}
-				return &agent.TryResult{Completed: false, Summary: "infra fail"}, nil
+				return &harnessapi.TryResult{Completed: false, Summary: "infra fail"}, nil
 			}
 			_ = os.WriteFile(filepath.Join(workspaceDir, "foo.txt"), []byte("bar"), 0o644)
 			c := exec.Command("git", "add", "foo.txt")
 			c.Dir = workspaceDir
 			_ = c.Run()
-			return &agent.TryResult{Completed: true, Summary: "success"}, nil
+			return &harnessapi.TryResult{Completed: true, Summary: "success"}, nil
 		},
 	}
-	executors := map[string]agent.Executor{"opencode": execExecutor}
+	executors := map[string]harnessapi.Executor{"opencode": execExecutor}
 
 	baseTime := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	r := NewRunner(s, Config{

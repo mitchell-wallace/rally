@@ -3,14 +3,15 @@ package runner
 import (
 	"context"
 	"fmt"
+	"github.com/mitchell-wallace/rally/internal/agent"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/mitchell-wallace/rally/internal/agent"
 	"github.com/mitchell-wallace/rally/internal/config"
+	"github.com/mitchell-wallace/rally/internal/harnessapi"
 	"github.com/mitchell-wallace/rally/internal/laps"
 	"github.com/mitchell-wallace/rally/internal/progress"
 	"github.com/mitchell-wallace/rally/internal/reliability"
@@ -22,22 +23,21 @@ func TestAgentCyclingDeterminism(t *testing.T) {
 	rallyDir := store.RallyDir(workspaceDir)
 	os.MkdirAll(rallyDir, 0o755)
 	initRepo(t, workspaceDir)
-
 	s := newTestStore(t, rallyDir)
 	var agents []string
 	changeCounter := 0
 	exec := &funcExecutor{
-		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+		fn: func(ctx context.Context, opts harnessapi.RunOptions) (*harnessapi.TryResult, error) {
 			agents = append(agents, opts.Persona)
 			changeCounter++
 			// Append unique content so each try produces a distinct change.
 			f, _ := os.OpenFile(filepath.Join(workspaceDir, "changes.txt"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
 			fmt.Fprintf(f, "change %d\n", changeCounter)
 			f.Close()
-			return &agent.TryResult{Completed: true}, nil
+			return &harnessapi.TryResult{Completed: true}, nil
 		},
 	}
-	executors := map[string]agent.Executor{"claude": exec, "codex": exec}
+	executors := map[string]harnessapi.Executor{"claude": exec, "codex": exec}
 
 	r := NewRunner(s, Config{
 		WorkspaceDir:     workspaceDir,
@@ -71,12 +71,12 @@ func TestRunnerSameHarnessAdvanceUsesRotateModel(t *testing.T) {
 	var executedModels []string
 	exec := &funcExecutor{
 		rotateSupported: true,
-		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+		fn: func(ctx context.Context, opts harnessapi.RunOptions) (*harnessapi.TryResult, error) {
 			executedModels = append(executedModels, opts.Model)
 			f, _ := os.OpenFile(filepath.Join(workspaceDir, fmt.Sprintf("change-%d.txt", len(executedModels))), os.O_CREATE|os.O_WRONLY, 0o644)
 			f.WriteString(opts.Model)
 			f.Close()
-			return &agent.TryResult{Completed: true, Summary: "ok"}, nil
+			return &harnessapi.TryResult{Completed: true, Summary: "ok"}, nil
 		},
 	}
 
@@ -89,7 +89,7 @@ func TestRunnerSameHarnessAdvanceUsesRotateModel(t *testing.T) {
 		TargetIterations: 2,
 		Resolver:         testResolver,
 		TaskPrompt:       "rotate",
-	}, map[string]agent.Executor{"opencode": exec})
+	}, map[string]harnessapi.Executor{"opencode": exec})
 
 	if err := r.Run(context.Background()); err != nil {
 		t.Fatalf("run failed: %v", err)
@@ -112,19 +112,19 @@ func TestRunnerCrossHarnessAdvanceDoesNotRotate(t *testing.T) {
 	s := newTestStore(t, rallyDir)
 	opExec := &funcExecutor{
 		rotateSupported: true,
-		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+		fn: func(ctx context.Context, opts harnessapi.RunOptions) (*harnessapi.TryResult, error) {
 			f, _ := os.OpenFile(filepath.Join(workspaceDir, "opencode.txt"), os.O_CREATE|os.O_WRONLY, 0o644)
 			f.WriteString("opencode")
 			f.Close()
-			return &agent.TryResult{Completed: true, Summary: "ok"}, nil
+			return &harnessapi.TryResult{Completed: true, Summary: "ok"}, nil
 		},
 	}
 	codexExec := &funcExecutor{
-		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+		fn: func(ctx context.Context, opts harnessapi.RunOptions) (*harnessapi.TryResult, error) {
 			f, _ := os.OpenFile(filepath.Join(workspaceDir, "codex.txt"), os.O_CREATE|os.O_WRONLY, 0o644)
 			f.WriteString("codex")
 			f.Close()
-			return &agent.TryResult{Completed: true, Summary: "ok"}, nil
+			return &harnessapi.TryResult{Completed: true, Summary: "ok"}, nil
 		},
 	}
 
@@ -137,7 +137,7 @@ func TestRunnerCrossHarnessAdvanceDoesNotRotate(t *testing.T) {
 		TargetIterations: 2,
 		Resolver:         testResolver,
 		TaskPrompt:       "cross harness",
-	}, map[string]agent.Executor{
+	}, map[string]harnessapi.Executor{
 		"opencode": opExec,
 		"codex":    codexExec,
 	})
@@ -163,12 +163,12 @@ func TestRunnerRotateModelErrorFallsBackToExecution(t *testing.T) {
 	exec := &funcExecutor{
 		rotateSupported: true,
 		rotateErr:       fmt.Errorf("rotate failed"),
-		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+		fn: func(ctx context.Context, opts harnessapi.RunOptions) (*harnessapi.TryResult, error) {
 			executedModels = append(executedModels, opts.Model)
 			f, _ := os.OpenFile(filepath.Join(workspaceDir, fmt.Sprintf("change-%d.txt", len(executedModels))), os.O_CREATE|os.O_WRONLY, 0o644)
 			f.WriteString(opts.Model)
 			f.Close()
-			return &agent.TryResult{Completed: true, Summary: "ok"}, nil
+			return &harnessapi.TryResult{Completed: true, Summary: "ok"}, nil
 		},
 	}
 
@@ -181,7 +181,7 @@ func TestRunnerRotateModelErrorFallsBackToExecution(t *testing.T) {
 		TargetIterations: 2,
 		Resolver:         testResolver,
 		TaskPrompt:       "fallback",
-	}, map[string]agent.Executor{"opencode": exec})
+	}, map[string]harnessapi.Executor{"opencode": exec})
 
 	if err := r.Run(context.Background()); err != nil {
 		t.Fatalf("run failed: %v", err)
@@ -217,11 +217,11 @@ func TestRunnerDoesNotCreateRepoRelayLogDir(t *testing.T) {
 	s := newTestStore(t, rallyDir)
 	dataDir := t.TempDir()
 	exec := &funcExecutor{
-		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+		fn: func(ctx context.Context, opts harnessapi.RunOptions) (*harnessapi.TryResult, error) {
 			if err := os.WriteFile(filepath.Join(workspaceDir, "change.txt"), []byte("ok\n"), 0o644); err != nil {
 				return nil, err
 			}
-			return &agent.TryResult{Completed: true, Summary: "ok"}, nil
+			return &harnessapi.TryResult{Completed: true, Summary: "ok"}, nil
 		},
 	}
 
@@ -232,7 +232,7 @@ func TestRunnerDoesNotCreateRepoRelayLogDir(t *testing.T) {
 		TargetIterations: 1,
 		Resolver:         testResolver,
 		TaskPrompt:       "no repo relay logs",
-	}, map[string]agent.Executor{"opencode": exec})
+	}, map[string]harnessapi.Executor{"opencode": exec})
 
 	if err := r.Run(context.Background()); err != nil {
 		t.Fatalf("run failed: %v", err)
@@ -253,14 +253,14 @@ func TestFailureCascadeMultipleInfraIncrements(t *testing.T) {
 
 	s := newTestStore(t, rallyDir)
 	exec := &funcExecutor{
-		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+		fn: func(ctx context.Context, opts harnessapi.RunOptions) (*harnessapi.TryResult, error) {
 			if opts.LogPath != "" {
 				_ = os.WriteFile(opts.LogPath, []byte("fork/exec failed\n"), 0o644)
 			}
-			return &agent.TryResult{Completed: false, Summary: "fail"}, nil
+			return &harnessapi.TryResult{Completed: false, Summary: "fail"}, nil
 		},
 	}
-	executors := map[string]agent.Executor{"opencode": exec}
+	executors := map[string]harnessapi.Executor{"opencode": exec}
 
 	r := NewRunner(s, Config{
 		WorkspaceDir:     workspaceDir,
@@ -309,11 +309,11 @@ func TestFailureCascadeSingleInfraDoesNotIncrement(t *testing.T) {
 
 	s := newTestStore(t, rallyDir)
 	exec := &funcExecutor{
-		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+		fn: func(ctx context.Context, opts harnessapi.RunOptions) (*harnessapi.TryResult, error) {
 			if opts.LogPath != "" {
 				_ = os.WriteFile(opts.LogPath, []byte("fork/exec failed\n"), 0o644)
 			}
-			return &agent.TryResult{Completed: false, Summary: "infra"}, nil
+			return &harnessapi.TryResult{Completed: false, Summary: "infra"}, nil
 		},
 	}
 	r := NewRunner(s, Config{
@@ -323,7 +323,7 @@ func TestFailureCascadeSingleInfraDoesNotIncrement(t *testing.T) {
 		TargetIterations: 1,
 		RetryBudget:      1,
 		Resolver:         cheapTestResolver,
-	}, map[string]agent.Executor{"opencode": exec})
+	}, map[string]harnessapi.Executor{"opencode": exec})
 
 	_ = r.Run(context.Background())
 
@@ -340,8 +340,8 @@ func TestFailureCascadeAgentErrorDoesNotIncrement(t *testing.T) {
 
 	s := newTestStore(t, rallyDir)
 	exec := &funcExecutor{
-		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
-			return &agent.TryResult{Completed: false, Summary: "agent failed"}, nil
+		fn: func(ctx context.Context, opts harnessapi.RunOptions) (*harnessapi.TryResult, error) {
+			return &harnessapi.TryResult{Completed: false, Summary: "agent failed"}, nil
 		},
 	}
 	r := NewRunner(s, Config{
@@ -351,7 +351,7 @@ func TestFailureCascadeAgentErrorDoesNotIncrement(t *testing.T) {
 		TargetIterations: 1,
 		RetryBudget:      2,
 		Resolver:         cheapTestResolver,
-	}, map[string]agent.Executor{"opencode": exec})
+	}, map[string]harnessapi.Executor{"opencode": exec})
 
 	_ = r.Run(context.Background())
 
@@ -383,17 +383,17 @@ func TestGracefulStop(t *testing.T) {
 	s := newTestStore(t, rallyDir)
 	changeCounter := 0
 	exec := &funcExecutor{
-		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+		fn: func(ctx context.Context, opts harnessapi.RunOptions) (*harnessapi.TryResult, error) {
 			time.Sleep(50 * time.Millisecond)
 			changeCounter++
 			// Append unique content so the try is not a no-op failure.
 			f, _ := os.OpenFile(filepath.Join(workspaceDir, "changes.txt"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
 			fmt.Fprintf(f, "stop %d\n", changeCounter)
 			f.Close()
-			return &agent.TryResult{Completed: true}, nil
+			return &harnessapi.TryResult{Completed: true}, nil
 		},
 	}
-	executors := map[string]agent.Executor{"claude": exec}
+	executors := map[string]harnessapi.Executor{"claude": exec}
 
 	r := NewRunner(s, Config{
 		WorkspaceDir:     workspaceDir,
@@ -444,7 +444,7 @@ func TestMessageConsumptionPerRun(t *testing.T) {
 	addressed := false
 	changeCounter := 0
 	exec := &funcExecutor{
-		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+		fn: func(ctx context.Context, opts harnessapi.RunOptions) (*harnessapi.TryResult, error) {
 			addressed = true
 			msgAddr := true
 			changeCounter++
@@ -452,10 +452,10 @@ func TestMessageConsumptionPerRun(t *testing.T) {
 			f, _ := os.OpenFile(filepath.Join(workspaceDir, "changes.txt"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
 			fmt.Fprintf(f, "msg %d\n", changeCounter)
 			f.Close()
-			return &agent.TryResult{Completed: true, MessageAddressed: &msgAddr}, nil
+			return &harnessapi.TryResult{Completed: true, MessageAddressed: &msgAddr}, nil
 		},
 	}
-	executors := map[string]agent.Executor{"claude": exec}
+	executors := map[string]harnessapi.Executor{"claude": exec}
 
 	r := NewRunner(s, Config{
 		WorkspaceDir:     workspaceDir,
@@ -498,16 +498,16 @@ func TestRelayScopedMessageIncludedInAllRuns(t *testing.T) {
 	var relayMsgsSeen []string
 	changeCounter := 0
 	exec := &funcExecutor{
-		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+		fn: func(ctx context.Context, opts harnessapi.RunOptions) (*harnessapi.TryResult, error) {
 			relayMsgsSeen = append(relayMsgsSeen, opts.RelayMessage)
 			changeCounter++
 			f, _ := os.OpenFile(filepath.Join(workspaceDir, "changes.txt"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
 			fmt.Fprintf(f, "change %d\n", changeCounter)
 			f.Close()
-			return &agent.TryResult{Completed: true}, nil
+			return &harnessapi.TryResult{Completed: true}, nil
 		},
 	}
-	executors := map[string]agent.Executor{"claude": exec}
+	executors := map[string]harnessapi.Executor{"claude": exec}
 
 	r := NewRunner(s, Config{
 		WorkspaceDir:     workspaceDir,
@@ -541,16 +541,16 @@ func TestRelayScopedMessageAddressed(t *testing.T) {
 
 	changeCounter := 0
 	exec := &funcExecutor{
-		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+		fn: func(ctx context.Context, opts harnessapi.RunOptions) (*harnessapi.TryResult, error) {
 			changeCounter++
 			f, _ := os.OpenFile(filepath.Join(workspaceDir, "changes.txt"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
 			fmt.Fprintf(f, "change %d\n", changeCounter)
 			f.Close()
 			msgAddr := true
-			return &agent.TryResult{Completed: true, MessageAddressed: &msgAddr}, nil
+			return &harnessapi.TryResult{Completed: true, MessageAddressed: &msgAddr}, nil
 		},
 	}
-	executors := map[string]agent.Executor{"claude": exec}
+	executors := map[string]harnessapi.Executor{"claude": exec}
 
 	r := NewRunner(s, Config{
 		WorkspaceDir:     workspaceDir,
@@ -600,7 +600,7 @@ func TestCombinedRelayAndRunScopedMessages(t *testing.T) {
 	var inboxMsgsSeen []string
 	changeCounter := 0
 	exec := &funcExecutor{
-		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+		fn: func(ctx context.Context, opts harnessapi.RunOptions) (*harnessapi.TryResult, error) {
 			relayMsgsSeen = append(relayMsgsSeen, opts.RelayMessage)
 			inboxMsgsSeen = append(inboxMsgsSeen, opts.InboxMessage)
 			changeCounter++
@@ -608,10 +608,10 @@ func TestCombinedRelayAndRunScopedMessages(t *testing.T) {
 			fmt.Fprintf(f, "change %d\n", changeCounter)
 			f.Close()
 			msgAddr := true
-			return &agent.TryResult{Completed: true, MessageAddressed: &msgAddr}, nil
+			return &harnessapi.TryResult{Completed: true, MessageAddressed: &msgAddr}, nil
 		},
 	}
-	executors := map[string]agent.Executor{"claude": exec}
+	executors := map[string]harnessapi.Executor{"claude": exec}
 
 	r := NewRunner(s, Config{
 		WorkspaceDir:     workspaceDir,
@@ -671,14 +671,14 @@ func TestFreezeCascade(t *testing.T) {
 
 	s := newTestStore(t, rallyDir)
 	exec := &funcExecutor{
-		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+		fn: func(ctx context.Context, opts harnessapi.RunOptions) (*harnessapi.TryResult, error) {
 			if opts.LogPath != "" {
 				_ = os.WriteFile(opts.LogPath, []byte("fork/exec failed\n"), 0o644)
 			}
-			return &agent.TryResult{Completed: false, Summary: "fail"}, nil
+			return &harnessapi.TryResult{Completed: false, Summary: "fail"}, nil
 		},
 	}
-	executors := map[string]agent.Executor{"opencode": exec}
+	executors := map[string]harnessapi.Executor{"opencode": exec}
 
 	r := NewRunner(s, Config{
 		WorkspaceDir:     workspaceDir,
@@ -776,14 +776,14 @@ func TestFailedRunDoesNotCountIteration(t *testing.T) {
 
 	s := newTestStore(t, rallyDir)
 	exec := &funcExecutor{
-		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+		fn: func(ctx context.Context, opts harnessapi.RunOptions) (*harnessapi.TryResult, error) {
 			if opts.LogPath != "" {
 				_ = os.WriteFile(opts.LogPath, []byte("fork/exec failed\n"), 0o644)
 			}
-			return &agent.TryResult{Completed: false, Summary: "fail"}, nil
+			return &harnessapi.TryResult{Completed: false, Summary: "fail"}, nil
 		},
 	}
-	executors := map[string]agent.Executor{"opencode": exec}
+	executors := map[string]harnessapi.Executor{"opencode": exec}
 
 	r := NewRunner(s, Config{
 		WorkspaceDir:     workspaceDir,
@@ -837,7 +837,7 @@ func TestHourlyRetryWithOtherAgentActive(t *testing.T) {
 	resilience.NowFunc = func() time.Time { return baseTime.Add(2 * time.Hour) }
 
 	mix := AgentMix{
-		Cycle: []agent.ResolvedAgent{
+		Cycle: []harnessapi.ResolvedAgent{
 			{Harness: "claude", Model: "test"},
 			{Harness: "claude", Model: "test"},
 			{Harness: "codex", Model: "test"},
@@ -875,7 +875,7 @@ func TestAllAgentsFrozenEndsRelay(t *testing.T) {
 	}
 
 	mix := AgentMix{
-		Cycle: []agent.ResolvedAgent{
+		Cycle: []harnessapi.ResolvedAgent{
 			{Harness: "claude", Model: "test"},
 			{Harness: "codex", Model: "test"},
 		},
@@ -917,13 +917,13 @@ func TestRunnerRouteIntegration_AssigneesQuotasFreezeAndRoleFiles(t *testing.T) 
 	failSeniorCheapAttempts := 3
 	changeCounter := 0
 	exec := &funcExecutor{
-		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+		fn: func(ctx context.Context, opts harnessapi.RunOptions) (*harnessapi.TryResult, error) {
 			if opts.Persona == "opencode" && opts.Model == cheapTestModel && opts.RoleInstructions == "Senior route guidance." && failSeniorCheapAttempts > 0 {
 				if opts.LogPath != "" {
 					_ = os.WriteFile(opts.LogPath, []byte("fork/exec failed\n"), 0o644)
 				}
 				failSeniorCheapAttempts--
-				return &agent.TryResult{Completed: false, Summary: "simulated senior cheap-model failure"}, nil
+				return &harnessapi.TryResult{Completed: false, Summary: "simulated senior cheap-model failure"}, nil
 			}
 
 			executions = append(executions, execution{
@@ -935,10 +935,10 @@ func TestRunnerRouteIntegration_AssigneesQuotasFreezeAndRoleFiles(t *testing.T) 
 			f, _ := os.OpenFile(filepath.Join(workspaceDir, "changes.txt"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
 			fmt.Fprintf(f, "change %d\n", changeCounter)
 			f.Close()
-			return &agent.TryResult{Completed: true, Summary: "ok"}, nil
+			return &harnessapi.TryResult{Completed: true, Summary: "ok"}, nil
 		},
 	}
-	executors := map[string]agent.Executor{
+	executors := map[string]harnessapi.Executor{
 		"opencode": exec,
 		"codex":    exec,
 	}
@@ -1031,16 +1031,16 @@ func TestRunnerNoBackendUsesDefaultRouteAndFallbackPrompt(t *testing.T) {
 	var receivedPersona string
 	var receivedTaskPrompt string
 	exec := &funcExecutor{
-		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+		fn: func(ctx context.Context, opts harnessapi.RunOptions) (*harnessapi.TryResult, error) {
 			receivedPersona = opts.Persona
 			receivedTaskPrompt = opts.TaskPrompt
 			f, _ := os.OpenFile(filepath.Join(workspaceDir, "changes.txt"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
 			fmt.Fprintf(f, "change\n")
 			f.Close()
-			return &agent.TryResult{Completed: true}, nil
+			return &harnessapi.TryResult{Completed: true}, nil
 		},
 	}
-	executors := map[string]agent.Executor{"codex": exec}
+	executors := map[string]harnessapi.Executor{"codex": exec}
 
 	r := NewRunner(s, Config{
 		WorkspaceDir:      workspaceDir,
@@ -1110,12 +1110,12 @@ instructions_file = %q
 		t.Fatalf("mix = %q, want 'cc:opus'", cfg.Defaults.Mix)
 	}
 
-	resolver := func(spec string) (agent.ResolvedAgent, error) {
+	resolver := func(spec string) (harnessapi.ResolvedAgent, error) {
 		ra, err := cfg.ResolveAgent(spec)
 		if err != nil {
-			return agent.ResolvedAgent{}, err
+			return harnessapi.ResolvedAgent{}, err
 		}
-		return agent.ResolvedAgent{Harness: ra.Harness, Model: ra.Model}, nil
+		return harnessapi.ResolvedAgent{Harness: ra.Harness, Model: ra.Model}, nil
 	}
 
 	s := newTestStore(t, rallyDir)
@@ -1123,17 +1123,17 @@ instructions_file = %q
 	var capturedTaskPrompt string
 	changeCounter := 0
 	exec := &funcExecutor{
-		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+		fn: func(ctx context.Context, opts harnessapi.RunOptions) (*harnessapi.TryResult, error) {
 			capturedModel = opts.Model
 			capturedTaskPrompt = opts.TaskPrompt
 			changeCounter++
 			f, _ := os.OpenFile(filepath.Join(workspaceDir, "changes.txt"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
 			fmt.Fprintf(f, "change %d\n", changeCounter)
 			f.Close()
-			return &agent.TryResult{Completed: true}, nil
+			return &harnessapi.TryResult{Completed: true}, nil
 		},
 	}
-	executors := map[string]agent.Executor{"claude": exec}
+	executors := map[string]harnessapi.Executor{"claude": exec}
 
 	mixSpecs := strings.Fields(cfg.Defaults.Mix)
 	r := NewRunner(s, Config{
@@ -1179,18 +1179,18 @@ func TestE2E_UserDefinedHarness_ModelFlagSet(t *testing.T) {
 		ModelFlag: &modelFlag,
 	}
 
-	resolver := func(spec string) (agent.ResolvedAgent, error) {
+	resolver := func(spec string) (harnessapi.ResolvedAgent, error) {
 		if spec == "droid:v1" {
-			return agent.ResolvedAgent{Harness: "droid", Model: "droid-v1"}, nil
+			return harnessapi.ResolvedAgent{Harness: "droid", Model: "droid-v1"}, nil
 		}
 		if spec == "droid" {
-			return agent.ResolvedAgent{Harness: "droid"}, nil
+			return harnessapi.ResolvedAgent{Harness: "droid"}, nil
 		}
 		return testResolver(spec)
 	}
 
 	s := newTestStore(t, rallyDir)
-	executors := map[string]agent.Executor{"droid": droidExec}
+	executors := map[string]harnessapi.Executor{"droid": droidExec}
 
 	r := NewRunner(s, Config{
 		WorkspaceDir:     workspaceDir,
@@ -1232,15 +1232,15 @@ func TestE2E_UserDefinedHarness_BareAliasNoModel(t *testing.T) {
 		ModelFlag: &modelFlag,
 	}
 
-	resolver := func(spec string) (agent.ResolvedAgent, error) {
+	resolver := func(spec string) (harnessapi.ResolvedAgent, error) {
 		if spec == "droid" {
-			return agent.ResolvedAgent{Harness: "droid"}, nil
+			return harnessapi.ResolvedAgent{Harness: "droid"}, nil
 		}
 		return testResolver(spec)
 	}
 
 	s := newTestStore(t, rallyDir)
-	executors := map[string]agent.Executor{"droid": droidExec}
+	executors := map[string]harnessapi.Executor{"droid": droidExec}
 
 	r := NewRunner(s, Config{
 		WorkspaceDir:     workspaceDir,
@@ -1282,15 +1282,15 @@ func TestE2E_UserDefinedHarness_ModelFlagEmpty(t *testing.T) {
 		ModelFlag: &modelFlag,
 	}
 
-	resolver := func(spec string) (agent.ResolvedAgent, error) {
+	resolver := func(spec string) (harnessapi.ResolvedAgent, error) {
 		if spec == "droid:v1" {
-			return agent.ResolvedAgent{Harness: "droid", Model: "droid-v1"}, nil
+			return harnessapi.ResolvedAgent{Harness: "droid", Model: "droid-v1"}, nil
 		}
 		return testResolver(spec)
 	}
 
 	s := newTestStore(t, rallyDir)
-	executors := map[string]agent.Executor{"droid": droidExec}
+	executors := map[string]harnessapi.Executor{"droid": droidExec}
 
 	r := NewRunner(s, Config{
 		WorkspaceDir:     workspaceDir,
@@ -1334,15 +1334,15 @@ func TestE2E_UserDefinedHarness_ModelFlagUnset_InfoNote(t *testing.T) {
 		ModelFlag: nil,
 	}
 
-	resolver := func(spec string) (agent.ResolvedAgent, error) {
+	resolver := func(spec string) (harnessapi.ResolvedAgent, error) {
 		if spec == "droid:v1" {
-			return agent.ResolvedAgent{Harness: "droid", Model: "droid-v1"}, nil
+			return harnessapi.ResolvedAgent{Harness: "droid", Model: "droid-v1"}, nil
 		}
 		return testResolver(spec)
 	}
 
 	s := newTestStore(t, rallyDir)
-	executors := map[string]agent.Executor{"droid": droidExec}
+	executors := map[string]harnessapi.Executor{"droid": droidExec}
 
 	r := NewRunner(s, Config{
 		WorkspaceDir:     workspaceDir,
@@ -1397,28 +1397,28 @@ run_hooks_on_autocommit = true
 		t.Errorf("expected model 'root-sonnet' from root-level field, got %q", resolved.Model)
 	}
 
-	resolver := func(spec string) (agent.ResolvedAgent, error) {
+	resolver := func(spec string) (harnessapi.ResolvedAgent, error) {
 		ra, err := cfg.ResolveAgent(spec)
 		if err != nil {
-			return agent.ResolvedAgent{}, err
+			return harnessapi.ResolvedAgent{}, err
 		}
-		return agent.ResolvedAgent{Harness: ra.Harness, Model: ra.Model}, nil
+		return harnessapi.ResolvedAgent{Harness: ra.Harness, Model: ra.Model}, nil
 	}
 
 	s := newTestStore(t, rallyDir)
 	var capturedModel string
 	changeCounter := 0
 	exec := &funcExecutor{
-		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+		fn: func(ctx context.Context, opts harnessapi.RunOptions) (*harnessapi.TryResult, error) {
 			capturedModel = opts.Model
 			changeCounter++
 			f, _ := os.OpenFile(filepath.Join(workspaceDir, "changes.txt"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
 			fmt.Fprintf(f, "change %d\n", changeCounter)
 			f.Close()
-			return &agent.TryResult{Completed: true}, nil
+			return &harnessapi.TryResult{Completed: true}, nil
 		},
 	}
-	executors := map[string]agent.Executor{"claude": exec}
+	executors := map[string]harnessapi.Executor{"claude": exec}
 
 	r := NewRunner(s, Config{
 		WorkspaceDir:     workspaceDir,
@@ -1470,28 +1470,28 @@ mix = "cc"
 		t.Errorf("expected model 'defaults-opus' from [defaults], got %q", resolved.Model)
 	}
 
-	resolver := func(spec string) (agent.ResolvedAgent, error) {
+	resolver := func(spec string) (harnessapi.ResolvedAgent, error) {
 		ra, err := cfg.ResolveAgent(spec)
 		if err != nil {
-			return agent.ResolvedAgent{}, err
+			return harnessapi.ResolvedAgent{}, err
 		}
-		return agent.ResolvedAgent{Harness: ra.Harness, Model: ra.Model}, nil
+		return harnessapi.ResolvedAgent{Harness: ra.Harness, Model: ra.Model}, nil
 	}
 
 	s := newTestStore(t, rallyDir)
 	var capturedModel string
 	changeCounter := 0
 	exec := &funcExecutor{
-		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+		fn: func(ctx context.Context, opts harnessapi.RunOptions) (*harnessapi.TryResult, error) {
 			capturedModel = opts.Model
 			changeCounter++
 			f, _ := os.OpenFile(filepath.Join(workspaceDir, "changes.txt"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
 			fmt.Fprintf(f, "change %d\n", changeCounter)
 			f.Close()
-			return &agent.TryResult{Completed: true}, nil
+			return &harnessapi.TryResult{Completed: true}, nil
 		},
 	}
-	executors := map[string]agent.Executor{"claude": exec}
+	executors := map[string]harnessapi.Executor{"claude": exec}
 
 	r := NewRunner(s, Config{
 		WorkspaceDir:     workspaceDir,
@@ -1523,12 +1523,12 @@ func TestE2E_CheapRotationOpencodeGLMToKimi(t *testing.T) {
 	var modelsExecuted []string
 	exec := &funcExecutor{
 		rotateSupported: true,
-		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+		fn: func(ctx context.Context, opts harnessapi.RunOptions) (*harnessapi.TryResult, error) {
 			modelsExecuted = append(modelsExecuted, opts.Model)
 			f, _ := os.Create(filepath.Join(workspaceDir, fmt.Sprintf("change-%s.txt", opts.Model)))
 			f.WriteString("changed")
 			f.Close()
-			return &agent.TryResult{Completed: true, Summary: "ok"}, nil
+			return &harnessapi.TryResult{Completed: true, Summary: "ok"}, nil
 		},
 	}
 
@@ -1541,7 +1541,7 @@ func TestE2E_CheapRotationOpencodeGLMToKimi(t *testing.T) {
 		TargetIterations: 2,
 		Resolver:         testResolver,
 		TaskPrompt:       "rotate",
-	}, map[string]agent.Executor{"opencode": exec})
+	}, map[string]harnessapi.Executor{"opencode": exec})
 
 	if err := r.Run(context.Background()); err != nil {
 		t.Fatalf("run failed: %v", err)
@@ -1567,22 +1567,22 @@ func TestE2E_ClaudeRateLimitWaitAndResume(t *testing.T) {
 	var sleptDurations []time.Duration
 	exec := &funcExecutor{
 		resumeSupported: true,
-		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+		fn: func(ctx context.Context, opts harnessapi.RunOptions) (*harnessapi.TryResult, error) {
 			attempt++
 			capturedSessionIDs = append(capturedSessionIDs, opts.ResumeSessionID)
 			if attempt == 1 {
 				if opts.LogPath != "" {
 					_ = os.WriteFile(opts.LogPath, []byte("sending to claude...\nerror 429 Too Many Requests\nretry-after: 1\n"), 0o644)
 				}
-				return &agent.TryResult{Completed: false, Summary: "rate limit hit", SessionID: "sess-rate"}, nil
+				return &harnessapi.TryResult{Completed: false, Summary: "rate limit hit", SessionID: "sess-rate"}, nil
 			}
 			f, _ := os.Create(filepath.Join(workspaceDir, "success.txt"))
 			f.WriteString("changed")
 			f.Close()
-			return &agent.TryResult{Completed: true, Summary: "success"}, nil
+			return &harnessapi.TryResult{Completed: true, Summary: "success"}, nil
 		},
 	}
-	executors := map[string]agent.Executor{"claude": exec}
+	executors := map[string]harnessapi.Executor{"claude": exec}
 
 	r := NewRunner(s, Config{
 		WorkspaceDir:     workspaceDir,
@@ -1623,17 +1623,17 @@ func TestE2E_SimulatedFreezeGracefulKillResumeRecovery(t *testing.T) {
 	var resumeIDs []string
 	exec := &funcExecutor{
 		resumeSupported: true,
-		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+		fn: func(ctx context.Context, opts harnessapi.RunOptions) (*harnessapi.TryResult, error) {
 			attempt++
 			resumeIDs = append(resumeIDs, opts.ResumeSessionID)
 			if attempt == 1 {
 				<-freezeCh
-				return &agent.TryResult{Completed: false, Summary: "freeze", SessionID: "sess-freeze"}, nil
+				return &harnessapi.TryResult{Completed: false, Summary: "freeze", SessionID: "sess-freeze"}, nil
 			}
 			f, _ := os.Create(filepath.Join(workspaceDir, "success.txt"))
 			f.WriteString("changed")
 			f.Close()
-			return &agent.TryResult{Completed: true, Summary: "success"}, nil
+			return &harnessapi.TryResult{Completed: true, Summary: "success"}, nil
 		},
 	}
 
@@ -1643,7 +1643,7 @@ func TestE2E_SimulatedFreezeGracefulKillResumeRecovery(t *testing.T) {
 		AgentMixSpecs:    []string{"cc:1"},
 		TargetIterations: 1,
 		RetryBudget:      3,
-	}, map[string]agent.Executor{"claude": exec})
+	}, map[string]harnessapi.Executor{"claude": exec})
 
 	controllerCount := 0
 	r.stallControllerFactory = func(logPath string) reliability.StallController {
@@ -1697,13 +1697,13 @@ func TestE2E_LivenessProbeClearsFreezeFlag(t *testing.T) {
 			probeCalls++
 			return true, nil
 		},
-		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+		fn: func(ctx context.Context, opts harnessapi.RunOptions) (*harnessapi.TryResult, error) {
 			attempt++
 			time.Sleep(50 * time.Millisecond)
 			f, _ := os.Create(filepath.Join(workspaceDir, "success.txt"))
 			f.WriteString("changed")
 			f.Close()
-			return &agent.TryResult{Completed: true, Summary: "success"}, nil
+			return &harnessapi.TryResult{Completed: true, Summary: "success"}, nil
 		},
 	}
 
@@ -1715,7 +1715,7 @@ func TestE2E_LivenessProbeClearsFreezeFlag(t *testing.T) {
 		RetryBudget:      3,
 		LivenessProbe:    true,
 		StallThreshold:   50 * time.Millisecond,
-	}, map[string]agent.Executor{"codex": exec})
+	}, map[string]harnessapi.Executor{"codex": exec})
 
 	r.stallControllerFactory = func(string) reliability.StallController {
 		probe := r.buildLivenessProbe(exec)
@@ -1770,17 +1770,17 @@ func TestE2E_LivenessProbeFailureConfirmsFreeze(t *testing.T) {
 			probeCalls++
 			return false, nil
 		},
-		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+		fn: func(ctx context.Context, opts harnessapi.RunOptions) (*harnessapi.TryResult, error) {
 			attempt++
 			resumeIDs = append(resumeIDs, opts.ResumeSessionID)
 			if attempt == 1 {
 				<-freezeCh
-				return &agent.TryResult{Completed: false, Summary: "freeze", SessionID: "sess-probe"}, nil
+				return &harnessapi.TryResult{Completed: false, Summary: "freeze", SessionID: "sess-probe"}, nil
 			}
 			f, _ := os.Create(filepath.Join(workspaceDir, "success.txt"))
 			f.WriteString("changed")
 			f.Close()
-			return &agent.TryResult{Completed: true, Summary: "success"}, nil
+			return &harnessapi.TryResult{Completed: true, Summary: "success"}, nil
 		},
 	}
 
@@ -1791,7 +1791,7 @@ func TestE2E_LivenessProbeFailureConfirmsFreeze(t *testing.T) {
 		TargetIterations: 1,
 		RetryBudget:      3,
 		LivenessProbe:    true,
-	}, map[string]agent.Executor{"codex": exec})
+	}, map[string]harnessapi.Executor{"codex": exec})
 
 	triggered := false
 	r.stallControllerFactory = func(string) reliability.StallController {
@@ -1888,21 +1888,21 @@ func TestE2E_ErrorPatternStrategies(t *testing.T) {
 			attempt := 0
 			exec := &funcExecutor{
 				resumeSupported: true,
-				fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+				fn: func(ctx context.Context, opts harnessapi.RunOptions) (*harnessapi.TryResult, error) {
 					attempt++
 					if attempt == 1 && opts.LogPath != "" {
 						_ = os.WriteFile(opts.LogPath, []byte(tt.logContent), 0o644)
 					}
 					if attempt < tt.wantAttempts {
-						return &agent.TryResult{Completed: false, Summary: "fail", SessionID: "sess-1"}, nil
+						return &harnessapi.TryResult{Completed: false, Summary: "fail", SessionID: "sess-1"}, nil
 					}
 					f, _ := os.Create(filepath.Join(workspaceDir, "success.txt"))
 					f.WriteString("changed")
 					f.Close()
-					return &agent.TryResult{Completed: true, Summary: "success"}, nil
+					return &harnessapi.TryResult{Completed: true, Summary: "success"}, nil
 				},
 			}
-			executors := map[string]agent.Executor{tt.harness: exec}
+			executors := map[string]harnessapi.Executor{tt.harness: exec}
 
 			r := NewRunner(s, Config{
 				WorkspaceDir:     workspaceDir,
@@ -1940,21 +1940,21 @@ func TestE2E_ErrorPatternRotateAdvancesRoute(t *testing.T) {
 	s := newTestStore(t, rallyDir)
 	var executed []string
 	opencodeExec := &funcExecutor{
-		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+		fn: func(ctx context.Context, opts harnessapi.RunOptions) (*harnessapi.TryResult, error) {
 			executed = append(executed, "opencode:"+opts.Model)
 			if opts.LogPath != "" {
 				_ = os.WriteFile(opts.LogPath, []byte("some output\nerror: API bad request from provider\n"), 0o644)
 			}
-			return &agent.TryResult{Completed: false, Summary: "rotate"}, nil
+			return &harnessapi.TryResult{Completed: false, Summary: "rotate"}, nil
 		},
 	}
 	codexExec := &funcExecutor{
-		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+		fn: func(ctx context.Context, opts harnessapi.RunOptions) (*harnessapi.TryResult, error) {
 			executed = append(executed, "codex:"+opts.Model)
 			f, _ := os.Create(filepath.Join(workspaceDir, "success.txt"))
 			f.WriteString("changed")
 			f.Close()
-			return &agent.TryResult{Completed: true, Summary: "success"}, nil
+			return &harnessapi.TryResult{Completed: true, Summary: "success"}, nil
 		},
 	}
 
@@ -1967,7 +1967,7 @@ func TestE2E_ErrorPatternRotateAdvancesRoute(t *testing.T) {
 		TargetIterations: 1,
 		Resolver:         testResolver,
 		TaskPrompt:       "rotate",
-	}, map[string]agent.Executor{
+	}, map[string]harnessapi.Executor{
 		"opencode": opencodeExec,
 		"codex":    codexExec,
 	})
@@ -2000,14 +2000,14 @@ func TestE2E_RunStateClearedAtRelayStart(t *testing.T) {
 
 	s := newTestStore(t, rallyDir)
 	exec := &funcExecutor{
-		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+		fn: func(ctx context.Context, opts harnessapi.RunOptions) (*harnessapi.TryResult, error) {
 			f, _ := os.Create(filepath.Join(workspaceDir, "success.txt"))
 			f.WriteString("changed")
 			f.Close()
-			return &agent.TryResult{Completed: true}, nil
+			return &harnessapi.TryResult{Completed: true}, nil
 		},
 	}
-	executors := map[string]agent.Executor{"claude": exec}
+	executors := map[string]harnessapi.Executor{"claude": exec}
 
 	r := NewRunner(s, Config{
 		WorkspaceDir:     workspaceDir,
@@ -2043,14 +2043,14 @@ func TestE2E_WindowsFreezeDisabledRetryBudgetExhaustion(t *testing.T) {
 
 	s := newTestStore(t, rallyDir)
 	exec := &funcExecutor{
-		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+		fn: func(ctx context.Context, opts harnessapi.RunOptions) (*harnessapi.TryResult, error) {
 			if opts.LogPath != "" {
 				_ = os.WriteFile(opts.LogPath, []byte("fork/exec failed\n"), 0o644)
 			}
-			return &agent.TryResult{Completed: false, Summary: "fail"}, nil
+			return &harnessapi.TryResult{Completed: false, Summary: "fail"}, nil
 		},
 	}
-	executors := map[string]agent.Executor{"opencode": exec}
+	executors := map[string]harnessapi.Executor{"opencode": exec}
 
 	r := NewRunner(s, Config{
 		WorkspaceDir:     workspaceDir,
@@ -2154,13 +2154,13 @@ func TestProbationIncompletePromotesToActive(t *testing.T) {
 	// path ensures the leftover-aware delta still classifies it incomplete.
 	attempt := 0
 	exec := &funcExecutor{
-		fn: func(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+		fn: func(ctx context.Context, opts harnessapi.RunOptions) (*harnessapi.TryResult, error) {
 			attempt++
 			_ = os.WriteFile(filepath.Join(workspaceDir, fmt.Sprintf("partial-%d.txt", attempt)), []byte("partial"), 0o644)
-			return &agent.TryResult{Completed: true, Summary: "made progress but did not finalize"}, nil
+			return &harnessapi.TryResult{Completed: true, Summary: "made progress but did not finalize"}, nil
 		},
 	}
-	executors := map[string]agent.Executor{"opencode": exec}
+	executors := map[string]harnessapi.Executor{"opencode": exec}
 
 	// Set up the agent as frozen long enough ago that it decays to probation.
 	baseTime := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)

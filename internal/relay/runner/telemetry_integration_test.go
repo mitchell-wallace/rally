@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/mitchell-wallace/rally/internal/agent"
+	"github.com/mitchell-wallace/rally/internal/harnessapi"
 	"github.com/mitchell-wallace/rally/internal/relay"
 	"github.com/mitchell-wallace/rally/internal/store"
 	"github.com/mitchell-wallace/rally/internal/telemetry"
@@ -44,7 +44,7 @@ type customExecutor struct {
 	execError  error
 }
 
-func (c *customExecutor) Execute(ctx context.Context, opts agent.RunOptions) (*agent.TryResult, error) {
+func (c *customExecutor) Execute(ctx context.Context, opts harnessapi.RunOptions) (*harnessapi.TryResult, error) {
 	c.attempts++
 	if c.logContent != "" && opts.LogPath != "" {
 		_ = os.WriteFile(opts.LogPath, []byte(c.logContent), 0o644)
@@ -70,7 +70,7 @@ func (c *customExecutor) Execute(ctx context.Context, opts agent.RunOptions) (*a
 			return nil, fmt.Errorf("laps wrapup: %w\n%s", err, out)
 		}
 	}
-	return &agent.TryResult{
+	return &harnessapi.TryResult{
 		Completed: completed,
 		Summary:   summary,
 	}, nil
@@ -93,7 +93,7 @@ func TestTelemetryIssueCriteriaAndPromptSize(t *testing.T) {
 		t.Fatalf("failed to init store: %v", err)
 	}
 
-	executors := map[string]agent.Executor{
+	executors := map[string]harnessapi.Executor{
 		"antigravity": &customExecutor{succeedOn: 99}, // always fail
 		"backupagent": &customExecutor{succeedOn: 99}, // always fail
 	}
@@ -108,11 +108,11 @@ func TestTelemetryIssueCriteriaAndPromptSize(t *testing.T) {
 			"junior": {"antigravity", "backupagent"},
 		},
 		UseOverrideRoute: true,
-		Resolver: func(spec string) (agent.ResolvedAgent, error) {
+		Resolver: func(spec string) (harnessapi.ResolvedAgent, error) {
 			if spec == "backupagent" {
-				return agent.ResolvedAgent{Harness: "backupagent", Model: "default-model"}, nil
+				return harnessapi.ResolvedAgent{Harness: "backupagent", Model: "default-model"}, nil
 			}
-			return agent.ResolvedAgent{Harness: "antigravity", Model: "default-model"}, nil
+			return harnessapi.ResolvedAgent{Harness: "antigravity", Model: "default-model"}, nil
 		},
 	}
 
@@ -208,7 +208,7 @@ func TestTelemetry_PromptBreakdown(t *testing.T) {
 		t.Fatalf("failed to add relay message: %v", err)
 	}
 
-	executors := map[string]agent.Executor{
+	executors := map[string]harnessapi.Executor{
 		"antigravity": &customExecutor{succeedOn: 2}, // fails first try, succeeds second
 	}
 
@@ -224,8 +224,8 @@ func TestTelemetry_PromptBreakdown(t *testing.T) {
 		},
 		UseOverrideRoute: true,
 		Instructions:     "global instructions content",
-		Resolver: func(spec string) (agent.ResolvedAgent, error) {
-			return agent.ResolvedAgent{Harness: "antigravity", Model: "default-model"}, nil
+		Resolver: func(spec string) (harnessapi.ResolvedAgent, error) {
+			return harnessapi.ResolvedAgent{Harness: "antigravity", Model: "default-model"}, nil
 		},
 	}
 
@@ -307,7 +307,7 @@ func TestTelemetry_AgentClassRetry_NoIssue(t *testing.T) {
 	}
 
 	// Fail on attempt 1, succeed on attempt 2. Classifies as FailureAgent.
-	executors := map[string]agent.Executor{
+	executors := map[string]harnessapi.Executor{
 		"antigravity": &customExecutor{succeedOn: 2},
 	}
 
@@ -321,8 +321,8 @@ func TestTelemetry_AgentClassRetry_NoIssue(t *testing.T) {
 			"junior": {"antigravity"},
 		},
 		UseOverrideRoute: true,
-		Resolver: func(spec string) (agent.ResolvedAgent, error) {
-			return agent.ResolvedAgent{Harness: "antigravity", Model: "default-model"}, nil
+		Resolver: func(spec string) (harnessapi.ResolvedAgent, error) {
+			return harnessapi.ResolvedAgent{Harness: "antigravity", Model: "default-model"}, nil
 		},
 	}
 
@@ -352,7 +352,7 @@ func TestTelemetry_InfraFailure_Issue(t *testing.T) {
 	// Write an API-timeout signal to the log file to classify as FailureInfra.
 	// (The rate-limit pattern previously used here is now scoped to the claude
 	// harness; "request timed out" stays harness-agnostic transient infra.)
-	executors := map[string]agent.Executor{
+	executors := map[string]harnessapi.Executor{
 		"antigravity": &customExecutor{succeedOn: 99, logContent: "request timed out\n"},
 	}
 
@@ -366,8 +366,8 @@ func TestTelemetry_InfraFailure_Issue(t *testing.T) {
 			"junior": {"antigravity"},
 		},
 		UseOverrideRoute: true,
-		Resolver: func(spec string) (agent.ResolvedAgent, error) {
-			return agent.ResolvedAgent{Harness: "antigravity", Model: "default-model"}, nil
+		Resolver: func(spec string) (harnessapi.ResolvedAgent, error) {
+			return harnessapi.ResolvedAgent{Harness: "antigravity", Model: "default-model"}, nil
 		},
 	}
 
@@ -403,7 +403,7 @@ func TestTelemetry_RelayStall_Issue(t *testing.T) {
 		t.Fatalf("failed to freeze agent: %v", err)
 	}
 
-	executors := map[string]agent.Executor{
+	executors := map[string]harnessapi.Executor{
 		"antigravity": &customExecutor{succeedOn: 1},
 	}
 
@@ -417,8 +417,8 @@ func TestTelemetry_RelayStall_Issue(t *testing.T) {
 			"junior": {"antigravity"},
 		},
 		UseOverrideRoute: true,
-		Resolver: func(spec string) (agent.ResolvedAgent, error) {
-			return agent.ResolvedAgent{Harness: "antigravity", Model: "default-model"}, nil
+		Resolver: func(spec string) (harnessapi.ResolvedAgent, error) {
+			return harnessapi.ResolvedAgent{Harness: "antigravity", Model: "default-model"}, nil
 		},
 	}
 

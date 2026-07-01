@@ -6,7 +6,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/mitchell-wallace/rally/internal/agent"
+	"github.com/mitchell-wallace/rally/internal/harnessapi"
 )
 
 func (c V2Config) defaultModelForHarness(harness string) string {
@@ -24,15 +24,15 @@ func (c V2Config) defaultModelForHarness(harness string) string {
 	}
 }
 
-func (c V2Config) ResolveAgent(spec string) (agent.ResolvedAgent, error) {
+func (c V2Config) ResolveAgent(spec string) (harnessapi.ResolvedAgent, error) {
 	parts := strings.SplitN(spec, ":", 3)
 	if len(parts) == 3 {
-		return agent.ResolvedAgent{}, fmt.Errorf("invalid agent spec %q: weight-on-named-model (e.g. cc:opus:2) is not supported", spec)
+		return harnessapi.ResolvedAgent{}, fmt.Errorf("invalid agent spec %q: weight-on-named-model (e.g. cc:opus:2) is not supported", spec)
 	}
 
 	alias := parts[0]
 	if isRemovedGeminiAlias(alias) {
-		return agent.ResolvedAgent{}, RemovedGeminiAliasError{Alias: alias}
+		return harnessapi.ResolvedAgent{}, RemovedGeminiAliasError{Alias: alias}
 	}
 	harness, ok := builtInAliases[alias]
 	if !ok {
@@ -44,16 +44,16 @@ func (c V2Config) ResolveAgent(spec string) (agent.ResolvedAgent, error) {
 		}
 	}
 	if !ok {
-		return agent.ResolvedAgent{}, fmt.Errorf("unknown agent alias %q", alias)
+		return harnessapi.ResolvedAgent{}, fmt.Errorf("unknown agent alias %q", alias)
 	}
 
 	if len(parts) == 1 {
-		return agent.ResolvedAgent{Harness: harness, Model: c.defaultModelForHarness(harness)}, nil
+		return harnessapi.ResolvedAgent{Harness: harness, Model: c.defaultModelForHarness(harness)}, nil
 	}
 
 	right := parts[1]
 	if numericOnlyPattern.MatchString(right) {
-		return agent.ResolvedAgent{Harness: harness, Model: c.defaultModelForHarness(harness)}, nil
+		return harnessapi.ResolvedAgent{Harness: harness, Model: c.defaultModelForHarness(harness)}, nil
 	}
 
 	if modelNamePattern.MatchString(right) {
@@ -63,17 +63,17 @@ func (c V2Config) ResolveAgent(spec string) (agent.ResolvedAgent, error) {
 		}
 		if found && hc.Models != nil {
 			if modelStr, modelOk := hc.Models[right]; modelOk {
-				return agent.ResolvedAgent{Harness: harness, Model: modelStr}, nil
+				return harnessapi.ResolvedAgent{Harness: harness, Model: modelStr}, nil
 			}
 		}
 		suggestions := didYouMean(right, modelNamesForHarness(c.Harnesses, harness, alias))
 		if suggestions != "" {
-			return agent.ResolvedAgent{}, fmt.Errorf("unknown model %q for harness %q; did you mean %s?", right, harness, suggestions)
+			return harnessapi.ResolvedAgent{}, fmt.Errorf("unknown model %q for harness %q; did you mean %s?", right, harness, suggestions)
 		}
-		return agent.ResolvedAgent{}, fmt.Errorf("unknown model %q for harness %q (no models defined for this harness)", right, harness)
+		return harnessapi.ResolvedAgent{}, fmt.Errorf("unknown model %q for harness %q (no models defined for this harness)", right, harness)
 	}
 
-	return agent.ResolvedAgent{Harness: harness, Model: right}, nil
+	return harnessapi.ResolvedAgent{Harness: harness, Model: right}, nil
 }
 
 func (c V2Config) ResolveRoleReasoning(role, selectedHarness, preference string) (string, string, error) {

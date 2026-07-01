@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"fmt"
+	"github.com/mitchell-wallace/rally/internal/harnessapi"
 	"os"
 	"path/filepath"
 	"strings"
@@ -27,7 +28,7 @@ func TestGenericExecutor_PromptSubstitution(t *testing.T) {
 		ModelFlag: &modelFlag,
 		Model:     "test-model",
 	}
-	res, err := g.Execute(context.Background(), RunOptions{TaskName: "hello"})
+	res, err := g.Execute(context.Background(), harnessapi.RunOptions{TaskName: "hello"})
 	if err != nil {
 		t.Fatalf("execute failed: %v", err)
 	}
@@ -46,7 +47,7 @@ func TestGenericExecutor_StdinFallback(t *testing.T) {
 	g := &GenericExecutor{
 		Command: []string{script},
 	}
-	res, err := g.Execute(context.Background(), RunOptions{TaskName: "stdin-test"})
+	res, err := g.Execute(context.Background(), harnessapi.RunOptions{TaskName: "stdin-test"})
 	if err != nil {
 		t.Fatalf("execute failed: %v", err)
 	}
@@ -74,7 +75,7 @@ func TestGenericExecutor_ModelFlagNonEmpty(t *testing.T) {
 		ModelFlag: &modelFlag,
 		Model:     "droid-v1",
 	}
-	res, err := g.Execute(context.Background(), RunOptions{})
+	res, err := g.Execute(context.Background(), harnessapi.RunOptions{})
 	if err != nil {
 		t.Fatalf("execute failed: %v", err)
 	}
@@ -95,7 +96,7 @@ func TestGenericExecutor_ModelFlagEmpty(t *testing.T) {
 		ModelFlag: &modelFlag,
 		Model:     "droid-v1",
 	}
-	res, err := g.Execute(context.Background(), RunOptions{})
+	res, err := g.Execute(context.Background(), harnessapi.RunOptions{})
 	if err != nil {
 		t.Fatalf("execute failed: %v", err)
 	}
@@ -115,7 +116,7 @@ func TestGenericExecutor_ModelFlagUnset_WithModel(t *testing.T) {
 		ModelFlag: nil,
 		Model:     "droid-v1",
 	}
-	res, err := g.Execute(context.Background(), RunOptions{})
+	res, err := g.Execute(context.Background(), harnessapi.RunOptions{})
 	if err != nil {
 		t.Fatalf("execute failed: %v", err)
 	}
@@ -133,7 +134,7 @@ func TestGenericExecutor_NoModel_NoModelFlag(t *testing.T) {
 		ModelFlag: &modelFlag,
 		Model:     "",
 	}
-	res, err := g.Execute(context.Background(), RunOptions{})
+	res, err := g.Execute(context.Background(), harnessapi.RunOptions{})
 	if err != nil {
 		t.Fatalf("execute failed: %v", err)
 	}
@@ -150,7 +151,7 @@ func TestGenericExecutor_TailParser_LongOutput(t *testing.T) {
 		OutputLines: 5,
 		TailStream:  "stdout",
 	}
-	res, err := g.Execute(context.Background(), RunOptions{})
+	res, err := g.Execute(context.Background(), harnessapi.RunOptions{})
 	if err != nil {
 		t.Fatalf("execute failed: %v", err)
 	}
@@ -174,7 +175,7 @@ func TestGenericExecutor_TailParser_ShortOutput(t *testing.T) {
 		OutputLines: 40,
 		TailStream:  "stdout",
 	}
-	res, err := g.Execute(context.Background(), RunOptions{})
+	res, err := g.Execute(context.Background(), harnessapi.RunOptions{})
 	if err != nil {
 		t.Fatalf("execute failed: %v", err)
 	}
@@ -191,7 +192,7 @@ func TestGenericExecutor_TailStreamStderr(t *testing.T) {
 		OutputLines: 40,
 		TailStream:  "stderr",
 	}
-	res, err := g.Execute(context.Background(), RunOptions{})
+	res, err := g.Execute(context.Background(), harnessapi.RunOptions{})
 	if err != nil {
 		t.Fatalf("execute failed: %v", err)
 	}
@@ -204,7 +205,7 @@ func TestGenericExecutor_TailStreamStderr(t *testing.T) {
 }
 
 func TestGenericExecutor_BuiltInStillUsesBuiltIn(t *testing.T) {
-	execs := map[string]Executor{
+	execs := map[string]harnessapi.Executor{
 		"claude": &ClaudeExecutor{Model: "claude-opus-4-7"},
 	}
 	if _, ok := execs["claude"]; !ok {
@@ -221,7 +222,7 @@ func TestGenericExecutor_PromptSubstitutionPartial(t *testing.T) {
 	g := &GenericExecutor{
 		Command: []string{script, "--prompt=$PROMPT"},
 	}
-	res, err := g.Execute(context.Background(), RunOptions{TaskName: "partial"})
+	res, err := g.Execute(context.Background(), harnessapi.RunOptions{TaskName: "partial"})
 	if err != nil {
 		t.Fatalf("execute failed: %v", err)
 	}
@@ -235,7 +236,7 @@ func TestGenericExecutor_InvalidOutputStrategy(t *testing.T) {
 		Command:        []string{"echo"},
 		OutputStrategy: "json",
 	}
-	_, err := g.Execute(context.Background(), RunOptions{})
+	_, err := g.Execute(context.Background(), harnessapi.RunOptions{})
 	if err == nil {
 		t.Fatal("expected error for unsupported output_strategy")
 	}
@@ -252,7 +253,7 @@ func TestGenericExecutor_ValidOutputStrategyTail(t *testing.T) {
 		OutputStrategy: "tail",
 		OutputLines:    40,
 	}
-	res, err := g.Execute(context.Background(), RunOptions{})
+	res, err := g.Execute(context.Background(), harnessapi.RunOptions{})
 	if err != nil {
 		t.Fatalf("execute failed: %v", err)
 	}

@@ -3,14 +3,14 @@ package runner
 import (
 	"strings"
 
-	"github.com/mitchell-wallace/rally/internal/agent"
+	"github.com/mitchell-wallace/rally/internal/harnessapi"
 	"github.com/mitchell-wallace/rally/internal/monitor"
 	"github.com/mitchell-wallace/rally/internal/reliability"
 )
 
 var stallCheckInterval = monitor.TickInterval
 
-func (r *Runner) newStallController(tryLogPath string, exec agent.Executor) reliability.StallController {
+func (r *Runner) newStallController(tryLogPath string, exec harnessapi.Executor) reliability.StallController {
 	if r.stallControllerFactory != nil {
 		return r.stallControllerFactory(tryLogPath)
 	}
@@ -22,7 +22,7 @@ func (r *Runner) newStallController(tryLogPath string, exec agent.Executor) reli
 	return reliability.NewStallControllerFull(tryLogPath, threshold, r.buildLivenessProbe(exec), netStatsPath)
 }
 
-func (r *Runner) buildLivenessProbe(exec agent.Executor) *reliability.LivenessProbe {
+func (r *Runner) buildLivenessProbe(exec harnessapi.Executor) *reliability.LivenessProbe {
 	if !r.cfg.LivenessProbe || exec == nil || !exec.LivenessProbeSupported() {
 		return nil
 	}

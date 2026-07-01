@@ -11,8 +11,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/mitchell-wallace/rally/internal/agent"
 	"github.com/mitchell-wallace/rally/internal/gitx"
+	"github.com/mitchell-wallace/rally/internal/harnessapi"
 	"github.com/mitchell-wallace/rally/internal/keyboard"
 	"github.com/mitchell-wallace/rally/internal/monitor"
 	"github.com/mitchell-wallace/rally/internal/progress"
@@ -109,14 +109,14 @@ type runOneState struct {
 	roleInstructions           string
 	leftoverWork               bool
 	runStartDirtySnapshot      map[string]string
-	exec                       agent.Executor
+	exec                       harnessapi.Executor
 	maxAttempts                int
 	runBudgetCh                <-chan time.Time
 	runDeadline                time.Time
 	tryTimeout                 time.Duration
 	runStartedAt               time.Time
 	previousSummary            string
-	lastResult                 *agent.TryResult
+	lastResult                 *harnessapi.TryResult
 	sessionID                  string
 	success                    bool
 	failReason                 string
@@ -157,7 +157,7 @@ type runAttemptState struct {
 	tryCtx                 context.Context
 	trySpan                telemetry.Span
 	cancelAttempt          context.CancelFunc
-	opts                   agent.RunOptions
+	opts                   harnessapi.RunOptions
 	prompt                 string
 	tryLogPath             string
 	headBefore             string
@@ -165,7 +165,7 @@ type runAttemptState struct {
 	startedAt              time.Time
 	endedAt                time.Time
 	mon                    *monitor.Monitor
-	result                 *agent.TryResult
+	result                 *harnessapi.TryResult
 	execErr                error
 	actionTaken            bool
 	timedOut               bool
@@ -214,7 +214,7 @@ func (r *Runner) runOne(
 	ctx context.Context,
 	relay *store.RelayRecord,
 	runIndex int,
-	picked agent.ResolvedAgent,
+	picked harnessapi.ResolvedAgent,
 	task runTask,
 	consumedMsg *store.MessageRecord,
 	relayMsg *store.MessageRecord,
@@ -328,7 +328,7 @@ func (r *Runner) newRunOneState(relay *store.RelayRecord, runIndex int, task run
 	}
 }
 
-func (r *Runner) captureRunStartWorkspaceState(state *runOneState, picked agent.ResolvedAgent) {
+func (r *Runner) captureRunStartWorkspaceState(state *runOneState, picked harnessapi.ResolvedAgent) {
 	// Check for uncommitted non-rally changes at run start. Errors are
 	// tolerated (treat as clean) so a broken git setup never crashes the run.
 	state.leftoverWork, _ = gitx.IsWorkspaceDirty(r.cfg.WorkspaceDir)
@@ -373,7 +373,7 @@ func (r *Runner) setupRunBudget(state *runOneState, isHourlyRetry bool, isProbat
 	return stopRunBudget
 }
 
-func (r *Runner) prepareRunAttempt(ctx context.Context, relay *store.RelayRecord, runIndex int, picked agent.ResolvedAgent, task runTask, state *runOneState, attempt int) (*runAttemptState, error) {
+func (r *Runner) prepareRunAttempt(ctx context.Context, relay *store.RelayRecord, runIndex int, picked harnessapi.ResolvedAgent, task runTask, state *runOneState, attempt int) (*runAttemptState, error) {
 	if attempt > 1 {
 		if state.exec != nil && state.exec.ResumeSupported() && state.sessionID != "" {
 			rs, rsErr := progress.LoadRunState(r.cfg.WorkspaceDir)
@@ -392,7 +392,7 @@ func (r *Runner) prepareRunAttempt(ctx context.Context, relay *store.RelayRecord
 	tryID := r.store.NextTryID()
 	tryCtx, trySpan := r.tel().StartSpan(ctx, "try", fmt.Sprintf("relay-%d-run-%d-try-%d", relay.ID, runIndex+1, tryID))
 
-	opts := agent.RunOptions{
+	opts := harnessapi.RunOptions{
 		Persona:          picked.Harness,
 		Model:            picked.Model,
 		ReasoningEffort:  picked.ReasoningEffort,
@@ -418,7 +418,7 @@ func (r *Runner) prepareRunAttempt(ctx context.Context, relay *store.RelayRecord
 			opts.TaskPrompt = incompleteRetryGuidance
 		}
 	}
-	prompt := agent.BuildPrompt(opts)
+	prompt := harnessapi.BuildPrompt(opts)
 
 	taskPath := store.CurrentTaskPath(r.cfg.WorkspaceDir)
 	if err := os.MkdirAll(filepath.Dir(taskPath), 0o755); err != nil {
@@ -493,7 +493,7 @@ func (r *Runner) prepareRunAttempt(ctx context.Context, relay *store.RelayRecord
 	}, nil
 }
 
-func (r *Runner) runMonitoredAttempt(ctx context.Context, relay *store.RelayRecord, runIndex int, picked agent.ResolvedAgent, state *runOneState, attempt *runAttemptState, onStall func(), log io.Writer) {
+func (r *Runner) runMonitoredAttempt(ctx context.Context, relay *store.RelayRecord, runIndex int, picked harnessapi.ResolvedAgent, state *runOneState, attempt *runAttemptState, onStall func(), log io.Writer) {
 	kb := keyboard.NewKeyboard(os.Stdin, os.Stdout)
 	_ = kb.SetRawMode()
 	kbCtx, kbCancel := context.WithCancel(ctx)
@@ -597,12 +597,12 @@ func (r *Runner) runMonitoredAttempt(ctx context.Context, relay *store.RelayReco
 func (r *Runner) resolveAttemptFinalSnippet(state *runOneState, attempt *runAttemptState) {
 	normalizedSummary := r.normalizeFinalSnippet(state.runID, attempt.tryLogPath, state.summaryEntryCountBeforeRun, attempt.result, attempt.execErr)
 	if attempt.result == nil {
-		attempt.result = &agent.TryResult{}
+		attempt.result = &harnessapi.TryResult{}
 	}
 	attempt.result.Summary = normalizedSummary
 }
 
-func (r *Runner) reconcileAttemptProgress(relay *store.RelayRecord, runIndex int, picked agent.ResolvedAgent, task runTask, state *runOneState, attempt *runAttemptState, log io.Writer) {
+func (r *Runner) reconcileAttemptProgress(relay *store.RelayRecord, runIndex int, picked harnessapi.ResolvedAgent, task runTask, state *runOneState, attempt *runAttemptState, log io.Writer) {
 	runStateAfter, _ := progress.LoadRunState(r.cfg.WorkspaceDir)
 	recordedLaps := []string{}
 	lapsAttempted := []store.LapAttempt{}
@@ -707,7 +707,7 @@ func (r *Runner) reconcileAttemptProgress(relay *store.RelayRecord, runIndex int
 	attempt.commitTitle = commitTitle
 }
 
-func (r *Runner) recordCancelledAttempt(relay *store.RelayRecord, runIndex int, picked agent.ResolvedAgent, task runTask, state *runOneState, attempt *runAttemptState, log io.Writer) (bool, error) {
+func (r *Runner) recordCancelledAttempt(relay *store.RelayRecord, runIndex int, picked harnessapi.ResolvedAgent, task runTask, state *runOneState, attempt *runAttemptState, log io.Writer) (bool, error) {
 	// Operator cancellation short-circuit: when the action loop recorded
 	// a cancellation source (skip / graceful_stop / quit_now), the attempt
 	// is classified as OutcomeCancelled without entering the normal failure
@@ -838,7 +838,7 @@ func (r *Runner) recordCancelledAttempt(relay *store.RelayRecord, runIndex int, 
 	return true, nil
 }
 
-func (r *Runner) classifyAttemptOutcome(relay *store.RelayRecord, runIndex int, picked agent.ResolvedAgent, task runTask, state *runOneState, attempt *runAttemptState, log io.Writer) {
+func (r *Runner) classifyAttemptOutcome(relay *store.RelayRecord, runIndex int, picked harnessapi.ResolvedAgent, task runTask, state *runOneState, attempt *runAttemptState, log io.Writer) {
 	// Compute failed before rendering the footer so the displayed result
 	// matches what gets recorded in the try record.
 	attempt.failed = false
@@ -1067,7 +1067,7 @@ func (r *Runner) classifyAttemptOutcome(relay *store.RelayRecord, runIndex int, 
 	state.lastAttemptIncomplete = attempt.failed && attempt.attemptFailureClass == reliability.FailureIncomplete
 }
 
-func (r *Runner) recordAttemptOutcome(relay *store.RelayRecord, runIndex int, picked agent.ResolvedAgent, task runTask, state *runOneState, attempt *runAttemptState, log io.Writer) error {
+func (r *Runner) recordAttemptOutcome(relay *store.RelayRecord, runIndex int, picked harnessapi.ResolvedAgent, task runTask, state *runOneState, attempt *runAttemptState, log io.Writer) error {
 	// A failing attempt that will be retried within budget is not a terminal
 	// outcome: it gets the neutral, in-place retry line rather than a red
 	// footer. Exactly one coloured footer prints when the run resolves —
@@ -1346,7 +1346,7 @@ func (r *Runner) decideRetryOrComplete(task runTask, state *runOneState, attempt
 			}
 		} else {
 			state.previousSummary = ""
-			state.lastResult = &agent.TryResult{Completed: false}
+			state.lastResult = &harnessapi.TryResult{Completed: false}
 		}
 		return runOneAttemptDecision{action: runOneAttemptContinue}
 	}
@@ -1409,12 +1409,12 @@ func (r *Runner) decideRetryOrComplete(task runTask, state *runOneState, attempt
 		}
 	} else {
 		state.previousSummary = ""
-		state.lastResult = &agent.TryResult{Completed: false}
+		state.lastResult = &harnessapi.TryResult{Completed: false}
 	}
 	return runOneAttemptDecision{action: runOneAttemptContinue}
 }
 
-func (r *Runner) runHandoffContinuation(ctx context.Context, relay *store.RelayRecord, runIndex int, picked agent.ResolvedAgent, task runTask, state *runOneState, log io.Writer) error {
+func (r *Runner) runHandoffContinuation(ctx context.Context, relay *store.RelayRecord, runIndex int, picked harnessapi.ResolvedAgent, task runTask, state *runOneState, log io.Writer) error {
 	// Bounded handoff-only continuation (task 4). The run budget was exhausted on
 	// a resume-capable harness with a captured session: resume that session once
 	// under HandoffTimeout (no stall detector, not counted against the run budget)
@@ -1441,7 +1441,7 @@ func (r *Runner) runHandoffContinuation(ctx context.Context, relay *store.RelayR
 	return nil
 }
 
-func (r *Runner) finalizeRunProgress(ctx context.Context, relay *store.RelayRecord, runIndex int, picked agent.ResolvedAgent, task runTask, state *runOneState) {
+func (r *Runner) finalizeRunProgress(ctx context.Context, relay *store.RelayRecord, runIndex int, picked harnessapi.ResolvedAgent, task runTask, state *runOneState) {
 	// Write stub entry if the agent did not finalize the run.
 	stubSummary := ""
 	if state.lastResult != nil {
@@ -1492,7 +1492,7 @@ func (r *Runner) finalizeRunProgress(ctx context.Context, relay *store.RelayReco
 	}
 }
 
-func (r *Runner) executeTry(ctx context.Context, picked agent.ResolvedAgent, opts agent.RunOptions) (*agent.TryResult, error) {
+func (r *Runner) executeTry(ctx context.Context, picked harnessapi.ResolvedAgent, opts harnessapi.RunOptions) (*harnessapi.TryResult, error) {
 	exec, ok := r.executors[picked.Harness]
 	if !ok {
 		return nil, fmt.Errorf("no executor for agent %s", picked.Harness)

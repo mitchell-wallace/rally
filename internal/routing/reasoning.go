@@ -3,7 +3,7 @@ package routing
 import (
 	"strings"
 
-	"github.com/mitchell-wallace/rally/internal/agent"
+	"github.com/mitchell-wallace/rally/internal/harnessapi"
 )
 
 // RoleReasoningResolver resolves a role-level reasoning preference once the
@@ -14,12 +14,12 @@ type RoleReasoningResolver func(role, selectedHarness, preference string) (model
 // route selection, and only for route entries that did not explicitly name a
 // model. Explicit route models remain the highest-precedence model selection.
 func ApplyRoleReasoningFallback(
-	picked agent.ResolvedAgent,
+	picked harnessapi.ResolvedAgent,
 	entry ParsedEntry,
 	role string,
 	preferences map[string]string,
 	resolver RoleReasoningResolver,
-) (agent.ResolvedAgent, error) {
+) (harnessapi.ResolvedAgent, error) {
 	if entry.ExplicitModel || picked.Harness == "" || resolver == nil {
 		return picked, nil
 	}
@@ -31,7 +31,7 @@ func ApplyRoleReasoningFallback(
 
 	model, effort, err := resolver(role, picked.Harness, preference)
 	if err != nil {
-		return agent.ResolvedAgent{}, err
+		return harnessapi.ResolvedAgent{}, err
 	}
 	if model != "" {
 		picked.Model = model

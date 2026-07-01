@@ -7,8 +7,8 @@ import (
 	osexec "os/exec"
 	"strings"
 
-	"github.com/mitchell-wallace/rally/internal/agent"
 	"github.com/mitchell-wallace/rally/internal/gitx"
+	"github.com/mitchell-wallace/rally/internal/harnessapi"
 	"github.com/mitchell-wallace/rally/internal/store"
 	"github.com/mitchell-wallace/rally/internal/telemetry"
 )
@@ -130,7 +130,7 @@ func (r *Runner) autoCommit(runIndex int, agentType string, attempt int) (string
 // diff against the recorded head before/after hashes (or the new commit
 // hash); finally falls back to `git status --porcelain` (excluding rally's
 // own state under `.rally/` and `.laps/`).
-func (r *Runner) filesChangedList(result *agent.TryResult, headBefore, headAfter, commitHash string) []string {
+func (r *Runner) filesChangedList(result *harnessapi.TryResult, headBefore, headAfter, commitHash string) []string {
 	if result != nil && len(result.FilesChanged) > 0 {
 		out := make([]string, len(result.FilesChanged))
 		copy(out, result.FilesChanged)

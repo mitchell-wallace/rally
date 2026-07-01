@@ -3,13 +3,13 @@ package routing
 import (
 	"testing"
 
-	"github.com/mitchell-wallace/rally/internal/agent"
+	"github.com/mitchell-wallace/rally/internal/harnessapi"
 )
 
 func TestApplyRoleReasoningFallback_ExplicitModelWins(t *testing.T) {
 	called := false
 	got, err := ApplyRoleReasoningFallback(
-		agent.ResolvedAgent{Harness: "codex", Model: "gpt-5.5"},
+		harnessapi.ResolvedAgent{Harness: "codex", Model: "gpt-5.5"},
 		ParsedEntry{Raw: "cx:g55", Spec: "codex:gpt-5.5", ExplicitModel: true},
 		"VERIFY",
 		map[string]string{"verify": "g55-xh"},
@@ -34,7 +34,7 @@ func TestApplyRoleReasoningFallback_ExplicitModelWins(t *testing.T) {
 
 func TestApplyRoleReasoningFallback_RoleAliasResolvesForSelectedHarness(t *testing.T) {
 	got, err := ApplyRoleReasoningFallback(
-		agent.ResolvedAgent{Harness: "codex", Model: "gpt-5.5"},
+		harnessapi.ResolvedAgent{Harness: "codex", Model: "gpt-5.5"},
 		ParsedEntry{Raw: "cx", Spec: "codex:gpt-5.5"},
 		"VERIFY",
 		map[string]string{"verify": "g55-xh"},
@@ -61,7 +61,7 @@ func TestApplyRoleReasoningFallback_RoleAliasResolvesForSelectedHarness(t *testi
 
 func TestApplyRoleReasoningFallback_EffortPropagates(t *testing.T) {
 	got, err := ApplyRoleReasoningFallback(
-		agent.ResolvedAgent{Harness: "codex", Model: "gpt-5.5"},
+		harnessapi.ResolvedAgent{Harness: "codex", Model: "gpt-5.5"},
 		ParsedEntry{Raw: "cx", Spec: "codex:gpt-5.5"},
 		"verify",
 		map[string]string{"VERIFY": "high"},

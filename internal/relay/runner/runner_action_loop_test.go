@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mitchell-wallace/rally/internal/agent"
+	"github.com/mitchell-wallace/rally/internal/harnessapi"
 	"github.com/mitchell-wallace/rally/internal/keyboard"
 )
 
@@ -73,7 +73,7 @@ func TestActionLoopArmsFirstPressThenConfirms(t *testing.T) {
 
 	go func() {
 		<-attemptCtx.Done()
-		tryCh <- tryResult{result: &agent.TryResult{Completed: false}, err: attemptCtx.Err()}
+		tryCh <- tryResult{result: &harnessapi.TryResult{Completed: false}, err: attemptCtx.Err()}
 	}()
 
 	done := runLoopAsync(r, actionLoopDeps{
@@ -134,7 +134,7 @@ func TestActionLoopQuitCancelsAndAbortsWithoutWaiting(t *testing.T) {
 	// waited for natural completion instead of cancelling, this never fires.
 	go func() {
 		<-attemptCtx.Done()
-		tryCh <- tryResult{result: &agent.TryResult{Completed: false}, err: attemptCtx.Err()}
+		tryCh <- tryResult{result: &harnessapi.TryResult{Completed: false}, err: attemptCtx.Err()}
 	}()
 
 	actionCh <- keyboard.Press{Action: keyboard.ActionQuit, Confirmed: true}
@@ -183,7 +183,7 @@ func TestActionLoopStopCancelsAndDrains(t *testing.T) {
 
 	go func() {
 		<-attemptCtx.Done()
-		tryCh <- tryResult{result: &agent.TryResult{Completed: false, Summary: "cancelled"}, err: attemptCtx.Err()}
+		tryCh <- tryResult{result: &harnessapi.TryResult{Completed: false, Summary: "cancelled"}, err: attemptCtx.Err()}
 	}()
 
 	actionCh <- keyboard.Press{Action: keyboard.ActionStop, Confirmed: true}
@@ -244,7 +244,7 @@ func TestActionLoopStalledAttemptQuitsPromptly(t *testing.T) {
 
 	go func() {
 		<-attemptCtx.Done()
-		tryCh <- tryResult{result: &agent.TryResult{Completed: false}, err: attemptCtx.Err()}
+		tryCh <- tryResult{result: &harnessapi.TryResult{Completed: false}, err: attemptCtx.Err()}
 	}()
 
 	mon := &fakeMonitor{onStalled: func(v bool) {
@@ -354,7 +354,7 @@ func TestActionLoopSecondQuitForceKills(t *testing.T) {
 	}
 
 	// Releasing the try lets the drain (and the loop) finish.
-	tryCh <- tryResult{result: &agent.TryResult{Completed: false}}
+	tryCh <- tryResult{result: &harnessapi.TryResult{Completed: false}}
 	select {
 	case <-done:
 	case <-time.After(2 * time.Second):
@@ -378,7 +378,7 @@ func TestActionLoopPauseCapturesSessionID(t *testing.T) {
 	go func() {
 		<-attemptCtx.Done()
 		tryCh <- tryResult{
-			result: &agent.TryResult{
+			result: &harnessapi.TryResult{
 				Completed: false,
 				Summary:   "paused mid-work",
 				SessionID: "sess-pause-capture",
@@ -434,7 +434,7 @@ func TestActionLoopSkipReturnsResultAndSetsFlag(t *testing.T) {
 	go func() {
 		<-attemptCtx.Done()
 		tryCh <- tryResult{
-			result: &agent.TryResult{
+			result: &harnessapi.TryResult{
 				Completed: false,
 				Summary:   "skipped mid-work",
 				SessionID: "sess-skip-discard",

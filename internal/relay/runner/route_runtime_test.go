@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mitchell-wallace/rally/internal/agent"
+	"github.com/mitchell-wallace/rally/internal/harnessapi"
 	"github.com/mitchell-wallace/rally/internal/relay"
 	"github.com/mitchell-wallace/rally/internal/reliability"
 	"github.com/mitchell-wallace/rally/internal/store"
@@ -54,9 +54,9 @@ const (
 func newReasoningRouteRuntimeOrDie(t *testing.T, routeSpecs map[string][]string) (*routeRuntime, *Resilience) {
 	t.Helper()
 
-	resolver := func(spec string) (agent.ResolvedAgent, error) {
+	resolver := func(spec string) (harnessapi.ResolvedAgent, error) {
 		if spec == "cx" || spec == "codex" {
-			return agent.ResolvedAgent{Harness: "codex", Model: reasoningBaseModel}, nil
+			return harnessapi.ResolvedAgent{Harness: "codex", Model: reasoningBaseModel}, nil
 		}
 		return testResolver(spec)
 	}

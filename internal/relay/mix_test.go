@@ -7,12 +7,12 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/mitchell-wallace/rally/internal/agent"
 	"github.com/mitchell-wallace/rally/internal/config"
+	"github.com/mitchell-wallace/rally/internal/harnessapi"
 	"github.com/mitchell-wallace/rally/internal/store"
 )
 
-func mixTestResolver(spec string) (agent.ResolvedAgent, error) {
+func mixTestResolver(spec string) (harnessapi.ResolvedAgent, error) {
 	aliases := map[string]string{
 		"ag": "antigravity", "agy": "antigravity", "antigravity": "antigravity",
 		"cc": "claude", "claude": "claude",
@@ -22,15 +22,15 @@ func mixTestResolver(spec string) (agent.ResolvedAgent, error) {
 	parts := strings.SplitN(spec, ":", 2)
 	harness, ok := aliases[parts[0]]
 	if !ok {
-		return agent.ResolvedAgent{}, fmt.Errorf("unknown agent alias %q", parts[0])
+		return harnessapi.ResolvedAgent{}, fmt.Errorf("unknown agent alias %q", parts[0])
 	}
 	if len(parts) == 2 {
 		if _, err := strconv.Atoi(parts[1]); err == nil {
-			return agent.ResolvedAgent{Harness: harness}, nil
+			return harnessapi.ResolvedAgent{Harness: harness}, nil
 		}
-		return agent.ResolvedAgent{Harness: harness, Model: parts[1]}, nil
+		return harnessapi.ResolvedAgent{Harness: harness, Model: parts[1]}, nil
 	}
-	return agent.ResolvedAgent{Harness: harness}, nil
+	return harnessapi.ResolvedAgent{Harness: harness}, nil
 }
 
 func newMixTestStore(t *testing.T, dir string) *store.Store {
@@ -78,10 +78,10 @@ func TestAgentMixNamedModels(t *testing.T) {
 	if len(mix.Cycle) != 2 {
 		t.Fatalf("expected 2 cycle entries, got %d", len(mix.Cycle))
 	}
-	if mix.Cycle[0] != (agent.ResolvedAgent{Harness: "opencode", Model: "z"}) {
+	if mix.Cycle[0] != (harnessapi.ResolvedAgent{Harness: "opencode", Model: "z"}) {
 		t.Fatalf("cycle[0] = %+v, want {opencode z}", mix.Cycle[0])
 	}
-	if mix.Cycle[1] != (agent.ResolvedAgent{Harness: "claude", Model: "opus"}) {
+	if mix.Cycle[1] != (harnessapi.ResolvedAgent{Harness: "claude", Model: "opus"}) {
 		t.Fatalf("cycle[1] = %+v, want {claude opus}", mix.Cycle[1])
 	}
 	if mix.Weights["opencode"] != 1 {
@@ -104,13 +104,13 @@ func TestAgentMixMixedForms(t *testing.T) {
 	if len(mix.Cycle) != 3 {
 		t.Fatalf("expected 3 cycle entries, got %d: %+v", len(mix.Cycle), mix.Cycle)
 	}
-	if mix.Cycle[0] != (agent.ResolvedAgent{Harness: "claude"}) {
+	if mix.Cycle[0] != (harnessapi.ResolvedAgent{Harness: "claude"}) {
 		t.Fatalf("cycle[0] = %+v, want {claude}", mix.Cycle[0])
 	}
-	if mix.Cycle[1] != (agent.ResolvedAgent{Harness: "claude"}) {
+	if mix.Cycle[1] != (harnessapi.ResolvedAgent{Harness: "claude"}) {
 		t.Fatalf("cycle[1] = %+v, want {claude}", mix.Cycle[1])
 	}
-	if mix.Cycle[2] != (agent.ResolvedAgent{Harness: "opencode", Model: "z"}) {
+	if mix.Cycle[2] != (harnessapi.ResolvedAgent{Harness: "opencode", Model: "z"}) {
 		t.Fatalf("cycle[2] = %+v, want {opencode z}", mix.Cycle[2])
 	}
 	if mix.Label != "claude claude op:z" {
@@ -127,10 +127,10 @@ func TestAgentMixMixedNamedAndWeighted(t *testing.T) {
 	if len(mix.Cycle) != 2 {
 		t.Fatalf("expected 2 cycle entries (1 named opencode + 1 named claude), got %d: %+v", len(mix.Cycle), mix.Cycle)
 	}
-	if mix.Cycle[0] != (agent.ResolvedAgent{Harness: "claude", Model: "sonnet"}) {
+	if mix.Cycle[0] != (harnessapi.ResolvedAgent{Harness: "claude", Model: "sonnet"}) {
 		t.Fatalf("cycle[0] = %+v, want {claude sonnet}", mix.Cycle[0])
 	}
-	if mix.Cycle[1] != (agent.ResolvedAgent{Harness: "opencode", Model: "z"}) {
+	if mix.Cycle[1] != (harnessapi.ResolvedAgent{Harness: "opencode", Model: "z"}) {
 		t.Fatalf("cycle[1] = %+v, want {opencode z}", mix.Cycle[1])
 	}
 }
@@ -282,13 +282,13 @@ func TestParseAgentMixThirdColonSegmentRejected(t *testing.T) {
 }
 
 func TestParseAgentMixUnresolvedModelError(t *testing.T) {
-	strictResolver := func(spec string) (agent.ResolvedAgent, error) {
+	strictResolver := func(spec string) (harnessapi.ResolvedAgent, error) {
 		ra, err := mixTestResolver(spec)
 		if err != nil {
 			return ra, err
 		}
 		if ra.Model != "" && ra.Model != "z" && ra.Model != "opus" && ra.Model != "sonnet" {
-			return agent.ResolvedAgent{}, fmt.Errorf("unknown model %q for harness %q", ra.Model, ra.Harness)
+			return harnessapi.ResolvedAgent{}, fmt.Errorf("unknown model %q for harness %q", ra.Model, ra.Harness)
 		}
 		return ra, nil
 	}
@@ -319,7 +319,7 @@ func TestParseAgentMixBareAlias(t *testing.T) {
 	if len(mix.Cycle) != 1 {
 		t.Fatalf("expected 1 cycle entry, got %d", len(mix.Cycle))
 	}
-	if mix.Cycle[0] != (agent.ResolvedAgent{Harness: "claude"}) {
+	if mix.Cycle[0] != (harnessapi.ResolvedAgent{Harness: "claude"}) {
 		t.Fatalf("cycle[0] = %+v, want {claude}", mix.Cycle[0])
 	}
 	if mix.Label != "claude" {
@@ -335,13 +335,13 @@ func TestParseAgentMixEmptySpecsDefaultMix(t *testing.T) {
 	if len(mix.Cycle) != 3 {
 		t.Fatalf("expected 3 cycle entries (1 claude + 2 codex), got %d: %+v", len(mix.Cycle), mix.Cycle)
 	}
-	if mix.Cycle[0] != (agent.ResolvedAgent{Harness: "claude"}) {
+	if mix.Cycle[0] != (harnessapi.ResolvedAgent{Harness: "claude"}) {
 		t.Fatalf("cycle[0] = %+v, want {claude}", mix.Cycle[0])
 	}
-	if mix.Cycle[1] != (agent.ResolvedAgent{Harness: "codex"}) {
+	if mix.Cycle[1] != (harnessapi.ResolvedAgent{Harness: "codex"}) {
 		t.Fatalf("cycle[1] = %+v, want {codex}", mix.Cycle[1])
 	}
-	if mix.Cycle[2] != (agent.ResolvedAgent{Harness: "codex"}) {
+	if mix.Cycle[2] != (harnessapi.ResolvedAgent{Harness: "codex"}) {
 		t.Fatalf("cycle[2] = %+v, want {codex}", mix.Cycle[2])
 	}
 	if mix.Weights["claude"] != 1 {
@@ -360,7 +360,7 @@ func TestParseAgentMixNilResolverBareAlias(t *testing.T) {
 	if len(mix.Cycle) != 1 {
 		t.Fatalf("expected 1 cycle entry, got %d", len(mix.Cycle))
 	}
-	if mix.Cycle[0] != (agent.ResolvedAgent{Harness: "claude", Model: ""}) {
+	if mix.Cycle[0] != (harnessapi.ResolvedAgent{Harness: "claude", Model: ""}) {
 		t.Fatalf("cycle[0] = %+v, want {claude}", mix.Cycle[0])
 	}
 	if mix.Label != "claude" {
@@ -412,16 +412,16 @@ func TestParseAgentMixAllFormsCombined(t *testing.T) {
 	if len(mix.Cycle) != 4 {
 		t.Fatalf("expected 4 cycle entries, got %d: %+v", len(mix.Cycle), mix.Cycle)
 	}
-	if mix.Cycle[0] != (agent.ResolvedAgent{Harness: "claude"}) {
+	if mix.Cycle[0] != (harnessapi.ResolvedAgent{Harness: "claude"}) {
 		t.Fatalf("cycle[0] = %+v, want {claude}", mix.Cycle[0])
 	}
-	if mix.Cycle[1] != (agent.ResolvedAgent{Harness: "codex"}) {
+	if mix.Cycle[1] != (harnessapi.ResolvedAgent{Harness: "codex"}) {
 		t.Fatalf("cycle[1] = %+v, want {codex}", mix.Cycle[1])
 	}
-	if mix.Cycle[2] != (agent.ResolvedAgent{Harness: "codex"}) {
+	if mix.Cycle[2] != (harnessapi.ResolvedAgent{Harness: "codex"}) {
 		t.Fatalf("cycle[2] = %+v, want {codex}", mix.Cycle[2])
 	}
-	if mix.Cycle[3] != (agent.ResolvedAgent{Harness: "opencode", Model: "z"}) {
+	if mix.Cycle[3] != (harnessapi.ResolvedAgent{Harness: "opencode", Model: "z"}) {
 		t.Fatalf("cycle[3] = %+v, want {opencode z}", mix.Cycle[3])
 	}
 }

@@ -1,4 +1,4 @@
-package agent
+package harnessapi
 
 import (
 	"context"
@@ -10,9 +10,9 @@ import (
 
 const executorFinalTextRuneLimit = 1000
 
-// boundedExecutorFinalText keeps unstructured final assistant text useful
+// BoundedFinalText keeps unstructured final assistant text useful
 // without allowing it to become a transcript-sized summary.
-func boundedExecutorFinalText(text string) string {
+func BoundedFinalText(text string) string {
 	return textutil.TruncateHeadTailRunes(strings.TrimSpace(text), executorFinalTextRuneLimit)
 }
 
