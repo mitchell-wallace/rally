@@ -605,6 +605,83 @@
       "createdAt": "2026-06-30T07:29:04.77361076Z",
       "updatedAt": "2026-06-30T15:20:32.698962997Z",
       "completedAt": "2026-06-30T15:20:32.698962997Z"
+    },
+    {
+      "id": "rall-e7b0",
+      "title": "Scaffold tools/archguard: walk, parse, line count, run modes, policy seam",
+      "description": "Context: First lap of OpenSpec change `add-architecture-guardrails` (#3 in the architecture sequence). Tooling-and-CI only — no Rally runtime change, no version bump, no release. Read `openspec/changes/add-architecture-guardrails/{proposal,design,tasks}.md` and `specs/architecture-guardrails/spec.md`. Dependencies #1 (decompose-relay-runner) and #2 (slim-cli-composition-root) have landed and the tree matches design.md's baseline (`internal/relay/runner/run_one.go` 1510, `internal/agent/opencode.go` 801). This lap builds the checker's foundation; the concrete rule classes land in later laps.\n\nOutcome: A new `tools/archguard` command (`package main`, existing module, stdlib-only) that walks the repo, parses each `.go` file with `parser.ImportsOnly`, counts physical lines, and exposes a unit-testable policy-engine seam plus the three run modes — even before any rule is populated.\n\nFiles \u0026 scope: Create `tools/archguard/**` only (main + policy seam + tests + testdata). Do not touch any `cmd/rally` or `internal/*` runtime file, `go.mod`, or `go.sum`.\n\nDesign: Follow design.md Decisions 1 \u0026 2. Stdlib only (`go/parser`, `go/token`, `go/ast`, `os`, `path/filepath`, `bufio`, `strings`, `flag`, `fmt`, `sort`) so `go mod tidy` stays a no-op. The walk skips `// Code generated` files, `testdata`, `vendor`, build output, and hidden dirs (`.git`, `.rally`, `.laps`). Physical lines = newline count (matches `wc -l`). Make the policy engine a testable unit (exported funcs or a `policy` sub-package) independent of the walk/print. Run modes: default (warnings + hard, non-zero exit on hard), `--report` (paste-ready over-budget list plus import/dep violations), `--ci` (hard-only exit; warnings print but never fail). Every violation carries a human-readable architectural reason (design.md Diagnostics format). Keep archguard's own files under budget.\n\nAcceptance: First confirm the tree is green (task 1.1): `go build ./...`, `go vet ./...`, `gofmt -l .` empty, `go test -count=1 ./...`. If red, STOP and surface it — do not fold unrelated fixes into this tooling change. Then: `go mod tidy` produces no diff; unit tests cover line counting, generated-file exemption (`// Code generated`), hidden-dir/`testdata`/`vendor` skipping, and import parsing (aliases, dot-imports, grouped blocks) against `tools/archguard/testdata` fixtures; all three modes run without panicking; `go vet ./...` and `gofmt -l .` clean. Reports tasks 1.1, 2.1, 2.2, 2.4 and the 2.3 engine seam — do not tick tasks.md.",
+      "assignee": "SENIOR",
+      "isDone": false,
+      "order": 65536,
+      "createdAt": "2026-07-01T00:48:39.074238268Z",
+      "updatedAt": "2026-07-01T00:48:39.074238268Z",
+      "completedAt": null
+    },
+    {
+      "id": "rall-5585",
+      "title": "File-size budgets with grandfathered baseline",
+      "description": "Context: Phase 2 of `add-architecture-guardrails`, building on lap 1's policy-engine seam. Read design.md Decision 3 and the file-size scenarios in `specs/architecture-guardrails/spec.md`.\n\nOutcome: The checker enforces file-size budgets with a grandfather map regenerated from HEAD, and `archguard --report` prints the current over-budget files as a paste-ready map. The baseline is green by construction.\n\nFiles \u0026 scope: `tools/archguard/**` only.\n\nDesign: production `.go` warn 500 / hard 800; `_test.go` warn 700 / hard 1000; generated exempt (must carry `// Code generated`). Grandfather semantics: a file in the map is exempt from the standard hard budget but FAILS if it exceeds its OWN recorded cap; a file NOT in the map fails if it exceeds the standard hard budget (that is how a new oversize file is caught). Warnings (500/700) print but NEVER set the exit code. Regenerate the size baseline against HEAD (task 1.2) via `archguard --report` — do NOT trust the 2026-07-01 figures in design.md; caps = current actual line counts. Diagnostics per design.md format (report size vs cap; “ratchet the cap down, never up”).\n\nAcceptance: Paste the regenerated grandfather map; `archguard --ci` exits 0 on the clean tree; a scratch one-line bump to a grandfathered file makes `--ci` fail (then revert). Bundle unit tests + size testdata fixtures: a new oversize non-grandfathered file fails with file+count+budget; a grandfathered file over its cap fails with size-vs-cap; a 500–800 non-grandfathered file warns but `--ci` exits 0; the clean baseline passes. Reports tasks 1.2, 3.1, 3.2 — do not tick tasks.md.",
+      "assignee": "JUNIOR",
+      "isDone": false,
+      "order": 131072,
+      "createdAt": "2026-07-01T00:48:39.074248417Z",
+      "updatedAt": "2026-07-01T00:48:39.074248417Z",
+      "completedAt": null
+    },
+    {
+      "id": "rall-6406",
+      "title": "Internal import-boundary rules (flagship + composition-root + allow-lists)",
+      "description": "Context: Phase 3a — the flagship reason this change exists: keep #1's `runner → relay` edge and #2's composition-root edges one-way. Read design.md Decision 4 and the Internal import-boundary requirement/scenarios in `specs/architecture-guardrails/spec.md`.\n\nOutcome: The checker enforces production-file internal import boundaries that match the CURRENT production graph; the clean tree passes.\n\nFiles \u0026 scope: `tools/archguard/**` only.\n\nDesign: FIRST regenerate the production internal import graph against HEAD (task 1.3): `go list -json ./internal/... ./cmd/...` using `.Imports` ONLY (not `.TestImports`/`.XTestImports`) — v1 internal boundary rules are production-only. Confirm it matches Decision 4's tables; if a production edge has changed, update the rule to match the CURRENT graph before encoding (encode the real graph, not an idealized one). Encode the flagship/composition-root deny edges (`relay ↛ relay/runner`; `relay` \u0026 `relay/runner ↛ config`/`cli`; `release ↛ app`; `app ↛ {cli, user_prompt, laps}`; no `internal/*` imports `cli`) plus the per-package internal allow-lists (lower packages tight; `cli`/`cmd/rally` the broad composition layers — express `cli` as a deny-direction rule, allow-lists for the lower packages). `_test.go` files are NOT boundary violations for internal allow-lists in v1. Diagnostics name the file, the offending import, and the architectural reason.\n\nAcceptance: `archguard --ci` exits 0 on the unmodified tree for all import rules, and current `_test.go` helper imports do not trip boundary rules. Bundle unit tests + a testdata fixture proving the flagship `relay → relay/runner` violation prints the expected diagnostic text. If the real graph diverges from Decision 4, surface it (`laps add head ...` or report) rather than silently widening a rule. Reports tasks 1.3, 4.1, 4.2 — do not tick tasks.md.",
+      "assignee": "SENIOR",
+      "isDone": false,
+      "order": 196608,
+      "createdAt": "2026-07-01T00:48:39.074253273Z",
+      "updatedAt": "2026-07-01T00:48:39.074253273Z",
+      "completedAt": null
+    },
+    {
+      "id": "rall-45c8",
+      "title": "Dependency confinement + testutil confinement + rule-class fixtures",
+      "description": "Context: Phase 3b of `add-architecture-guardrails`, building on lap 3. Read design.md Decision 5 and the Third-party dependency confinement, Test-helper confinement, and Human-readable diagnostics requirements in `specs/architecture-guardrails/spec.md`.\n\nOutcome: The checker confines the listed third-party deps to their owning packages and blocks production imports of `internal/testutil`; every rule class has a diagnostic-asserting fixture.\n\nFiles \u0026 scope: `tools/archguard/**` only.\n\nDesign: FIRST regenerate the third-party dependency scopes against HEAD (task 1.4) for New Relic, `go-toml`, Cobra, huh, and lipgloss; confirm they match Decision 5 (note `cobra` is legitimately used in `internal/progress`). Encode confinement: New Relic → `telemetry`; `go-toml` → `config`; Cobra → {`cmd/rally`, `cli`, `progress`}; huh → {`cli`, `user_prompt`}; lipgloss → {`style`, `cli`}. Dependency confinement is TEST-INCLUSIVE (applies to production AND `_test.go`) — a New Relic import in a non-telemetry test is still a leak. Do NOT add broader terminal deps (e.g. `golang.org/x/term`) in this first pass. testutil confinement is production-only: non-test files MUST NOT import `internal/testutil` (the clean tree passes — no production file imports it today). Add the remaining deliberate `tools/archguard/testdata` fixtures (dep-confinement + testutil) asserting diagnostic TEXT; leave NO deliberate failure in real source.\n\nAcceptance: `archguard --ci` exits 0 on the clean tree. Bundle unit tests: a New Relic import outside `telemetry` fails with the ownership reason; `internal/progress` Cobra usage passes; a production `testutil` import fails and names the file; each rule class's fixture asserts its diagnostic text. If the real tree has a dep import the design table does not anticipate, surface it (`laps add head ...` or report) rather than silently widening a rule. Reports tasks 1.4, 4.3, 4.4, 4.5 — do not tick tasks.md.",
+      "assignee": "JUNIOR",
+      "isDone": false,
+      "order": 262144,
+      "createdAt": "2026-07-01T00:48:39.074254426Z",
+      "updatedAt": "2026-07-01T00:48:39.074254426Z",
+      "completedAt": null
+    },
+    {
+      "id": "rall-c6fe",
+      "title": "Verify the checker and all rules (Phases 1–3)",
+      "description": "Use the `openspec-verify-change` skill against `add-architecture-guardrails`, focused on Phases 1–3 (the checker plus all rule classes, before local/CI wiring).\n\nIdentify the intended merge target first (ask the user / PR metadata / repo docs / branch config / recent history — do NOT assume `main`) and the first lap/try in this batch; treat earlier branch work as pre-existing. Diff with `git diff \u003ctarget\u003e...HEAD`.\n\nVerify by tracing real behaviour, not just green tests: `archguard --ci` exits 0 on the clean tree; `--report` output matches the committed grandfather map (regenerate and compare); the import rules match the current production graph (`go list ... .Imports` only) — spot-check the flagship `relay ↛ relay/runner`, `release ↛ app`, `app ↛ {cli, user_prompt, laps}`, and the no-`internal/*`-imports-`cli` edges; dep confinement is test-inclusive; the testutil rule is production-only; every rule class has a fixture asserting diagnostic TEXT; stdlib-only (`go mod tidy` no diff); archguard's own files are under budget. Smoke: scratch-bump a grandfathered file and a normal file → `--ci` fails with actionable text; revert. Run `go test -count=1 ./...`, `go vet ./...`, `gofmt -l .` empty.\n\nCheck off the tasks.md boxes for 1.1–1.4, 2.1–2.4, 3.1–3.2, 4.1–4.5 that you verified are correctly and thoroughly done; do not tick boxes for merely-attempted work. Fix only tiny safe one-liners; anything larger becomes a new focused lap added to the head of the queue (`laps add head ...`). Do not rewrite git history.",
+      "assignee": "VERIFY",
+      "isDone": false,
+      "order": 327680,
+      "createdAt": "2026-07-01T00:48:39.074255185Z",
+      "updatedAt": "2026-07-01T00:48:39.074255185Z",
+      "completedAt": null
+    },
+    {
+      "id": "rall-684b",
+      "title": "Wire arch-check into just + CI, and document the policy",
+      "description": "Context: Phase 4 plus docs. Read design.md Decision 6, the Local and CI wiring requirement in `specs/architecture-guardrails/spec.md`, and tasks 5.1, 5.2, 6.2. Today the `justfile` recipe is `check: vet` with a `gofmt -l .` assertion in the body, and the CI `lint` job in `.github/workflows/test.yml` runs `go vet` and a formatting check.\n\nOutcome: `just arch-check` runs the checker in advisory mode; `just check` invokes it after its formatting assertion; the `lint` CI job runs `archguard --ci`; and the policy is briefly documented.\n\nFiles \u0026 scope: `justfile`, `.github/workflows/test.yml`, and README/architecture docs. Do NOT touch `tools/archguard` logic or any runtime file.\n\nDesign: `just arch-check` → `go run ./tools/archguard` (advisory: warnings + hard). Add `just arch-check` INSIDE the `check` recipe body AFTER the `gofmt -l .` assertion (not as a Just dependency that would run before formatting), preserving the `check: vet` ordering so a local `just check` is a faithful mirror of CI. Add an `archguard` step to the existing `lint` job running `go run ./tools/archguard --ci` — no new job, no new required check beyond `lint`, and the trigger surface (push to `dev`/`main`, PRs) unchanged. Docs (6.2): a brief README/architecture note on `just arch-check` and the budget/boundary policy, pointing at `tools/archguard` as the source of truth for caps and rules.\n\nAcceptance: `just check` is green and now runs arch-check; `just arch-check` runs; the workflow diff adds only the one step; the README section is added. Reports tasks 5.1, 5.2, 6.2 — do not tick tasks.md.",
+      "assignee": "JUNIOR",
+      "isDone": false,
+      "order": 393216,
+      "createdAt": "2026-07-01T00:48:39.074256053Z",
+      "updatedAt": "2026-07-01T00:48:39.074256053Z",
+      "completedAt": null
+    },
+    {
+      "id": "rall-eac5",
+      "title": "Final full-change verification",
+      "description": "Run the complete `openspec-verify-change` skill against `add-architecture-guardrails` and inspect the WHOLE diff.\n\nIdentify the intended merge target first (do NOT assume `main`) and the first lap/try in this batch; treat earlier branch work as pre-existing. Diff with `git diff \u003ctarget\u003e...HEAD`.\n\nConfirm the whole outcome (tasks 6.1, 6.3): `go test -count=1 ./...` (includes `tools/archguard`), `go vet ./...`, `gofmt -l .` empty, `go run ./tools/archguard --ci` exit 0, `just check` green, `go mod tidy` no diff. Confirm the tooling-only contract: NO Rally runtime file changed (the diff touches only `tools/archguard/**`, `justfile`, the CI workflow, and docs); `internal/buildinfo/VERSION` untouched; no release implied; `tools/archguard` is not compiled into `cmd/rally` or shipped by GoReleaser. Re-check that `just check` and the `lint` job are faithful mirrors and that CI hard-fails only on hard violations, never on advisory size warnings.\n\nCheck off any remaining tasks.md boxes (5.1, 5.2, 6.1, 6.2, 6.3, plus anything from sections 1–4 not already ticked) that you verified as correct and thorough. Create head laps (`laps add head ...`) for substantive gaps rather than fixing beyond tiny one-liners. Do not rewrite git history.",
+      "assignee": "VERIFY",
+      "isDone": false,
+      "order": 458752,
+      "createdAt": "2026-07-01T00:48:39.074257953Z",
+      "updatedAt": "2026-07-01T00:48:39.074257953Z",
+      "completedAt": null
     }
   ]
 }
