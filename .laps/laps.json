@@ -862,11 +862,11 @@
       "title": "Phase 5: update archguard policy tables and regenerate the grandfather map",
       "description": "Context: modularize-harness-adapters tasks.md section 6 (6.1, 6.2); design.md Decision 8 and the harness-module-structure guardrail requirement. This is the lap that turns archguard --ci GREEN again by matching policy to the new production graph and ratchets away the opencode.go cap. Depends on Phases 1-4 (all packages exist, internal/agent gone).\n\nOutcome: tools/archguard policy tables carry the new-package allow-lists and the swapped consumer allow-lists (agent to harnessapi); the adapter-confinement diagnostic has an architectural reason; the grandfather baseline is regenerated with the internal/agent entries gone and no internal/harness/** entry needed; go run ./tools/archguard --ci exits 0.\n\nFiles \u0026 scope:\n- tools/archguard/policy/imports.go: add allow-list entries - harnessapi: {agent_prompt, reliability, textutil}; harness/process: {reliability}; each adapter (claude, codex, opencode, antigravity, generic): {harnessapi, harness/process, reliability}; fixture: {harnessapi}; the harness registry: {harnessapi, harness/claude, harness/codex, harness/opencode, harness/antigravity, harness/generic}. Swap agent to harnessapi in the config, routing, relay, relay/runner, and app allow-lists (use design.md Decision 8's table for the exact per-package sets). Keep the existing _test.go exemption for import-boundary allow-lists explicit, and give the adapter-confinement diagnostic a clear architectural reason (harness adapters must not depend on relay/runtime/presentation; they execute and return typed evidence).\n- Update the pinned archguard policy tests that assert these tables.\n- tools/archguard/baseline.go: regenerate via go run ./tools/archguard --report against HEAD; confirm the internal/agent/opencode.go (801) and internal/agent/agent_test.go entries are gone (agent removed) and that no internal/harness/** production or _test file needs a new grandfather entry.\n\nDesign: Policy-table update only - the architecture-guardrails spec already mandates tight per-package allow-lists, so do NOT modify that spec. Sanity-check that the confinement diagnostic actually fires: a production internal/harness/* file importing relay/config/store/etc. must hard-fail with the architectural message.\n\nAcceptance: go run ./tools/archguard --ci exits 0 (green again); go test -count=1 ./tools/archguard/...; just check green. Do not tick tasks.md.",
       "assignee": "SENIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 786432,
       "createdAt": "2026-07-01T12:04:05.930635595Z",
-      "updatedAt": "2026-07-01T12:04:05.930635595Z",
-      "completedAt": null
+      "updatedAt": "2026-07-01T15:33:47.946243843Z",
+      "completedAt": "2026-07-01T15:33:47.946243843Z"
     },
     {
       "id": "rall-9ddc",
