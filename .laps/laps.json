@@ -730,11 +730,11 @@
       "title": "Re-verify full add-architecture-guardrails diff scope",
       "description": "After the branch-scope cleanup lands, re-run full verification for add-architecture-guardrails against the intended merge target. Confirm git diff origin/dev...HEAD is limited to tools/archguard/**, justfile, .github/workflows/test.yml, README/docs, and expected planning/state files; confirm internal/buildinfo/VERSION remains untouched, tools/archguard is not built into cmd/rally or GoReleaser, and the full command suite still passes (go test -count=1 ./..., go vet ./..., gofmt -l ., go run ./tools/archguard --ci, just check, go mod tidy no diff). Then close 6.3 if clean.",
       "assignee": "VERIFY",
-      "isDone": false,
+      "isDone": true,
       "order": 425984,
       "createdAt": "2026-07-01T05:41:39.307399936Z",
-      "updatedAt": "2026-07-01T05:41:39.307399936Z",
-      "completedAt": null
+      "updatedAt": "2026-07-01T05:46:55.995017807Z",
+      "completedAt": "2026-07-01T05:46:55.995017807Z"
     }
   ]
 }

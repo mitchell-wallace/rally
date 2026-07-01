@@ -34,4 +34,4 @@
 
 - [x] 6.1 `go test -count=1 ./...` (includes `tools/archguard`), `go vet ./...`, `gofmt -l .` empty, `go run ./tools/archguard --ci` exit 0, `just check` green, `go mod tidy` no diff.
 - [x] 6.2 Document `just arch-check` and the budget/boundary policy briefly in README (or the architecture section), pointing at `tools/archguard` as the source of truth for caps and rules.
-- [ ] 6.3 Confirm no Rally runtime file changed, `internal/buildinfo/VERSION` is untouched, and no release is implied by this change.
+- [x] 6.3 Confirm no Rally runtime file changed, `internal/buildinfo/VERSION` is untouched, and no release is implied by this change.
