@@ -10,7 +10,7 @@
 - [x] 2.1 Create `tools/archguard` as `package main` in the existing module, standard-library-only (for example `go/parser`, `go/token`, `go/ast`, `os`, `path/filepath`, `bufio`, `strings`, plus normal CLI/reporting stdlib packages such as `flag`, `fmt`, and `sort`). Confirm `go mod tidy` produces no diff (no new dependency).
 - [x] 2.2 Implement the repo walk: skip `// Code generated` files, `testdata`, `vendor`, build output, and hidden dirs (`.git`, `.rally`, `.laps`). Parse imports with `parser.ImportsOnly`; count physical lines (newline count, matching `wc -l`).
 - [x] 2.3 Implement the policy engine as a testable unit (exported funcs or a `policy` sub-package): file-size budgets, grandfather map, import-boundary rules, dependency-confinement rules, and `testutil` confinement. Each violation carries a human-readable architectural reason (see `design.md` Diagnostics format).
-- [ ] 2.4 Implement run modes: default (warnings + hard, non-zero exit on hard), `--report` (print over-budget files as a paste-ready grandfather map + any import/dep violations), `--ci` (hard-only exit; warnings printed but never fail). Keep `tools/archguard`'s own files under budget.
+- [x] 2.4 Implement run modes: default (warnings + hard, non-zero exit on hard), `--report` (print over-budget files as a paste-ready grandfather map + any import/dep violations), `--ci` (hard-only exit; warnings printed but never fail). Keep `tools/archguard`'s own files under budget.
 
 ## 3. Phase 2 — file-size budgets with grandfathered baseline
 
@@ -27,11 +27,11 @@
 
 ## 5. Phase 4 — local + CI wiring
 
-- [ ] 5.1 Add a `just arch-check` recipe (`go run ./tools/archguard`) and invoke `just arch-check` from the existing `check: vet` recipe body after the `gofmt -l .` assertion, matching the current `justfile` ordering. `just check` stays green.
-- [ ] 5.2 Add an `archguard` step to the `lint` job in `.github/workflows/test.yml` running `go run ./tools/archguard --ci`. No new job, no new required check beyond `lint`; trigger surface (push to `dev`/`main`, PRs) unchanged.
+- [x] 5.1 Add a `just arch-check` recipe (`go run ./tools/archguard`) and invoke `just arch-check` from the existing `check: vet` recipe body after the `gofmt -l .` assertion, matching the current `justfile` ordering. `just check` stays green.
+- [x] 5.2 Add an `archguard` step to the `lint` job in `.github/workflows/test.yml` running `go run ./tools/archguard --ci`. No new job, no new required check beyond `lint`; trigger surface (push to `dev`/`main`, PRs) unchanged.
 
 ## 6. Verification & docs
 
-- [ ] 6.1 `go test -count=1 ./...` (includes `tools/archguard`), `go vet ./...`, `gofmt -l .` empty, `go run ./tools/archguard --ci` exit 0, `just check` green, `go mod tidy` no diff.
-- [ ] 6.2 Document `just arch-check` and the budget/boundary policy briefly in README (or the architecture section), pointing at `tools/archguard` as the source of truth for caps and rules.
+- [x] 6.1 `go test -count=1 ./...` (includes `tools/archguard`), `go vet ./...`, `gofmt -l .` empty, `go run ./tools/archguard --ci` exit 0, `just check` green, `go mod tidy` no diff.
+- [x] 6.2 Document `just arch-check` and the budget/boundary policy briefly in README (or the architecture section), pointing at `tools/archguard` as the source of truth for caps and rules.
 - [ ] 6.3 Confirm no Rally runtime file changed, `internal/buildinfo/VERSION` is untouched, and no release is implied by this change.

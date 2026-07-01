@@ -708,10 +708,32 @@
       "title": "Final full-change verification",
       "description": "Run the complete `openspec-verify-change` skill against `add-architecture-guardrails` and inspect the WHOLE diff.\n\nIdentify the intended merge target first (do NOT assume `main`) and the first lap/try in this batch; treat earlier branch work as pre-existing. Diff with `git diff \u003ctarget\u003e...HEAD`.\n\nConfirm the whole outcome (tasks 6.1, 6.3): `go test -count=1 ./...` (includes `tools/archguard`), `go vet ./...`, `gofmt -l .` empty, `go run ./tools/archguard --ci` exit 0, `just check` green, `go mod tidy` no diff. Confirm the tooling-only contract: NO Rally runtime file changed (the diff touches only `tools/archguard/**`, `justfile`, the CI workflow, and docs); `internal/buildinfo/VERSION` untouched; no release implied; `tools/archguard` is not compiled into `cmd/rally` or shipped by GoReleaser. Re-check that `just check` and the `lint` job are faithful mirrors and that CI hard-fails only on hard violations, never on advisory size warnings.\n\nCheck off any remaining tasks.md boxes (5.1, 5.2, 6.1, 6.2, 6.3, plus anything from sections 1–4 not already ticked) that you verified as correct and thorough. Create head laps (`laps add head ...`) for substantive gaps rather than fixing beyond tiny one-liners. Do not rewrite git history.",
       "assignee": "VERIFY",
-      "isDone": false,
+      "isDone": true,
       "order": 458752,
       "createdAt": "2026-07-01T00:48:39.074257953Z",
-      "updatedAt": "2026-07-01T00:48:39.074257953Z",
+      "updatedAt": "2026-07-01T05:41:51.220112965Z",
+      "completedAt": "2026-07-01T05:41:51.220112965Z"
+    },
+    {
+      "id": "work-8445",
+      "title": "Restore tooling-only diff scope for add-architecture-guardrails",
+      "description": "Whole-diff verify against origin/dev found one branch-scope contract gap: git diff origin/dev...HEAD still includes internal/relay/relay_test.go (format-only preflight cleanup from relay-3 run 2), so the branch as-is does not satisfy the change requirement that the tooling-only diff touch only tools/archguard/**, justfile, CI workflow, and docs. Resolve this additively without rewriting history: either land/rebase the preflight formatting fix outside this change's merge surface or otherwise make the final merge diff for add-architecture-guardrails exclude internal/relay/relay_test.go while keeping gofmt -l . green. Re-run git diff origin/dev...HEAD, gofmt -l ., go run ./tools/archguard --ci, and just check after the branch-scope cleanup.",
+      "assignee": "SENIOR",
+      "isDone": false,
+      "order": 393216,
+      "createdAt": "2026-07-01T05:41:25.542047742Z",
+      "updatedAt": "2026-07-01T05:41:25.542047742Z",
+      "completedAt": null
+    },
+    {
+      "id": "work-01c7",
+      "title": "Re-verify full add-architecture-guardrails diff scope",
+      "description": "After the branch-scope cleanup lands, re-run full verification for add-architecture-guardrails against the intended merge target. Confirm git diff origin/dev...HEAD is limited to tools/archguard/**, justfile, .github/workflows/test.yml, README/docs, and expected planning/state files; confirm internal/buildinfo/VERSION remains untouched, tools/archguard is not built into cmd/rally or GoReleaser, and the full command suite still passes (go test -count=1 ./..., go vet ./..., gofmt -l ., go run ./tools/archguard --ci, just check, go mod tidy no diff). Then close 6.3 if clean.",
+      "assignee": "VERIFY",
+      "isDone": false,
+      "order": 425984,
+      "createdAt": "2026-07-01T05:41:39.307399936Z",
+      "updatedAt": "2026-07-01T05:41:39.307399936Z",
       "completedAt": null
     }
   ]
