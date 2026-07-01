@@ -884,11 +884,11 @@
       "title": "Final full-change verification",
       "description": "Whole-outcome verification of the modularize-harness-adapters refactor (tasks.md section 8: 8.1-8.3). Run the full openspec-verify-change skill against modularize-harness-adapters and inspect the entire diff.\n\nChecks:\n- go test -count=1 ./...; go vet ./...; gofmt -l . empty; go mod tidy produces no diff (no dependency added/removed); go run ./tools/archguard --ci exits 0 (MUST be green now that Phase 5 landed); just check green.\n- go test -race -shuffle=on -count=1 ./internal/harness/... ./internal/relay/... ./internal/app to catch relocation-induced races in the moved subprocess/log code.\n- Behaviour preservation (8.3): confirm NO CLI flag, config schema/semantic, telemetry field/activation, prompt-content, store-shape, or agent-authored-commit-message change; internal/buildinfo/VERSION untouched; no release implied. Trace concretely: BuildPrompt output is identical, each adapter's CLI flags are unchanged, and the internal/reliability per-harness parsers remain in internal/reliability.\n- Confirm the final package graph: harnessapi contract clean; each adapter confined to {harnessapi, harness/process, reliability}; the harness layer free of internal/config; internal/agent gone; the opencode.go grandfather entry removed and no new internal/harness/** grandfather entry.\n\nBranch-target awareness: resolve the merge target (user/PR/repo docs/branch config/history; not assumed main) and inspect the full git diff \u003ctarget\u003e...HEAD. Identify the first lap/try of THIS batch and treat earlier branch work as pre-existing unless the user asks to include it. Do NOT rewrite git history - substantive gaps become focused head laps using additive/revert commits, not silent fixes.\n\ntasks.md: check off section 6 (6.1, 6.2), section 7 (7.1, 7.2), and section 8 (8.1-8.3) boxes for work verified correct and complete, and confirm the whole tasks.md is complete only for work genuinely verified.",
       "assignee": "VERIFY",
-      "isDone": false,
+      "isDone": true,
       "order": 917504,
       "createdAt": "2026-07-01T12:04:05.930637014Z",
-      "updatedAt": "2026-07-01T12:04:05.930637014Z",
-      "completedAt": null
+      "updatedAt": "2026-07-01T15:42:26.031084584Z",
+      "completedAt": "2026-07-01T15:42:26.031084584Z"
     }
   ]
 }

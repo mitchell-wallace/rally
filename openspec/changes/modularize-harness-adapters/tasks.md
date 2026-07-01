@@ -34,16 +34,16 @@
 
 ## 6. Phase 5 — architecture guardrails
 
-- [ ] 6.1 Update `tools/archguard` policy tables and their pinned tests: add the new-package production internal allow-lists (`harnessapi`; `harness/process`; each adapter; the `harness` registry) and swap `agent` → `harnessapi` in the `config`/`routing`/`relay`/`relay/runner`/`app` allow-lists, per `design.md` Decision 8. Give the adapter-confinement diagnostic an architectural reason and keep the existing `_test.go` exemption for import-boundary allow-lists explicit.
-- [ ] 6.2 Regenerate the grandfather map with `go run ./tools/archguard --report` against HEAD; confirm the `internal/agent/opencode.go` (801) entry is gone and no `internal/harness/**` file needs a new grandfather entry. `go run ./tools/archguard --ci` exits 0.
+- [x] 6.1 Update `tools/archguard` policy tables and their pinned tests: add the new-package production internal allow-lists (`harnessapi`; `harness/process`; each adapter; the `harness` registry) and swap `agent` → `harnessapi` in the `config`/`routing`/`relay`/`relay/runner`/`app` allow-lists, per `design.md` Decision 8. Give the adapter-confinement diagnostic an architectural reason and keep the existing `_test.go` exemption for import-boundary allow-lists explicit.
+- [x] 6.2 Regenerate the grandfather map with `go run ./tools/archguard --report` against HEAD; confirm the `internal/agent/opencode.go` (801) entry is gone and no `internal/harness/**` file needs a new grandfather entry. `go run ./tools/archguard --ci` exits 0.
 
 ## 7. Phase 6 — durable guidance
 
-- [ ] 7.1 Update the README architecture section: `internal/agent` → `internal/harnessapi` (contract) + `internal/harness/*` (adapters + registry), and update the import-chain description.
-- [ ] 7.2 Update the `add-new-harness` skill so "add a harness" is "add an `internal/harness/<name>` module (with `New`/`Executor` + local parsing) and register it in `internal/harness.BuildExecutors`," and refresh any `internal/agent` references it and `test-driving-rally`/`phone-a-friend` carry.
+- [x] 7.1 Update the README architecture section: `internal/agent` → `internal/harnessapi` (contract) + `internal/harness/*` (adapters + registry), and update the import-chain description.
+- [x] 7.2 Update the `add-new-harness` skill so "add a harness" is "add an `internal/harness/<name>` module (with `New`/`Executor` + local parsing) and register it in `internal/harness.BuildExecutors`," and refresh any `internal/agent` references it and `test-driving-rally`/`phone-a-friend` carry.
 
 ## 8. Verification
 
-- [ ] 8.1 `go test -count=1 ./...`, `go vet ./...`, `gofmt -l .` empty, `go mod tidy` no diff (no dependency added/removed), `go run ./tools/archguard --ci` exit 0, `just check` green.
-- [ ] 8.2 `go test -race -shuffle=on -count=1 ./internal/harness/... ./internal/relay/... ./internal/app` to catch relocation-induced races in the moved subprocess/log code.
-- [ ] 8.3 Confirm behaviour preservation: no CLI flag, config-schema/semantic, telemetry-field/activation, prompt-content, store-shape, or agent-commit-message change; `internal/buildinfo/VERSION` untouched; no release implied.
+- [x] 8.1 `go test -count=1 ./...`, `go vet ./...`, `gofmt -l .` empty, `go mod tidy` no diff (no dependency added/removed), `go run ./tools/archguard --ci` exit 0, `just check` green.
+- [x] 8.2 `go test -race -shuffle=on -count=1 ./internal/harness/... ./internal/relay/... ./internal/app` to catch relocation-induced races in the moved subprocess/log code.
+- [x] 8.3 Confirm behaviour preservation: no CLI flag, config-schema/semantic, telemetry-field/activation, prompt-content, store-shape, or agent-commit-message change; `internal/buildinfo/VERSION` untouched; no release implied.
