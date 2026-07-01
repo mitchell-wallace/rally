@@ -7,11 +7,9 @@
 // layer a small, unit-testable unit: a test can construct FileInfo values and
 // rules directly, without touching the filesystem walk or the CLI.
 //
-// This is the scaffolding lap: the engine, the Rule/Reporter seam, and the
-// Violation formatting are in place, but no concrete rule classes (file-size
-// budgets, import-boundary rules, dependency confinement, testutil confinement)
-// are populated yet. Those land in later laps by adding Rule implementations to
-// this package and registering them with the Engine.
+// Concrete rules live in this package: SizeBudget (file-size budgets with a
+// grandfathered baseline) is here now; the import-boundary,
+// dependency-confinement, and testutil-confinement rules land in later laps.
 package policy
 
 import (

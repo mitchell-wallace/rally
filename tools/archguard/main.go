@@ -18,10 +18,10 @@
 //	archguard --ci       print warnings and hard violations, but exit non-zero
 //	                     only on hard violations (warnings never fail CI).
 //
-// This is the scaffolding lap: the walk, parse, line count, policy-engine seam,
-// and all three modes are in place, but no concrete rule classes are registered
-// yet (see rules below). With no rules, every mode reports nothing and exits
-// zero. Later laps populate rules() and the reporting is exercised in full.
+// The size-budget rule (with its grandfathered baseline) is registered; the
+// import-boundary, dependency-confinement, and testutil rules land in later
+// laps. Until then, `--report` prints the size grandfather map and the other
+// sections remain empty.
 package main
 
 import (
@@ -33,6 +33,15 @@ import (
 
 	"github.com/mitchell-wallace/rally/tools/archguard/policy"
 )
+
+// rules returns the policy rules the engine enforces, in evaluation order. The
+// size-budget rule is the first concrete rule: later laps append the import-
+// boundary, dependency-confinement, and testutil rules.
+func rules() []policy.Rule {
+	return []policy.Rule{
+		policy.NewSizeBudget(grandfather),
+	}
+}
 
 // runMode selects the output/exit behaviour.
 type runMode int
@@ -82,13 +91,20 @@ func Main(args []string, stdout, stderr io.Writer) int {
 // the exit code. Separated from Main so tests can drive it against a fixture
 // tree without depending on the working directory.
 func runAt(root string, mode runMode, stdout, stderr io.Writer) int {
+	return runWithRules(root, mode, stdout, stderr, rules())
+}
+
+// runWithRules is runAt with an explicit rule set, so tests can drive the full
+// scan->policy->print->exit flow with a size rule carrying a custom grandfather
+// map (the real `runAt` always uses the committed baseline).
+func runWithRules(root string, mode runMode, stdout, stderr io.Writer, rs []policy.Rule) int {
 	files, err := scanRepo(root)
 	if err != nil {
 		fmt.Fprintf(stderr, "archguard: scan: %v\n", err)
 		return 2
 	}
 
-	engine := policy.NewEngine(rules()...)
+	engine := policy.NewEngine(rs...)
 	violations := engine.Check(files)
 
 	if mode == modeReport {
@@ -102,14 +118,6 @@ func runAt(root string, mode runMode, stdout, stderr io.Writer) int {
 		return 1
 	}
 	return 0
-}
-
-// rules returns the policy rules the engine enforces. It is the registration
-// seam: later laps populate it with the size-budget, import-boundary,
-// dependency-confinement, and testutil-confinement rules. It is intentionally
-// empty in this scaffolding lap.
-func rules() []policy.Rule {
-	return nil
 }
 
 // printViolations writes each violation on its own line. With no violations it

@@ -7,8 +7,9 @@ import (
 )
 
 // TestRunAtAllModesCleanTree drives all three run modes against the fixture
-// tree. With no rules registered (this scaffolding lap) every mode must run
-// without panicking, exit zero, and print nothing.
+// tree. The tree's files are all well under every size budget and not
+// grandfathered, so every mode must run without panicking, exit zero, and print
+// nothing (the size rule finds nothing to report).
 func TestRunAtAllModesCleanTree(t *testing.T) {
 	root := filepath.Join("testdata", "tree")
 	modes := map[string]runMode{
