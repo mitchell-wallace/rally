@@ -132,13 +132,25 @@ func printViolations(w io.Writer, vs []policy.Violation) {
 }
 
 // printReport writes the paste-ready reporter sections (e.g. the regeneratable
-// grandfather map) followed by any violations, for use in regenerating the
-// committed baseline.
+// grandfather map) followed by hard non-size violations. Size findings are
+// already represented by the regenerated map, and advisory warnings would make
+// baseline regeneration noisy.
 func printReport(w io.Writer, engine *policy.Engine, files []policy.FileInfo, vs []policy.Violation) {
 	for _, section := range engine.Reports(files) {
 		fmt.Fprintln(w, section)
 	}
-	printViolations(w, vs)
+	printViolations(w, reportModeViolations(vs))
+}
+
+func reportModeViolations(vs []policy.Violation) []policy.Violation {
+	var out []policy.Violation
+	for _, v := range vs {
+		if v.Severity != policy.Hard || v.Category == "size" {
+			continue
+		}
+		out = append(out, v)
+	}
+	return out
 }
 
 // findRepoRoot walks up from the working directory to the module root (the

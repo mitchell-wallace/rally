@@ -191,6 +191,7 @@ func TestSizeBudgetReportRegeneratesMap(t *testing.T) {
 	for _, want := range []string{
 		"`archguard --report`",
 		"Ratchet the cap down, never up.",
+		"var grandfather = map[string]int{",
 		// Values align to the longest key exactly as gofmt would, so pasting
 		// the section straight into baseline.go is byte-for-byte clean.
 		`"internal/agent/agent_test.go":     2812,`,
@@ -207,6 +208,7 @@ func TestSizeBudgetReportRegeneratesMap(t *testing.T) {
 	// The map-literal body must be gofmt-clean: reformatting it through go/format
 	// is a no-op. This is what keeps the regenerated block byte-for-byte
 	// identical to the committed, gofmt'd baseline.go.
+	assertReportSnippetFormats(t, got)
 	assertBodyGofmtClean(t, got)
 }
 
@@ -230,10 +232,18 @@ func TestSizeBudgetReportAlignsMixedKeyWidths(t *testing.T) {
 	if !strings.Contains(got, `"internal/relay/runner/run_one.go": 1510,`) {
 		t.Errorf("longest key spacing wrong\ngot:\n%s", got)
 	}
+	assertReportSnippetFormats(t, got)
 	assertBodyGofmtClean(t, got)
 }
 
-// assertBodyGofmtClean extracts the `grandfather = map[string]int{ ... }` body
+func assertReportSnippetFormats(t *testing.T, report string) {
+	t.Helper()
+	if _, err := format.Source([]byte("package main\n\n" + report)); err != nil {
+		t.Fatalf("report snippet is not valid Go for baseline.go: %v\nsrc:\n%s", err, report)
+	}
+}
+
+// assertBodyGofmtClean extracts the `var grandfather = map[string]int{ ... }` body
 // from a --report section, wraps it in a trivial Go file, formats it through
 // go/format, and re-extracts the body. A gofmt-clean body is unchanged by the
 // round-trip (so pasting it into baseline.go never dirties the file). Comparing
@@ -255,7 +265,7 @@ func assertBodyGofmtClean(t *testing.T, report string) {
 }
 
 // extractReportBody pulls the indented entry lines out of a --report grandfather
-// section (between the `grandfather = map[string]int{` line and the closing `}`).
+// section (between the `var grandfather = map[string]int{` line and the closing `}`).
 func extractReportBody(t *testing.T, report string) string {
 	t.Helper()
 	var b strings.Builder

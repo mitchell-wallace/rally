@@ -126,6 +126,31 @@ func TestImportBoundaryFlagshipEdgesComplete(t *testing.T) {
 	}
 }
 
+// TestImportBoundaryAllowListMatchesDecision4 pins the per-package production
+// allow-list to the OpenSpec Decision 4 table. This guards against accidentally
+// broadening the current-graph baseline while the self-check below only proves
+// that the encoded edges pass.
+func TestImportBoundaryAllowListMatchesDecision4(t *testing.T) {
+	want := map[string]map[string]bool{
+		"agent":                  {"agent_prompt": true, "reliability": true, "textutil": true},
+		"config":                 {"agent": true, "routing": true, "store": true},
+		"routing":                {"agent": true},
+		"store":                  {"reliability": true, "textutil": true},
+		"reliability":            {"monitor": true},
+		"laps":                   {"release": true},
+		"progress":               {"laps": true, "store": true},
+		"telemetry":              {"buildinfo": true},
+		"release":                {"buildinfo": true},
+		"user_prompt/roleloader": {"store": true},
+		"relay":                  {"agent": true, "store": true},
+		"relay/runner":           {"agent": true, "agent_prompt": true, "gitx": true, "keyboard": true, "laps": true, "monitor": true, "progress": true, "relay": true, "reliability": true, "routing": true, "store": true, "style": true, "telemetry": true, "textutil": true, "user_prompt/roleloader": true},
+		"app":                    {"agent": true, "config": true, "relay": true, "relay/runner": true, "routing": true, "store": true, "telemetry": true},
+	}
+	if !reflect.DeepEqual(allowList, want) {
+		t.Errorf("allowList:\n got %+v\nwant %+v", allowList, want)
+	}
+}
+
 // TestImportBoundaryCLIDenyDirection confirms the no-internal-imports-cli rule:
 // any internal package importing internal/cli hard-fails, but cmd/rally (the
 // process composition root) is exempt.

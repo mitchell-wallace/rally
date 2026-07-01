@@ -169,6 +169,25 @@ func TestSizeIntegrationReportRegeneratesMap(t *testing.T) {
 	if !strings.Contains(out, "Ratchet the cap down, never up.") {
 		t.Errorf("--report missing ratchet header:\ngot %q", out)
 	}
+	if !strings.Contains(out, "var grandfather = map[string]int{") {
+		t.Errorf("--report missing paste-ready var declaration:\ngot %q", out)
+	}
+}
+
+// TestSizeIntegrationReportOmitsSizeWarnings confirms --report stays focused on
+// baseline regeneration: warning-only size findings do not get appended after
+// the grandfather map section.
+func TestSizeIntegrationReportOmitsSizeWarnings(t *testing.T) {
+	dir := t.TempDir()
+	writeLinesFile(t, dir, "internal/store/medium.go", 600, "store")
+
+	code, out := runSize(t, dir, modeReport)
+	if code != 0 {
+		t.Errorf("--report = %d, want 0", code)
+	}
+	if strings.TrimSpace(out) != "" {
+		t.Errorf("--report should omit size warnings, got:\n%s", out)
+	}
 }
 
 // TestSizeIntegrationGeneratedExempt confirms a generated file over the budget

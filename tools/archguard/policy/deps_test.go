@@ -116,6 +116,52 @@ func TestDepConfinementEachDepOwnerPasses(t *testing.T) {
 	}
 }
 
+func TestDepConfinementEachDepDiagnosticText(t *testing.T) {
+	cases := []struct {
+		name string
+		imp  string
+		want string
+	}{
+		{
+			name: "New Relic",
+			imp:  "github.com/newrelic/go-agent/v3/newrelic",
+			want: "imports github.com/newrelic/go-agent/v3/newrelic — New Relic is owned by internal/telemetry; adapters return typed evidence and let relay/runtime emit telemetry",
+		},
+		{
+			name: "go-toml",
+			imp:  "github.com/pelletier/go-toml/v2",
+			want: "imports github.com/pelletier/go-toml/v2 — go-toml is owned by internal/config; keep TOML decoding in the config layer",
+		},
+		{
+			name: "cobra",
+			imp:  "github.com/spf13/cobra",
+			want: "imports github.com/spf13/cobra — cobra is owned by cmd/rally, internal/cli, internal/progress; it is the CLI framework; only command-shaped packages may depend on it",
+		},
+		{
+			name: "huh",
+			imp:  "github.com/charmbracelet/huh",
+			want: "imports github.com/charmbracelet/huh — huh is owned by internal/cli, internal/user_prompt; it is the interactive-prompt library; only prompt packages may depend on it",
+		},
+		{
+			name: "lipgloss",
+			imp:  "github.com/charmbracelet/lipgloss",
+			want: "imports github.com/charmbracelet/lipgloss — lipgloss is owned by internal/cli, internal/style; keep presentation logic in the presentation layer",
+		},
+	}
+	r := NewDependencyConfinement()
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got := r.Check([]FileInfo{depFile("internal/agent", c.imp)})
+			if len(got) != 1 {
+				t.Fatalf("want 1 violation, got %d: %+v", len(got), got)
+			}
+			if got[0].Reason != c.want {
+				t.Errorf("Reason:\n got %q\nwant %q", got[0].Reason, c.want)
+			}
+		})
+	}
+}
+
 // TestDepConfinementMajorVersionSubpathsMatched confirms the module-path prefix
 // matching covers the major-version subpaths actually used in the tree (New
 // Relic v3, go-toml v2), so an aliased/major-version import is still confined.
@@ -187,12 +233,13 @@ func TestDepConfinementTableMatchesDecision5(t *testing.T) {
 		prefix string
 		name   string
 		owners []string
+		why    string
 	}{
-		{"github.com/newrelic/go-agent", "New Relic", []string{"internal/telemetry"}},
-		{"github.com/pelletier/go-toml", "go-toml", []string{"internal/config"}},
-		{"github.com/spf13/cobra", "cobra", []string{"cmd/rally", "internal/cli", "internal/progress"}},
-		{"github.com/charmbracelet/huh", "huh", []string{"internal/cli", "internal/user_prompt"}},
-		{"github.com/charmbracelet/lipgloss", "lipgloss", []string{"internal/style", "internal/cli"}},
+		{"github.com/newrelic/go-agent", "New Relic", []string{"internal/telemetry"}, "adapters return typed evidence and let relay/runtime emit telemetry"},
+		{"github.com/pelletier/go-toml", "go-toml", []string{"internal/config"}, "keep TOML decoding in the config layer"},
+		{"github.com/spf13/cobra", "cobra", []string{"cmd/rally", "internal/cli", "internal/progress"}, "it is the CLI framework; only command-shaped packages may depend on it"},
+		{"github.com/charmbracelet/huh", "huh", []string{"internal/cli", "internal/user_prompt"}, "it is the interactive-prompt library; only prompt packages may depend on it"},
+		{"github.com/charmbracelet/lipgloss", "lipgloss", []string{"internal/style", "internal/cli"}, "keep presentation logic in the presentation layer"},
 	}
 	got := confinedDepsForTest()
 	if len(got) != len(want) {
@@ -210,8 +257,8 @@ func TestDepConfinementTableMatchesDecision5(t *testing.T) {
 		if !reflect.DeepEqual(gotOwners, wantOwners) {
 			t.Errorf("row %d (%s) owners:\n got %v\nwant %v", i, w.name, gotOwners, wantOwners)
 		}
-		if strings.TrimSpace(g.why) == "" {
-			t.Errorf("row %d (%s): why must be non-empty", i, w.name)
+		if g.why != w.why {
+			t.Errorf("row %d (%s) why:\n got %q\nwant %q", i, w.name, g.why, w.why)
 		}
 	}
 }

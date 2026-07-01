@@ -201,6 +201,6 @@ require a release.
 #### Scenario: No runtime or version change
 
 - **WHEN** the diff of the change is reviewed
-- **THEN** it touches only `tools/archguard/**`, the `justfile`, the CI workflow,
-  and documentation; `internal/buildinfo/VERSION` is unchanged; and the released
-  binary's behaviour is unaffected
+- **THEN** it changes no Rally runtime files, touches no release packaging, leaves
+  `internal/buildinfo/VERSION` unchanged, and the released binary's behaviour is
+  unaffected
