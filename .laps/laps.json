@@ -829,11 +829,11 @@
       "title": "Phase 4: harness registry, app mapper, and removal of internal/agent",
       "description": "Context: modularize-harness-adapters tasks.md section 5 (5.1-5.3); design.md Decision 5 and the harness-module-structure + composition-root-structure specs. This introduces the only genuinely new logic in the change (the construction registry and the config translation) and removes the emptied internal/agent. Depends on Phases 1-3.\n\nOutcome: internal/harness.BuildExecutors(Config) map[string]harnessapi.Executor builds the four built-ins by canonical name plus one generic adapter per custom entry; harness.Config and GenericConfig are defined; internal/app.BuildExecutors becomes a thin config.V2Config to harness.Config mapper preserving the exact prior executor set and keys; internal/agent is removed with no shim; tree green and no internal/agent import remains.\n\nFiles \u0026 scope:\n- internal/harness/registry.go (package harness): BuildExecutors(cfg Config); Config{ClaudeModel, CodexModel, OpenCodeModel, AntigravityModel string; Custom map[string]GenericConfig}; GenericConfig{Command []string; ModelFlag *string; OutputStrategy string; OutputLines int; TailStream string; Model string}. Construct claude.New/codex.New/opencode.New/antigravity.New keyed by canonical name plus generic.New per Custom entry. This package MUST NOT import internal/config.\n- Rewrite internal/app/executors.go: translate config.V2Config (built-in model fields plus cfg.Harnesses command specs) into harness.Config and delegate to harness.BuildExecutors. Preserve ModelFlag *string absent-vs-empty semantics (nil distinct from empty string); leave GenericConfig.Model empty because the config shape has no generic-harness default-model field today. The returned map still feeds runner.NewRunner at the composition root.\n- Remove internal/agent entirely. Confirm git grep finds no production import of internal/agent.\n\nDesign: This is where subtle parity lives. The pre-change and post-change executor maps must have identical keys and identical per-adapter model wiring; ModelFlag nil vs empty-string must survive the translation; the canonical names claude/codex/opencode/antigravity are unchanged. The registry is the only harness-layer package that imports the adapter subpackages.\n\nAcceptance: go build ./...; go test -count=1 ./internal/app ./internal/relay/... ./cmd/rally; go vet; gofmt clean; git grep -n 'internal/agent' shows no import (docs/spec references excepted). archguard --ci still RED until Phase 5. Do not tick tasks.md.",
       "assignee": "SENIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 589824,
       "createdAt": "2026-07-01T12:04:05.93063354Z",
-      "updatedAt": "2026-07-01T12:04:05.93063354Z",
-      "completedAt": null
+      "updatedAt": "2026-07-01T15:05:37.902085624Z",
+      "completedAt": "2026-07-01T15:05:37.902085624Z"
     },
     {
       "id": "rall-09cc",
