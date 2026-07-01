@@ -1,13 +1,14 @@
-package agent
+package generic
 
 import (
 	"context"
 	"fmt"
-	"github.com/mitchell-wallace/rally/internal/harnessapi"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/mitchell-wallace/rally/internal/harnessapi"
 )
 
 func writeScript(t *testing.T, dir, name, content string) string {
@@ -23,7 +24,7 @@ func TestGenericExecutor_PromptSubstitution(t *testing.T) {
 	dir := t.TempDir()
 	script := writeScript(t, dir, "run.sh", `printf 'substituted\n'`)
 	modelFlag := "--model"
-	g := &GenericExecutor{
+	g := &Executor{
 		Command:   []string{script, "$PROMPT"},
 		ModelFlag: &modelFlag,
 		Model:     "test-model",
@@ -44,7 +45,7 @@ func TestGenericExecutor_StdinFallback(t *testing.T) {
 	dir := t.TempDir()
 	outFile := filepath.Join(dir, "out.txt")
 	script := writeScript(t, dir, "run.sh", fmt.Sprintf(`cat > %q; echo "stdin-ok"`, outFile))
-	g := &GenericExecutor{
+	g := &Executor{
 		Command: []string{script},
 	}
 	res, err := g.Execute(context.Background(), harnessapi.RunOptions{TaskName: "stdin-test"})
@@ -70,7 +71,7 @@ func TestGenericExecutor_ModelFlagNonEmpty(t *testing.T) {
 	dir := t.TempDir()
 	script := writeScript(t, dir, "run.sh", `for arg in "$@"; do printf '<%s>\n' "$arg"; done`)
 	modelFlag := "--model"
-	g := &GenericExecutor{
+	g := &Executor{
 		Command:   []string{script},
 		ModelFlag: &modelFlag,
 		Model:     "droid-v1",
@@ -91,7 +92,7 @@ func TestGenericExecutor_ModelFlagEmpty(t *testing.T) {
 	dir := t.TempDir()
 	script := writeScript(t, dir, "run.sh", `for arg in "$@"; do printf '<%s>\n' "$arg"; done`)
 	modelFlag := ""
-	g := &GenericExecutor{
+	g := &Executor{
 		Command:   []string{script},
 		ModelFlag: &modelFlag,
 		Model:     "droid-v1",
@@ -111,7 +112,7 @@ func TestGenericExecutor_ModelFlagEmpty(t *testing.T) {
 func TestGenericExecutor_ModelFlagUnset_WithModel(t *testing.T) {
 	dir := t.TempDir()
 	script := writeScript(t, dir, "run.sh", `for arg in "$@"; do printf '<%s>\n' "$arg"; done`)
-	g := &GenericExecutor{
+	g := &Executor{
 		Command:   []string{script},
 		ModelFlag: nil,
 		Model:     "droid-v1",
@@ -129,7 +130,7 @@ func TestGenericExecutor_NoModel_NoModelFlag(t *testing.T) {
 	dir := t.TempDir()
 	script := writeScript(t, dir, "run.sh", `for arg in "$@"; do printf '<%s>\n' "$arg"; done`)
 	modelFlag := "--model"
-	g := &GenericExecutor{
+	g := &Executor{
 		Command:   []string{script},
 		ModelFlag: &modelFlag,
 		Model:     "",
@@ -146,7 +147,7 @@ func TestGenericExecutor_NoModel_NoModelFlag(t *testing.T) {
 func TestGenericExecutor_TailParser_LongOutput(t *testing.T) {
 	dir := t.TempDir()
 	script := writeScript(t, dir, "run.sh", `for i in $(seq 1 100); do echo "line $i"; done`)
-	g := &GenericExecutor{
+	g := &Executor{
 		Command:     []string{script},
 		OutputLines: 5,
 		TailStream:  "stdout",
@@ -170,7 +171,7 @@ func TestGenericExecutor_TailParser_LongOutput(t *testing.T) {
 func TestGenericExecutor_TailParser_ShortOutput(t *testing.T) {
 	dir := t.TempDir()
 	script := writeScript(t, dir, "run.sh", `echo "only line"`)
-	g := &GenericExecutor{
+	g := &Executor{
 		Command:     []string{script},
 		OutputLines: 40,
 		TailStream:  "stdout",
@@ -187,7 +188,7 @@ func TestGenericExecutor_TailParser_ShortOutput(t *testing.T) {
 func TestGenericExecutor_TailStreamStderr(t *testing.T) {
 	dir := t.TempDir()
 	script := writeScript(t, dir, "run.sh", `echo "stdout-msg"; echo "stderr-msg" >&2`)
-	g := &GenericExecutor{
+	g := &Executor{
 		Command:     []string{script},
 		OutputLines: 40,
 		TailStream:  "stderr",
@@ -204,22 +205,10 @@ func TestGenericExecutor_TailStreamStderr(t *testing.T) {
 	}
 }
 
-func TestGenericExecutor_BuiltInStillUsesBuiltIn(t *testing.T) {
-	execs := map[string]harnessapi.Executor{
-		"claude": &ClaudeExecutor{Model: "claude-opus-4-7"},
-	}
-	if _, ok := execs["claude"]; !ok {
-		t.Error("expected claude executor to be registered")
-	}
-	if _, ok := execs["droid"]; ok {
-		t.Error("expected droid to not be registered as built-in")
-	}
-}
-
 func TestGenericExecutor_PromptSubstitutionPartial(t *testing.T) {
 	dir := t.TempDir()
 	script := writeScript(t, dir, "run.sh", `echo "got: $1"`)
-	g := &GenericExecutor{
+	g := &Executor{
 		Command: []string{script, "--prompt=$PROMPT"},
 	}
 	res, err := g.Execute(context.Background(), harnessapi.RunOptions{TaskName: "partial"})
@@ -232,7 +221,7 @@ func TestGenericExecutor_PromptSubstitutionPartial(t *testing.T) {
 }
 
 func TestGenericExecutor_InvalidOutputStrategy(t *testing.T) {
-	g := &GenericExecutor{
+	g := &Executor{
 		Command:        []string{"echo"},
 		OutputStrategy: "json",
 	}
@@ -248,7 +237,7 @@ func TestGenericExecutor_InvalidOutputStrategy(t *testing.T) {
 func TestGenericExecutor_ValidOutputStrategyTail(t *testing.T) {
 	dir := t.TempDir()
 	script := writeScript(t, dir, "run.sh", `echo "hello"`)
-	g := &GenericExecutor{
+	g := &Executor{
 		Command:        []string{script},
 		OutputStrategy: "tail",
 		OutputLines:    40,
@@ -259,6 +248,33 @@ func TestGenericExecutor_ValidOutputStrategyTail(t *testing.T) {
 	}
 	if !strings.Contains(res.Summary, "hello") {
 		t.Errorf("expected 'hello' in output, got %q", res.Summary)
+	}
+}
+
+// TestExecutor_CapabilityDefaults asserts the generic adapter reports no
+// support for resume/rotate/liveness, mirroring the contract the runner relies
+// on. Carved out of internal/agent/agent_test.go's TestAdapterCapabilityDefaults
+// when generic moved into its own package.
+func TestExecutor_CapabilityDefaults(t *testing.T) {
+	g := &Executor{}
+	if g.ResumeSupported() {
+		t.Error("ResumeSupported() = true, want false")
+	}
+	if g.RotateSupported() {
+		t.Error("RotateSupported() = true, want false")
+	}
+	if g.LivenessProbeSupported() {
+		t.Error("LivenessProbeSupported() = true, want false")
+	}
+	if err := g.RotateModel("new-model"); err == nil {
+		t.Error("RotateModel() = nil, want error")
+	}
+	ok, err := g.ProbeLiveness(context.Background())
+	if ok {
+		t.Error("ProbeLiveness() = true, want false")
+	}
+	if err == nil {
+		t.Error("ProbeLiveness() err = nil, want error")
 	}
 }
 

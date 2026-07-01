@@ -3,7 +3,7 @@ package runner
 import (
 	"context"
 	"fmt"
-	"github.com/mitchell-wallace/rally/internal/agent"
+	"github.com/mitchell-wallace/rally/internal/harness/fixture"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -125,12 +125,7 @@ func cheapTestResolver(spec string) (harnessapi.ResolvedAgent, error) {
 
 func NewFixtureExecutor(t *testing.T, dir, diffPath, outputPath string, delay time.Duration) harnessapi.Executor {
 	t.Helper()
-	return &agent.FixtureExecutor{
-		DiffPath:   diffPath,
-		OutputPath: outputPath,
-		Delay:      delay,
-		Dir:        dir,
-	}
+	return fixture.New(diffPath, outputPath, delay, dir)
 }
 
 func CopyFixtureProject(t *testing.T, destDir string) {

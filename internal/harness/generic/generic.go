@@ -1,17 +1,22 @@
-package agent
+package generic
 
 import (
 	"bytes"
 	"context"
 	"fmt"
-	"github.com/mitchell-wallace/rally/internal/harness/process"
-	"github.com/mitchell-wallace/rally/internal/harnessapi"
 	"io"
 	"os/exec"
 	"strings"
+
+	"github.com/mitchell-wallace/rally/internal/harness/process"
+	"github.com/mitchell-wallace/rally/internal/harnessapi"
 )
 
-type GenericExecutor struct {
+// Executor is the concrete generic adapter. It shells out to a user-configured
+// command, optionally substituting $PROMPT into the command's arguments or
+// piping the prompt to its stdin, and tail-bounds the captured output into a
+// TryResult summary.
+type Executor struct {
 	Command        []string
 	ModelFlag      *string
 	OutputStrategy string
@@ -20,17 +25,32 @@ type GenericExecutor struct {
 	Model          string
 }
 
-func (g *GenericExecutor) ResumeSupported() bool        { return false }
-func (g *GenericExecutor) RotateSupported() bool        { return false }
-func (g *GenericExecutor) LivenessProbeSupported() bool { return false }
-func (g *GenericExecutor) RotateModel(string) error {
+// New constructs a generic adapter over the concrete Executor, returning the
+// harnessapi.Executor contract. The field order mirrors Executor's exported
+// fields so the call site reads in the same order as the struct literal it
+// replaces.
+func New(command []string, modelFlag *string, outputStrategy string, outputLines int, tailStream string, model string) harnessapi.Executor {
+	return &Executor{
+		Command:        command,
+		ModelFlag:      modelFlag,
+		OutputStrategy: outputStrategy,
+		OutputLines:    outputLines,
+		TailStream:     tailStream,
+		Model:          model,
+	}
+}
+
+func (g *Executor) ResumeSupported() bool        { return false }
+func (g *Executor) RotateSupported() bool        { return false }
+func (g *Executor) LivenessProbeSupported() bool { return false }
+func (g *Executor) RotateModel(string) error {
 	return fmt.Errorf("rotate not supported by generic adapter")
 }
-func (g *GenericExecutor) ProbeLiveness(_ context.Context) (bool, error) {
+func (g *Executor) ProbeLiveness(_ context.Context) (bool, error) {
 	return false, fmt.Errorf("liveness probe not supported by generic adapter")
 }
 
-func (g *GenericExecutor) Execute(ctx context.Context, opts harnessapi.RunOptions) (*harnessapi.TryResult, error) {
+func (g *Executor) Execute(ctx context.Context, opts harnessapi.RunOptions) (*harnessapi.TryResult, error) {
 	if g.OutputStrategy != "" && g.OutputStrategy != "tail" {
 		return nil, fmt.Errorf("generic harness: unsupported output_strategy %q", g.OutputStrategy)
 	}
@@ -82,7 +102,7 @@ func (g *GenericExecutor) Execute(ctx context.Context, opts harnessapi.RunOption
 	return g.runGenericCommand(cmd, prompt, hasPrompt, tailStream, outputLines, opts)
 }
 
-func (g *GenericExecutor) runGenericCommand(
+func (g *Executor) runGenericCommand(
 	cmd *exec.Cmd,
 	prompt string,
 	promptInArgs bool, // true when $PROMPT was substituted; stdin not used

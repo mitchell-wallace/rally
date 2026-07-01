@@ -13,6 +13,7 @@ package runner
 import (
 	"context"
 	"github.com/mitchell-wallace/rally/internal/agent"
+	"github.com/mitchell-wallace/rally/internal/harness/generic"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -547,14 +548,14 @@ func TestRealBackend_CustomHarnessRelay(t *testing.T) {
 	s := newTestStore(t, rallyDir)
 	modelFlag := "--model"
 	executors := map[string]harnessapi.Executor{
-		"mycode": &agent.GenericExecutor{
-			Command:        []string{"opencode", "run", "$PROMPT", "--format", "json"},
-			ModelFlag:      &modelFlag,
-			OutputStrategy: "tail",
-			OutputLines:    50,
-			TailStream:     "stdout",
-			Model:          "opencode/big-pickle",
-		},
+		"mycode": generic.New(
+			[]string{"opencode", "run", "$PROMPT", "--format", "json"},
+			&modelFlag,
+			"tail",
+			50,
+			"stdout",
+			"opencode/big-pickle",
+		),
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)

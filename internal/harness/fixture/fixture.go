@@ -1,34 +1,50 @@
-package agent
+package fixture
 
 import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/mitchell-wallace/rally/internal/harnessapi"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"time"
+
+	"github.com/mitchell-wallace/rally/internal/harnessapi"
 )
 
-type FixtureExecutor struct {
+// Executor is the concrete fixture adapter. It is a test double: it replays a
+// precomputed git diff and a canned JSON TryResult without invoking any real
+// agent CLI.
+type Executor struct {
 	DiffPath   string
 	OutputPath string
 	Delay      time.Duration
 	Dir        string
 }
 
-func (f *FixtureExecutor) ResumeSupported() bool        { return false }
-func (f *FixtureExecutor) RotateSupported() bool        { return false }
-func (f *FixtureExecutor) LivenessProbeSupported() bool { return false }
-func (f *FixtureExecutor) RotateModel(string) error {
+// New constructs a fixture adapter over the concrete Executor, returning the
+// harnessapi.Executor contract. The field order mirrors Executor's exported
+// fields (DiffPath, OutputPath, Delay, Dir).
+func New(diffPath, outputPath string, delay time.Duration, dir string) harnessapi.Executor {
+	return &Executor{
+		DiffPath:   diffPath,
+		OutputPath: outputPath,
+		Delay:      delay,
+		Dir:        dir,
+	}
+}
+
+func (f *Executor) ResumeSupported() bool        { return false }
+func (f *Executor) RotateSupported() bool        { return false }
+func (f *Executor) LivenessProbeSupported() bool { return false }
+func (f *Executor) RotateModel(string) error {
 	return fmt.Errorf("rotate not supported by fixture adapter")
 }
-func (f *FixtureExecutor) ProbeLiveness(_ context.Context) (bool, error) {
+func (f *Executor) ProbeLiveness(_ context.Context) (bool, error) {
 	return false, fmt.Errorf("liveness probe not supported by fixture adapter")
 }
 
-func (f *FixtureExecutor) Execute(ctx context.Context, opts harnessapi.RunOptions) (*harnessapi.TryResult, error) {
+func (f *Executor) Execute(ctx context.Context, opts harnessapi.RunOptions) (*harnessapi.TryResult, error) {
 	dir := f.Dir
 	if dir == "" && f.DiffPath != "" {
 		dir = filepath.Dir(f.DiffPath)

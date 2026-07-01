@@ -785,11 +785,11 @@
       "title": "Phase 3a: move generic and fixture adapters into internal/harness/*",
       "description": "Context: modularize-harness-adapters tasks.md section 4 (tasks 4.1, 4.2, plus the 4.5 confinement checks and the 4.6 carve for these two adapters); design.md Decision 4. Establishes the per-adapter module pattern with the two smallest, self-contained adapters. Depends on Phases 1-2.\n\nOutcome: internal/harness/generic (generic.New over a concrete generic.Executor) and internal/harness/fixture (fixture.New over a concrete fixture.Executor) exist; their tests are relocated; consumers are updated; tree and tests green.\n\nFiles \u0026 scope:\n- Move generic.go to internal/harness/generic with a New(...) harnessapi.Executor constructor over the concrete Executor; move generic_test.go. Update internal/app/executors.go so custom-harness construction calls generic.New (map keys unchanged).\n- Move fixture.go to internal/harness/fixture with fixture.New(...); update fixture test consumers: internal/relay/runner/git_test.go (~line 128, struct literal to fixture.New) and helpers_test.go (~line 125, the NewFixtureExecutor helper to fixture.New), plus any relocated agent tests that build a fixture.\n- Carve generic's cases out of agent_test.go into internal/harness/generic (joining generic_test.go); no duplicate tests.\n- internal/harness/generic imports only harnessapi, harness/process, reliability. internal/harness/fixture imports only harnessapi.\n\nDesign: fixture.New must cover the fields today's FixtureExecutor exposes (DiffPath, OutputPath, Delay, Dir) - mirror how git_test.go and helpers_test.go construct it. Keep behaviour identical (git apply, reverse-check for already-applied diffs, commit, configurable delay).\n\nAcceptance: go test -count=1 ./internal/harness/... ./internal/relay/... ./internal/app ./cmd/rally; go build ./...; gofmt clean. Confirm each new package's direct internal imports are within the allowed set via go list -f '{{.Imports}}'. archguard --ci still expected RED until Phase 5. Do not tick tasks.md.",
       "assignee": "JUNIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 327680,
       "createdAt": "2026-07-01T12:04:05.930630425Z",
-      "updatedAt": "2026-07-01T12:04:05.930630425Z",
-      "completedAt": null
+      "updatedAt": "2026-07-01T14:01:42.425187736Z",
+      "completedAt": "2026-07-01T14:01:42.425187736Z"
     },
     {
       "id": "rall-2ad6",

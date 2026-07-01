@@ -3,7 +3,7 @@ package runner
 import (
 	"context"
 	"fmt"
-	"github.com/mitchell-wallace/rally/internal/agent"
+	"github.com/mitchell-wallace/rally/internal/harness/fixture"
 	"os"
 	"path/filepath"
 	"strings"
@@ -126,11 +126,7 @@ func TestCommitHashTracking_AgentCommitted(t *testing.T) {
 	s := newTestStore(t, rallyDir)
 	diffPath, _ := filepath.Abs(filepath.Join("..", "..", "..", "testdata", "diffs", "add-feature.diff"))
 	outputPath, _ := filepath.Abs(filepath.Join("..", "..", "..", "testdata", "outputs", "success.json"))
-	exec := &agent.FixtureExecutor{
-		DiffPath:   diffPath,
-		OutputPath: outputPath,
-		Dir:        workspaceDir,
-	}
+	exec := fixture.New(diffPath, outputPath, 0, workspaceDir)
 	executors := map[string]harnessapi.Executor{"claude": exec}
 
 	r := NewRunner(s, Config{

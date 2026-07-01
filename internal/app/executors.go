@@ -3,6 +3,7 @@ package app
 import (
 	"github.com/mitchell-wallace/rally/internal/agent"
 	"github.com/mitchell-wallace/rally/internal/config"
+	"github.com/mitchell-wallace/rally/internal/harness/generic"
 	"github.com/mitchell-wallace/rally/internal/harnessapi"
 )
 
@@ -19,13 +20,14 @@ func BuildExecutors(cfg config.V2Config) map[string]harnessapi.Executor {
 
 	for name, hc := range cfg.Harnesses {
 		if len(hc.Command) > 0 {
-			executors[name] = &agent.GenericExecutor{
-				Command:        hc.Command,
-				ModelFlag:      hc.ModelFlag,
-				OutputStrategy: hc.OutputStrategy,
-				OutputLines:    hc.OutputLines,
-				TailStream:     hc.TailStream,
-			}
+			executors[name] = generic.New(
+				hc.Command,
+				hc.ModelFlag,
+				hc.OutputStrategy,
+				hc.OutputLines,
+				hc.TailStream,
+				"", // no programmatic default model from config today
+			)
 		}
 	}
 

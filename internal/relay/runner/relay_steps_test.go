@@ -3,7 +3,7 @@ package runner
 import (
 	"context"
 	"fmt"
-	"github.com/mitchell-wallace/rally/internal/agent"
+	"github.com/mitchell-wallace/rally/internal/harness/generic"
 	"os"
 	"path/filepath"
 	"strings"
@@ -1174,10 +1174,7 @@ func TestE2E_UserDefinedHarness_ModelFlagSet(t *testing.T) {
 		`echo "ARGS:$@" > %q; touch %q; echo "ok"`, argsFile, changeFile))
 
 	modelFlag := "--model"
-	droidExec := &agent.GenericExecutor{
-		Command:   []string{script},
-		ModelFlag: &modelFlag,
-	}
+	droidExec := generic.New([]string{script}, &modelFlag, "", 0, "", "")
 
 	resolver := func(spec string) (harnessapi.ResolvedAgent, error) {
 		if spec == "droid:v1" {
@@ -1227,10 +1224,7 @@ func TestE2E_UserDefinedHarness_BareAliasNoModel(t *testing.T) {
 		`echo "ARGS:$@" > %q; touch %q; echo "ok"`, argsFile, changeFile))
 
 	modelFlag := "--model"
-	droidExec := &agent.GenericExecutor{
-		Command:   []string{script},
-		ModelFlag: &modelFlag,
-	}
+	droidExec := generic.New([]string{script}, &modelFlag, "", 0, "", "")
 
 	resolver := func(spec string) (harnessapi.ResolvedAgent, error) {
 		if spec == "droid" {
@@ -1277,10 +1271,7 @@ func TestE2E_UserDefinedHarness_ModelFlagEmpty(t *testing.T) {
 		`echo "ARGS:$@" > %q; touch %q; echo "ok"`, argsFile, changeFile))
 
 	modelFlag := ""
-	droidExec := &agent.GenericExecutor{
-		Command:   []string{script},
-		ModelFlag: &modelFlag,
-	}
+	droidExec := generic.New([]string{script}, &modelFlag, "", 0, "", "")
 
 	resolver := func(spec string) (harnessapi.ResolvedAgent, error) {
 		if spec == "droid:v1" {
@@ -1329,10 +1320,7 @@ func TestE2E_UserDefinedHarness_ModelFlagUnset_InfoNote(t *testing.T) {
 	script := writeRelayScript(t, workspaceDir, "droid.sh", fmt.Sprintf(
 		`echo "ARGS:$@" > %q; touch %q; echo "ok"`, argsFile, changeFile))
 
-	droidExec := &agent.GenericExecutor{
-		Command:   []string{script},
-		ModelFlag: nil,
-	}
+	droidExec := generic.New([]string{script}, nil, "", 0, "", "")
 
 	resolver := func(spec string) (harnessapi.ResolvedAgent, error) {
 		if spec == "droid:v1" {
