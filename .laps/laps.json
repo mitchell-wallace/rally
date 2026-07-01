@@ -675,10 +675,21 @@
       "title": "Verify the checker and all rules (Phases 1–3)",
       "description": "Use the `openspec-verify-change` skill against `add-architecture-guardrails`, focused on Phases 1–3 (the checker plus all rule classes, before local/CI wiring).\n\nIdentify the intended merge target first (ask the user / PR metadata / repo docs / branch config / recent history — do NOT assume `main`) and the first lap/try in this batch; treat earlier branch work as pre-existing. Diff with `git diff \u003ctarget\u003e...HEAD`.\n\nVerify by tracing real behaviour, not just green tests: `archguard --ci` exits 0 on the clean tree; `--report` output matches the committed grandfather map (regenerate and compare); the import rules match the current production graph (`go list ... .Imports` only) — spot-check the flagship `relay ↛ relay/runner`, `release ↛ app`, `app ↛ {cli, user_prompt, laps}`, and the no-`internal/*`-imports-`cli` edges; dep confinement is test-inclusive; the testutil rule is production-only; every rule class has a fixture asserting diagnostic TEXT; stdlib-only (`go mod tidy` no diff); archguard's own files are under budget. Smoke: scratch-bump a grandfathered file and a normal file → `--ci` fails with actionable text; revert. Run `go test -count=1 ./...`, `go vet ./...`, `gofmt -l .` empty.\n\nCheck off the tasks.md boxes for 1.1–1.4, 2.1–2.4, 3.1–3.2, 4.1–4.5 that you verified are correctly and thoroughly done; do not tick boxes for merely-attempted work. Fix only tiny safe one-liners; anything larger becomes a new focused lap added to the head of the queue (`laps add head ...`). Do not rewrite git history.",
       "assignee": "VERIFY",
-      "isDone": false,
+      "isDone": true,
       "order": 327680,
       "createdAt": "2026-07-01T00:48:39.074255185Z",
-      "updatedAt": "2026-07-01T00:48:39.074255185Z",
+      "updatedAt": "2026-07-01T05:11:37.498193834Z",
+      "completedAt": "2026-07-01T05:11:37.498193834Z"
+    },
+    {
+      "id": "work-8a0f",
+      "title": "Make archguard report baseline diff-clean",
+      "description": "Fix the remaining Phase 1-3 verification gap in add-architecture-guardrails: `go run ./tools/archguard --report` regenerates the correct grandfather entries, but the baseline block does not diff byte-for-byte against `tools/archguard/baseline.go` because the map literal spacing differs. Make the report output match the committed grandfather map exactly when compared directly, keep it stdlib-only, and re-verify with `diff`, `go test -count=1 ./tools/archguard/...`, `go run ./tools/archguard --ci`, and `gofmt -l .`. Scope: `tools/archguard/**` only.",
+      "assignee": "JUNIOR",
+      "isDone": false,
+      "order": 262144,
+      "createdAt": "2026-07-01T05:10:35.068329785Z",
+      "updatedAt": "2026-07-01T05:10:35.068329785Z",
       "completedAt": null
     },
     {
