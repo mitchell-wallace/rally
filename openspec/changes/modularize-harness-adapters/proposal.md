@@ -117,16 +117,17 @@ tree compiles at each phase.
 
 ### Modified Capabilities
 
-<!-- None. The behavioural `executor` spec still defines WHAT each harness does
-     (flags, parsing, evidence, bounded summaries, reasoning injection); this
-     change only relocates WHERE that code lives. Following the #1/#2 precedent
-     (decompose-relay-runner added relay-module-structure and
-     slim-cli-composition-root added composition-root-structure, neither
-     rewriting the behavioural specs they relocated), the new
-     harness-module-structure spec owns the location/boundary contract and the
-     executor spec is left intact. The architecture-guardrails spec (#3) is
-     enforced with updated policy tables, not redefined, so it is not modified
-     either. -->
+- `executor`: keeps the behavioural executor contract intact while aligning the
+  spec with the current six-method lifecycle interface and moving the OpenCode
+  disk-log machinery reference from `internal/agent/opencode.go` to the relocated
+  `internal/harness/opencode` adapter files. It also updates the concrete adapter
+  type/package names (`agent.ClaudeExecutor` → `claude.Executor` via
+  `claude.New`, etc.) without changing CLI flag, parsing, evidence, retry,
+  telemetry, or prompt behaviour.
+- `composition-root-structure`: updates the executor-registry seam from
+  `app.BuildExecutors(cfg) map[string]agent.Executor` to
+  `app.BuildExecutors(cfg) map[string]harnessapi.Executor`, reflecting the new
+  contract package while preserving the same runner wiring.
 
 ## Impact
 

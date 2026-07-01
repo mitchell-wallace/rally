@@ -61,7 +61,9 @@ imports the adapter subpackages.
 
 `internal/harnessapi` holds exactly the surface the rest of the tree consumes:
 
-- `Executor` (the five-method interface, unchanged),
+- `Executor` (the six-method interface: `Execute`, `ResumeSupported`,
+  `RotateSupported`, `LivenessProbeSupported`, `RotateModel`, and
+  `ProbeLiveness`; unchanged),
 - `RunOptions`, `TryResult`, `ResolvedAgent` (unchanged field sets),
 - `BuildPrompt(RunOptions) string` — shared by adapters **and** by
   `internal/relay/runner/run_one.go`, which calls it directly today
@@ -130,6 +132,15 @@ type Config struct {
     AntigravityModel string
     Custom           map[string]GenericConfig // one generic adapter per entry
 }
+
+type GenericConfig struct {
+    Command        []string
+    ModelFlag      *string // preserves absent vs model_flag = ""
+    OutputStrategy string
+    OutputLines    int
+    TailStream     string
+    Model          string // preserves GenericExecutor's programmatic default
+}
 ```
 
 - `harness.BuildExecutors` constructs the four built-in adapters keyed by
@@ -142,9 +153,12 @@ type Config struct {
   it returns still feeds `runner.NewRunner`, so concrete adapter types stay out of
   both `cmd/rally` and the runner.
 - `GenericConfig` carries the current `GenericExecutor` construction fields
-  (`Command`, `ModelFlag`, `OutputStrategy`, `OutputLines`, `TailStream`); the
+  exactly. `ModelFlag` stays `*string` so `model_flag` absent remains distinct
+  from `model_flag = ""`, and `Model` stays available to preserve the current
+  programmatic default-model path used by tests and direct construction. The
   `config → harness.Config` translation in `app` is the only place that knows both
-  shapes.
+  shapes; it leaves `GenericConfig.Model` empty unless the config layer gains an
+  explicit generic-harness default in a separate change.
 
 Alternative considered — keep construction in `internal/app` (draft Option C):
 rejected because "add a harness" would then edit a composition-root file and
@@ -193,6 +207,11 @@ adapters call across the new boundary must be **exported** (Decision 10):
   suite would exceed it. This coordinates with #8 (`decompose-large-test-files`),
   which owns the stable-package test caps; a grandfather entry is a last resort
   only if a suite cannot be cleanly split within this change.
+- Process/log tests move with their code: `exec_linux_test.go`,
+  `exec_unix_test.go`, `TestRunLoggedCommandStreamsTryLog`, and `TestTailString`
+  move to `internal/harness/process`. The unrelated `TestGitHelpers` case moves
+  to `internal/gitx` (where `GitRepoRoot` and `GitUserFallbackConfig` live) rather
+  than staying behind in a deleted `internal/agent` package.
 
 ## Decision 8 — import-boundary rules and guardrail updates
 
@@ -309,8 +328,9 @@ Guardrails and full suite:
   `go run ./tools/archguard --ci` exits 0; `just check` green; `go vet ./...`;
   `gofmt -l .` empty; `go mod tidy` no diff.
 - `go test -count=1 ./...`. If real-backend harness tests are affected, run
-  `RALLY_TEST_REAL_AGENTS=1 go test -count=1 ./internal/harness/... ./cmd/rally`
-  where local credentials allow.
+  `RALLY_TEST_REAL_AGENTS=1 go test -count=1 -run TestRealBackend ./internal/relay/... ./cmd/rally`
+  where local credentials allow; the real-backend coverage currently lives in
+  `internal/relay/runner/runner_real_backend_test.go`.
 
 ## Open questions — resolved
 

@@ -38,13 +38,16 @@ relay/runtime retain retry, routing, and telemetry ownership. The former
 Each built-in harness SHALL be a deep module under `internal/harness/<name>`
 (`claude`, `codex`, `opencode`, `antigravity`, `generic`) exposing an idiomatic
 constructor `New(...) harnessapi.Executor` over its own concrete `Executor` type.
-Each adapter module SHALL import only `internal/harnessapi`,
-`internal/harness/process`, and `internal/reliability`, and SHALL own its own
-harness CLI-schema parsing and native session-/server-log recovery. Adapter
-modules SHALL NOT import one another and SHALL NOT import `internal/relay`,
+Production files in each adapter module SHALL limit their direct Rally-internal
+imports to `internal/harnessapi`, `internal/harness/process`, and
+`internal/reliability`, and SHALL own their own
+harness CLI-schema parsing and native session-/server-log recovery. Production
+adapter files SHALL NOT import one another and SHALL NOT import `internal/relay`,
 `internal/relay/runner`, `internal/config`, `internal/store`, `internal/progress`,
-`internal/telemetry`, `internal/cli`, or any presentation package. Each adapter
-SHALL own its harness default-model constant where it has one (e.g.
+`internal/telemetry`, `internal/cli`, or any presentation package. Adapter test
+files remain outside the production import-boundary allow-list, while dependency
+confinement still applies to tests. Each adapter SHALL own its harness
+default-model constant where it has one (e.g.
 `antigravity.DefaultModel`). The replay `fixture` adapter SHALL move to
 `internal/harness/fixture` under the same convention.
 
@@ -57,8 +60,9 @@ SHALL own its harness default-model constant where it has one (e.g.
 
 #### Scenario: Adapter package stays confined to the contract and support layers
 
-- **WHEN** the **direct** internal imports of an `internal/harness/<name>` adapter
-  are inspected (as `archguard` parses them via `parser.ImportsOnly`, or
+- **WHEN** the **direct** internal imports of a production
+  `internal/harness/<name>` adapter file are inspected (as `archguard` parses
+  them via `parser.ImportsOnly`, or
   `go list -f '{{.Imports}}'`)
 - **THEN** they are a subset of `internal/harnessapi`, `internal/harness/process`,
   and `internal/reliability`, with no other adapter package and none of relay,
