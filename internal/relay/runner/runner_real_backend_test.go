@@ -12,11 +12,11 @@ package runner
 
 import (
 	"context"
-	"github.com/mitchell-wallace/rally/internal/agent"
 	"github.com/mitchell-wallace/rally/internal/harness/antigravity"
 	"github.com/mitchell-wallace/rally/internal/harness/claude"
 	"github.com/mitchell-wallace/rally/internal/harness/codex"
 	"github.com/mitchell-wallace/rally/internal/harness/generic"
+	"github.com/mitchell-wallace/rally/internal/harness/opencode"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -319,7 +319,7 @@ func TestRealBackend_OpenCodeRelay(t *testing.T) {
 
 	s := newTestStore(t, rallyDir)
 	executors := map[string]harnessapi.Executor{
-		"opencode": &agent.OpenCodeExecutor{Model: "opencode/big-pickle"},
+		"opencode": opencode.New("opencode/big-pickle"),
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)

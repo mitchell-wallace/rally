@@ -420,6 +420,50 @@ func TestGitRepoRootCorruptedGitDir(t *testing.T) {
 	}
 }
 
+// TestGitHelpers covers GitRepoRoot against a freshly-initialised repo and the
+// GitUserFallbackConfig fallback path (present when no user is configured, gone
+// once user.name/user.email are set). The host git config is isolated so the
+// fallback assertion is deterministic. Relocated from internal/agent/agent_test.go.
+func TestGitHelpers(t *testing.T) {
+	tmp := t.TempDir()
+	if _, err := GitOutput(tmp, "init"); err != nil {
+		t.Fatalf("git init: %v", err)
+	}
+
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("GIT_CONFIG_GLOBAL", "/dev/null")
+	t.Setenv("GIT_CONFIG_SYSTEM", "/dev/null")
+
+	root, ok, err := GitRepoRoot(tmp)
+	if err != nil {
+		t.Fatalf("GitRepoRoot error: %v", err)
+	}
+	if !ok {
+		t.Fatal("expected ok")
+	}
+	if !strings.HasSuffix(root, filepath.Base(tmp)) {
+		t.Errorf("unexpected root: %s", root)
+	}
+
+	// GitUserFallbackConfig when not configured
+	fallback := GitUserFallbackConfig(tmp)
+	if len(fallback) == 0 {
+		t.Error("expected fallback config")
+	}
+
+	// configure user
+	if _, err := GitOutput(tmp, "config", "user.name", "A"); err != nil {
+		t.Fatalf("git config user.name: %v", err)
+	}
+	if _, err := GitOutput(tmp, "config", "user.email", "a@b"); err != nil {
+		t.Fatalf("git config user.email: %v", err)
+	}
+	fallback = GitUserFallbackConfig(tmp)
+	if len(fallback) != 0 {
+		t.Error("expected no fallback when configured")
+	}
+}
+
 // FoldRallyState on a corrupted repo (empty .git) is a graceful no-op.
 func TestFoldRallyStateCorruptedGitDirIsNoOp(t *testing.T) {
 	dir := t.TempDir()

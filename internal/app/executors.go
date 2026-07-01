@@ -1,12 +1,12 @@
 package app
 
 import (
-	"github.com/mitchell-wallace/rally/internal/agent"
 	"github.com/mitchell-wallace/rally/internal/config"
 	"github.com/mitchell-wallace/rally/internal/harness/antigravity"
 	"github.com/mitchell-wallace/rally/internal/harness/claude"
 	"github.com/mitchell-wallace/rally/internal/harness/codex"
 	"github.com/mitchell-wallace/rally/internal/harness/generic"
+	"github.com/mitchell-wallace/rally/internal/harness/opencode"
 	"github.com/mitchell-wallace/rally/internal/harnessapi"
 )
 
@@ -18,7 +18,7 @@ func BuildExecutors(cfg config.V2Config) map[string]harnessapi.Executor {
 		"antigravity": antigravity.New(cfg.AntigravityModel),
 		"claude":      claude.New(cfg.ClaudeModel),
 		"codex":       codex.New(cfg.CodexModel),
-		"opencode":    &agent.OpenCodeExecutor{Model: cfg.OpenCodeModel},
+		"opencode":    opencode.New(cfg.OpenCodeModel),
 	}
 
 	for name, hc := range cfg.Harnesses {
