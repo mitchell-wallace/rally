@@ -46,10 +46,11 @@ surface than a test assertion.
   paste grandfather map and prints any import/dep violations. The implementer
   runs it against HEAD and pastes the result, so the committed caps always match
   the real tree at landing.
-- `archguard --ci` exits non-zero only on **hard** violations (disallowed import,
+- `archguard --ci` exits non-zero only on **hard** violations (disallowed
+  production import,
   new file over the hard budget, grandfathered file grown above its cap,
   dependency-confinement breach, production import of `testutil`). Warnings
-  (500/900) print but never set the exit code.
+  (500/700) print but never set the exit code.
 - Default (no flag) = local advisory: prints warnings **and** hard violations,
   exits non-zero on hard violations (so `just check` is a faithful local mirror
   of CI).
@@ -108,9 +109,13 @@ grandfather entry.
 
 ## Decision 4 — import-boundary rules (verified against the current graph)
 
-Encode the **current** graph, not an idealized future one. The full production
-graph at `4c9d307` is the source of truth; the rules below match it exactly, so
-the baseline passes.
+Encode the **current production graph**, not an idealized future one. The full
+production graph at `4c9d307` is the source of truth; the rules below match it
+exactly, so the baseline passes. Internal import-boundary rules are production-
+file rules in v1; `_test.go` files can keep their current helper imports while
+production edges stay one-way. Third-party dependency confinement remains
+test-inclusive (Decision 5), and non-test files still may not import
+`internal/testutil`.
 
 Flagship / composition-root edges (the reason this change exists):
 
@@ -174,15 +179,18 @@ revisit.
 `cobra` is currently used in `internal/progress/cli.go` as well as `internal/cli`
 — `progress` is command-shaped, so it is included rather than treated as a leak.
 Keep the first pass to these obvious owners; do not encode every incidental
-import. Test files are checked the same as production for dep confinement (a
-New Relic import in a non-telemetry `_test.go` is still a leak), since the
-confinement intent is package-level.
+import or broader terminal dependency such as `golang.org/x/term`. Test files
+are checked the same as production for dep confinement (a New Relic import in a
+non-telemetry `_test.go` is still a leak), since the confinement intent is
+package-level.
 
 ## Decision 6 — local + CI wiring
 
 - `just arch-check` → `go run ./tools/archguard` (advisory: warnings + hard).
-- `just check` gains `arch-check` as a dependency (after `vet`/format), so a
-  local `just check` is a faithful mirror of the CI gate. This folds it in
+- Current `just check` is `check: vet` with the `gofmt -l .` assertion in the
+  recipe body, so add `just arch-check` inside that body after the formatting
+  assertion rather than as a Just dependency that would run before formatting.
+  A local `just check` is then a faithful mirror of the CI gate. This folds it in
   immediately rather than keeping it separate for a cycle (the draft's hedge):
   safe because the baseline is green by construction. Alternative (keep separate
   one cycle) is noted but not taken.

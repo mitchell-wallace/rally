@@ -48,9 +48,9 @@ construction before it is allowed to fail a build.
 **Phase 1 — the checker (`tools/archguard`), advisory:**
 
 - Add a small dependency-free Go command, `tools/archguard` (`package main` in
-  the existing module — stdlib `go/parser`, `go/token`, `path/filepath` only, so
-  `go mod tidy` and `go vet ./...` are unaffected and no third-party dep is
-  added).
+  the existing module — standard library only, for example `go/parser`,
+  `go/token`, and `path/filepath`, so `go mod tidy` and `go vet ./...` are
+  unaffected and no third-party dep is added).
 - It walks the repo, parses each `.go` file with `parser.ImportsOnly`, counts
   physical lines, and applies a policy engine. It skips generated files (those
   beginning with `// Code generated`), `testdata`, `vendor`, build output, and
@@ -79,25 +79,28 @@ construction before it is allowed to fail a build.
   `internal/app`; `internal/app` ↛ {`internal/cli`, `internal/user_prompt`,
   `internal/laps`}; and no `internal/*` package imports `internal/cli` (only
   `cmd/rally` does).
-- Confine third-party dependencies to their owning packages (verified against the
-  current tree): New Relic → `internal/telemetry`; `go-toml` → `internal/config`;
-  Cobra → command-shaped packages (`cmd/rally`, `internal/cli`,
-  `internal/progress`); huh → interactive-prompt packages (`internal/cli`,
-  `internal/user_prompt`); lipgloss/terminal styling → `internal/style`,
-  `internal/cli`.
+- Confine selected third-party dependencies to their owning packages (verified
+  against the current tree): New Relic → `internal/telemetry`; `go-toml` →
+  `internal/config`; Cobra → command-shaped packages (`cmd/rally`,
+  `internal/cli`, `internal/progress`); huh → interactive-prompt packages
+  (`internal/cli`, `internal/user_prompt`); `lipgloss` → `internal/style`,
+  `internal/cli`. Broader terminal packages such as `golang.org/x/term` are not
+  part of this first confinement pass because current ownership spans keyboard,
+  telemetry, prompts, style, and CLI packages.
 - Confine the test helper: non-test files MUST NOT import `internal/testutil`.
 
 **Phase 4 — local + CI wiring:**
 
 - Add a `just arch-check` recipe (advisory warnings + hard import/size failures)
-  and make `just check` depend on it so violations surface locally before a push.
+  and invoke it from the existing `just check` recipe body after formatting so
+  violations surface locally before a push.
 - Add an `archguard` step to the `lint` job in `.github/workflows/test.yml`,
   running `archguard --ci` so CI hard-fails on disallowed imports, new oversize
   files, and grandfathered-file growth — but never on advisory warnings.
 
 Because every rule is generated from the current tree, the baseline is green the
 moment it lands: the gate goes straight to enforcing (hard errors) with no
-advisory-only grace period needed, while the 500/900 warnings stay informational
+advisory-only grace period needed, while the 500/700 warnings stay informational
 forever. As later refactors (#4 splits `opencode.go`, etc.) land, the grandfather
 caps ratchet down and eventually disappear.
 

@@ -43,7 +43,7 @@ listed in a grandfather map. The grandfather map SHALL record each currently
 over-budget file at its actual line count, and a grandfathered file SHALL hard-
 fail if it grows above its recorded cap. The grandfather map SHALL be generated
 from the tree at implementation time (via `--report`), not hard-coded to any
-earlier snapshot. Warnings (over 500 / over 900) SHALL NOT set a non-zero exit
+earlier snapshot. Warnings (over 500 / over 700) SHALL NOT set a non-zero exit
 code; only hard violations SHALL.
 
 #### Scenario: New oversize file fails
@@ -74,34 +74,38 @@ code; only hard violations SHALL.
 
 ### Requirement: Internal import-boundary rules
 
-The checker SHALL enforce internal import boundaries that match the current
-dependency graph, keeping the edges established by `relay-module-structure` (#1)
-and `composition-root-structure` (#2) one-way. In particular: `internal/relay`
-SHALL NOT import `internal/relay/runner`; `internal/relay` and
-`internal/relay/runner` SHALL NOT import `internal/config` or `internal/cli`;
-`internal/release` SHALL NOT import `internal/app`; `internal/app` SHALL NOT
-import `internal/cli`, `internal/user_prompt`, or `internal/laps`; and no
-`internal/*` package other than `cmd/rally` SHALL import `internal/cli`. Lower-
-level packages SHALL be held to tight internal allow-lists matching the current
-tree, while `internal/cli` and `cmd/rally` are the composition/presentation
-layers permitted broad internal imports.
+The checker SHALL enforce production-file internal import boundaries that match
+the current production dependency graph, keeping the edges established by
+`relay-module-structure` (#1) and `composition-root-structure` (#2) one-way. In
+particular: `internal/relay` SHALL NOT import `internal/relay/runner`;
+`internal/relay` and `internal/relay/runner` SHALL NOT import `internal/config`
+or `internal/cli`; `internal/release` SHALL NOT import `internal/app`;
+`internal/app` SHALL NOT import `internal/cli`, `internal/user_prompt`, or
+`internal/laps`; and no `internal/*` package SHALL import `internal/cli`. Lower-
+level production packages SHALL be held to tight internal allow-lists matching
+the current tree, while `internal/cli` and `cmd/rally` are the
+composition/presentation layers permitted broad internal imports. `_test.go`
+files are not boundary violations for these internal allow-lists in v1, but they
+remain subject to third-party dependency confinement.
 
 #### Scenario: Flagship runner → relay edge stays one-way
 
-- **WHEN** a change makes `internal/relay` import `internal/relay/runner`
+- **WHEN** a change makes a production file in `internal/relay` import
+  `internal/relay/runner`
 - **THEN** `archguard --ci` exits non-zero with a message explaining the relay
   primitives must not depend on the orchestrator
 
 #### Scenario: App seam stays presentation-neutral
 
-- **WHEN** a change makes `internal/app` import `internal/cli`,
+- **WHEN** a change makes a production file in `internal/app` import `internal/cli`,
   `internal/user_prompt`, or `internal/laps`
 - **THEN** `archguard --ci` exits non-zero, preserving the #2 seam where `app`
   reaches `laps` only transitively through `internal/relay/runner`
 
 #### Scenario: Release metadata does not cycle through app
 
-- **WHEN** a change makes `internal/release` import `internal/app`
+- **WHEN** a change makes a production file in `internal/release` import
+  `internal/app`
 - **THEN** `archguard --ci` exits non-zero, because that would recreate the
   `app → runner → laps → release → app` cycle #2 broke
 
@@ -109,7 +113,7 @@ layers permitted broad internal imports.
 
 - **WHEN** `archguard --ci` runs against the unmodified current tree
 - **THEN** it exits zero for all import-boundary rules, because the rules are
-  generated to match that graph
+  generated to match that production graph
 
 ### Requirement: Third-party dependency confinement
 
@@ -122,7 +126,7 @@ applied to production and test files alike:
 interactive-prompt packages (`internal/cli`, `internal/user_prompt`); and
 `github.com/charmbracelet/lipgloss` only under `internal/style` and
 `internal/cli`. The first pass SHALL confine these obvious owners and SHALL NOT
-attempt to encode every incidental import.
+attempt to encode every incidental import or broader terminal dependency.
 
 #### Scenario: New Relic leak outside telemetry fails
 
@@ -164,13 +168,14 @@ rule name, so a CI failure is actionable without reading the policy source.
 
 The checker SHALL be wired into both local and CI flows. A `just arch-check`
 recipe SHALL run the checker in advisory mode (warnings plus hard violations),
-and `just check` SHALL depend on `arch-check` so local checks mirror CI. The
-`lint` job in `.github/workflows/test.yml` SHALL run the checker in `--ci` mode,
-hard-failing only on disallowed imports, new oversize files, grandfathered-file
-growth, dependency-confinement breaches, and production `testutil` imports — never
-on advisory size warnings. No new CI job or required status check beyond the
-existing `lint` gate SHALL be introduced, and the CI trigger surface SHALL be
-unchanged.
+and the existing `just check` recipe SHALL invoke `just arch-check` after its
+formatting assertion so local checks mirror CI while preserving the current
+`check: vet` ordering. The `lint` job in `.github/workflows/test.yml` SHALL run
+the checker in `--ci` mode, hard-failing only on disallowed imports, new oversize
+files, grandfathered-file growth, dependency-confinement breaches, and production
+`testutil` imports — never on advisory size warnings. No new CI job or required
+status check beyond the existing `lint` gate SHALL be introduced, and the CI
+trigger surface SHALL be unchanged.
 
 #### Scenario: Local check mirrors CI
 
@@ -196,6 +201,6 @@ require a release.
 #### Scenario: No runtime or version change
 
 - **WHEN** the diff of the change is reviewed
-- **THEN** it touches only `tools/archguard`, the `justfile`, the CI workflow, and
-  documentation; `internal/buildinfo/VERSION` is unchanged; and the released
+- **THEN** it touches only `tools/archguard/**`, the `justfile`, the CI workflow,
+  and documentation; `internal/buildinfo/VERSION` is unchanged; and the released
   binary's behaviour is unaffected
