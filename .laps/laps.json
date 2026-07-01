@@ -774,11 +774,11 @@
       "title": "Phase 2: extract internal/harness/process support package",
       "description": "Context: modularize-harness-adapters tasks.md section 3 (3.1, 3.2); design.md Decisions 6 and 10. Pure relocation of the shared subprocess/log plumbing out of internal/agent; behaviour unchanged. Depends on Phase 1 (harnessapi) already landed.\n\nOutcome: internal/harness/process holds SetProcessGroup and WriteTryLog (already exported) plus the newly-exported RunLoggedCommand, OpenTryLog, and TailString. The still-in-agent adapters call process.*; internal/agent still builds and its tests pass.\n\nFiles \u0026 scope:\n- Create internal/harness/process. Move from internal/agent: exec.go (SetProcessGroup) and log.go (runLoggedCommand to RunLoggedCommand, openTryLog to OpenTryLog, tailString to TailString, plus WriteTryLog). Export the three per Decision 10.\n- Move the dedicated exec tests (exec_linux_test.go, exec_unix_test.go) with the code. The two process tests embedded in the agent_test.go monolith (TestRunLoggedCommandStreamsTryLog ~line 906, TestTailString ~line 1894) may be re-pointed to process.* now and physically carved to internal/harness/process during the Phase-3 monolith carve (task 4.6) - do not duplicate them.\n- Re-point the four built-in adapters (still in agent) plus generic to process.*.\n- internal/harness/process imports ONLY internal/reliability and the standard library. It MUST NOT hold any harness parser helpers - those stay in their owning adapter.\n\nDesign: Behaviour-preserving move of process-group setup, graceful group-wide cancellation, the logged-command runner, and the try-log tail helpers. Do not change the subprocess or cancellation logic.\n\nAcceptance: go build ./...; go test -count=1 ./internal/harness/process ./internal/agent; go vet; gofmt -l . empty. archguard --ci still expected RED until Phase 5 - ignore it. Do not tick tasks.md.",
       "assignee": "JUNIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 262144,
       "createdAt": "2026-07-01T12:04:05.930629698Z",
-      "updatedAt": "2026-07-01T12:04:05.930629698Z",
-      "completedAt": null
+      "updatedAt": "2026-07-01T13:51:19.937600379Z",
+      "completedAt": "2026-07-01T13:51:19.937600379Z"
     },
     {
       "id": "rall-2079",

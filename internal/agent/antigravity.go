@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/mitchell-wallace/rally/internal/harness/process"
 	"github.com/mitchell-wallace/rally/internal/harnessapi"
 	"io"
 	"os"
@@ -103,15 +104,15 @@ func (a *AntigravityExecutor) Execute(ctx context.Context, opts harnessapi.RunOp
 	if opts.WorkspaceDir != "" {
 		cmd.Dir = opts.WorkspaceDir
 	}
-	SetProcessGroup(cmd)
-	out, runErr := runLoggedCommand(cmd, opts.LogPath, true, opts.OnStart)
+	process.SetProcessGroup(cmd)
+	out, runErr := process.RunLoggedCommand(cmd, opts.LogPath, true, opts.OnStart)
 
 	agyLogData, _ := os.ReadFile(agyLogPath)
 	_ = appendAntigravityLog(opts.LogPath, agyLogData)
 	sessionID := scanAntigravityConversationID(agyLogData)
 
 	if runErr != nil {
-		execErr := fmt.Errorf("antigravity exec failed: %w\noutput: %s\nlog: %s", runErr, string(out), tailString(string(agyLogData), 4096))
+		execErr := fmt.Errorf("antigravity exec failed: %w\noutput: %s\nlog: %s", runErr, string(out), process.TailString(string(agyLogData), 4096))
 		errorText := string(out) + "\n" + string(agyLogData)
 		if ev := reliability.ParseAntigravityError(errorText); ev != nil {
 			return &harnessapi.TryResult{Evidence: ev, ResolvedModel: model}, execErr
@@ -190,7 +191,7 @@ func appendAntigravityLog(path string, data []byte) error {
 		return err
 	}
 	defer f.Close()
-	_, err = fmt.Fprintf(f, "\n--- agy log ---\n%s\n", tailString(string(data), 65536))
+	_, err = fmt.Fprintf(f, "\n--- agy log ---\n%s\n", process.TailString(string(data), 65536))
 	return err
 }
 

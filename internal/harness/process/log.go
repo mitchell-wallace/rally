@@ -1,4 +1,4 @@
-package agent
+package process
 
 import (
 	"bytes"
@@ -10,7 +10,7 @@ import (
 	"strings"
 )
 
-func openTryLog(path string) (*os.File, error) {
+func OpenTryLog(path string) (*os.File, error) {
 	if path == "" {
 		return nil, nil
 	}
@@ -27,7 +27,7 @@ func openTryLog(path string) (*os.File, error) {
 // WriteTryLog writes captured output to the try's log file.
 // It creates parent directories if needed.
 func WriteTryLog(path string, data []byte) error {
-	f, err := openTryLog(path)
+	f, err := OpenTryLog(path)
 	if err != nil || f == nil {
 		return err
 	}
@@ -36,8 +36,8 @@ func WriteTryLog(path string, data []byte) error {
 	return err
 }
 
-// tailString returns the last n bytes of s, prefixed with "…" if truncated.
-func tailString(s string, n int) string {
+// TailString returns the last n bytes of s, prefixed with "…" if truncated.
+func TailString(s string, n int) string {
 	s = strings.TrimSpace(s)
 	if len(s) <= n {
 		return s
@@ -45,7 +45,7 @@ func tailString(s string, n int) string {
 	return "…" + s[len(s)-n:]
 }
 
-func runLoggedCommand(cmd *exec.Cmd, logPath string, mergeStderr bool, onStart func(pid int)) ([]byte, error) {
+func RunLoggedCommand(cmd *exec.Cmd, logPath string, mergeStderr bool, onStart func(pid int)) ([]byte, error) {
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		return nil, err
@@ -54,7 +54,7 @@ func runLoggedCommand(cmd *exec.Cmd, logPath string, mergeStderr bool, onStart f
 		cmd.Stderr = cmd.Stdout
 	}
 
-	logFile, err := openTryLog(logPath)
+	logFile, err := OpenTryLog(logPath)
 	if err != nil {
 		return nil, err
 	}

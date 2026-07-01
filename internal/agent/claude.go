@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/mitchell-wallace/rally/internal/harness/process"
 	"github.com/mitchell-wallace/rally/internal/harnessapi"
 	"os"
 	"os/exec"
@@ -68,8 +69,8 @@ func (c *ClaudeExecutor) Execute(ctx context.Context, opts harnessapi.RunOptions
 	if opts.WorkspaceDir != "" {
 		cmd.Dir = opts.WorkspaceDir
 	}
-	SetProcessGroup(cmd)
-	out, err := runLoggedCommand(cmd, opts.LogPath, true, opts.OnStart)
+	process.SetProcessGroup(cmd)
+	out, err := process.RunLoggedCommand(cmd, opts.LogPath, true, opts.OnStart)
 	if err != nil {
 		execErr := fmt.Errorf("claude exec failed: %w\noutput: %s", err, string(out))
 		if ev := reliability.ParseClaudeError(string(out)); ev != nil {

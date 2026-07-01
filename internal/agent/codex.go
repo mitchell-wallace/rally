@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/mitchell-wallace/rally/internal/harness/process"
 	"github.com/mitchell-wallace/rally/internal/harnessapi"
 	"io"
 	"os"
@@ -138,8 +139,8 @@ func (c *CodexExecutor) ProbeLiveness(ctx context.Context) (bool, error) {
 	args = append(args, sessionID, "Respond with exactly OK.")
 
 	cmd := exec.CommandContext(ctx, "codex", args...)
-	SetProcessGroup(cmd)
-	out, err := runLoggedCommand(cmd, "", true, nil)
+	process.SetProcessGroup(cmd)
+	out, err := process.RunLoggedCommand(cmd, "", true, nil)
 	if err != nil {
 		return false, fmt.Errorf("codex probe failed: %w\noutput: %s", err, string(out))
 	}
@@ -193,7 +194,7 @@ func (c *CodexExecutor) Execute(ctx context.Context, opts harnessapi.RunOptions)
 	if opts.WorkspaceDir != "" {
 		cmd.Dir = opts.WorkspaceDir
 	}
-	SetProcessGroup(cmd)
+	process.SetProcessGroup(cmd)
 	out, err := runCodexCommand(cmd, opts.LogPath, opts.OnStart, c.setActiveSessionID)
 	if err != nil {
 		os.Remove(reportPath)
@@ -241,7 +242,7 @@ func runCodexCommand(cmd *exec.Cmd, logPath string, onStart func(pid int), onSes
 	}
 	cmd.Stderr = cmd.Stdout
 
-	logFile, err := openTryLog(logPath)
+	logFile, err := process.OpenTryLog(logPath)
 	if err != nil {
 		return nil, err
 	}

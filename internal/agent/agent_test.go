@@ -15,6 +15,7 @@ import (
 
 	"github.com/mitchell-wallace/rally/internal/agent_prompt"
 	"github.com/mitchell-wallace/rally/internal/gitx"
+	"github.com/mitchell-wallace/rally/internal/harness/process"
 	"github.com/mitchell-wallace/rally/internal/reliability"
 	"github.com/mitchell-wallace/rally/internal/testutil"
 )
@@ -914,7 +915,7 @@ func TestRunLoggedCommandStreamsTryLog(t *testing.T) {
 	resultCh := make(chan result, 1)
 	started := make(chan int, 1)
 	go func() {
-		out, err := runLoggedCommand(cmd, logPath, false, func(pid int) {
+		out, err := process.RunLoggedCommand(cmd, logPath, false, func(pid int) {
 			started <- pid
 		})
 		resultCh <- result{out: out, err: err}
@@ -943,7 +944,7 @@ func TestRunLoggedCommandStreamsTryLog(t *testing.T) {
 
 	res := <-resultCh
 	if res.err != nil {
-		t.Fatalf("runLoggedCommand failed: %v", res.err)
+		t.Fatalf("process.RunLoggedCommand failed: %v", res.err)
 	}
 	if string(res.out) != "first\nsecond\n" {
 		t.Fatalf("unexpected combined output: %q", string(res.out))
@@ -1892,13 +1893,13 @@ func TestAntigravityAdapterCapabilities(t *testing.T) {
 }
 
 func TestTailString(t *testing.T) {
-	if got := tailString("hello", 100); got != "hello" {
+	if got := process.TailString("hello", 100); got != "hello" {
 		t.Errorf("tailString short = %q, want hello", got)
 	}
-	if got := tailString("  hello  ", 100); got != "hello" {
+	if got := process.TailString("  hello  ", 100); got != "hello" {
 		t.Errorf("tailString trimmed = %q, want hello", got)
 	}
-	got := tailString("abcdefghij", 4)
+	got := process.TailString("abcdefghij", 4)
 	if got != "…ghij" {
 		t.Errorf("tailString long = %q, want …ghij", got)
 	}

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"github.com/mitchell-wallace/rally/internal/harness/process"
 	"github.com/mitchell-wallace/rally/internal/harnessapi"
 	"io"
 	"os/exec"
@@ -76,7 +77,7 @@ func (g *GenericExecutor) Execute(ctx context.Context, opts harnessapi.RunOption
 	if opts.WorkspaceDir != "" {
 		cmd.Dir = opts.WorkspaceDir
 	}
-	SetProcessGroup(cmd)
+	process.SetProcessGroup(cmd)
 
 	return g.runGenericCommand(cmd, prompt, hasPrompt, tailStream, outputLines, opts)
 }
@@ -89,7 +90,7 @@ func (g *GenericExecutor) runGenericCommand(
 	outputLines int,
 	opts harnessapi.RunOptions,
 ) (*harnessapi.TryResult, error) {
-	logFile, err := openTryLog(opts.LogPath)
+	logFile, err := process.OpenTryLog(opts.LogPath)
 	if err != nil {
 		return nil, err
 	}

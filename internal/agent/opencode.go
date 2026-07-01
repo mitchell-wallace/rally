@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/mitchell-wallace/rally/internal/harness/process"
 	"github.com/mitchell-wallace/rally/internal/harnessapi"
 	"io"
 	"os"
@@ -101,9 +102,9 @@ func (o *OpenCodeExecutor) Execute(ctx context.Context, opts harnessapi.RunOptio
 		cmd.Dir = opts.WorkspaceDir
 	}
 	cmd.Env = append(os.Environ(), `OPENCODE_PERMISSION={"*":"allow"}`)
-	SetProcessGroup(cmd)
+	process.SetProcessGroup(cmd)
 	startedAt := time.Now()
-	out, runErr := runLoggedCommand(cmd, opts.LogPath, true, opts.OnStart)
+	out, runErr := process.RunLoggedCommand(cmd, opts.LogPath, true, opts.OnStart)
 	endedAt := time.Now()
 
 	tr, err := parseOpenCodeOutput(out, runErr == nil)
