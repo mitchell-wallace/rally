@@ -763,11 +763,11 @@
       "title": "Verify Phase 1 contract seam",
       "description": "Use the openspec-verify-change skill against modularize-harness-adapters, focused on sections 1-2.\n\nVerify: internal/harnessapi holds exactly the contract surface (design.md Decision 3) and nothing more; the six exported helpers (Decision 10) carry the right names and every caller compiles; go list -deps ./internal/harnessapi is clean of adapters, relay, config, store, telemetry, cli, and progress; every listed consumer imports harnessapi rather than agent for the contract types. Trace run_one.go's BuildPrompt call to confirm BuildPrompt output is unchanged (behaviour preservation) - do not settle for green tests. Confirm no test appears twice after the prompt_test.go/reasoning_test.go moves. Confirm go build, go test -count=1 ./..., go vet, and gofmt -l . (empty) all pass.\n\narchguard: go run ./tools/archguard --ci is EXPECTED RED until Phase 5 (consumer allow-lists not yet swapped). Do NOT treat that as a Phase-1 failure; note it and move on.\n\nBranch-target awareness: determine the intended merge target from the user, PR metadata, repo docs, branch config, or recent history - do NOT assume main - then diff with git diff \u003ctarget\u003e...HEAD. Identify the first lap/try of THIS batch and treat earlier branch work as pre-existing (you may flag it, but do not add cleanup laps to remove it unless the user asks). Do NOT rewrite git history; if cleanup is needed, add a focused head lap using additive/revert commits.\n\ntasks.md: check off section 1 (1.1, 1.2) and section 2 (2.1-2.5) boxes ONLY for work verified correct, complete, and behaviour-preserving. A checked box means verified done, not attempted. You may fix only tiny safe one-liners; anything larger becomes a new focused head lap.",
       "assignee": "VERIFY",
-      "isDone": false,
+      "isDone": true,
       "order": 196608,
       "createdAt": "2026-07-01T12:04:05.930628851Z",
-      "updatedAt": "2026-07-01T12:04:05.930628851Z",
-      "completedAt": null
+      "updatedAt": "2026-07-01T13:14:41.890080465Z",
+      "completedAt": "2026-07-01T13:14:41.890080465Z"
     },
     {
       "id": "rall-ce43",
