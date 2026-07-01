@@ -840,11 +840,11 @@
       "title": "Phase 4 tests: registry and app.BuildExecutors coverage",
       "description": "Context: modularize-harness-adapters tasks.md section 5 (task 5.4). Focused unit tests for the newly-added construction logic. Depends on the Phase-4 registry lap.\n\nOutcome: Tests covering: the four built-in canonical names (claude, codex, opencode, antigravity) are present; a configured generic/custom harness registers a generic adapter; configured model defaults reach the right adapter; and app.BuildExecutors maps a representative config.V2Config to the same executor set and keys as before the change.\n\nFiles \u0026 scope: Add internal/harness/registry_test.go (package harness) and, if not already covered, an app.BuildExecutors parity test under internal/app. Follow the repo's existing table-test style.\n\nDesign: Concrete adapter types are hidden behind harnessapi.Executor, so assert on observable properties: the map keys, and each value's behavioural profile (e.g. ResumeSupported/RotateSupported/LivenessProbeSupported, or a resolved-model probe) rather than a type assertion. Verify ModelFlag nil-vs-empty-string is preserved through the app mapper and that GenericConfig.Model stays empty.\n\nAcceptance: go test -count=1 ./internal/harness ./internal/app; gofmt clean. archguard --ci still RED until Phase 5. Do not tick tasks.md.",
       "assignee": "JUNIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 655360,
       "createdAt": "2026-07-01T12:04:05.93063422Z",
-      "updatedAt": "2026-07-01T12:04:05.93063422Z",
-      "completedAt": null
+      "updatedAt": "2026-07-01T15:18:18.278314511Z",
+      "completedAt": "2026-07-01T15:18:18.278314511Z"
     },
     {
       "id": "rall-4f33",

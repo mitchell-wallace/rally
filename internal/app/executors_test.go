@@ -1,18 +1,28 @@
 package app
 
 import (
+	"context"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/mitchell-wallace/rally/internal/config"
-	"github.com/mitchell-wallace/rally/internal/harness/generic"
 	"github.com/mitchell-wallace/rally/internal/harnessapi"
 )
+
+// app.BuildExecutors is a thin config -> harness.Config mapper that delegates to
+// harness.BuildExecutors. These tests assert on observable properties — the
+// executor set/keys parity and the generic adapter's Execute-visible behaviour
+// — rather than type asserting the concrete adapter, matching the registry
+// tests' approach (modularize-harness-adapters tasks.md 5.4).
 
 // TestBuildExecutors_Parity confirms app.BuildExecutors still yields the same
 // executor set and keys the pre-change inline map produced for a representative
 // config: the four built-in canonical names plus one generic adapter per harness
-// entry that declares a command, with generic-harness model defaults absent
-// (tasks.md 5.4).
+// entry that declares a command, with command-less entries skipped (tasks.md
+// 5.4). The generic adapter is identified by its all-false capability profile,
+// not by its concrete type.
 func TestBuildExecutors_Parity(t *testing.T) {
 	emptyFlag := ""
 	cfg := config.V2Config{
@@ -42,21 +52,19 @@ func TestBuildExecutors_Parity(t *testing.T) {
 		}
 	}
 
-	g, ok := executors["mycli"].(*generic.Executor)
+	g, ok := executors["mycli"]
 	if !ok {
-		t.Fatalf("mycli executor is %T, want *generic.Executor", executors["mycli"])
+		t.Fatal(`missing generic executor "mycli"`)
 	}
-	if g.ModelFlag != &emptyFlag {
-		t.Errorf("mycli ModelFlag pointer not preserved through config->harness.Config translation: got %p, want %p", g.ModelFlag, &emptyFlag)
-	}
-	// The config shape has no generic-harness default-model field, so the mapper
-	// must leave GenericConfig.Model empty (not "" from a programmatic default).
-	if g.Model != "" {
-		t.Errorf("mycli Model = %q, want empty (no generic default-model field in config)", g.Model)
+	// The generic adapter reports no capability support — the observable
+	// signature that distinguishes it from the built-ins.
+	if g.ResumeSupported() || g.RotateSupported() || g.LivenessProbeSupported() {
+		t.Errorf("mycli capability profile = (resume=%v, rotate=%v, liveness=%v), want all false (generic)",
+			g.ResumeSupported(), g.RotateSupported(), g.LivenessProbeSupported())
 	}
 
 	if _, ok := executors["modelsonly"]; ok {
-		t.Errorf("modelsonly (no command) should not register an executor")
+		t.Error(`modelsonly (no command) should not register an executor`)
 	}
 
 	if want := 5; len(executors) != want {
@@ -64,35 +72,69 @@ func TestBuildExecutors_Parity(t *testing.T) {
 	}
 }
 
-// TestBuildExecutors_PreservesModelFlagAbsent confirms the config->harness.Config
-// mapper preserves ModelFlag absent (nil) versus empty-string pointer semantics.
-func TestBuildExecutors_PreservesModelFlagAbsent(t *testing.T) {
+// TestBuildExecutors_PreservesModelFlagSemantics confirms the config ->
+// harness.Config mapper preserves ModelFlag absent (nil) versus empty-string
+// pointer semantics end to end. The difference is observable in the generic
+// adapter's argv: an empty-string flag appends the resolved model positionally,
+// while a nil flag passes no model at all (tasks.md 5.4).
+func TestBuildExecutors_PreservesModelFlagSemantics(t *testing.T) {
 	cfg := config.V2Config{
 		Harnesses: map[string]*config.HarnessConfig{
-			"absent": {Command: []string{"absent"}}, // ModelFlag nil
-			"empty":  {Command: []string{"empty"}, ModelFlag: strPtr("")},
+			"absent": {Command: []string{"absent"}},                       // ModelFlag nil
+			"empty":  {Command: []string{"empty"}, ModelFlag: strPtr("")}, // ModelFlag = empty string
 		},
 	}
 
 	executors := BuildExecutors(cfg)
+	binDir := stageEchoBin(t, "absent", "empty")
+	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 
-	absent, ok := executors["absent"].(*generic.Executor)
-	if !ok {
-		t.Fatalf("absent executor is %T, want *generic.Executor", executors["absent"])
+	// A per-try model is resolved via opts.Model (GenericConfig.Model is empty
+	// through the mapper), so the flag's nil-vs-empty distinction is visible.
+	absentRes, err := executors["absent"].Execute(context.Background(), harnessapi.RunOptions{Model: "droid-v1"})
+	if err != nil {
+		t.Fatalf("absent Execute failed: %v", err)
 	}
-	if absent.ModelFlag != nil {
-		t.Errorf("absent ModelFlag = %v, want nil (absent distinct from empty string)", absent.ModelFlag)
+	if strings.Contains(absentRes.Summary, "droid-v1") {
+		t.Errorf("absent (nil ModelFlag): model leaked into argv %q, want no model appended", absentRes.Summary)
 	}
 
-	empty, ok := executors["empty"].(*generic.Executor)
-	if !ok {
-		t.Fatalf("empty executor is %T, want *generic.Executor", executors["empty"])
+	emptyRes, err := executors["empty"].Execute(context.Background(), harnessapi.RunOptions{Model: "droid-v1"})
+	if err != nil {
+		t.Fatalf("empty Execute failed: %v", err)
 	}
-	if empty.ModelFlag == nil {
-		t.Fatalf("empty ModelFlag = nil, want non-nil pointer to empty string")
+	if !strings.Contains(emptyRes.Summary, "<droid-v1>") {
+		t.Errorf("empty (empty-string ModelFlag): expected positional model in argv, got %q", emptyRes.Summary)
 	}
-	if *empty.ModelFlag != "" {
-		t.Errorf("empty ModelFlag value = %q, want empty string", *empty.ModelFlag)
+}
+
+// TestBuildExecutors_GenericModelStaysEmpty confirms the mapper leaves
+// GenericConfig.Model empty because the current config shape has no
+// generic-harness default-model field. The observable consequence: with no
+// per-try model and a non-empty ModelFlag, no model and no flag token reach the
+// argv (had the mapper injected a default model, the flag + default would
+// appear) (tasks.md 5.4).
+func TestBuildExecutors_GenericModelStaysEmpty(t *testing.T) {
+	modelFlag := "--model"
+	cfg := config.V2Config{
+		Harnesses: map[string]*config.HarnessConfig{
+			"flagged": {Command: []string{"flagged", "run"}, ModelFlag: &modelFlag},
+		},
+	}
+
+	executors := BuildExecutors(cfg)
+	binDir := stageEchoBin(t, "flagged")
+	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	res, err := executors["flagged"].Execute(context.Background(), harnessapi.RunOptions{})
+	if err != nil {
+		t.Fatalf("Execute failed: %v", err)
+	}
+	// No per-try model and no injected default: neither the flag nor any model
+	// token reaches the argv. Had the mapper injected a GenericConfig.Model
+	// default, "<--model>" plus that default would appear here.
+	if strings.Contains(res.Summary, "<--model>") {
+		t.Errorf("expected no model flag in argv (no model resolved), got %q", res.Summary)
 	}
 }
 
@@ -104,4 +146,23 @@ func executorKeys(m map[string]harnessapi.Executor) []string {
 		out = append(out, k)
 	}
 	return out
+}
+
+// stageEchoBin writes executable mock CLIs that echo each argv element wrapped
+// in <...> into a fresh temp bin dir and returns that dir for PATH staging. The
+// echoed tokens land in the generic adapter's tailed summary, making the
+// constructed argv observable through the interface.
+func stageEchoBin(t *testing.T, binNames ...string) string {
+	t.Helper()
+	binDir := filepath.Join(t.TempDir(), "bin")
+	if err := os.MkdirAll(binDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	const script = `for arg in "$@"; do printf '<%s>\n' "$arg"; done`
+	for _, name := range binNames {
+		if err := os.WriteFile(filepath.Join(binDir, name), []byte("#!/bin/sh\n"+script), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return binDir
 }

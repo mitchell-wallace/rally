@@ -1,21 +1,47 @@
 package harness
 
 import (
+	"context"
+	"os"
+	"path/filepath"
 	"sort"
 	"testing"
 
-	"github.com/mitchell-wallace/rally/internal/harness/antigravity"
-	"github.com/mitchell-wallace/rally/internal/harness/claude"
-	"github.com/mitchell-wallace/rally/internal/harness/codex"
-	"github.com/mitchell-wallace/rally/internal/harness/generic"
-	"github.com/mitchell-wallace/rally/internal/harness/opencode"
 	"github.com/mitchell-wallace/rally/internal/harnessapi"
 )
 
+// Concrete adapter types are hidden behind the harnessapi.Executor contract, so
+// these registry tests assert on observable properties — the map keys, each
+// value's capability profile, and a resolved-model probe — rather than type
+// asserting the concrete *<harness>.Executor (modularize-harness-adapters
+// tasks.md 5.4). The file imports only the contract package, never the adapter
+// subpackages, so it cannot reach into adapter internals.
+
+// builtInProfile is the observable capability profile each built-in adapter
+// reports through the harnessapi.Executor interface.
+type builtInProfile struct {
+	name                   string
+	resumeSupported        bool
+	rotateSupported        bool
+	livenessProbeSupported bool
+}
+
+// The four built-in adapters keyed by canonical name, each tagged by its
+// observable capability profile. opencode alone reports RotateSupported; codex
+// alone reports LivenessProbeSupported; claude and antigravity share the
+// resume-only profile and are told apart by the resolved-model probe in
+// TestBuildExecutors_ModelDefaultsReachAdapter.
+var builtInProfiles = []builtInProfile{
+	{name: "antigravity", resumeSupported: true, rotateSupported: false, livenessProbeSupported: false},
+	{name: "claude", resumeSupported: true, rotateSupported: false, livenessProbeSupported: false},
+	{name: "codex", resumeSupported: true, rotateSupported: false, livenessProbeSupported: true},
+	{name: "opencode", resumeSupported: true, rotateSupported: true, livenessProbeSupported: false},
+}
+
 // TestBuildExecutors_BuiltInCanonicalNames confirms the registry produces the
-// four built-in adapters keyed by their canonical names, each constructed via
-// its package constructor over the concrete Executor type and wired with its
-// configured model default (tasks.md 5.4).
+// four built-in adapters keyed by their canonical names, each carrying its
+// observable capability profile through the harnessapi.Executor interface
+// (tasks.md 5.4).
 func TestBuildExecutors_BuiltInCanonicalNames(t *testing.T) {
 	executors := BuildExecutors(Config{
 		ClaudeModel:      "claude-default",
@@ -24,151 +50,164 @@ func TestBuildExecutors_BuiltInCanonicalNames(t *testing.T) {
 		AntigravityModel: "antigravity-default",
 	})
 
-	want := []string{"antigravity", "claude", "codex", "opencode"}
-	for _, name := range want {
-		ex, ok := executors[name]
-		if !ok {
-			t.Errorf("missing built-in executor %q", name)
-			continue
-		}
-		switch name {
-		case "claude":
-			c, ok := ex.(*claude.Executor)
-			if !ok {
-				t.Errorf("claude executor is %T, want *claude.Executor", ex)
-			} else if c.Model != "claude-default" {
-				t.Errorf("claude.Model = %q, want %q", c.Model, "claude-default")
-			}
-		case "codex":
-			c, ok := ex.(*codex.Executor)
-			if !ok {
-				t.Errorf("codex executor is %T, want *codex.Executor", ex)
-			} else if c.Model != "codex-default" {
-				t.Errorf("codex.Model = %q, want %q", c.Model, "codex-default")
-			}
-		case "opencode":
-			c, ok := ex.(*opencode.Executor)
-			if !ok {
-				t.Errorf("opencode executor is %T, want *opencode.Executor", ex)
-			} else if c.Model != "opencode-default" {
-				t.Errorf("opencode.Model = %q, want %q", c.Model, "opencode-default")
-			}
-		case "antigravity":
-			c, ok := ex.(*antigravity.Executor)
-			if !ok {
-				t.Errorf("antigravity executor is %T, want *antigravity.Executor", ex)
-			} else if c.Model != "antigravity-default" {
-				t.Errorf("antigravity.Model = %q, want %q", c.Model, "antigravity-default")
-			}
-		}
+	if want := len(builtInProfiles); len(executors) != want {
+		t.Errorf("executor count = %d, want %d (built-ins only): %v", len(executors), want, sortedKeys(executors))
 	}
 
-	if len(executors) != len(want) {
-		t.Errorf("executor count = %d, want %d (built-ins only): %v", len(executors), len(want), sortedKeys(executors))
+	for _, p := range builtInProfiles {
+		t.Run(p.name, func(t *testing.T) {
+			ex, ok := executors[p.name]
+			if !ok {
+				t.Fatalf("missing built-in executor %q", p.name)
+			}
+			if got := ex.ResumeSupported(); got != p.resumeSupported {
+				t.Errorf("%s.ResumeSupported() = %v, want %v", p.name, got, p.resumeSupported)
+			}
+			if got := ex.RotateSupported(); got != p.rotateSupported {
+				t.Errorf("%s.RotateSupported() = %v, want %v", p.name, got, p.rotateSupported)
+			}
+			if got := ex.LivenessProbeSupported(); got != p.livenessProbeSupported {
+				t.Errorf("%s.LivenessProbeSupported() = %v, want %v", p.name, got, p.livenessProbeSupported)
+			}
+		})
+	}
+}
+
+// modelProbeCase drives one built-in adapter's resolved-model probe: the mock
+// CLI binary name the adapter shells out to and a script body that emits a
+// completed TryResult the adapter's own parser accepts. home marks adapters
+// that read/write $HOME (antigravity's settings file).
+type modelProbeCase struct {
+	name    string // canonical adapter key
+	model   string // distinct configured default used to spot cross-wiring
+	binName string // mock binary name the adapter invokes
+	script  string // mock binary body (without shebang)
+	home    bool   // adapter touches $HOME
+}
+
+// TestBuildExecutors_ModelDefaultsReachAdapter confirms each built-in model
+// default configured on Config reaches the adapter registered under its
+// canonical name. It is observed through harnessapi.TryResult.ResolvedModel
+// after a drive-by Execute against a mock CLI, never by inspecting the concrete
+// adapter. Distinct defaults per adapter catch any cross-wiring (e.g.
+// ClaudeModel handed to codex) (tasks.md 5.4).
+func TestBuildExecutors_ModelDefaultsReachAdapter(t *testing.T) {
+	cases := []modelProbeCase{
+		{name: "claude", model: "claude-resolved-marker", binName: "claude", script: claudeProbeScript},
+		{name: "codex", model: "codex-resolved-marker", binName: "codex", script: codexProbeScript},
+		{name: "opencode", model: "opencode-resolved-marker", binName: "opencode", script: opencodeProbeScript},
+		{name: "antigravity", model: "antigravity-resolved-marker", binName: "agy", script: antigravityProbeScript, home: true},
+	}
+
+	executors := BuildExecutors(Config{
+		ClaudeModel:      "claude-resolved-marker",
+		CodexModel:       "codex-resolved-marker",
+		OpenCodeModel:    "opencode-resolved-marker",
+		AntigravityModel: "antigravity-resolved-marker",
+	})
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			ex, ok := executors[tc.name]
+			if !ok {
+				t.Fatalf("missing executor %q", tc.name)
+			}
+			binDir := stageMockBin(t, tc.binName, tc.script)
+			t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+			if tc.home {
+				t.Setenv("HOME", filepath.Join(t.TempDir(), "home"))
+			}
+			res, err := ex.Execute(context.Background(), harnessapi.RunOptions{Prompt: "do work"})
+			if err != nil {
+				t.Fatalf("%s Execute failed: %v", tc.name, err)
+			}
+			if res.ResolvedModel != tc.model {
+				t.Errorf("%s ResolvedModel = %q, want %q (configured model default did not reach the right adapter)",
+					tc.name, res.ResolvedModel, tc.model)
+			}
+		})
 	}
 }
 
 // TestBuildExecutors_GenericWithCommand confirms a Custom entry that declares a
-// command registers a generic adapter carrying its command and command-spec
-// fields, and that one without a command is skipped (tasks.md 5.4).
+// command registers a generic adapter — observed through its all-false
+// capability profile, which is distinct from every built-in (all of which
+// report ResumeSupported) — while a command-less Custom entry is skipped so the
+// set and keys match the pre-change inline map (tasks.md 5.4).
 func TestBuildExecutors_GenericWithCommand(t *testing.T) {
-	emptyFlag := ""
 	executors := BuildExecutors(Config{
 		Custom: map[string]GenericConfig{
-			"mycli": {
-				Command:        []string{"mycli", "run"},
-				ModelFlag:      &emptyFlag,
-				OutputStrategy: "tail",
-				OutputLines:    7,
-				TailStream:     "stdout",
-				Model:          "mycli-default",
-			},
-			"modelsonly": {
-				// No Command: defines model aliases only, must not register an executor.
-				Model: "ignored",
-			},
+			"mycli":      {Command: []string{"mycli", "run"}},
+			"modelsonly": {Model: "ignored"}, // no Command: defines model aliases only
 		},
 	})
 
 	ex, ok := executors["mycli"]
 	if !ok {
-		t.Fatalf("missing generic executor %q", "mycli")
+		t.Fatal(`missing generic executor "mycli"`)
 	}
-	g, ok := ex.(*generic.Executor)
-	if !ok {
-		t.Fatalf("mycli executor is %T, want *generic.Executor", ex)
+	// The generic adapter reports no capability support — the observable
+	// signature that distinguishes it from the built-ins.
+	if ex.ResumeSupported() {
+		t.Error("mycli.ResumeSupported() = true, want false (generic supports no capabilities)")
 	}
-	if !equalStrings(g.Command, []string{"mycli", "run"}) {
-		t.Errorf("generic.Command = %v, want [mycli run]", g.Command)
+	if ex.RotateSupported() {
+		t.Error("mycli.RotateSupported() = true, want false")
 	}
-	if g.ModelFlag != &emptyFlag {
-		t.Errorf("generic.ModelFlag = %p, want the passed *string %p (empty string preserved)", g.ModelFlag, &emptyFlag)
-	}
-	if g.OutputStrategy != "tail" {
-		t.Errorf("generic.OutputStrategy = %q, want %q", g.OutputStrategy, "tail")
-	}
-	if g.OutputLines != 7 {
-		t.Errorf("generic.OutputLines = %d, want 7", g.OutputLines)
-	}
-	if g.TailStream != "stdout" {
-		t.Errorf("generic.TailStream = %q, want %q", g.TailStream, "stdout")
-	}
-	if g.Model != "mycli-default" {
-		t.Errorf("generic.Model = %q, want %q", g.Model, "mycli-default")
+	if ex.LivenessProbeSupported() {
+		t.Error("mycli.LivenessProbeSupported() = true, want false")
 	}
 
 	if _, ok := executors["modelsonly"]; ok {
-		t.Errorf("modelsonly (no command) should not register an executor")
+		t.Error(`modelsonly (no command) should not register an executor`)
 	}
 
-	if want := 5; len(executors) != want {
+	if want := len(builtInProfiles) + 1; len(executors) != want {
 		t.Errorf("executor count = %d, want %d (4 built-ins + mycli): %v", len(executors), want, sortedKeys(executors))
 	}
 }
 
-// TestBuildExecutors_NilModelFlagAbsent confirms ModelFlag nil (absent) threads
-// through to the generic adapter distinct from an empty-string pointer, the
-// semantic the config->harness.Config translation must preserve.
-func TestBuildExecutors_NilModelFlagAbsent(t *testing.T) {
-	executors := BuildExecutors(Config{
-		Custom: map[string]GenericConfig{
-			"absent": {Command: []string{"absent"}},
-			"empty":  {Command: []string{"empty"}, ModelFlag: strPtr("")},
-		},
-	})
+// Mock CLI bodies for the resolved-model probe. Each emits exactly the shape its
+// adapter's parser accepts as a completed try; they mirror the proven stubs in
+// each adapter's own TestExecutor_PopulateResolvedModel.
+const (
+	// claudeProbeScript emits the system + result JSON lines the claude parser
+	// accepts as a completed try.
+	claudeProbeScript = `printf '%s\n' '{"type":"system","session_id":"s"}'
+printf '%s\n' '{"type":"result","result":{"completed":true,"summary":"ok"}}'
+`
+	// codexProbeScript emits a thread.started event and writes the result JSON
+	// to the path following the -o flag, mirroring codex's --json report file.
+	codexProbeScript = `printf '%s\n' '{"type":"thread.started","thread_id":"s"}'
+next=0
+for i in "$@"; do
+  if [ "$next" = "1" ]; then printf '{"completed":true,"summary":"ok"}' > "$i"; break; fi
+  if [ "$i" = "-o" ]; then next=1; fi
+done
+`
+	// opencodeProbeScript emits the text-part event whose embedded JSON the
+	// opencode parser decodes as a completed try.
+	opencodeProbeScript = `printf '%s\n' '{"type":"text","part":{"type":"text","text":"{\"completed\":true,\"summary\":\"ok\"}"}}'
+`
+	// antigravityProbeScript emits a TryResult JSON line the antigravity parser
+	// accepts in print mode.
+	antigravityProbeScript = `printf '%s\n' '{"completed":true,"summary":"ok"}'
+`
+)
 
-	absent, ok := executors["absent"].(*generic.Executor)
-	if !ok {
-		t.Fatalf("absent executor is %T, want *generic.Executor", executors["absent"])
+// stageMockBin writes an executable mock CLI named binName with the given script
+// body into a fresh temp bin dir and returns that dir for PATH staging.
+func stageMockBin(t *testing.T, binName, script string) string {
+	t.Helper()
+	binDir := filepath.Join(t.TempDir(), "bin")
+	if err := os.MkdirAll(binDir, 0o755); err != nil {
+		t.Fatal(err)
 	}
-	if absent.ModelFlag != nil {
-		t.Errorf("absent generic.ModelFlag = %v, want nil (absent distinct from empty)", absent.ModelFlag)
+	if err := os.WriteFile(filepath.Join(binDir, binName), []byte("#!/bin/sh\n"+script), 0o755); err != nil {
+		t.Fatal(err)
 	}
-
-	empty, ok := executors["empty"].(*generic.Executor)
-	if !ok {
-		t.Fatalf("empty executor is %T, want *generic.Executor", executors["empty"])
-	}
-	if empty.ModelFlag == nil {
-		t.Errorf("empty generic.ModelFlag = nil, want non-nil pointer to empty string")
-	} else if *empty.ModelFlag != "" {
-		t.Errorf("empty generic.ModelFlag value = %q, want empty string", *empty.ModelFlag)
-	}
+	return binDir
 }
-
-func equalStrings(a, b []string) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	for i := range a {
-		if a[i] != b[i] {
-			return false
-		}
-	}
-	return true
-}
-
-func strPtr(s string) *string { return &s }
 
 func sortedKeys(m map[string]harnessapi.Executor) []string {
 	out := make([]string, 0, len(m))
