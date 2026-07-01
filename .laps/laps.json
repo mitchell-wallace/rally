@@ -610,51 +610,11 @@
       "id": "work-a9f6",
       "title": "Resolve the pre-existing gofmt...",
       "description": "Resolve the pre-existing gofmt issue in internal/relay/relay_test.go so gofmt -l . returns empty output, then rerun lap rall-e7b0 to scaffold tools/archguard.",
-      "isDone": false,
+      "isDone": true,
       "order": -262144,
       "createdAt": "2026-07-01T01:10:17.440625966Z",
-      "updatedAt": "2026-07-01T01:10:17.440625966Z",
-      "completedAt": null
-    },
-    {
-      "id": "work-5eec",
-      "title": "Format or otherwise resolve th...",
-      "description": "Format or otherwise resolve the pre-existing gofmt issue in internal/relay/relay_test.go so gofmt -l . returns empty output, then rerun lap rall-e7b0 to scaffold tools/archguard.",
-      "isDone": false,
-      "order": -196608,
-      "createdAt": "2026-07-01T01:08:52.214685161Z",
-      "updatedAt": "2026-07-01T01:08:52.214685161Z",
-      "completedAt": null
-    },
-    {
-      "id": "work-657a",
-      "title": "Fix the pre-existing gofmt iss...",
-      "description": "Fix the pre-existing gofmt issue in internal/relay/relay_test.go so gofmt -l . is empty, then rerun lap rall-e7b0 to scaffold tools/archguard.",
-      "isDone": false,
-      "order": -131072,
-      "createdAt": "2026-07-01T01:07:28.575684307Z",
-      "updatedAt": "2026-07-01T01:07:28.575684307Z",
-      "completedAt": null
-    },
-    {
-      "id": "work-482e",
-      "title": "Restore gofmt -l . to empty ou...",
-      "description": "Restore gofmt -l . to empty output by formatting internal/relay/relay_test.go or otherwise resolving that pre-existing formatting issue, then rerun lap rall-e7b0 to scaffold tools/archguard.",
-      "isDone": false,
-      "order": -65536,
-      "createdAt": "2026-07-01T01:06:06.807245836Z",
-      "updatedAt": "2026-07-01T01:06:06.807245836Z",
-      "completedAt": null
-    },
-    {
-      "id": "work-e0e8",
-      "title": "Format internal/relay/relay_te...",
-      "description": "Format internal/relay/relay_test.go or otherwise restore gofmt -l . to empty output, then rerun lap rall-e7b0 to scaffold tools/archguard.",
-      "isDone": false,
-      "order": 0,
-      "createdAt": "2026-07-01T01:04:02.757847335Z",
-      "updatedAt": "2026-07-01T01:04:02.757847335Z",
-      "completedAt": null
+      "updatedAt": "2026-07-01T01:14:19.174344868Z",
+      "completedAt": "2026-07-01T01:14:19.174344868Z"
     },
     {
       "id": "rall-e7b0",
