@@ -18,8 +18,8 @@ func newInitCmd() *cobra.Command {
 		Short: "Initialize rally workspace",
 		RunE:  runInit,
 	}
-	cmd.AddCommand(initRolesCmd)
-	cmd.AddCommand(initAllCmd)
+	cmd.AddCommand(newInitRolesCmd())
+	cmd.AddCommand(newInitAllCmd())
 	return cmd
 }
 

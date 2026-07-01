@@ -85,31 +85,7 @@ func StartRelay(ctx context.Context, opts RelayStartOptions) error {
 		return fmt.Errorf("rally not initialized; run `rally init` first")
 	}
 
-	s, err := store.NewStore(rallyDir)
-	if err != nil {
-		return fmt.Errorf("load store: %w", err)
-	}
-
-	if opts.DiscardUnfinishedRelay {
-		relays := s.RecentRelays(1)
-		if len(relays) > 0 && relays[0].EndedAt == "" {
-			_ = relay.CompleteRelay(s, relays[0].ID)
-		}
-	}
-	if opts.ResetAgentStatus {
-		if err := s.ResetAgentStatus(); err != nil {
-			return fmt.Errorf("reset agent status: %w", err)
-		}
-	}
-
 	executors := BuildExecutors(opts.Config)
-
-	// Init telemetry only for relay execution. Mechanical commands like help,
-	// version, and update never reach this path, so baked release credentials
-	// cannot create machine-id files or open a telemetry client for those
-	// commands.
-	telemetryResult := telemetry.InitWithIdentity(telemetryConfigForRelay(opts.Config, opts.DataDir, opts.Telemetry))
-	defer telemetryResult.Cleanup()
 
 	providerIndex, err := opts.Config.BuildProviderIndex()
 	if err != nil {
@@ -119,7 +95,6 @@ func StartRelay(ctx context.Context, opts RelayStartOptions) error {
 	runnerCfg := runner.Config{
 		WorkspaceDir:           opts.WorkspaceDir,
 		DataDir:                opts.DataDir,
-		MachineID:              telemetryResult.MachineID,
 		AgentMixSpecs:          opts.AgentMixSpecs,
 		RouteSpecs:             opts.Config.Routes,
 		Reasoning:              opts.Config.Reasoning,
@@ -162,6 +137,31 @@ func StartRelay(ctx context.Context, opts RelayStartOptions) error {
 	if data, err := os.ReadFile(instructionsPath); err == nil {
 		runnerCfg.Instructions = string(data)
 	}
+
+	s, err := store.NewStore(rallyDir)
+	if err != nil {
+		return fmt.Errorf("load store: %w", err)
+	}
+
+	if opts.DiscardUnfinishedRelay {
+		relays := s.RecentRelays(1)
+		if len(relays) > 0 && relays[0].EndedAt == "" {
+			_ = relay.CompleteRelay(s, relays[0].ID)
+		}
+	}
+	if opts.ResetAgentStatus {
+		if err := s.ResetAgentStatus(); err != nil {
+			return fmt.Errorf("reset agent status: %w", err)
+		}
+	}
+
+	// Init telemetry only for relay execution. Mechanical commands like help,
+	// version, and update never reach this path, so baked release credentials
+	// cannot create machine-id files or open a telemetry client for those
+	// commands.
+	telemetryResult := telemetry.InitWithIdentity(telemetryConfigForRelay(opts.Config, opts.DataDir, opts.Telemetry))
+	defer telemetryResult.Cleanup()
+	runnerCfg.MachineID = telemetryResult.MachineID
 
 	r := runner.NewRunner(s, runnerCfg, executors)
 	r.SetTelemetry(telemetryResult.Sink)

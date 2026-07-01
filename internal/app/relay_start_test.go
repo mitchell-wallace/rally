@@ -275,6 +275,46 @@ func TestStartRelayCompletesZeroIterationRelayWithCapturedOutput(t *testing.T) {
 	}
 }
 
+func TestStartRelayValidationFailureDoesNotDiscardOrReset(t *testing.T) {
+	t.Setenv("RALLY_TELEMETRY", "0")
+
+	workspaceDir := seededStartRelayWorkspace(t)
+	cfg := startRelayTestConfig()
+	cfg.Providers = map[string]config.ProviderConfig{
+		"bad": {Models: []string{"unknown-model-alias"}},
+	}
+
+	err := StartRelay(context.Background(), RelayStartOptions{
+		WorkspaceDir:           workspaceDir,
+		Config:                 cfg,
+		AgentMixSpecs:          []string{"cc"},
+		TargetIters:            1,
+		DataDir:                filepath.Join(t.TempDir(), "data"),
+		DiscardUnfinishedRelay: true,
+		ResetAgentStatus:       true,
+		Out:                    &bytes.Buffer{},
+		Err:                    &bytes.Buffer{},
+	})
+	if err == nil || !strings.Contains(err.Error(), "resolve providers") {
+		t.Fatalf("StartRelay error = %v, want provider validation error", err)
+	}
+
+	reloaded, err := store.NewStore(store.RallyDir(workspaceDir))
+	if err != nil {
+		t.Fatalf("reload store: %v", err)
+	}
+	original := reloaded.GetRelay(1)
+	if original == nil {
+		t.Fatal("original relay missing")
+	}
+	if original.EndedAt != "" {
+		t.Fatalf("original EndedAt = %q, want unchanged unfinished relay", original.EndedAt)
+	}
+	if got := len(reloaded.AllAgentStatus()); got != 1 {
+		t.Fatalf("agent status events = %d, want existing status preserved", got)
+	}
+}
+
 func TestAppImportInvariant(t *testing.T) {
 	direct := goList(t, "-f", "{{.Imports}}", "./internal/app")
 	for _, forbidden := range []string{

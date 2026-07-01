@@ -13,16 +13,20 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var initRolesCmd = &cobra.Command{
-	Use:   "roles",
-	Short: "Install default role routing and role instructions",
-	RunE:  runInitRoles,
+func newInitRolesCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "roles",
+		Short: "Install default role routing and role instructions",
+		RunE:  runInitRoles,
+	}
 }
 
-var initAllCmd = &cobra.Command{
-	Use:   "all",
-	Short: "Initialize workspace and install roles",
-	RunE:  runInitAll,
+func newInitAllCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "all",
+		Short: "Initialize workspace and install roles",
+		RunE:  runInitAll,
+	}
 }
 
 type roleBootstrap struct {

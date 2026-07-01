@@ -15,21 +15,25 @@ func newInstructionsCmd() *cobra.Command {
 		Use:   "instructions",
 		Short: "Manage project instructions",
 	}
-	cmd.AddCommand(instructionsEditCmd)
-	cmd.AddCommand(instructionsShowCmd)
+	cmd.AddCommand(newInstructionsEditCmd())
+	cmd.AddCommand(newInstructionsShowCmd())
 	return cmd
 }
 
-var instructionsEditCmd = &cobra.Command{
-	Use:   "edit",
-	Short: "Edit project instructions",
-	RunE:  runInstructionsEdit,
+func newInstructionsEditCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "edit",
+		Short: "Edit project instructions",
+		RunE:  runInstructionsEdit,
+	}
 }
 
-var instructionsShowCmd = &cobra.Command{
-	Use:   "show",
-	Short: "Show project instructions",
-	RunE:  runInstructionsShow,
+func newInstructionsShowCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "show",
+		Short: "Show project instructions",
+		RunE:  runInstructionsShow,
+	}
 }
 
 func runInstructionsEdit(cmd *cobra.Command, args []string) error {

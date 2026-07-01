@@ -613,7 +613,9 @@ func TestRunRelayNewResetsAgentStatus(t *testing.T) {
 
 	rootCmd := NewRootCommand(RootOptions{Version: "dev"})
 	rootCmd.SetArgs([]string{"start", "--new", "--iterations", "0"})
-	_ = rootCmd.Execute()
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
 
 	s2, _ := store.NewStore(rallyDir)
 	resilience2 := relay.NewResilience(s2)

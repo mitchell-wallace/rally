@@ -106,6 +106,9 @@ func runRelay(cmd *cobra.Command, args []string, opts RootOptions) error {
 	if _, err := os.Stat(rallyDir); os.IsNotExist(err) {
 		return fmt.Errorf("rally not initialized; run `rally init` first")
 	}
+	if _, err := store.NewStore(rallyDir); err != nil {
+		return fmt.Errorf("load store: %w", err)
+	}
 
 	// Migrate/auto-update role instruction folders for repos that use roles.
 	// Skipped when the repo never set up .rally/agents/ so roles are never
