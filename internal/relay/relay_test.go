@@ -79,19 +79,19 @@ func TestResumeRelay_FindsIncompleteRelay(t *testing.T) {
 	s := newRelayTestStore(t)
 
 	r1 := store.RelayRecord{
-		ID:               1,
-		TargetIterations: 5,
+		ID:                  1,
+		TargetIterations:    5,
 		CompletedIterations: 5,
-		AgentMix:         "cc",
-		StartedAt:        time.Now().UTC().Add(-2 * time.Hour).Format(time.RFC3339),
-		EndedAt:          time.Now().UTC().Add(-1 * time.Hour).Format(time.RFC3339),
+		AgentMix:            "cc",
+		StartedAt:           time.Now().UTC().Add(-2 * time.Hour).Format(time.RFC3339),
+		EndedAt:             time.Now().UTC().Add(-1 * time.Hour).Format(time.RFC3339),
 	}
 	r2 := store.RelayRecord{
-		ID:               2,
-		TargetIterations: 10,
+		ID:                  2,
+		TargetIterations:    10,
 		CompletedIterations: 3,
-		AgentMix:         "cx",
-		StartedAt:        time.Now().UTC().Add(-30 * time.Minute).Format(time.RFC3339),
+		AgentMix:            "cx",
+		StartedAt:           time.Now().UTC().Add(-30 * time.Minute).Format(time.RFC3339),
 	}
 	if err := s.AppendRelay(r1); err != nil {
 		t.Fatal(err)
@@ -119,12 +119,12 @@ func TestResumeRelay_NoIncompleteRelay(t *testing.T) {
 	s := newRelayTestStore(t)
 
 	r := store.RelayRecord{
-		ID:               1,
-		TargetIterations: 5,
+		ID:                  1,
+		TargetIterations:    5,
 		CompletedIterations: 5,
-		AgentMix:         "cc",
-		StartedAt:        time.Now().UTC().Add(-2 * time.Hour).Format(time.RFC3339),
-		EndedAt:          time.Now().UTC().Add(-1 * time.Hour).Format(time.RFC3339),
+		AgentMix:            "cc",
+		StartedAt:           time.Now().UTC().Add(-2 * time.Hour).Format(time.RFC3339),
+		EndedAt:             time.Now().UTC().Add(-1 * time.Hour).Format(time.RFC3339),
 	}
 	if err := s.AppendRelay(r); err != nil {
 		t.Fatal(err)
@@ -160,11 +160,11 @@ func TestCompleteRelay(t *testing.T) {
 	s := newRelayTestStore(t)
 
 	r := store.RelayRecord{
-		ID:               1,
-		TargetIterations: 10,
+		ID:                  1,
+		TargetIterations:    10,
 		CompletedIterations: 10,
-		AgentMix:         "cc cx",
-		StartedAt:        time.Now().UTC().Add(-1 * time.Hour).Format(time.RFC3339),
+		AgentMix:            "cc cx",
+		StartedAt:           time.Now().UTC().Add(-1 * time.Hour).Format(time.RFC3339),
 	}
 	if err := s.AppendRelay(r); err != nil {
 		t.Fatal(err)
