@@ -36,26 +36,22 @@ and risk-of-drift, not final scope. Last reviewed 2026-07-01.
   responsibility-named files, decomposed the large run/try loops into named
   steps, and added the `relay-module-structure` spec for the runner/relay
   boundary.
+- **slim-cli-composition-root** (`2026-07-01`) — slimmed `cmd/rally/main.go` and
+  split `internal/config/config_v2.go`; added the `internal/cli` command/prompt
+  layer and the presentation-neutral `internal/app.StartRelay` seam (with
+  `InspectResume` / `BuildExecutors`), resolving interactive start-of-run
+  decisions CLI-side; broke the `release → app` metadata edge; added the
+  `composition-root-structure` spec.
 
 ## Order
 
 The runner is the spine of this sequence: #1 gave it its own package
-(`internal/relay/runner`) and the one-way `runner → relay` boundary, and #2–#5
-build on that edge rather than on a monolithic runner.
-
-2. **slim-cli-composition-root** _(landed; review in progress, not yet archived)_
-   Reduce `cmd/rally/main.go` (864 lines) and `internal/config/config_v2.go` (993
-   lines) from broad catch-all files into a slim process entry, an `internal/cli`
-   command/prompt layer, and responsibility-named config modules. Introduces the
-   **presentation-neutral** `internal/app.StartRelay` seam (plus `InspectResume` /
-   `BuildExecutors`) that composes `runner.Runner` above config — the reusable
-   start path CLI and the future TUI share. The CLI resolves every interactive
-   start-of-run decision so `internal/app` never directly imports
-   `internal/user_prompt` or `internal/laps`; it first breaks the current
-   `release → app` metadata edge so `app → runner → laps → release` remains
-   acyclic. Release build vars stay in `package main` and thread through options
-   so GoReleaser ldflags are untouched. Adds the `composition-root-structure`
-   spec #3 can codify as import rules.
+(`internal/relay/runner`) and the one-way `runner → relay` boundary, and #2
+layered the composition root (`cmd/rally → internal/cli → internal/app`) above
+it. The queued changes #3–#8 build on those edges rather than on a monolithic
+runner: a guardrail (#3) that holds the boundaries, then the deep-module
+decompositions (#4 harness adapters, #5 presentation boundary, #6 run/try loop,
+#7 remaining source files, #8 test files).
 
 3. **add-architecture-guardrails** _(proposed)_
    Add the `tools/archguard` checker (file-size budgets with grandfathered caps,
@@ -87,12 +83,34 @@ build on that edge rather than on a monolithic runner.
    CLI and future TUI consume a presentation-neutral runtime instead of runner
    internals.
 
-6. **rename-rally-roles** _(author input captured; artifacts not drafted)_
+6. **decompose-run-one** _(draft)_
+   Split the runner orchestration core (`run_one.go` 1,510 + `route_runtime.go`
+   752 + `relay_steps.go` 526) into responsibility-named files behind the existing
+   `runOne` index, and break up its two deepest phase bodies (classify/record).
+   Same-package file split like #2 did to config; behaviour-preserving, no API
+   change. Ratchets #3's flagship production cap (`run_one.go`) down. Sequence
+   after #5 so it splits orchestration-only code.
+
+7. **decompose-remaining-source-files** _(draft)_
+   Deep-module split of the production warning-band outliers no other change owns:
+   `monitor.go` (663), `config/providers.go` (621), `cli/routes_check.go` (619),
+   `store.go` (541). All under #3's 800-line hard budget, so this is findability
+   polish, not gate-clearing. Same-package file splits, behaviour-preserving.
+
+8. **decompose-large-test-files** _(draft)_
+   Split the nine `_test.go` files over #3's 1,000-line cap into responsibility-
+   named test files that mirror the post-#4/#6/#7 source layout, with shared setup
+   in per-package helper files. Pure test reorganization. Coordinates with #4/#6
+   (which may split their own tests) and directly owns the stable-package tests
+   (`config_v2_test`, `store_test`, `resilience_test`). Land last of the
+   decompositions; ratchets #3's test caps away.
+
+9. **rename-rally-roles** _(author input captured; artifacts not drafted)_
    Rename routing roles from skill-hierarchy (JUNIOR/SENIOR/UI/VERIFY) to judgment
    framing (**builder**/**architect**/**designer**/**analyst**), builder as default.
    Needs a migration-vs-breaking decision. See `rename-rally-roles/laps-author-input-1.md`.
 
-7. **build-new-tui** _(stub proposal)_
+10. **build-new-tui** _(stub proposal)_
    Future TUI plus a lighter start-of-run config / inflight steering flow (e.g.
    disabling a runner for one relay, the ergonomic successor to the
    invalid-model-name workaround #1 only classifies). Sequence after the runtime
@@ -112,9 +130,16 @@ build on that edge rather than on a monolithic runner.
   primitives (relay-record/resilience/mix). Downstream changes preserve the
   direction — `relay` must never import `runner` — and attach new structure
   (app-start seam #2, import guardrail #3, harness registry #4, presentation
-  boundary #5) on top of that edge, not by re-monolithising the runner. Don't
-  reintroduce a "same-package, defer the boundary" framing: extract when the
-  dependency graph already supports it.
+  boundary #5, deep-module decompositions #6–#8) on top of that edge, not by
+  re-monolithising the runner. Don't reintroduce a "same-package, defer the
+  boundary" framing: extract when the dependency graph already supports it.
+- **Deep-module decomposition** (from slim-cli-composition-root's config split):
+  when a file grows past its budget, split it into responsibility-named files in
+  the *same* package behind a shallow entry point (the type/constructor or the
+  step-index function), so the directory listing answers "where does X live" and
+  each file exposes a small surface over its own deeper body. Prefer a file split
+  first; promote to a child package only when a clean interface has emerged.
+  Applies to #6 (`run_one`), #7 (remaining source), and #8 (tests).
 - **OpenSpec/laps coupling.** Rally core, the executor, and default role docs stay
   OpenSpec-agnostic; **laps** is the permanent backend. OpenSpec-specific tuning lives in
   `prepare-laps`, applied per-lap only when a lap has a related change. (Bounds #3's
