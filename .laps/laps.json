@@ -686,11 +686,11 @@
       "title": "Make archguard report baseline diff-clean",
       "description": "Fix the remaining Phase 1-3 verification gap in add-architecture-guardrails: `go run ./tools/archguard --report` regenerates the correct grandfather entries, but the baseline block does not diff byte-for-byte against `tools/archguard/baseline.go` because the map literal spacing differs. Make the report output match the committed grandfather map exactly when compared directly, keep it stdlib-only, and re-verify with `diff`, `go test -count=1 ./tools/archguard/...`, `go run ./tools/archguard --ci`, and `gofmt -l .`. Scope: `tools/archguard/**` only.",
       "assignee": "JUNIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 262144,
       "createdAt": "2026-07-01T05:10:35.068329785Z",
-      "updatedAt": "2026-07-01T05:10:35.068329785Z",
-      "completedAt": null
+      "updatedAt": "2026-07-01T05:27:37.759823897Z",
+      "completedAt": "2026-07-01T05:27:37.759823897Z"
     },
     {
       "id": "rall-684b",

@@ -1,6 +1,7 @@
 package policy
 
 import (
+	"go/format"
 	"reflect"
 	"strings"
 	"testing"
@@ -190,7 +191,9 @@ func TestSizeBudgetReportRegeneratesMap(t *testing.T) {
 	for _, want := range []string{
 		"`archguard --report`",
 		"Ratchet the cap down, never up.",
-		`"internal/agent/agent_test.go": 2812,`,
+		// Values align to the longest key exactly as gofmt would, so pasting
+		// the section straight into baseline.go is byte-for-byte clean.
+		`"internal/agent/agent_test.go":     2812,`,
 		`"internal/relay/runner/run_one.go": 1510,`,
 	} {
 		if !strings.Contains(got, want) {
@@ -201,6 +204,81 @@ func TestSizeBudgetReportRegeneratesMap(t *testing.T) {
 	if strings.Contains(got, `"internal/store/store.go"`) {
 		t.Errorf("Report should not grandfather a warn-only file\ngot:\n%s", got)
 	}
+	// The map-literal body must be gofmt-clean: reformatting it through go/format
+	// is a no-op. This is what keeps the regenerated block byte-for-byte
+	// identical to the committed, gofmt'd baseline.go.
+	assertBodyGofmtClean(t, got)
+}
+
+// TestSizeBudgetReportAlignsMixedKeyWidths confirms the report body routes
+// through go/format rather than naive single-space padding: with deliberately
+// different key widths, the values align to the longest key (5 spaces for the
+// shorter key, 1 for the longest), matching gofmt's decision. This is the
+// regression guard for the "baseline block does not diff byte-for-byte" gap.
+func TestSizeBudgetReportAlignsMixedKeyWidths(t *testing.T) {
+	r := NewSizeBudget(nil)
+	files := []FileInfo{
+		fi("internal/agent/agent_test.go", 2812, true),      // 30-char key
+		fi("internal/relay/runner/run_one.go", 1510, false), // 34-char key (longest)
+	}
+	got := r.Report(files)
+	// Longest key gets a single space; the shorter key is padded so both values
+	// start at the same column.
+	if !strings.Contains(got, `"internal/agent/agent_test.go":     2812,`) {
+		t.Errorf("shorter key not aligned to longest\ngot:\n%s", got)
+	}
+	if !strings.Contains(got, `"internal/relay/runner/run_one.go": 1510,`) {
+		t.Errorf("longest key spacing wrong\ngot:\n%s", got)
+	}
+	assertBodyGofmtClean(t, got)
+}
+
+// assertBodyGofmtClean extracts the `grandfather = map[string]int{ ... }` body
+// from a --report section, wraps it in a trivial Go file, formats it through
+// go/format, and re-extracts the body. A gofmt-clean body is unchanged by the
+// round-trip (so pasting it into baseline.go never dirties the file). Comparing
+// the bodies — not the wrapper files — sidesteps gofmt's incidental blank-line
+// spacing around the package clause. A non-gofmt body (e.g. single-space when
+// gofmt would align) fails here, which is exactly the "would dirty baseline.go"
+// failure.
+func assertBodyGofmtClean(t *testing.T, report string) {
+	t.Helper()
+	body := extractReportBody(t, report)
+	wrapped := "package p\nvar v = map[string]int{\n" + body + "}\n"
+	formatted, err := format.Source([]byte(wrapped))
+	if err != nil {
+		t.Fatalf("report body did not parse as a map literal: %v\nsrc:\n%s", err, wrapped)
+	}
+	if reformatted := extractReportBody(t, string(formatted)); reformatted != body {
+		t.Errorf("report map body is not gofmt-clean (would dirty baseline.go on paste):\n got:\n%s\nwant:\n%s", body, reformatted)
+	}
+}
+
+// extractReportBody pulls the indented entry lines out of a --report grandfather
+// section (between the `grandfather = map[string]int{` line and the closing `}`).
+func extractReportBody(t *testing.T, report string) string {
+	t.Helper()
+	var b strings.Builder
+	inMap := false
+	got := false
+	for _, ln := range strings.Split(report, "\n") {
+		if !inMap {
+			if strings.HasSuffix(ln, "{") {
+				inMap = true
+			}
+			continue
+		}
+		if strings.TrimSpace(ln) == "}" {
+			got = true
+			break
+		}
+		b.WriteString(ln)
+		b.WriteString("\n")
+	}
+	if !got {
+		t.Fatalf("no grandfather map block found in report:\n%s", report)
+	}
+	return b.String()
 }
 
 // TestSizeBudgetReportEmptyWhenNothingOverHard confirms the report section is
