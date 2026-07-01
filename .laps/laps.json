@@ -741,11 +741,11 @@
       "title": "Baseline check and capture agent's exported surface",
       "description": "Context: First lap of the modularize-harness-adapters refactor (OpenSpec change of the same name; tasks.md section 1). The whole change is a behaviour-preserving relocation of internal/agent into a new internal/harnessapi contract package plus internal/harness/* adapter modules. Baseline was verified green at the current HEAD.\n\nOutcome: A confirmed-green baseline and a written inventory of internal/agent's exported surface (types, funcs, consts) plus the six unexported helpers that later laps must export, so relocation parity can be checked later. This is tasks 1.1 and 1.2 (report only; do not tick tasks.md).\n\nFiles \u0026 scope: No production code changes. Read-only over internal/agent. Record the inventory in your completion/handoff note (it can be re-derived any time via go doc ./internal/agent and git grep). Include the old-to-new name mapping from design.md Decision 4 and Decision 10, e.g. agent.ClaudeExecutor to claude.Executor via claude.New, agent.DefaultAntigravityModel to antigravity.DefaultModel, boundedExecutorFinalText to harnessapi.BoundedFinalText, applyReasoningEffort to harnessapi.ApplyReasoningEffort, emitReasoningWarning to harnessapi.EmitReasoningWarning, runLoggedCommand to process.RunLoggedCommand, openTryLog to process.OpenTryLog, tailString to process.TailString.\n\nDesign: go doc will not show the unexported helpers, so list them from source. The six helpers in Decision 10 are the one place this refactor is not a pure move (unexported to exported), so capture them explicitly.\n\nAcceptance: go build ./..., go vet ./..., gofmt -l . (empty), go test -count=1 ./..., and go run ./tools/archguard --ci (exit 0) all pass. This is the LAST point archguard --ci is expected green until Phase 5. If anything is red, STOP and surface it - do not fold unrelated fixes into this refactor. Do not check tasks.md boxes.",
       "assignee": "JUNIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 65536,
       "createdAt": "2026-07-01T12:04:05.930615629Z",
-      "updatedAt": "2026-07-01T12:04:05.930615629Z",
-      "completedAt": null
+      "updatedAt": "2026-07-01T12:54:03.817819501Z",
+      "completedAt": "2026-07-01T12:54:03.817819501Z"
     },
     {
       "id": "rall-4666",
