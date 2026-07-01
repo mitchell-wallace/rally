@@ -54,6 +54,30 @@ func TestImportIntegrationBoundaryFixture(t *testing.T) {
 	}
 }
 
+// TestImportIntegrationReportPrintsHardBoundaryViolation confirms report mode
+// stays useful for regeneration audits: it exits zero, but still prints hard
+// non-size violations after any reporter sections.
+func TestImportIntegrationReportPrintsHardBoundaryViolation(t *testing.T) {
+	root := filepath.Join("testdata", "boundary")
+	rs := []policy.Rule{policy.NewImportBoundary()}
+
+	var stdout, stderr bytes.Buffer
+	code := runWithRules(root, modeReport, &stdout, &stderr, rs)
+	if code != 0 {
+		t.Errorf("--report = %d, want 0; stderr=%q", code, stderr.String())
+	}
+	out := stdout.String()
+	for _, want := range []string{
+		"internal/relay/relay.go:1: import boundary:",
+		"imports github.com/mitchell-wallace/rally/internal/relay/runner",
+		"keep the runner to relay edge one-way",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("--report stdout missing %q\ngot:\n%s", want, out)
+		}
+	}
+}
+
 // TestImportIntegrationBoundaryWarningsDontFailCI confirms a boundary rule
 // alongside the size rule keeps --ci green on the clean repo fixture (only size
 // warnings, no hard violations), mirroring the real repo acceptance.

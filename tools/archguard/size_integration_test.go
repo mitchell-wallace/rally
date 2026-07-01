@@ -172,6 +172,9 @@ func TestSizeIntegrationReportRegeneratesMap(t *testing.T) {
 	if !strings.Contains(out, "var grandfather = map[string]int{") {
 		t.Errorf("--report missing paste-ready var declaration:\ngot %q", out)
 	}
+	if strings.Contains(out, ": size:") {
+		t.Errorf("--report should not duplicate over-hard size diagnostics outside the map:\n%s", out)
+	}
 }
 
 // TestSizeIntegrationReportOmitsSizeWarnings confirms --report stays focused on
