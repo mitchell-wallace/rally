@@ -851,11 +851,11 @@
       "title": "Verify Phase 4: registry correctness and agent removal",
       "description": "Use the openspec-verify-change skill against modularize-harness-adapters, focused on section 5. This gates the point-of-no-return (internal/agent removed) and the only new logic before guardrails and docs land.\n\nVerify: harness.BuildExecutors builds the correct executor set; go list -deps ./internal/harness and ./internal/harness/... show NO internal/config; app.BuildExecutors is a thin mapper whose output matches the pre-change map - trace the keys and per-adapter model wiring, confirm ModelFlag nil-vs-empty-string is preserved and GenericConfig.Model is empty; internal/agent is gone with no shim (git grep for internal/agent is clean of imports); the executor map still feeds runner.NewRunner from the composition root and neither cmd/rally nor internal/relay/runner references a concrete adapter type. Confirm go build and go test are green.\n\narchguard: go run ./tools/archguard --ci is STILL expected RED (Phase 5 not done). Do NOT gate on it; note it.\n\nBranch-target awareness: resolve the merge target (not assumed main) and diff \u003ctarget\u003e...HEAD; treat pre-batch work as pre-existing; do NOT rewrite git history; gaps become focused head laps.\n\ntasks.md: check off section 5 (5.1-5.4) boxes verified correct and complete.",
       "assignee": "VERIFY",
-      "isDone": false,
+      "isDone": true,
       "order": 720896,
       "createdAt": "2026-07-01T12:04:05.930634917Z",
-      "updatedAt": "2026-07-01T12:04:05.930634917Z",
-      "completedAt": null
+      "updatedAt": "2026-07-01T15:22:08.563713724Z",
+      "completedAt": "2026-07-01T15:22:08.563713724Z"
     },
     {
       "id": "rall-fdef",

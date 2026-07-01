@@ -27,10 +27,10 @@
 
 ## 5. Phase 4 — registry + app mapper
 
-- [ ] 5.1 Add `internal/harness.BuildExecutors(Config) map[string]harnessapi.Executor` (package `harness`, `registry.go`) constructing the four built-in adapters by canonical name plus a `generic.New(...)` per `Config.Custom` entry. Define `harness.Config` (built-in model strings + `Custom map[string]GenericConfig`) and `GenericConfig{Command []string, ModelFlag *string, OutputStrategy string, OutputLines int, TailStream string, Model string}`; do not import `internal/config`.
-- [ ] 5.2 Rewrite `internal/app.BuildExecutors(cfg config.V2Config)` as a thin mapper: translate `config.V2Config` (built-in models + `cfg.Harnesses` command specs) into `harness.Config` and delegate. Preserve the exact executor set/keys the pre-change map produced, preserve `ModelFlag *string` absent-vs-empty semantics, and leave `GenericConfig.Model` empty because the current config shape has no generic-harness default model field.
-- [ ] 5.3 Remove the now-empty `internal/agent` package (no shim). Confirm `go build ./...` and no remaining `internal/agent` import anywhere.
-- [ ] 5.4 Unit-test the registry: four built-in canonical names present; a generic harness configured with a command registers a generic adapter; configured model defaults reach the right adapter; `app.BuildExecutors` yields the same set as before for a representative config.
+- [x] 5.1 Add `internal/harness.BuildExecutors(Config) map[string]harnessapi.Executor` (package `harness`, `registry.go`) constructing the four built-in adapters by canonical name plus a `generic.New(...)` per `Config.Custom` entry. Define `harness.Config` (built-in model strings + `Custom map[string]GenericConfig`) and `GenericConfig{Command []string, ModelFlag *string, OutputStrategy string, OutputLines int, TailStream string, Model string}`; do not import `internal/config`.
+- [x] 5.2 Rewrite `internal/app.BuildExecutors(cfg config.V2Config)` as a thin mapper: translate `config.V2Config` (built-in models + `cfg.Harnesses` command specs) into `harness.Config` and delegate. Preserve the exact executor set/keys the pre-change map produced, preserve `ModelFlag *string` absent-vs-empty semantics, and leave `GenericConfig.Model` empty because the current config shape has no generic-harness default model field.
+- [x] 5.3 Remove the now-empty `internal/agent` package (no shim). Confirm `go build ./...` and no remaining `internal/agent` import anywhere.
+- [x] 5.4 Unit-test the registry: four built-in canonical names present; a generic harness configured with a command registers a generic adapter; configured model defaults reach the right adapter; `app.BuildExecutors` yields the same set as before for a representative config.
 
 ## 6. Phase 5 — architecture guardrails
 
