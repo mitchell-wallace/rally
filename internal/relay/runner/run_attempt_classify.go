@@ -14,7 +14,24 @@ import (
 	"github.com/mitchell-wallace/rally/internal/store"
 )
 
+// classifyAttemptOutcome resolves whether the attempt failed, why, and how it
+// should be recorded/routed. It is a table of named sub-steps; each helper
+// preserves the original statement order, error strings, and telemetry fields.
 func (r *Runner) classifyAttemptOutcome(relay *store.RelayRecord, runIndex int, picked harnessapi.ResolvedAgent, task runTask, state *runOneState, attempt *runAttemptState, log io.Writer) {
+	r.classifyInitialFailure(state, attempt)
+	detectLapsMarkerAsText(relay, runIndex, task, state, attempt, log)
+	r.validatePinnedLapForAttempt(relay, runIndex, task, state, attempt, log)
+	applyStallRecovery(relay, runIndex, task, state, attempt, log)
+	r.resolveAttemptOutcomeAndResume(state, attempt)
+	r.classifyErrorAndApplyStrategy(picked, state, attempt)
+	reclassifyRunBudgetTimeout(state, attempt)
+	reclassifyTryCapTimeout(state, attempt)
+	state.lastAttemptIncomplete = attempt.failed && attempt.attemptFailureClass == reliability.FailureIncomplete
+}
+
+// classifyInitialFailure computes the raw failure flag and high-level reason
+// for the attempt before any taxonomy or recovery adjustment is applied.
+func (r *Runner) classifyInitialFailure(state *runOneState, attempt *runAttemptState) {
 	// Compute failed before rendering the footer so the displayed result
 	// matches what gets recorded in the try record.
 	attempt.failed = false
@@ -54,7 +71,11 @@ func (r *Runner) classifyAttemptOutcome(relay *store.RelayRecord, runIndex int, 
 			state.failReason = "no changes made"
 		}
 	}
+}
 
+// detectLapsMarkerAsText flags agents that emit "laps done" / "laps handoff"
+// as summary text instead of invoking the shell command.
+func detectLapsMarkerAsText(relay *store.RelayRecord, runIndex int, task runTask, state *runOneState, attempt *runAttemptState, log io.Writer) {
 	// Detect agents that emit "laps done" / "laps handoff" as text instead of
 	// invoking the shell command. Symptom: the lap hooks never updated
 	// RecordedLaps or HandoffState, yet the summary contains the literal marker.
@@ -69,6 +90,11 @@ func (r *Runner) classifyAttemptOutcome(relay *store.RelayRecord, runIndex int, 
 			fmt.Fprintf(log, "relay %d run %d attempt %d laps-marker-as-text: agent wrote %q in summary but did not invoke the shell command (no hook fired, tool_calls=%d). Likely a model/harness output-vs-tool-call mismatch.\n", relay.ID, runIndex+1, attempt.attempt, attempt.markerAsText, attempt.result.ToolCalls)
 		}
 	}
+}
+
+// validatePinnedLapForAttempt records a lap-pin mismatch when the laps the
+// agent recorded do not match the pinned lap for this task.
+func (r *Runner) validatePinnedLapForAttempt(relay *store.RelayRecord, runIndex int, task runTask, state *runOneState, attempt *runAttemptState, log io.Writer) {
 	attempt.lapPinMismatch = false
 	if task.IsLapsBacked {
 		if reason, mismatch := validatePinnedLap(task.LapID, attempt.recordedLaps); mismatch {
@@ -87,6 +113,12 @@ func (r *Runner) classifyAttemptOutcome(relay *store.RelayRecord, runIndex int, 
 			}
 		}
 	}
+}
+
+// applyStallRecovery promotes a stalled attempt to success when the agent
+// committed files before idling. VERIFY runs are excluded: a trivial commit is
+// not evidence verification happened.
+func applyStallRecovery(relay *store.RelayRecord, runIndex int, task runTask, state *runOneState, attempt *runAttemptState, log io.Writer) {
 	// Stall recovery: if the stall detector killed the process but the agent had
 	// already committed or created files (autoCommit ran), treat the try as
 	// successful. This handles agents (e.g. opencode TUI) that complete the
@@ -101,7 +133,11 @@ func (r *Runner) classifyAttemptOutcome(relay *store.RelayRecord, runIndex int, 
 			fmt.Fprintf(log, "relay %d run %d attempt %d stall recovery: files committed, treating as success\n", relay.ID, runIndex+1, attempt.attempt)
 		}
 	}
+}
 
+// resolveAttemptOutcomeAndResume captures the resumable session id and derives
+// the base attempt outcome, applying the timeout override.
+func (r *Runner) resolveAttemptOutcomeAndResume(state *runOneState, attempt *runAttemptState) {
 	// A run-budget exhaustion only yields a separate handoff-only continuation
 	// when the harness can resume into the captured session. Capture this
 	// attempt's session id (the cancelled attempt may still carry it) before
@@ -129,7 +165,13 @@ func (r *Runner) classifyAttemptOutcome(relay *store.RelayRecord, runIndex int, 
 			state.failReason = noHandoffResumeReason(state.exec, state.sessionID)
 		}
 	}
+}
 
+// classifyErrorAndApplyStrategy runs reliability.ClassifyError over the
+// failing attempt and applies the resulting strategy (no-op, rotate,
+// wait/resume, fresh restart), terminal-category handling, and infra-failure
+// accounting.
+func (r *Runner) classifyErrorAndApplyStrategy(picked harnessapi.ResolvedAgent, state *runOneState, attempt *runAttemptState) {
 	// Error classification and strategy dispatch.
 	//
 	// terminalCategory marks usage_limit / auth_or_proxy: categories whose
@@ -207,6 +249,12 @@ func (r *Runner) classifyAttemptOutcome(relay *store.RelayRecord, runIndex int, 
 			state.failureCategory = ""
 		}
 	}
+}
+
+// reclassifyRunBudgetTimeout relabels a run-budget-exhausted failed attempt
+// as a non-freezing run_timeout (or handoff_timeout when no resumable session
+// exists), assigning the unidentified_issue floor when no category surfaced.
+func reclassifyRunBudgetTimeout(state *runOneState, attempt *runAttemptState) {
 	if attempt.failed && attempt.runBudgetExhausted {
 		attempt.canHandoffResume = state.exec != nil && state.exec.ResumeSupported() && state.sessionID != ""
 		attempt.attemptOutcome = reliability.OutcomeRunTimeout
@@ -228,6 +276,13 @@ func (r *Runner) classifyAttemptOutcome(relay *store.RelayRecord, runIndex int, 
 			state.failReason = noHandoffResumeReason(state.exec, state.sessionID)
 		}
 	}
+}
+
+// reclassifyTryCapTimeout assigns the non-freezing agent-class
+// unidentified_issue floor to a try-cap-only timeout that skipped the
+// classifier, unless executor/session/disk-log evidence already produced a
+// category.
+func reclassifyTryCapTimeout(state *runOneState, attempt *runAttemptState) {
 	// Try-cap-only kill (per-try deadline fired, run budget remains):
 	// ClassifyError was skipped (attemptOutcome = OutcomeRunTimeout, whose
 	// CarriesFailureCategory() is false), so failureCategory would
@@ -240,5 +295,4 @@ func (r *Runner) classifyAttemptOutcome(relay *store.RelayRecord, runIndex int, 
 		state.failureClass = reliability.FailureAgent
 		attempt.attemptFailureClass = reliability.FailureAgent
 	}
-	state.lastAttemptIncomplete = attempt.failed && attempt.attemptFailureClass == reliability.FailureIncomplete
 }

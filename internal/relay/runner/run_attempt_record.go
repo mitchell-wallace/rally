@@ -15,7 +15,35 @@ import (
 	"github.com/mitchell-wallace/rally/internal/telemetry"
 )
 
+// recordAttemptOutcome renders the attempt footer, assembles and persists the
+// try record, emits the try telemetry, and updates resolving run state. It is a
+// table of named sub-steps; each helper preserves the original statement order,
+// error strings, and telemetry fields.
 func (r *Runner) recordAttemptOutcome(relay *store.RelayRecord, runIndex int, picked harnessapi.ResolvedAgent, task runTask, state *runOneState, attempt *runAttemptState, log io.Writer) error {
+	r.emitAttemptOutcomeFooter(state, attempt)
+	tryRecord := buildTryRecord(relay, runIndex, picked, task, state, attempt)
+	fmt.Fprintf(log, "relay %d run %d attempt %d result: completed=%v outcome=%q fail_reason=%q runtime=%s files_changed=%d tool_calls=%d commit=%q lap_id=%q assignee=%q recorded_laps=%v laps_attempted=%v handoff_state=%d\n",
+		relay.ID, runIndex+1, attempt.attempt, !attempt.failed, attempt.attemptOutcome, state.failReason, attempt.runtime, attempt.filesChangedCount, tryRecord.ToolCalls, attempt.shortHash, task.LapID, task.Assignee, attempt.recordedLaps, attempt.lapsAttempted, attempt.handoffState)
+
+	tryLogFields := r.emitAttemptTelemetry(relay, runIndex, picked, task, state, attempt, tryRecord)
+	attempt.trySpan.Finish()
+
+	state.resolvingOutcome = attempt.attemptOutcome
+	state.resolvingDirtyHandoff = attempt.dirtyHandoff
+	if err := r.store.AppendTry(tryRecord); err != nil {
+		return err
+	}
+	if err := progress.ClearActiveTry(r.cfg.WorkspaceDir); err != nil {
+		return fmt.Errorf("clear active try metadata: %w", err)
+	}
+	r.tel().EmitTryLog(attempt.tryCtx, tryLogFields)
+	return nil
+}
+
+// emitAttemptOutcomeFooter renders the coloured attempt footer: an interim
+// (neutral) line for an in-budget retry, or a terminal footer (green on
+// success, red when the budget is exhausted or the run breaks out).
+func (r *Runner) emitAttemptOutcomeFooter(state *runOneState, attempt *runAttemptState) {
 	// A failing attempt that will be retried within budget is not a terminal
 	// outcome: it gets the neutral, in-place retry line rather than a red
 	// footer. Exactly one coloured footer prints when the run resolves —
@@ -41,7 +69,11 @@ func (r *Runner) recordAttemptOutcome(relay *store.RelayRecord, runIndex int, pi
 		MaxAttempts:  state.maxAttempts,
 	}
 	r.emitAttemptFooter(context.Background(), outcomeFooter)
+}
 
+// buildTryRecord assembles the persistent store.TryRecord for this attempt from
+// the resolved attempt/run state and the agent result.
+func buildTryRecord(relay *store.RelayRecord, runIndex int, picked harnessapi.ResolvedAgent, task runTask, state *runOneState, attempt *runAttemptState) store.TryRecord {
 	tryRecord := store.TryRecord{
 		ID:                     attempt.tryID,
 		RunID:                  runIndex + 1,
@@ -79,9 +111,14 @@ func (r *Runner) recordAttemptOutcome(relay *store.RelayRecord, runIndex int, pi
 			tryRecord.FilesChanged = attempt.result.FilesChanged
 		}
 	}
-	fmt.Fprintf(log, "relay %d run %d attempt %d result: completed=%v outcome=%q fail_reason=%q runtime=%s files_changed=%d tool_calls=%d commit=%q lap_id=%q assignee=%q recorded_laps=%v laps_attempted=%v handoff_state=%d\n",
-		relay.ID, runIndex+1, attempt.attempt, !attempt.failed, attempt.attemptOutcome, state.failReason, attempt.runtime, attempt.filesChangedCount, tryRecord.ToolCalls, attempt.shortHash, task.LapID, task.Assignee, attempt.recordedLaps, attempt.lapsAttempted, attempt.handoffState)
+	return tryRecord
+}
 
+// emitAttemptTelemetry populates the try trace span and structured try-log
+// fields, attaches failure/timeout/lap-pin/provider-limit/recovery evidence,
+// and captures operator-worthy and diagnostic events. It returns the assembled
+// try-log fields for the caller's final EmitTryLog call.
+func (r *Runner) emitAttemptTelemetry(relay *store.RelayRecord, runIndex int, picked harnessapi.ResolvedAgent, task runTask, state *runOneState, attempt *runAttemptState, tryRecord store.TryRecord) map[string]interface{} {
 	// Telemetry: per-try structured log + trace span tags. Only summaries
 	// and byte sizes are emitted — never current_task.md contents or the
 	// transcript (the scrubber is defense-in-depth on top of this).
@@ -263,16 +300,5 @@ func (r *Runner) recordAttemptOutcome(relay *store.RelayRecord, runIndex int, pi
 		}
 		r.tel().CaptureFailure(attempt.tryCtx, fmt.Sprintf("relay %d run %d try %d recovery needs_user", relay.ID, runIndex+1, tryRecord.ID), failureStateEvent(tryTags, state.rc, fs))
 	}
-	attempt.trySpan.Finish()
-
-	state.resolvingOutcome = attempt.attemptOutcome
-	state.resolvingDirtyHandoff = attempt.dirtyHandoff
-	if err := r.store.AppendTry(tryRecord); err != nil {
-		return err
-	}
-	if err := progress.ClearActiveTry(r.cfg.WorkspaceDir); err != nil {
-		return fmt.Errorf("clear active try metadata: %w", err)
-	}
-	r.tel().EmitTryLog(attempt.tryCtx, tryLogFields)
-	return nil
+	return tryLogFields
 }
