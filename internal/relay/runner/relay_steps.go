@@ -9,6 +9,7 @@ import (
 	"time"
 
 	relaycore "github.com/mitchell-wallace/rally/internal/relay"
+	"github.com/mitchell-wallace/rally/internal/relay/runner/runtimeevent"
 	"github.com/mitchell-wallace/rally/internal/reliability"
 	"github.com/mitchell-wallace/rally/internal/store"
 	"github.com/mitchell-wallace/rally/internal/style"
@@ -56,6 +57,7 @@ func (r *Runner) startOrResumeRelay() (*store.RelayRecord, *routeRuntime, io.Wri
 
 	for _, w := range routeRuntime.Warnings() {
 		fmt.Fprintln(os.Stderr, w)
+		r.eventSink().Emit(context.Background(), runtimeevent.RouteWarning{Message: w})
 	}
 
 	log, err := openRelayLog(r.cfg.DataDir, r.cfg.WorkspaceDir, relay.ID)
@@ -66,6 +68,13 @@ func (r *Runner) startOrResumeRelay() (*store.RelayRecord, *routeRuntime, io.Wri
 
 	fmt.Fprintf(log, "relay %d started (target %d iterations, mix: %s)\n", relay.ID, relay.TargetIterations, relay.AgentMix)
 	r.relayStart = time.Now()
+	// Data-only lifecycle marker: no operator-facing print (a terminal sink
+	// no-ops it); the literal "Relay complete." line stays owned by app.StartRelay.
+	r.eventSink().Emit(context.Background(), runtimeevent.RelayStarted{
+		RelayID:          relay.ID,
+		TargetIterations: relay.TargetIterations,
+		AgentMix:         relay.AgentMix,
+	})
 
 	return relay, routeRuntime, log, nil
 }
@@ -148,7 +157,7 @@ func (r *Runner) selectRouteOrWait(
 				return runTask{}, routeSelection{}, false, false, fmt.Errorf("relay failed: %s", routeErr.Error())
 			}
 			fmt.Fprintf(log, "relay %d all agents paused, waiting %v\n", relay.ID, routeErr.Wait)
-			outcome, waitErr := waitWithCountdown(ctx, routeErr.Wait, "agents paused, waiting %s...")
+			outcome, waitErr := waitWithCountdown(ctx, r.eventSink(), routeErr.Wait, "agents paused, waiting %s...")
 			if waitErr != nil {
 				return runTask{}, routeSelection{}, false, false, waitErr
 			}
@@ -170,6 +179,7 @@ func (r *Runner) selectRouteOrWait(
 	if selection.Route.Warning != "" {
 		fmt.Fprintln(os.Stderr, selection.Route.Warning)
 		fmt.Fprintln(log, selection.Route.Warning)
+		r.eventSink().Emit(ctx, runtimeevent.RouteWarning{Message: selection.Route.Warning})
 	}
 	task.ResolvedRoute = selection.Route.Name
 	task.EffectiveAssignee = selection.EffectiveAssignee
@@ -476,11 +486,28 @@ func (r *Runner) printRelaySummary(relay *store.RelayRecord) {
 	// Print relay summary
 	passCount, failCount, cancelledCount := tallyRuns(r.store.AllTries(), relay.ID)
 	totalRuns := passCount + failCount + cancelledCount
+	totalDuration := time.Since(r.relayStart)
 	if totalRuns > 0 {
-		totalDuration := time.Since(r.relayStart)
 		summary := style.RenderSummary(totalRuns, passCount, failCount, totalDuration, cancelledCount)
 		fmt.Println(summary)
+		r.eventSink().Emit(context.Background(), runtimeevent.RelaySummaryReady{
+			TotalRuns:     totalRuns,
+			Passed:        passCount,
+			Failed:        failCount,
+			Cancelled:     cancelledCount,
+			TotalDuration: totalDuration,
+		})
 	}
+	// Data-only lifecycle marker: no operator-facing print (a terminal sink
+	// no-ops it); it pairs with RelayStarted for alternate presentations.
+	r.eventSink().Emit(context.Background(), runtimeevent.RelayCompleted{
+		RelayID:       relay.ID,
+		TotalRuns:     totalRuns,
+		Passed:        passCount,
+		Failed:        failCount,
+		Cancelled:     cancelledCount,
+		TotalDuration: totalDuration,
+	})
 }
 
 // tallyRuns aggregates try records into run-level pass/fail/cancelled counts

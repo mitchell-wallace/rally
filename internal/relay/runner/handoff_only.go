@@ -13,6 +13,7 @@ import (
 	"github.com/mitchell-wallace/rally/internal/gitx"
 	"github.com/mitchell-wallace/rally/internal/harnessapi"
 	"github.com/mitchell-wallace/rally/internal/progress"
+	"github.com/mitchell-wallace/rally/internal/relay/runner/runtimeevent"
 	"github.com/mitchell-wallace/rally/internal/reliability"
 	"github.com/mitchell-wallace/rally/internal/store"
 	"github.com/mitchell-wallace/rally/internal/style"
@@ -214,13 +215,15 @@ func (r *Runner) runBoundedHandoffOnly(
 	}
 
 	runtime := endedAt.Sub(startedAt)
-	renderRunFooter(r.outWriter(), style.FooterOptions{
+	footerOpts := style.FooterOptions{
 		Passed:      succeeded,
 		Duration:    runtime,
 		FailReason:  failReason,
 		Attempt:     attemptNumber,
 		MaxAttempts: maxAttempts,
-	})
+	}
+	renderRunFooter(r.outWriter(), footerOpts)
+	r.eventSink().Emit(ctx, runtimeevent.HandoffAttemptFinished{FooterData: footerData(footerOpts)})
 
 	tryRecord := store.TryRecord{
 		ID:                     tryID,

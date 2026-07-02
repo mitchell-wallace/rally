@@ -17,6 +17,7 @@ import (
 	"github.com/mitchell-wallace/rally/internal/monitor"
 	"github.com/mitchell-wallace/rally/internal/progress"
 	relaycore "github.com/mitchell-wallace/rally/internal/relay"
+	"github.com/mitchell-wallace/rally/internal/relay/runner/runtimeevent"
 	"github.com/mitchell-wallace/rally/internal/reliability"
 	"github.com/mitchell-wallace/rally/internal/store"
 	"github.com/mitchell-wallace/rally/internal/style"
@@ -294,48 +295,6 @@ attemptLoop:
 	return state.outcome(task, state.success, addressed, interrupted), nil
 }
 
-func (r *Runner) newRunOneState(relay *store.RelayRecord, runIndex int, task runTask, consumedMsg *store.MessageRecord, relayMsg *store.MessageRecord) *runOneState {
-	// Initialize run-state for this run.
-	runID := fmt.Sprintf("relay-%d-run-%d", relay.ID, runIndex+1)
-	rc := r.rallyContext(relay)
-	summaryEntryCountBeforeRun := progressSummaryEntryCount(r.cfg.WorkspaceDir)
-	_ = progress.SaveRunState(r.cfg.WorkspaceDir, newProgressRunState(runID, task.LapID))
-
-	inbox := ""
-	if consumedMsg != nil {
-		inbox = consumedMsg.Body
-	}
-	relayMessage := ""
-	if relayMsg != nil {
-		relayMessage = relayMsg.Body
-	}
-
-	recentTryCount := r.cfg.RecentTryCount
-	if recentTryCount <= 0 {
-		recentTryCount = 5
-	}
-	recentTries := r.store.RecentTries(recentTryCount, relay.ID)
-	recentContext := buildRecentContext(recentTries, r.cfg.RecentTryCharLimit, r.cfg.RecentContextCharLimit)
-
-	return &runOneState{
-		runID:                      runID,
-		rc:                         rc,
-		summaryEntryCountBeforeRun: summaryEntryCountBeforeRun,
-		inbox:                      inbox,
-		relayMessage:               relayMessage,
-		recentContext:              recentContext,
-		failureClass:               reliability.FailureAgent,
-	}
-}
-
-func (r *Runner) captureRunStartWorkspaceState(state *runOneState, picked harnessapi.ResolvedAgent) {
-	// Check for uncommitted non-rally changes at run start. Errors are
-	// tolerated (treat as clean) so a broken git setup never crashes the run.
-	state.leftoverWork, _ = gitx.IsWorkspaceDirty(r.cfg.WorkspaceDir)
-	state.runStartDirtySnapshot, _ = gitx.WorkspaceDirtyPaths(r.cfg.WorkspaceDir)
-	state.exec = r.executors[picked.Harness]
-}
-
 func (r *Runner) setupRunBudget(state *runOneState, isHourlyRetry bool, isProbation bool) func() bool {
 	maxAttempts := r.cfg.RetryBudget
 	if maxAttempts <= 0 {
@@ -453,7 +412,7 @@ func (r *Runner) prepareRunAttempt(ctx context.Context, relay *store.RelayRecord
 		if !task.IsLapsBacked && relay.CompletedIterations < relay.TargetIterations {
 			displayRunIndex = relay.CompletedIterations
 		}
-		header := style.RenderHeader(style.HeaderOptions{
+		headerOpts := style.HeaderOptions{
 			RunIndex:     displayRunIndex,
 			TotalRuns:    relay.TargetIterations,
 			AgentName:    picked.Harness,
@@ -465,8 +424,9 @@ func (r *Runner) prepareRunAttempt(ctx context.Context, relay *store.RelayRecord
 			LapsTotal:    lapsTotal,
 			Model:        picked.Model,
 			RoleLabel:    task.Assignee,
-		})
-		fmt.Fprintln(r.outWriter(), header)
+		}
+		fmt.Fprintln(r.outWriter(), style.RenderHeader(headerOpts))
+		r.eventSink().Emit(ctx, headerData(headerOpts))
 	}
 
 	if err := progress.SetActiveTry(r.cfg.WorkspaceDir, progress.ActiveTryMetadata{
@@ -519,9 +479,11 @@ func (r *Runner) runMonitoredAttempt(ctx context.Context, relay *store.RelayReco
 	cursorUp := 1
 	if strings.TrimSpace(initialStatus) != "" {
 		fmt.Printf("\r\x1b[2K%s\n", initialStatus)
+		r.eventSink().Emit(ctx, runtimeevent.TryStatusSnapshot{Status: initialStatus})
 		cursorUp = 2
 	}
 	fmt.Printf("\r\x1b[2K%s\n", style.ShortcutHint())
+	r.eventSink().Emit(ctx, runtimeevent.ShortcutHintReady{Width: 0})
 	mon.SetCursorUpLines(cursorUp)
 	mon.Start(os.Stdout)
 
@@ -732,7 +694,7 @@ func (r *Runner) recordCancelledAttempt(relay *store.RelayRecord, runIndex int, 
 	// Render a terminal footer for the cancelled attempt. The persisted
 	// outcome/source below are the source of truth; the style layer owns
 	// the muted cancelled presentation.
-	renderRunFooter(r.outWriter(), style.FooterOptions{
+	cancelledFooter := style.FooterOptions{
 		Cancelled:          true,
 		Duration:           attempt.runRuntime,
 		FilesChanged:       attempt.filesChangedCount,
@@ -743,7 +705,9 @@ func (r *Runner) recordCancelledAttempt(relay *store.RelayRecord, runIndex int, 
 		Interim:            false,
 		Attempt:            attempt.attempt,
 		MaxAttempts:        state.maxAttempts,
-	})
+	}
+	renderRunFooter(r.outWriter(), cancelledFooter)
+	r.eventSink().Emit(context.Background(), runtimeevent.AttemptCancelled{FooterData: footerData(cancelledFooter)})
 
 	tryRecord := store.TryRecord{
 		ID:                     attempt.tryID,
@@ -1011,6 +975,7 @@ func (r *Runner) classifyAttemptOutcome(relay *store.RelayRecord, runIndex int, 
 					}
 				}
 				if cooldown > 0 {
+					r.eventSink().Emit(context.Background(), runtimeevent.RateLimitWaitStarted{Wait: cooldown})
 					fmt.Println(style.DimStyle.Render(fmt.Sprintf("waiting %v for rate limit...", cooldown)))
 					if r.sleepFunc != nil {
 						r.sleepFunc(cooldown)
@@ -1081,7 +1046,7 @@ func (r *Runner) recordAttemptOutcome(relay *store.RelayRecord, runIndex int, pi
 	if !willRetry {
 		footerDuration = attempt.runRuntime
 	}
-	renderRunFooter(r.outWriter(), style.FooterOptions{
+	outcomeFooter := style.FooterOptions{
 		Passed:       !attempt.failed,
 		Duration:     footerDuration,
 		FilesChanged: attempt.filesChangedCount,
@@ -1091,7 +1056,9 @@ func (r *Runner) recordAttemptOutcome(relay *store.RelayRecord, runIndex int, pi
 		Interim:      willRetry,
 		Attempt:      attempt.attempt,
 		MaxAttempts:  state.maxAttempts,
-	})
+	}
+	renderRunFooter(r.outWriter(), outcomeFooter)
+	r.emitAttemptFooter(context.Background(), outcomeFooter)
 
 	tryRecord := store.TryRecord{
 		ID:                     attempt.tryID,
@@ -1336,7 +1303,9 @@ func (r *Runner) decideRetryOrComplete(task runTask, state *runOneState, attempt
 		if r.skipFlag.Load() {
 			return runOneAttemptDecision{action: runOneAttemptReturn, outcome: state.outcome(task, false, false, false)}
 		}
-		fmt.Println("Paused — press Enter to resume")
+		pausePrompt := "Paused — press Enter to resume"
+		fmt.Println(pausePrompt)
+		r.eventSink().Emit(context.Background(), runtimeevent.PausePromptShown{Message: pausePrompt})
 		bufio.NewReader(os.Stdin).ReadString('\n')
 		if attempt.result != nil {
 			state.previousSummary = attempt.result.Summary

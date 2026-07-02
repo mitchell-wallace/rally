@@ -8,8 +8,29 @@ import (
 
 	"github.com/mitchell-wallace/rally/internal/harnessapi"
 	"github.com/mitchell-wallace/rally/internal/keyboard"
+	"github.com/mitchell-wallace/rally/internal/relay/runner/runtimeevent"
 	"github.com/mitchell-wallace/rally/internal/reliability"
 )
+
+// operatorAction maps an internal/keyboard Action onto its presentation-neutral
+// [runtimeevent.OperatorAction]. The two enumerations share a 1:1 value order
+// (None, Quit, Skip, Pause, Stop) — pinned by runtimeevent's parity test — so
+// the mapping is an explicit switch rather than a numeric cast, keeping the
+// runner readable and robust if either enum is reordered.
+func operatorAction(a keyboard.Action) runtimeevent.OperatorAction {
+	switch a {
+	case keyboard.ActionQuit:
+		return runtimeevent.OperatorActionQuit
+	case keyboard.ActionSkip:
+		return runtimeevent.OperatorActionSkip
+	case keyboard.ActionPause:
+		return runtimeevent.OperatorActionPause
+	case keyboard.ActionStop:
+		return runtimeevent.OperatorActionStop
+	default:
+		return runtimeevent.OperatorActionNone
+	}
+}
 
 // forceKillGroup escalates the cancel drain to an immediate group-wide SIGKILL,
 // routing through the injectable hook so tests can observe the escalation.
@@ -194,11 +215,22 @@ actionLoop:
 				// hint on the live status line so the operator sees it
 				// registered and what a second press will do.
 				d.mon.SetArmed(keyboard.ArmMessage(press.Action), keyboard.ConfirmWindow)
+				// Data-only mirror: during an active try the arm feedback shows on
+				// the monitor indicator, so a terminal sink no-ops this event; it
+				// exists for alternate presentations.
+				r.eventSink().Emit(d.attemptCtx, runtimeevent.OperatorActionArmed{
+					Action:  operatorAction(press.Action),
+					Message: runtimeevent.ArmMessage(operatorAction(press.Action)),
+				})
 				continue
 			}
 			switch press.Action {
 			case keyboard.ActionSkip:
 				d.mon.SetActing(keyboard.ActMessage(press.Action))
+				r.eventSink().Emit(d.attemptCtx, runtimeevent.OperatorActionApplied{
+					Action:  operatorAction(press.Action),
+					Message: runtimeevent.ActMessage(operatorAction(press.Action)),
+				})
 				d.cancelAttempt()
 				r.skipFlag.Store(true)
 				out.actionTaken = true
@@ -207,6 +239,10 @@ actionLoop:
 				break actionLoop
 			case keyboard.ActionPause:
 				d.mon.SetActing(keyboard.ActMessage(press.Action))
+				r.eventSink().Emit(d.attemptCtx, runtimeevent.OperatorActionApplied{
+					Action:  operatorAction(press.Action),
+					Message: runtimeevent.ActMessage(operatorAction(press.Action)),
+				})
 				d.cancelAttempt()
 				out.actionTaken = true
 				res := <-d.tryCh

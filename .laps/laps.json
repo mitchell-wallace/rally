@@ -50,11 +50,11 @@
       "title": "Parallel-emit events at every print site (no output change)",
       "description": "Context: Phase 3 (tasks.md 3.2), design Decision 2/3 and the run-budget risk note. Uses the emit-site inventory from the baseline lap.\n\nOutcome: The runner emits the correct runtimeevent Event at every print site from the inventory, ALONGSIDE the existing prints (parallel-emit) -- synchronous, same-goroutine, at the exact points that print today. No output changes: prints stay; emissions are additive. The no-op default means headless callers see nothing new.\n\nFiles \u0026 scope: internal/relay/runner/*.go (run_one.go, relay_steps.go, terminal.go, handoff_only.go, task.go, action_loop.go emit sites). Do not create the terminal sink yet; do not delete any print.\n\nDesign: This is architecture-sensitive. Insert emissions at print sites only -- NEVER move any code across setupRunBudget / runBudgetCh construction (the same-deadline guard and once-built budget channel are timing-load-bearing; design Risk on run-budget boundary). Map each print to its Decision 3 event exactly as inventoried. Emit synchronously via Config.EventSink (no-op when nil). Respect the data-only vs no-print event distinctions in the Decision 3 table (e.g. RelayStarted/RelayCompleted and active-try OperatorAction events have no current print).\n\nAcceptance: go build ./... green; existing runner/app/cmd tests still green; output byte-for-byte unchanged in a headless run (no sink) and unchanged with a recording sink attached (recording sink writes nothing). Order tests follow in the next lap.",
       "assignee": "SENIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 327680,
       "createdAt": "2026-07-02T11:28:44.895304319Z",
-      "updatedAt": "2026-07-02T11:28:44.895304319Z",
-      "completedAt": null
+      "updatedAt": "2026-07-02T15:54:37.206678147Z",
+      "completedAt": "2026-07-02T15:54:37.206678147Z"
     },
     {
       "id": "rall-fd9f",

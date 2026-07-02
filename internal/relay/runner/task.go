@@ -9,6 +9,7 @@ import (
 
 	"github.com/mitchell-wallace/rally/internal/agent_prompt"
 	"github.com/mitchell-wallace/rally/internal/laps"
+	"github.com/mitchell-wallace/rally/internal/relay/runner/runtimeevent"
 	"github.com/mitchell-wallace/rally/internal/reliability"
 	"github.com/mitchell-wallace/rally/internal/store"
 	"github.com/mitchell-wallace/rally/internal/textutil"
@@ -59,7 +60,9 @@ func (r *Runner) resolveInstructions() string {
 	data, err := os.ReadFile(r.cfg.LapsInstructionsFile)
 	if err != nil {
 		if !r.lapsWarned {
-			fmt.Fprintf(os.Stderr, "warning: laps instructions file %q not readable: %v; using default\n", r.cfg.LapsInstructionsFile, err)
+			msg := fmt.Sprintf("warning: laps instructions file %q not readable: %v; using default", r.cfg.LapsInstructionsFile, err)
+			fmt.Fprintln(os.Stderr, msg)
+			r.eventSink().Emit(context.Background(), runtimeevent.TaskFileWarning{Message: msg})
 			r.lapsWarned = true
 		}
 		return r.cfg.Instructions
@@ -76,7 +79,9 @@ func (r *Runner) loadFreeRunPrompt() string {
 		data, err := os.ReadFile(r.cfg.FreeRunPromptFile)
 		if err != nil {
 			if !r.freeRunWarned {
-				fmt.Fprintf(os.Stderr, "warning: free-run prompt file %q not readable: %v; using built-in default\n", r.cfg.FreeRunPromptFile, err)
+				msg := fmt.Sprintf("warning: free-run prompt file %q not readable: %v; using built-in default", r.cfg.FreeRunPromptFile, err)
+				fmt.Fprintln(os.Stderr, msg)
+				r.eventSink().Emit(context.Background(), runtimeevent.TaskFileWarning{Message: msg})
 				r.freeRunWarned = true
 			}
 			return builtInDefaultFreeRunPrompt

@@ -16,7 +16,7 @@ var grandfather = map[string]int{
 	"internal/relay/resilience_test.go":                      1063,
 	"internal/relay/runner/relay_steps_test.go":              2226,
 	"internal/relay/runner/route_runtime_test.go":            1392,
-	"internal/relay/runner/run_one.go":                       1510,
+	"internal/relay/runner/run_one.go":                       1479,
 	"internal/relay/runner/run_one_test.go":                  2355,
 	"internal/relay/runner/runner_failure_telemetry_test.go": 2331,
 	"internal/relay/runner/runner_outcome_test.go":           1038,

@@ -13,6 +13,7 @@ import (
 
 	"github.com/mitchell-wallace/rally/internal/harnessapi"
 	"github.com/mitchell-wallace/rally/internal/keyboard"
+	"github.com/mitchell-wallace/rally/internal/relay/runner/runtimeevent"
 	"github.com/mitchell-wallace/rally/internal/store"
 	"github.com/mitchell-wallace/rally/internal/style"
 )
@@ -59,7 +60,7 @@ func TestWaitWithCountdownCancellable(t *testing.T) {
 		cancel()
 	}()
 	start := time.Now()
-	outcome, err := waitWithCountdown(ctx, 10*time.Second, "test %s")
+	outcome, err := waitWithCountdown(ctx, runtimeevent.NoopSink{}, 10*time.Second, "test %s")
 	elapsed := time.Since(start)
 	if err == nil {
 		t.Fatal("expected context error, got nil")
@@ -76,7 +77,7 @@ func TestWaitLoopSkipOnAction(t *testing.T) {
 	actionCh := make(chan keyboard.Press, 1)
 	actionCh <- keyboard.Press{Action: keyboard.ActionSkip, Confirmed: true}
 	start := time.Now()
-	outcome := waitLoop(context.Background(), 10*time.Second, "test %s", actionCh, io.Discard, 50*time.Millisecond)
+	outcome := waitLoop(context.Background(), runtimeevent.NoopSink{}, 10*time.Second, "test %s", actionCh, io.Discard, 50*time.Millisecond)
 	elapsed := time.Since(start)
 	if outcome != waitSkipped {
 		t.Errorf("outcome = %v, want waitSkipped", outcome)
@@ -89,7 +90,7 @@ func TestWaitLoopSkipOnAction(t *testing.T) {
 func TestWaitLoopStopOnQuit(t *testing.T) {
 	actionCh := make(chan keyboard.Press, 1)
 	actionCh <- keyboard.Press{Action: keyboard.ActionQuit, Confirmed: true}
-	outcome := waitLoop(context.Background(), 10*time.Second, "test %s", actionCh, io.Discard, 50*time.Millisecond)
+	outcome := waitLoop(context.Background(), runtimeevent.NoopSink{}, 10*time.Second, "test %s", actionCh, io.Discard, 50*time.Millisecond)
 	if outcome != waitStopped {
 		t.Errorf("outcome = %v, want waitStopped", outcome)
 	}
@@ -98,7 +99,7 @@ func TestWaitLoopStopOnQuit(t *testing.T) {
 func TestWaitLoopElapses(t *testing.T) {
 	actionCh := make(chan keyboard.Press)
 	start := time.Now()
-	outcome := waitLoop(context.Background(), 200*time.Millisecond, "test %s", actionCh, io.Discard, 30*time.Millisecond)
+	outcome := waitLoop(context.Background(), runtimeevent.NoopSink{}, 200*time.Millisecond, "test %s", actionCh, io.Discard, 30*time.Millisecond)
 	elapsed := time.Since(start)
 	if outcome != waitElapsed {
 		t.Errorf("outcome = %v, want waitElapsed", outcome)
@@ -112,7 +113,7 @@ func TestWaitLoopRendersHintAndCountdown(t *testing.T) {
 	actionCh := make(chan keyboard.Press, 1)
 	actionCh <- keyboard.Press{Action: keyboard.ActionSkip, Confirmed: true}
 	var buf bytes.Buffer
-	_ = waitLoop(context.Background(), 5*time.Second, "agents frozen, waiting %s...", actionCh, &buf, 50*time.Millisecond)
+	_ = waitLoop(context.Background(), runtimeevent.NoopSink{}, 5*time.Second, "agents frozen, waiting %s...", actionCh, &buf, 50*time.Millisecond)
 	got := buf.String()
 	if !strings.Contains(got, "agents frozen, waiting 5s...") {
 		t.Errorf("output missing countdown line: %q", got)
@@ -130,7 +131,7 @@ func TestWaitLoopArmedPressShowsHint(t *testing.T) {
 	actionCh <- keyboard.Press{Action: keyboard.ActionQuit, Confirmed: false}
 	actionCh <- keyboard.Press{Action: keyboard.ActionSkip, Confirmed: true}
 	var buf bytes.Buffer
-	outcome := waitLoop(context.Background(), 5*time.Second, "agents paused, waiting %s...", actionCh, &buf, 50*time.Millisecond)
+	outcome := waitLoop(context.Background(), runtimeevent.NoopSink{}, 5*time.Second, "agents paused, waiting %s...", actionCh, &buf, 50*time.Millisecond)
 	if outcome != waitSkipped {
 		t.Errorf("outcome = %v, want waitSkipped", outcome)
 	}
@@ -147,7 +148,7 @@ func TestWaitLoopRendersOnNewLineSafely(t *testing.T) {
 	actionCh := make(chan keyboard.Press, 1)
 	actionCh <- keyboard.Press{Action: keyboard.ActionSkip, Confirmed: true}
 	var buf bytes.Buffer
-	_ = waitLoop(context.Background(), 5*time.Second, "agents paused, waiting %s...", actionCh, &buf, 50*time.Millisecond)
+	_ = waitLoop(context.Background(), runtimeevent.NoopSink{}, 5*time.Second, "agents paused, waiting %s...", actionCh, &buf, 50*time.Millisecond)
 	got := buf.String()
 	if strings.Contains(got, "...\n") && !strings.Contains(got, "...\r\n") {
 		t.Errorf("countdown line followed by bare LF (raw-mode unsafe): %q", got)
@@ -166,7 +167,7 @@ func TestWaitWithCountdownElapses(t *testing.T) {
 		_ = devnull.Close()
 	}()
 
-	outcome, err := waitWithCountdown(context.Background(), 1500*time.Millisecond, "test %s")
+	outcome, err := waitWithCountdown(context.Background(), runtimeevent.NoopSink{}, 1500*time.Millisecond, "test %s")
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}

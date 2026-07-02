@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/mitchell-wallace/rally/internal/keyboard"
+	"github.com/mitchell-wallace/rally/internal/relay/runner/runtimeevent"
 	"github.com/mitchell-wallace/rally/internal/style"
 )
 
@@ -27,6 +28,59 @@ func renderRunFooter(out io.Writer, opts style.FooterOptions) {
 	fmt.Fprintf(out, "\r\x1b[2K%s\n", rendered)
 }
 
+// headerData mirrors a style.HeaderOptions into the presentation-neutral
+// runtimeevent.RunHeaderReady carried by the run-header event. The two structs
+// share identical fields; runtimeevent is stdlib-only and cannot import style,
+// so the values are copied by value at the single emit site.
+func headerData(opts style.HeaderOptions) runtimeevent.RunHeaderReady {
+	return runtimeevent.RunHeaderReady{
+		RunIndex:     opts.RunIndex,
+		TotalRuns:    opts.TotalRuns,
+		AgentName:    opts.AgentName,
+		Attempt:      opts.Attempt,
+		StartTime:    opts.StartTime,
+		IsLapsBacked: opts.IsLapsBacked,
+		LapTitle:     opts.LapTitle,
+		LapsStarted:  opts.LapsStarted,
+		LapsTotal:    opts.LapsTotal,
+		Model:        opts.Model,
+		RoleLabel:    opts.RoleLabel,
+	}
+}
+
+// emitAttemptFooter parallel-emits the per-attempt footer event matching what
+// renderRunFooter just drew: an interim within-budget retry (RetryFooterUpdated)
+// or a terminal pass/fail outcome (AttemptFinished). The cancelled and
+// handoff-only footers carry their own distinct events at their call sites.
+func (r *Runner) emitAttemptFooter(ctx context.Context, opts style.FooterOptions) {
+	if opts.Interim {
+		r.eventSink().Emit(ctx, runtimeevent.RetryFooterUpdated{FooterData: footerData(opts)})
+		return
+	}
+	r.eventSink().Emit(ctx, runtimeevent.AttemptFinished{FooterData: footerData(opts)})
+}
+
+// footerData mirrors a style.FooterOptions into the presentation-neutral
+// runtimeevent.FooterData carried by the footer events. runtimeevent is
+// stdlib-only and cannot import style, so the fields are copied by value; the
+// four footer events (RetryFooterUpdated/AttemptFinished/AttemptCancelled/
+// HandoffAttemptFinished) embed the result and are distinguished by their Kind.
+func footerData(opts style.FooterOptions) runtimeevent.FooterData {
+	return runtimeevent.FooterData{
+		Passed:             opts.Passed,
+		Cancelled:          opts.Cancelled,
+		Duration:           opts.Duration,
+		FilesChanged:       opts.FilesChanged,
+		CommitHash:         opts.CommitHash,
+		CommitTitle:        opts.CommitTitle,
+		FailReason:         opts.FailReason,
+		CancellationSource: opts.CancellationSource,
+		Interim:            opts.Interim,
+		Attempt:            opts.Attempt,
+		MaxAttempts:        opts.MaxAttempts,
+	}
+}
+
 // waitOutcome enumerates how a waitWithCountdown call ended.
 type waitOutcome int
 
@@ -40,7 +94,7 @@ const (
 // waitWithCountdown blocks for `total`, redrawing a one-line countdown +
 // shortcut hint on stdout once per second. See [waitLoop] for the core logic;
 // this wrapper handles the keyboard, terminal raw mode, and stdout rendering.
-func waitWithCountdown(ctx context.Context, total time.Duration, msgFmt string) (waitOutcome, error) {
+func waitWithCountdown(ctx context.Context, sink runtimeevent.Sink, total time.Duration, msgFmt string) (waitOutcome, error) {
 	if total <= 0 {
 		return waitElapsed, nil
 	}
@@ -52,7 +106,7 @@ func waitWithCountdown(ctx context.Context, total time.Duration, msgFmt string) 
 	defer kbCancel()
 	actionCh := kb.Start(kbCtx)
 
-	outcome := waitLoop(ctx, total, msgFmt, actionCh, os.Stdout, time.Second)
+	outcome := waitLoop(ctx, sink, total, msgFmt, actionCh, os.Stdout, time.Second)
 	if outcome == waitCancelled {
 		return outcome, ctx.Err()
 	}
@@ -63,7 +117,7 @@ func waitWithCountdown(ctx context.Context, total time.Duration, msgFmt string) 
 // `tickInterval`, renders the countdown + shortcut hint to `out`, and returns
 // when the timer elapses, ctx is cancelled, or an action arrives on actionCh.
 // Split out from waitWithCountdown for testability.
-func waitLoop(ctx context.Context, total time.Duration, msgFmt string, actionCh <-chan keyboard.Press, out io.Writer, tickInterval time.Duration) waitOutcome {
+func waitLoop(ctx context.Context, sink runtimeevent.Sink, total time.Duration, msgFmt string, actionCh <-chan keyboard.Press, out io.Writer, tickInterval time.Duration) waitOutcome {
 	deadline := time.Now().Add(total)
 	ticker := time.NewTicker(tickInterval)
 	defer ticker.Stop()
@@ -71,19 +125,27 @@ func waitLoop(ctx context.Context, total time.Duration, msgFmt string, actionCh 
 	var armedAction keyboard.Action
 	var armedUntil time.Time
 	lastFrame := ""
+	started := false
 
 	render := func(remaining time.Duration) {
 		if remaining < 0 {
 			remaining = 0
 		}
 		remaining = remaining.Round(time.Second)
-		line := style.DimStyle.Render(fmt.Sprintf(msgFmt, formatRemaining(remaining)))
+		// msg is the unstyled countdown text carried by the event; line is its
+		// dim-rendered form written to the terminal.
+		msg := fmt.Sprintf(msgFmt, formatRemaining(remaining))
+		line := style.DimStyle.Render(msg)
 		// The second line is normally the dim shortcut legend; while a shortcut
 		// is armed it becomes a highlighted "press X again…" hint so the
-		// operator sees the first press registered.
+		// operator sees the first press registered. hintText mirrors the armed
+		// hint for the event (unstyled); an empty hintText means the default
+		// legend, which a sink derives itself.
 		hint := style.ShortcutHint()
+		hintText := ""
 		if armedAction != keyboard.ActionNone {
 			if time.Now().Before(armedUntil) {
+				hintText = runtimeevent.ArmMessage(operatorAction(armedAction))
 				hint = style.WarningStyle.Render("⌨ " + keyboard.ArmMessage(armedAction))
 			} else {
 				armedAction = keyboard.ActionNone
@@ -105,11 +167,20 @@ func waitLoop(ctx context.Context, total time.Duration, msgFmt string, actionCh 
 		// stair-step onto fresh lines. The trailing \x1b[1A\r parks the cursor
 		// back at the start of the countdown line ready for the next repaint.
 		fmt.Fprintf(out, "\r\x1b[J%s\r\n%s\x1b[1A\r", line, hint)
+		// Parallel-emit alongside the frame write: the first painted frame is the
+		// start of the countdown, subsequent frames are ticks.
+		if !started {
+			started = true
+			sink.Emit(ctx, runtimeevent.WaitStarted{Message: msg, Hint: hintText, Total: total, Remaining: remaining})
+		} else {
+			sink.Emit(ctx, runtimeevent.WaitTick{Message: msg, Hint: hintText, Remaining: remaining})
+		}
 	}
 	clear := func() {
 		// Erase both lines and leave the cursor at the top one so subsequent
 		// stdout writes land on a fresh line.
 		fmt.Fprint(out, "\r\x1b[J")
+		sink.Emit(ctx, runtimeevent.WaitFinished{})
 	}
 
 	render(total)
@@ -125,6 +196,10 @@ func waitLoop(ctx context.Context, total time.Duration, msgFmt string, actionCh 
 				if press.Action != keyboard.ActionPause {
 					armedAction = press.Action
 					armedUntil = time.Now().Add(keyboard.ConfirmWindow)
+					sink.Emit(ctx, runtimeevent.OperatorActionArmed{
+						Action:  operatorAction(press.Action),
+						Message: runtimeevent.ArmMessage(operatorAction(press.Action)),
+					})
 					render(time.Until(deadline))
 				}
 				continue
