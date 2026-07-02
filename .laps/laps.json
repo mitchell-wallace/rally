@@ -380,11 +380,11 @@
       "title": "Full-change verification and record final file lists for #8",
       "description": "Context: final verification of the whole decompose-remaining-source-files change (all four splits + baseline). Covers tasks.md task 6 and closes out tasks 4 and 5.\n\nOutcome: a findings-first report confirming the whole refactor is behaviour-preserving and complete; remaining tasks.md boxes (4.x, 5.x, 6.x, and any 1.x not already ticked) checked for verified work.\n\nProcess: use openspec-verify-change against the whole change and inspect the entire diff. Identify the merge target from the user, PR metadata, repo docs, branch config, or history (do not assume main); diff with `git diff \u003ctarget\u003e...HEAD`. Identify the first lap/try of this batch; earlier work is pre-existing. Do not rewrite git history; substantive gaps become new head laps.\n\nChecks (task 6): (6.1) function-inventory one-for-one across every package's new files vs the baseline lap's recorded inventory — no functions added or dropped; (6.2) exported-surface per package identical (`go doc` diffed pre/post); (6.3) `go test -count=1 ./...`, `go vet ./...`, `gofmt -l .` empty, `go run ./tools/archguard --ci` exit 0 with the four 500-line advisory warnings gone and NO grandfather-map or policy-table diff, `just check` green; (6.4) behaviour preservation — no CLI-output, config-schema/semantic, telemetry, store-shape, or error-string diff, `internal/buildinfo/VERSION` untouched, and the three harness warning-band files internal/harness/claude/claude.go, internal/harness/opencode/opencode_evidence.go, internal/harness/antigravity/antigravity.go untouched per design Decision 3 (out of scope); (6.5) record the final per-package production file lists so #8 decompose-large-test-files can mirror config_v2_test.go/store_test.go splits against them. Trace the actual moved symbols and the per-package commits, not just green tests. Tick tasks.md 4.x/5.x/6.x (and any remaining 1.x).",
       "assignee": "VERIFY",
-      "isDone": false,
+      "isDone": true,
       "order": 2293760,
       "createdAt": "2026-07-02T11:29:17.15749133Z",
-      "updatedAt": "2026-07-02T11:29:17.15749133Z",
-      "completedAt": null
+      "updatedAt": "2026-07-02T21:22:17.587931485Z",
+      "completedAt": "2026-07-02T21:22:17.587931485Z"
     },
     {
       "id": "rall-95da",

@@ -306,3 +306,110 @@ responsibility axes. Counts in parens are per target file.
 
 Totals reconcile to Decision 2 exactly: monitor 16+7+8+3 = 34, config
 5+12+9 = 26, cli 3+10+2+8 = 23, store 1+5+6+9+5 = 26.
+
+## Final production file lists (task 6.5) — for #8 decompose-large-test-files
+
+Recorded post-split at final verification (rall-529c). #8's test-file mirroring
+should reference these as the production axes for config/store test splits.
+
+### internal/monitor (4 files, 683 lines)
+
+| file | lines |
+|------|------:|
+| `monitor.go` | 289 |
+| `monitor_render.go` | 121 |
+| `network_monitor.go` | 63 |
+| `proc_stats.go` | 210 |
+
+### internal/config (9 files, 1659 lines)
+
+| file | lines |
+|------|------:|
+| `decode.go` | 184 |
+| `load.go` | 116 |
+| `providers_parse.go` | 169 |
+| `providers_resolve.go` | 285 |
+| `providers_wildcard.go` | 179 |
+| `resolve.go` | 302 |
+| `save.go` | 71 |
+| `types.go` | 239 |
+| `validate.go` | 114 |
+
+### internal/cli (17 files, 2806 lines)
+
+| file | lines |
+|------|------:|
+| `config.go` | 469 |
+| `hooks.go` | 158 |
+| `init.go` | 145 |
+| `init_roles.go` | 291 |
+| `init_templates.go` | 102 |
+| `instructions.go` | 81 |
+| `relay_flags.go` | 51 |
+| `root.go` | 63 |
+| `routes_check.go` | 308 |
+| `routes_cmd.go` | 57 |
+| `routes_render.go` | 76 |
+| `routes_startup.go` | 189 |
+| `routes_validate.go` | 203 |
+| `start.go` | 228 |
+| `tail.go` | 177 |
+| `tail_highlight.go` | 141 |
+| `update.go` | 67 |
+
+### internal/store (13 files, 1391 lines)
+
+| file | lines |
+|------|------:|
+| `cache.go` | 63 |
+| `final_snippet.go` | 11 |
+| `jsonl.go` | 108 |
+| `migration.go` | 212 |
+| `paths.go` | 76 |
+| `records.go` | 86 |
+| `recovery.go` | 192 |
+| `store.go` | 44 |
+| `store_agent_status.go` | 134 |
+| `store_messages.go` | 210 |
+| `store_read.go` | 85 |
+| `store_write.go` | 91 |
+| `window.go` | 79 |
+
+### internal/relay/runner (for #8 reference — from #6 decompose-run-one)
+
+32 production files, 5247 lines. All under the 800-line hard cap.
+
+| file | lines |
+|------|------:|
+| `action_loop.go` | 303 |
+| `failure_display.go` | 79 |
+| `final_snippet.go` | 118 |
+| `git.go` | 191 |
+| `handoff_only.go` | 341 |
+| `liveness.go` | 30 |
+| `log.go` | 97 |
+| `progress.go` | 284 |
+| `relay_route_wait.go` | 190 |
+| `relay_run_progress.go` | 172 |
+| `relay_steps.go` | 148 |
+| `relay_summary.go` | 78 |
+| `route_runtime.go` | 99 |
+| `route_runtime_bench.go` | 92 |
+| `route_runtime_construct.go` | 220 |
+| `route_runtime_recovery.go` | 133 |
+| `route_runtime_select.go` | 248 |
+| `run_attempt_cancel.go` | 147 |
+| `run_attempt_classify.go` | 298 |
+| `run_attempt_monitor.go` | 138 |
+| `run_attempt_prepare.go` | 172 |
+| `run_attempt_reconcile.go` | 118 |
+| `run_attempt_record.go` | 304 |
+| `run_finalize.go` | 62 |
+| `run_handoff.go` | 36 |
+| `run_one.go` | 241 |
+| `run_one_state.go` | 53 |
+| `run_retry_decide.go` | 142 |
+| `runner.go` | 272 |
+| `task.go` | 195 |
+| `telemetry.go` | 227 |
+| `terminal.go` | 172 |
