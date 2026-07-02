@@ -1,10 +1,8 @@
 package runner
 
 import (
-	"bytes"
 	"context"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -13,7 +11,6 @@ import (
 
 	"github.com/mitchell-wallace/rally/internal/harnessapi"
 	"github.com/mitchell-wallace/rally/internal/keyboard"
-	presentationterminal "github.com/mitchell-wallace/rally/internal/presentation/terminal"
 	"github.com/mitchell-wallace/rally/internal/relay/runner/runtimeevent"
 	"github.com/mitchell-wallace/rally/internal/store"
 )
@@ -185,14 +182,14 @@ func TestRunFooterCadenceExhausted(t *testing.T) {
 	}
 	executors := map[string]harnessapi.Executor{"claude": exec}
 
-	var buf bytes.Buffer
+	rec := runtimeevent.NewRecordingSink()
 	r := NewRunner(s, Config{
 		WorkspaceDir:     workspaceDir,
 		DataDir:          t.TempDir(),
 		AgentMixSpecs:    []string{"cc:1"},
 		TargetIterations: 1,
 		RetryBudget:      5,
-		EventSink:        presentationterminal.NewSink(&buf, io.Discard),
+		EventSink:        rec,
 	}, executors)
 
 	if err := r.Run(context.Background()); err != nil {
@@ -201,20 +198,20 @@ func TestRunFooterCadenceExhausted(t *testing.T) {
 		}
 	}
 
-	out := buf.String()
-	plain := stripFooterAnsi(out)
-	if n := strings.Count(plain, "↻ retrying"); n != 4 {
-		t.Errorf("expected 4 interim retry lines (attempts 1-4), got %d\noutput: %q", n, plain)
+	retries, terminal := footerEvents(rec.Events())
+	if len(retries) != 4 {
+		t.Fatalf("expected 4 interim retry events (attempts 1-4), got %d: %#v", len(retries), retries)
 	}
-	if n := strings.Count(plain, "✗"); n != 1 {
-		t.Errorf("expected exactly one coloured ✗ footer, got %d\noutput: %q", n, plain)
+	for i, retry := range retries {
+		if !retry.Interim || retry.Attempt != i+1 || retry.MaxAttempts != 5 {
+			t.Errorf("retry event %d = %+v, want interim attempt %d/5", i, retry, i+1)
+		}
 	}
-	if !strings.Contains(plain, "failed after 5 tries") {
-		t.Errorf("expected terminal 'failed after 5 tries' footer, got: %q", plain)
+	if terminal == nil {
+		t.Fatal("expected one terminal attempt footer event")
 	}
-	// The terminal footer must be coloured (FailureStyle red), not plain text.
-	if !strings.Contains(out, "\x1b[") {
-		t.Errorf("expected ANSI colour on terminal footer, got: %q", out)
+	if terminal.Passed || terminal.Interim || terminal.Attempt != 5 || terminal.MaxAttempts != 5 {
+		t.Errorf("terminal footer event = %+v, want failed terminal attempt 5/5", *terminal)
 	}
 }
 
@@ -242,29 +239,34 @@ func TestRunFooterCadenceRecovery(t *testing.T) {
 	}
 	executors := map[string]harnessapi.Executor{"claude": exec}
 
-	var buf bytes.Buffer
+	rec := runtimeevent.NewRecordingSink()
 	r := NewRunner(s, Config{
 		WorkspaceDir:     workspaceDir,
 		DataDir:          t.TempDir(),
 		AgentMixSpecs:    []string{"cc:1"},
 		TargetIterations: 1,
 		RetryBudget:      5,
-		EventSink:        presentationterminal.NewSink(&buf, io.Discard),
+		EventSink:        rec,
 	}, executors)
 
 	if err := r.Run(context.Background()); err != nil {
 		t.Fatalf("run failed: %v", err)
 	}
 
-	plain := stripFooterAnsi(buf.String())
-	if n := strings.Count(plain, "↻ retrying"); n != 2 {
-		t.Errorf("expected 2 interim retry lines, got %d\noutput: %q", n, plain)
+	retries, terminal := footerEvents(rec.Events())
+	if len(retries) != 2 {
+		t.Fatalf("expected 2 interim retry events, got %d: %#v", len(retries), retries)
 	}
-	if !strings.Contains(plain, "passed on try 3/5") {
-		t.Errorf("expected green 'passed on try 3/5' footer, got: %q", plain)
+	for i, retry := range retries {
+		if !retry.Interim || retry.Attempt != i+1 || retry.MaxAttempts != 5 {
+			t.Errorf("retry event %d = %+v, want interim attempt %d/5", i, retry, i+1)
+		}
 	}
-	if strings.Contains(plain, "✗") {
-		t.Errorf("a recovering run should print no ✗ footer, got: %q", plain)
+	if terminal == nil {
+		t.Fatal("expected one terminal attempt footer event")
+	}
+	if !terminal.Passed || terminal.Interim || terminal.Attempt != 3 || terminal.MaxAttempts != 5 {
+		t.Errorf("terminal footer event = %+v, want passing terminal attempt 3/5", *terminal)
 	}
 }
 
@@ -294,7 +296,7 @@ func TestRunHeaderDoesNotExceedTargetAfterFailedRun(t *testing.T) {
 		"codex":       exec,
 	}
 
-	var buf bytes.Buffer
+	rec := runtimeevent.NewRecordingSink()
 	r := NewRunner(s, Config{
 		WorkspaceDir:     workspaceDir,
 		DataDir:          t.TempDir(),
@@ -303,22 +305,30 @@ func TestRunHeaderDoesNotExceedTargetAfterFailedRun(t *testing.T) {
 		TargetIterations: 2,
 		RetryBudget:      1,
 		Resolver:         cheapTestResolver,
-		EventSink:        presentationterminal.NewSink(&buf, io.Discard),
+		EventSink:        rec,
 	}, executors)
 
 	if err := r.Run(context.Background()); err != nil {
 		t.Fatalf("run failed: %v", err)
 	}
 
-	plain := stripFooterAnsi(buf.String())
-	if strings.Contains(plain, "run: 3/2") {
-		t.Fatalf("header exceeded target after failed run:\n%s", plain)
+	var got []runtimeevent.RunHeaderReady
+	for _, event := range rec.Events() {
+		if header, ok := event.(runtimeevent.RunHeaderReady); ok {
+			got = append(got, header)
+		}
 	}
-	if n := strings.Count(plain, "run: 1/2"); n != 2 {
-		t.Fatalf("expected failed first target slot and replacement to both render as run: 1/2, got %d\n%s", n, plain)
+	if len(got) != 3 {
+		t.Fatalf("expected 3 run header events, got %d: %#v", len(got), got)
 	}
-	if n := strings.Count(plain, "run: 2/2"); n != 1 {
-		t.Fatalf("expected final target slot to render once as run: 2/2, got %d\n%s", n, plain)
+	want := []int{0, 0, 1}
+	for i, header := range got {
+		if header.TotalRuns != 2 {
+			t.Errorf("header %d TotalRuns = %d, want 2", i, header.TotalRuns)
+		}
+		if header.RunIndex != want[i] {
+			t.Errorf("header %d RunIndex = %d, want %d", i, header.RunIndex, want[i])
+		}
 	}
 }
 
@@ -338,14 +348,14 @@ func TestRunFooterSingleAttemptColoursImmediately(t *testing.T) {
 	}
 	executors := map[string]harnessapi.Executor{"claude": exec}
 
-	var buf bytes.Buffer
+	rec := runtimeevent.NewRecordingSink()
 	r := NewRunner(s, Config{
 		WorkspaceDir:     workspaceDir,
 		DataDir:          t.TempDir(),
 		AgentMixSpecs:    []string{"cc:1"},
 		TargetIterations: 1,
 		RetryBudget:      1,
-		EventSink:        presentationterminal.NewSink(&buf, io.Discard),
+		EventSink:        rec,
 	}, executors)
 
 	if err := r.Run(context.Background()); err != nil {
@@ -354,18 +364,29 @@ func TestRunFooterSingleAttemptColoursImmediately(t *testing.T) {
 		}
 	}
 
-	out := buf.String()
-	plain := stripFooterAnsi(out)
-	if strings.Contains(plain, "↻ retrying") {
-		t.Errorf("single-attempt run should print no interim retry line, got: %q", plain)
+	retries, terminal := footerEvents(rec.Events())
+	if len(retries) != 0 {
+		t.Fatalf("single-attempt run should emit no interim retry footer, got %#v", retries)
 	}
-	if n := strings.Count(plain, "✗"); n != 1 {
-		t.Errorf("expected exactly one ✗ footer, got %d\noutput: %q", n, plain)
+	if terminal == nil {
+		t.Fatal("expected one terminal attempt footer event")
 	}
-	if strings.Contains(plain, "after") {
-		t.Errorf("single-attempt footer should not say 'after N tries', got: %q", plain)
+	if terminal.Passed || terminal.Interim || terminal.Attempt != 1 || terminal.MaxAttempts != 1 {
+		t.Errorf("terminal footer event = %+v, want failed terminal attempt 1/1", *terminal)
 	}
-	if !strings.Contains(out, "\x1b[") {
-		t.Errorf("expected ANSI colour on the terminal footer, got: %q", out)
+}
+
+func footerEvents(events []runtimeevent.Event) ([]runtimeevent.FooterData, *runtimeevent.FooterData) {
+	var retries []runtimeevent.FooterData
+	var terminal *runtimeevent.FooterData
+	for _, event := range events {
+		switch e := event.(type) {
+		case runtimeevent.RetryFooterUpdated:
+			retries = append(retries, e.FooterData)
+		case runtimeevent.AttemptFinished:
+			footer := e.FooterData
+			terminal = &footer
+		}
 	}
+	return retries, terminal
 }
