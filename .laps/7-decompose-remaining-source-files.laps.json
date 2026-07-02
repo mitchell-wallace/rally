@@ -1,0 +1,82 @@
+{
+  "version": 2,
+  "tasks": [
+    {
+      "id": "rall-2dbd",
+      "title": "Baseline the tree and re-ground the four inventories",
+      "description": "Context: OpenSpec change decompose-remaining-source-files (change #7), tasks.md task 1. This is a behaviour-preserving refactor that splits four warning-band files into responsibility-named same-package files (verbatim moves only). It is planned for a post-#5 world; #5 is not yet landed, so this lap re-grounds at execution time to absorb any drift. Per the design, only monitor.go consumption may have drifted; #5 leaves internal/monitor internals untouched.\n\nOutcome: a confirmed-green baseline and recorded name-\u003efile function inventories for the four target files, captured in the commit/lap notes so the split laps and final verification can do a one-for-one check.\n\nFiles \u0026 scope: read the four files only; do not move anything yet. Targets: internal/monitor/monitor.go, internal/config/providers.go, internal/cli/routes_check.go, internal/store/store.go.\n\nDesign: run task 1.1's green checks first; if the tree is red, STOP and add a head lap. Then regenerate line counts and `grep -n \"^func\"` inventories for the four files and record each pre-change inventory (name -\u003e current file). Design Decision 2 carries the authoritative name-to-file target mapping and function counts (monitor 34, providers 26, routes_check 23, store 26 incl. the new store_read.go); the responsibility axes there are authoritative even if a specific function has drifted. If the live inventory materially diverges from Decision 2 (most likely monitor.go after #5), place each function by its responsibility axis and add a head lap flagging the divergence before the split laps proceed.\n\nAcceptance: `go build ./...`, `go vet ./...`, `gofmt -l .` (empty), `go test -count=1 ./internal/monitor ./internal/config ./internal/cli ./internal/store`, and `go run ./tools/archguard --ci` (exit 0) all pass; the four pre-change function inventories are recorded. Do not tick tasks.md (VERIFY owns that).",
+      "assignee": "JUNIOR",
+      "isDone": false,
+      "order": 65536,
+      "createdAt": "2026-07-02T03:43:47.178753642Z",
+      "updatedAt": "2026-07-02T03:43:47.178753642Z",
+      "completedAt": null
+    },
+    {
+      "id": "rall-0b76",
+      "title": "Split internal/monitor into responsibility-named files",
+      "description": "Context: tasks.md task 2, using the recorded inventory from the baseline lap and design Decision 2's full 34-function monitor inventory. Do not re-list functions here; follow Decision 2's exact name-to-file mapping.\n\nOutcome: internal/monitor/monitor.go split into monitor.go (lifecycle + state, keeps the headline file an agent opens first), monitor_render.go (rendering/formatting), proc_stats.go (process/network inspection), and network_monitor.go (NetworkMonitor). Verbatim moves; no behaviour, exported-surface, or error-string change.\n\nFiles \u0026 scope: internal/monitor only. No test edits. No helpers.go/misc catch-all — every symbol keeps exactly one home per its primary responsibility.\n\nDesign: move functions whole; keep error strings byte-identical; self-review with `git diff --color-moved` to confirm pure moves. If an unexported helper is shared across new files, place it in the file matching its primary responsibility, not a shared file.\n\nAcceptance: `go test -count=1 ./internal/monitor ./internal/relay/...` green (the runner consumes monitor). One commit: `decompose-remaining-source-files: split internal/monitor`. Do not tick tasks.md.",
+      "assignee": "JUNIOR",
+      "isDone": false,
+      "order": 131072,
+      "createdAt": "2026-07-02T03:43:47.178763174Z",
+      "updatedAt": "2026-07-02T03:43:47.178763174Z",
+      "completedAt": null
+    },
+    {
+      "id": "rall-3710",
+      "title": "Split internal/config providers into parse/resolve/wildcard files",
+      "description": "Context: tasks.md task 3, using design Decision 2's full 26-function providers inventory; mirrors #2's config_v2.go split convention. Do not re-list functions here; follow Decision 2's exact name-to-file mapping.\n\nOutcome: internal/config/providers.go split into providers_parse.go (raw-TOML \u003c-\u003e ProviderConfig), providers_resolve.go (resolution + index/count surface + ordering/label helpers), and providers_wildcard.go (wildcard matching/expansion + modelFilter type). Delete providers.go if nothing remains (preferred); never leave it as a catch-all.\n\nFiles \u0026 scope: internal/config only. No test edits. Every symbol keeps exactly one home; go-toml stays confined to internal/config.\n\nDesign: verbatim moves; deprecation/validation message strings byte-identical; self-review with `git diff --color-moved`.\n\nAcceptance: `go test -count=1 ./internal/config ./cmd/rally` green; deprecation/validation messages unchanged. One commit for the split. Do not tick tasks.md.",
+      "assignee": "JUNIOR",
+      "isDone": false,
+      "order": 196608,
+      "createdAt": "2026-07-02T03:43:47.178765414Z",
+      "updatedAt": "2026-07-02T03:43:47.178765414Z",
+      "completedAt": null
+    },
+    {
+      "id": "rall-05f8",
+      "title": "Verify monitor and config-providers splits (tasks 1-3)",
+      "description": "Context: mid-queue verification of the first two of four independent package splits (a natural slice boundary) plus the baseline lap. Change: decompose-remaining-source-files.\n\nOutcome: a findings-first report confirming tasks 1-3 (baseline/re-grounding, internal/monitor split, internal/config providers split) are correct and thorough; tasks.md boxes 1.x/2.x/3.x ticked only for verified work.\n\nProcess: use the openspec-verify-change skill against decompose-remaining-source-files, focused on the phase just completed. Before diffing, identify the intended merge target from the user, PR metadata, repo docs, branch config, or recent history (do not assume main), then diff with `git diff \u003ctarget\u003e...HEAD`. Identify the first lap/try of this batch; treat earlier branch work as pre-existing (flag but do not remove unless the user asks). Do not rewrite git history; substantive gaps become new head laps rather than in-lap fixes (VERIFY may fix only tiny safe one-liners).\n\nChecks: function-inventory one-for-one against the baseline lap's recorded inventory (no functions added/dropped) for internal/monitor and internal/config; exported surfaces identical (e.g. `go doc` diffed pre/post); `git diff --color-moved` shows verbatim moves; error/deprecation/validation strings byte-identical; two of the four 500-line advisory warnings gone with NO archguard grandfather-map or policy-table diff; `go test -count=1 ./internal/monitor ./internal/relay/... ./internal/config ./cmd/rally` green. Trace the actual moved symbols and the two commits, not just green tests. Tick tasks.md 1.x/2.x/3.x for verified-correct work.",
+      "assignee": "VERIFY",
+      "isDone": false,
+      "order": 262144,
+      "createdAt": "2026-07-02T03:43:47.178767377Z",
+      "updatedAt": "2026-07-02T03:43:47.178767377Z",
+      "completedAt": null
+    },
+    {
+      "id": "rall-786c",
+      "title": "Split internal/cli routes-check into wiring/core/render/validate files",
+      "description": "Context: tasks.md task 4, using design Decision 2's full 23-function routes-check inventory. Do not re-list functions here; follow Decision 2's exact name-to-file mapping.\n\nOutcome: internal/cli/routes_check.go split into routes_cmd.go (Cobra wiring), routes_check.go (check core, keeps the headline name so links/history stay anchored on the core logic), routes_render.go (rendering), and routes_validate.go (reasoning/alias validation). Verbatim moves.\n\nFiles \u0026 scope: internal/cli only. No test edits. Cobra imports stay confined to internal/cli. Every symbol keeps one home; no catch-all file.\n\nDesign: move functions whole; keep error strings byte-identical; self-review with `git diff --color-moved`.\n\nAcceptance: `go test -count=1 ./internal/cli ./cmd/rally` green; `rally routes check` output byte-identical on a representative config. One commit for the split. Do not tick tasks.md.",
+      "assignee": "JUNIOR",
+      "isDone": false,
+      "order": 327680,
+      "createdAt": "2026-07-02T03:43:47.178768754Z",
+      "updatedAt": "2026-07-02T03:43:47.178768754Z",
+      "completedAt": null
+    },
+    {
+      "id": "rall-cdb3",
+      "title": "Split internal/store into write/read/messages/agent-status files",
+      "description": "Context: tasks.md task 5, using design Decision 2's full 26-function store inventory. Note store_read.go is a new file the draft's four-way axis missed (relay/try read paths get their own home). Do not re-list functions here; follow Decision 2's exact name-to-file mapping.\n\nOutcome: internal/store/store.go split into store.go (Store type + NewStore, open/init/layout migration), store_write.go (relay/try writes + ID allocation), store_read.go (relay/try queries), store_messages.go (message subsystem writes+queries), and store_agent_status.go (agent-status). Verbatim moves; persisted store shape untouched.\n\nFiles \u0026 scope: internal/store only. No test edits. Every symbol keeps one home; no catch-all file.\n\nDesign: move functions whole; keep error strings byte-identical; self-review with `git diff --color-moved`.\n\nAcceptance: `go test -count=1 ./internal/store ./internal/relay/...` green. One commit for the split. Do not tick tasks.md.",
+      "assignee": "JUNIOR",
+      "isDone": false,
+      "order": 393216,
+      "createdAt": "2026-07-02T03:43:47.178770708Z",
+      "updatedAt": "2026-07-02T03:43:47.178770708Z",
+      "completedAt": null
+    },
+    {
+      "id": "rall-ff61",
+      "title": "Full-change verification and record final file lists for #8",
+      "description": "Context: final verification of the whole decompose-remaining-source-files change (all four splits + baseline). Covers tasks.md task 6 and closes out tasks 4 and 5.\n\nOutcome: a findings-first report confirming the whole refactor is behaviour-preserving and complete; remaining tasks.md boxes (4.x, 5.x, 6.x, and any 1.x not already ticked) checked for verified work.\n\nProcess: use openspec-verify-change against the whole change and inspect the entire diff. Identify the merge target from the user, PR metadata, repo docs, branch config, or history (do not assume main); diff with `git diff \u003ctarget\u003e...HEAD`. Identify the first lap/try of this batch; earlier work is pre-existing. Do not rewrite git history; substantive gaps become new head laps.\n\nChecks (task 6): (6.1) function-inventory one-for-one across every package's new files vs the baseline lap's recorded inventory — no functions added or dropped; (6.2) exported-surface per package identical (`go doc` diffed pre/post); (6.3) `go test -count=1 ./...`, `go vet ./...`, `gofmt -l .` empty, `go run ./tools/archguard --ci` exit 0 with the four 500-line advisory warnings gone and NO grandfather-map or policy-table diff, `just check` green; (6.4) behaviour preservation — no CLI-output, config-schema/semantic, telemetry, store-shape, or error-string diff, `internal/buildinfo/VERSION` untouched, and the three harness warning-band files internal/harness/claude/claude.go, internal/harness/opencode/opencode_evidence.go, internal/harness/antigravity/antigravity.go untouched per design Decision 3 (out of scope); (6.5) record the final per-package production file lists so #8 decompose-large-test-files can mirror config_v2_test.go/store_test.go splits against them. Trace the actual moved symbols and the per-package commits, not just green tests. Tick tasks.md 4.x/5.x/6.x (and any remaining 1.x).",
+      "assignee": "VERIFY",
+      "isDone": false,
+      "order": 458752,
+      "createdAt": "2026-07-02T03:43:47.17877211Z",
+      "updatedAt": "2026-07-02T03:43:47.17877211Z",
+      "completedAt": null
+    }
+  ]
+}
