@@ -10,6 +10,7 @@ import (
 func TestBuildPrompt_AllFields(t *testing.T) {
 	opts := RunOptions{
 		Persona:          "Expert Go developer",
+		WorkspaceDir:     "/tmp/rally-workspace",
 		TaskName:         "Refactor store layer",
 		TaskRequirements: "Use generics for JSONL records.",
 		Instructions:     "Always write tests first.",
@@ -24,6 +25,8 @@ func TestBuildPrompt_AllFields(t *testing.T) {
 	}
 	checks := []string{
 		"Expert Go developer",
+		"## Workspace",
+		"Work in this repository: `/tmp/rally-workspace`",
 		"Refactor store layer",
 		"Use generics for JSONL records.",
 		"Always write tests first.",

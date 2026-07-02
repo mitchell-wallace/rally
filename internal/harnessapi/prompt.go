@@ -42,6 +42,10 @@ func BuildPrompt(opts RunOptions) string {
 		}
 	}
 
+	if opts.WorkspaceDir != "" {
+		fmt.Fprintf(&b, "## Workspace\nWork in this repository: `%s`. Create and edit files in that repository, not in a scratch directory.\n\n", opts.WorkspaceDir)
+	}
+
 	if opts.TaskName != "" {
 		fmt.Fprintf(&b, "Task: %s\n", opts.TaskName)
 	}
