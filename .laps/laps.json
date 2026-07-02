@@ -39,11 +39,11 @@
       "title": "Plumb EventSink/Controls through cli -\u003e app -\u003e runner.Config (nil-safe)",
       "description": "Context: Phase 3 (tasks.md 3.1), design Decision 6. Wire the injection path with no behaviour change; nothing renders through it yet.\n\nOutcome: runner.Config gains `EventSink runtimeevent.Sink` and `Controls runtimeevent.ControlSource` (nil-safe: nil sink -\u003e no-op sink; nil controls -\u003e no operator input). app.RelayStartOptions gains the same two fields as opaque contract values; app.StartRelay (internal/app/relay_start.go) forwards them into runner.Config untouched, without inspecting them. internal/cli/start.go passes nil for both for now.\n\nFiles \u0026 scope: internal/relay/runner (Config type + nil-safe defaulting), internal/app/relay_start.go (RelayStartOptions + forward), internal/cli/start.go (pass nil). internal/app imports runtimeevent for types only and must never import internal/presentation/*; the seam stays presentation-neutral and never reads input.\n\nDesign: Mechanical plumbing -- do not emit or render anything here. Keep app oblivious to concrete presentation. Ensure existing runner construction/tests still compile with the new optional fields defaulting safely.\n\nAcceptance: go build ./... green; go test -count=1 ./internal/relay/... ./internal/app ./cmd/rally green (no behaviour change).",
       "assignee": "JUNIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 262144,
       "createdAt": "2026-07-02T11:28:44.895303337Z",
-      "updatedAt": "2026-07-02T11:28:44.895303337Z",
-      "completedAt": null
+      "updatedAt": "2026-07-02T15:34:29.726747038Z",
+      "completedAt": "2026-07-02T15:34:29.726747038Z"
     },
     {
       "id": "rall-a264",
