@@ -149,11 +149,11 @@
       "title": "Update action-loop and timeout tests to runtimeevent.Press fakes",
       "description": "Context: Phase 5 (tasks.md 5.3), following the control conversion lap.\n\nOutcome: runner_action_loop_test.go and any timeout tests that feed presses now drive runtimeevent.Press fakes (via a fake ControlSource / press channel) instead of keyboard.Press. All seven action-loop cases plus the stall/timeout precedence cases stay green and unchanged in substance.\n\nFiles \u0026 scope: internal/relay/runner/*_test.go (action-loop and timeout suites). Mechanical type/fixture conversion following the existing test structure; do not change what the tests assert about cancellation ordering or precedence.\n\nDesign: Keep the test intent identical -- only the press type and its source change. Preserve the exact scenarios (arm/confirm, skip, pause, stop, quit, second-quit force-kill during drain, stall/timeout precedence).\n\nAcceptance: go test -race -shuffle=on -count=1 ./internal/relay/... green with all action-loop and timeout cases intact.",
       "assignee": "JUNIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 917504,
       "createdAt": "2026-07-02T11:28:44.895315333Z",
-      "updatedAt": "2026-07-02T11:28:44.895315333Z",
-      "completedAt": null
+      "updatedAt": "2026-07-02T18:37:13.872173459Z",
+      "completedAt": "2026-07-02T18:37:13.872173459Z"
     },
     {
       "id": "rall-8349",
