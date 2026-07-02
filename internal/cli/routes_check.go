@@ -3,8 +3,6 @@ package cli
 import (
 	"encoding/json"
 	"fmt"
-	"io"
-	"math"
 	"os"
 	"path/filepath"
 	"sort"
@@ -12,17 +10,11 @@ import (
 
 	"github.com/mitchell-wallace/rally/internal/agent_prompt"
 	"github.com/mitchell-wallace/rally/internal/config"
-	"github.com/mitchell-wallace/rally/internal/gitx"
-	"github.com/mitchell-wallace/rally/internal/harnessapi"
 	"github.com/mitchell-wallace/rally/internal/routing"
 	"github.com/mitchell-wallace/rally/internal/user_prompt/roleloader"
-	"github.com/spf13/cobra"
 )
 
 const defaultRouteKey = "default"
-
-var resolveWorkspaceDir = defaultResolveWorkspaceDir
-var loadConfig = config.LoadV2
 
 type removedAliasRouteError struct {
 	msg     string
@@ -65,39 +57,6 @@ type RoleOverlap struct {
 type RouteSummary struct {
 	Name       string
 	EntryCount int
-}
-
-func NewRoutesCmd() *cobra.Command {
-	routesCmd := &cobra.Command{
-		Use:   "routes",
-		Short: "Inspect route configuration",
-	}
-
-	checkCmd := &cobra.Command{
-		Use:          "check",
-		Short:        "Validate [routes] configuration",
-		SilenceUsage: true,
-		RunE:         runRoutesCheck,
-	}
-
-	routesCmd.AddCommand(checkCmd)
-	return routesCmd
-}
-
-func runRoutesCheck(cmd *cobra.Command, args []string) error {
-	workspaceDir, err := resolveWorkspaceDir()
-	if err != nil {
-		return err
-	}
-
-	cfg, err := loadConfig(workspaceDir)
-	if err != nil {
-		return fmt.Errorf("load config: %w", err)
-	}
-
-	result, err := CheckRoutes(workspaceDir, cfg)
-	renderRouteCheckResult(cmd.OutOrStdout(), result)
-	return err
 }
 
 func CheckRoutes(workspaceDir string, cfg config.V2Config) (RouteCheckResult, error) {
@@ -267,214 +226,6 @@ func checkRoles(workspaceDir string) ([]RoleDiagnostic, []RoleOverlap, error) {
 	return diags, overlaps, nil
 }
 
-func renderRouteCheckResult(w io.Writer, result RouteCheckResult) {
-	fmt.Fprintln(w, "routes check summary:")
-	if len(result.Summaries) == 0 {
-		fmt.Fprintln(w, "- no routes declared")
-	} else {
-		for _, summary := range result.Summaries {
-			fmt.Fprintf(w, "- %s: %d %s\n", summary.Name, summary.EntryCount, pluralize(summary.EntryCount, "entry", "entries"))
-		}
-	}
-
-	if len(result.ProviderSummary) > 0 {
-		fmt.Fprintln(w, "\nproviders (shared-quota groups):")
-		for _, p := range result.ProviderSummary {
-			status := ""
-			if p.Disabled {
-				status = " [disabled]"
-			}
-			fmt.Fprintf(w, "- %s: %d %s%s\n", p.Name, p.MemberCount, pluralize(p.MemberCount, "model", "models"), status)
-		}
-	}
-
-	if len(result.RoleDiagnostics) > 0 {
-		fmt.Fprintln(w, "\nrole prompt diagnostics:")
-		for _, diag := range result.RoleDiagnostics {
-			src := "embedded"
-			if diag.IsCustom {
-				src = fmt.Sprintf("custom, .rally/agents/%s.md", diag.Role)
-			}
-			fmt.Fprintf(w, "- %s: ~%d tokens (%s)\n", diag.Role, diag.TokenCount, src)
-		}
-	}
-
-	if len(result.Warnings) > 0 || len(result.Infos) > 0 {
-		fmt.Fprintln(w)
-	}
-
-	for _, warning := range result.Warnings {
-		fmt.Fprintln(w, warning)
-	}
-	for _, info := range result.Infos {
-		fmt.Fprintln(w, info)
-	}
-
-	for _, overlap := range result.Overlaps {
-		fmt.Fprintf(w, "\nadvisory: custom role prompt .rally/agents/%s.md references %q.\n", overlap.Role, overlap.MatchTerm)
-		fmt.Fprintln(w, "This may overlap with the shared guidance which is automatically injected.")
-
-		snippetName := "finalize.md"
-		snippetText := agent_prompt.Finalize()
-		if overlap.IsHeadless {
-			snippetName = "headless.md"
-			snippetText = agent_prompt.Headless()
-		}
-
-		fmt.Fprintf(w, "For comparison, the embedded general/%s snippet is:\n", snippetName)
-		fmt.Fprintln(w, "---")
-		fmt.Fprintln(w, snippetText)
-		fmt.Fprintln(w, "---")
-	}
-}
-
-// validateReasoning checks the `[reasoning]` table. A harness-scoped model
-// alias (e.g. `cc:opus-high`) names its harness, so a missing alias is almost
-// certainly an operator typo and is reported as a hard error. A bare token is
-// resolved against the route-selected harness only at runtime — it may be a
-// model alias or a passthrough effort value — so it never hard-fails; it only
-// warns when it matches neither a configured model alias nor a documented
-// reasoning effort.
-func validateReasoning(cfg config.V2Config) ([]string, error) {
-	if len(cfg.Reasoning) == 0 {
-		return nil, nil
-	}
-
-	roles := make([]string, 0, len(cfg.Reasoning))
-	for role := range cfg.Reasoning {
-		roles = append(roles, role)
-	}
-	sort.Strings(roles)
-
-	var warnings []string
-	for _, role := range roles {
-		preference := strings.TrimSpace(cfg.Reasoning[role])
-		if preference == "" {
-			continue
-		}
-
-		if scopedHarness, _, scoped := strings.Cut(preference, ":"); scoped {
-			if _, _, err := cfg.ResolveRoleReasoning(role, strings.TrimSpace(scopedHarness), preference); err != nil {
-				return nil, fmt.Errorf("routes check: %w", err)
-			}
-			continue
-		}
-
-		if reasoningTokenRecognised(cfg, preference) {
-			continue
-		}
-		warnings = append(warnings, fmt.Sprintf(
-			"warning: [reasoning].%s value %q is not a known model alias or documented reasoning effort; it will be passed through to the selected harness as-is",
-			role, preference))
-	}
-
-	return warnings, nil
-}
-
-func reasoningTokenRecognised(cfg config.V2Config, token string) bool {
-	if harnessapi.IsKnownReasoningEffort(token) {
-		return true
-	}
-	for _, hc := range cfg.Harnesses {
-		if hc == nil || hc.Models == nil {
-			continue
-		}
-		if _, ok := hc.Models[token]; ok {
-			return true
-		}
-	}
-	return false
-}
-
-func validateRouteEntry(cfg config.V2Config, routeName string, entry routing.ParsedEntry) error {
-	if _, err := cfg.ResolveAgent(entry.Spec); err != nil {
-		if alias, ok := config.RemovedGeminiAlias(err); ok {
-			return &removedAliasRouteError{
-				msg:     fmt.Sprintf("routes check: route %q entry %q: %s", routeName, entry.Raw, config.RemovedGeminiAliasWarning(routeName, entry.Raw, alias)),
-				alias:   strings.ToLower(alias),
-				warning: config.RemovedGeminiAliasWarning(routeName, entry.Raw, alias),
-			}
-		}
-		return fmt.Errorf("routes check: route %q entry %q: %s", routeName, entry.Raw, decorateResolveError(cfg, entry.Spec, err))
-	}
-	return nil
-}
-
-func decorateResolveError(cfg config.V2Config, spec string, err error) string {
-	errMsg := err.Error()
-	if !strings.Contains(errMsg, "unknown agent alias") {
-		return errMsg
-	}
-
-	alias := spec
-	if idx := strings.Index(alias, ":"); idx >= 0 {
-		alias = alias[:idx]
-	}
-	suggestions := topAliasSuggestions(alias, cfg)
-	if len(suggestions) == 0 {
-		return errMsg
-	}
-	return fmt.Sprintf("%s; did you mean %s?", errMsg, strings.Join(suggestions, ", "))
-}
-
-func topAliasSuggestions(target string, cfg config.V2Config) []string {
-	candidates := aliasCandidates(cfg)
-	if len(candidates) == 0 {
-		return nil
-	}
-
-	type scored struct {
-		name  string
-		score int
-	}
-
-	ranked := make([]scored, 0, len(candidates))
-	for _, candidate := range candidates {
-		ranked = append(ranked, scored{name: candidate, score: levenshtein(target, candidate)})
-	}
-
-	sort.Slice(ranked, func(i, j int) bool {
-		if ranked[i].score == ranked[j].score {
-			return ranked[i].name < ranked[j].name
-		}
-		return ranked[i].score < ranked[j].score
-	})
-
-	if len(ranked) > 3 {
-		ranked = ranked[:3]
-	}
-
-	suggestions := make([]string, 0, len(ranked))
-	for _, item := range ranked {
-		suggestions = append(suggestions, item.name)
-	}
-	return suggestions
-}
-
-func aliasCandidates(cfg config.V2Config) []string {
-	seen := map[string]bool{}
-	candidates := []string{}
-
-	for _, name := range []string{"ag", "agy", "antigravity", "cc", "claude", "cx", "codex", "op", "opencode"} {
-		if seen[name] {
-			continue
-		}
-		seen[name] = true
-		candidates = append(candidates, name)
-	}
-
-	for name := range cfg.Harnesses {
-		if seen[name] {
-			continue
-		}
-		seen[name] = true
-		candidates = append(candidates, name)
-	}
-
-	sort.Strings(candidates)
-	return candidates
-}
-
 func collectActiveAssignees(workspaceDir string) (map[string]struct{}, string, error) {
 	assignees := map[string]struct{}{}
 
@@ -554,66 +305,4 @@ func sortedRouteNames(routes map[string][]string) []string {
 	}
 	sort.Strings(names)
 	return names
-}
-
-func pluralize(n int, singular, plural string) string {
-	if n == 1 {
-		return singular
-	}
-	return plural
-}
-
-func defaultResolveWorkspaceDir() (string, error) {
-	wd, err := os.Getwd()
-	if err != nil {
-		return "", err
-	}
-	if root, ok, _ := gitx.GitRepoRoot(wd); ok {
-		return root, nil
-	}
-	return wd, nil
-}
-
-func levenshtein(a, b string) int {
-	la, lb := len(a), len(b)
-	if la == 0 {
-		return lb
-	}
-	if lb == 0 {
-		return la
-	}
-
-	prev := make([]int, lb+1)
-	curr := make([]int, lb+1)
-	for j := 0; j <= lb; j++ {
-		prev[j] = j
-	}
-
-	for i := 1; i <= la; i++ {
-		curr[0] = i
-		for j := 1; j <= lb; j++ {
-			cost := 1
-			if a[i-1] == b[j-1] {
-				cost = 0
-			}
-			curr[j] = min(
-				prev[j]+1,
-				curr[j-1]+1,
-				prev[j-1]+cost,
-			)
-		}
-		prev, curr = curr, prev
-	}
-
-	return prev[lb]
-}
-
-func min(vals ...int) int {
-	best := math.MaxInt
-	for _, value := range vals {
-		if value < best {
-			best = value
-		}
-	}
-	return best
 }

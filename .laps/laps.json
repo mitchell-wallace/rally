@@ -358,11 +358,11 @@
       "title": "Split internal/cli routes-check into wiring/core/render/validate files",
       "description": "Context: tasks.md task 4, using design Decision 2's full 23-function routes-check inventory. Do not re-list functions here; follow Decision 2's exact name-to-file mapping.\n\nOutcome: internal/cli/routes_check.go split into routes_cmd.go (Cobra wiring), routes_check.go (check core, keeps the headline name so links/history stay anchored on the core logic), routes_render.go (rendering), and routes_validate.go (reasoning/alias validation). Verbatim moves.\n\nFiles \u0026 scope: internal/cli only. No test edits. Cobra imports stay confined to internal/cli. Every symbol keeps one home; no catch-all file.\n\nDesign: move functions whole; keep error strings byte-identical; self-review with `git diff --color-moved`.\n\nAcceptance: `go test -count=1 ./internal/cli ./cmd/rally` green; `rally routes check` output byte-identical on a representative config. One commit for the split. Do not tick tasks.md.",
       "assignee": "JUNIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 2162688,
       "createdAt": "2026-07-02T11:29:17.157489272Z",
-      "updatedAt": "2026-07-02T11:29:17.157489272Z",
-      "completedAt": null
+      "updatedAt": "2026-07-02T21:12:02.135735851Z",
+      "completedAt": "2026-07-02T21:12:02.135735851Z"
     },
     {
       "id": "rall-77a3",
