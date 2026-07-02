@@ -127,11 +127,11 @@
       "title": "Implement terminal.Controls ControlSource adapter + Start/Stop test",
       "description": "Context: Phase 5 (tasks.md 5.1), design Decision 4/5 and the raw-mode-lifecycle + WaitResume risks. First step of the control cut-over; runner still uses keyboard directly until the next lap.\n\nOutcome: terminal.Controls implementing runtimeevent.ControlSource, with an injectable-stream constructor terminal.NewControls(in io.Reader, out io.Writer) (CLI passes os.Stdin/os.Stdout). It wraps keyboard.NewKeyboard(in, out) with a raw-mode session per Start/Stop, translates keyboard.Press -\u003e runtimeevent.Press, and WaitResume performs today's leave-raw-mode-then-read-Enter sequence against `in`. An adapter test exercises repeated Start/Stop cycles using pipes with no leaked readers.\n\nFiles \u0026 scope: internal/presentation/terminal (Controls + test). Mirror internal/keyboard's keyboard_test.go pipe-driven approach -- no global os.Stdin mutation. Do not yet convert the runner's keyboard sessions (next lap).\n\nDesign: Per-phase Start/Stop must mirror today's two independent keyboard instances exactly, preserving raw-mode enter/leave points and the no-leaked-reader property. WaitResume must reproduce the exact pause sequence (leave raw mode via Stop, then read a line) so pause semantics are unchanged (design Risk on WaitResume).\n\nAcceptance: go build ./... green; go test -race -count=1 ./internal/presentation/... green including the repeated Start/Stop pipe test (no leaked readers).",
       "assignee": "SENIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 786432,
       "createdAt": "2026-07-02T11:28:44.895313104Z",
-      "updatedAt": "2026-07-02T11:28:44.895313104Z",
-      "completedAt": null
+      "updatedAt": "2026-07-02T18:17:12.690478478Z",
+      "completedAt": "2026-07-02T18:17:12.690478478Z"
     },
     {
       "id": "rall-8b34",
