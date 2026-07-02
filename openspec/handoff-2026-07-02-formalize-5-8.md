@@ -29,10 +29,15 @@ prepare-laps completes and the queues are committed.
     sequencing overstatement, prepare-helper assignment, providers 26-function
     inventory, stale monitor-interface claim, #4→#5 archive-order hardened)
 - All four validate with `openspec validate <change> --strict`.
-- Review passes completed: 1 of ~3 (pass-1 reviewer reports in scratchpad
-  `review1-5-out.md` / `review1-678-out.md`; final report follows the last
-  `tokens used` line in each file). Pass 2 = fresh reviews diffing against
-  pass-1 findings; #8 had zero pass-1 findings.
+- **Review passes complete: 3 of 3, all four changes verdict READY.**
+  Findings converged 8 (pass 1, `62503da`) → 5 (pass 2, `783555d`) → 1
+  mechanical propagation (pass 3, `ce39b3d`). No product calls surfaced — all
+  findings were factual tighten-ups, applied. Reviewer reports in scratchpad
+  `review{1,2,3}-*-out.md` (final report follows the last `tokens used` line).
+- **Next step: prepare-laps stage below.** Verified mechanics: `laps -f
+  <name>.laps.json <cmd>` reads/writes `.laps/<name>.laps.json` without
+  touching the active `.laps/laps.json` — every laps command in the subagent
+  prompts must carry the `-f` flag.
 
 ## Key grounding facts (verified 2026-07-02, commit f55712c)
 
@@ -97,9 +102,18 @@ behaviour-preserving refactors).
   `.laps/7-decompose-remaining-source-files.laps.json`,
   `.laps/8-decompose-large-test-files.laps.json`.
 - Commit after each subagent completes (protects against usage limits).
+- Subagent prompt must include: use the `prepare-laps` skill; pass
+  `-f <number>-<change-name>.laps.json` on EVERY `laps` command (add/list/
+  count); do NOT touch `.laps/laps.json` (skip the skill's "clear previous
+  batch" orient step — these are staged queues, not the active queue); the
+  upstream changes (#5 before #6/#7, #6/#7 before #8) have NOT landed yet —
+  skip the skill's "dependency must have landed" gate and rely on the
+  re-grounding tasks already in each change's tasks.md; commit the staged
+  queue file; do not push.
 - Memory note: `parallel-batch-worktree-staging` — independent Rally batches
   run as separate branch+worktree with their own `.laps` queue; these
-  per-change queue files fit that staging pattern.
+  per-change queue files fit that staging pattern (though #5→#8 are dependent
+  and will run sequentially, not in parallel).
 
 ## Scratchpad artifacts (this session, /tmp — may not survive reboot)
 
