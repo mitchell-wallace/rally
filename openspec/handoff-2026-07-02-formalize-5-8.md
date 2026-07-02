@@ -24,8 +24,15 @@ prepare-laps completes and the queues are committed.
   - `c8c9fca` #7 decompose-remaining-source-files formalized
   - `cefc1e0` #8 decompose-large-test-files formalized
   - `0e8e964` #5 separate-runtime-presentation-boundary formalized
+  - `62503da` pass-1 tightening (8 findings: monitor-residual contradiction,
+    armed/applied event contract split, injectable Controls streams, #6
+    sequencing overstatement, prepare-helper assignment, providers 26-function
+    inventory, stale monitor-interface claim, #4→#5 archive-order hardened)
 - All four validate with `openspec validate <change> --strict`.
-- Review passes completed: 0 of ~3.
+- Review passes completed: 1 of ~3 (pass-1 reviewer reports in scratchpad
+  `review1-5-out.md` / `review1-678-out.md`; final report follows the last
+  `tokens used` line in each file). Pass 2 = fresh reviews diffing against
+  pass-1 findings; #8 had zero pass-1 findings.
 
 ## Key grounding facts (verified 2026-07-02, commit f55712c)
 
