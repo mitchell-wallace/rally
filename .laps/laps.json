@@ -325,11 +325,11 @@
       "title": "Split internal/monitor into responsibility-named files",
       "description": "Context: tasks.md task 2, using the recorded inventory from the baseline lap and design Decision 2's full 34-function monitor inventory. Do not re-list functions here; follow Decision 2's exact name-to-file mapping.\n\nOutcome: internal/monitor/monitor.go split into monitor.go (lifecycle + state, keeps the headline file an agent opens first), monitor_render.go (rendering/formatting), proc_stats.go (process/network inspection), and network_monitor.go (NetworkMonitor). Verbatim moves; no behaviour, exported-surface, or error-string change.\n\nFiles \u0026 scope: internal/monitor only. No test edits. No helpers.go/misc catch-all — every symbol keeps exactly one home per its primary responsibility.\n\nDesign: move functions whole; keep error strings byte-identical; self-review with `git diff --color-moved` to confirm pure moves. If an unexported helper is shared across new files, place it in the file matching its primary responsibility, not a shared file.\n\nAcceptance: `go test -count=1 ./internal/monitor ./internal/relay/...` green (the runner consumes monitor). One commit: `decompose-remaining-source-files: split internal/monitor`. Do not tick tasks.md.",
       "assignee": "JUNIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 1966080,
       "createdAt": "2026-07-02T11:29:17.157483628Z",
-      "updatedAt": "2026-07-02T11:29:17.157483628Z",
-      "completedAt": null
+      "updatedAt": "2026-07-02T20:55:13.630264972Z",
+      "completedAt": "2026-07-02T20:55:13.630264972Z"
     },
     {
       "id": "rall-b4f8",
