@@ -94,7 +94,7 @@ Always use these slugs in tests. They are the only slugs known to be available i
 
 | Harness | Slug | Notes |
 |---|---|---|
-| `ag`/`agy` (antigravity) | `Gemini 3.5 Flash (High)` | Verified 2026-05-21 via `agy --print`; `agy` 1.0.0 has no CLI model flag, so Rally sets `~/.gemini/antigravity-cli/settings.json` for the run and restores it. |
+| `ag`/`agy` (antigravity) | `Gemini 3.5 Flash (High)` | Re-verified 2026-07-02 via `agy --print` and Rally real-backend; `agy` 1.0.15 has no CLI model flag, so Rally sets `~/.gemini/antigravity-cli/settings.json` for the run and restores it. |
 | `cc` (claude) | `claude-haiku-4-5` | Cheapest/fastest; default for smoke tests. |
 | `cx` (codex) | `gpt-5.4-mini` | Verified working (see `TestRealBackend_CodexRelay`). |
 | `ge` (gemini) | `gemini-3.1-pro-preview` | Previously verified, but unavailable on 2026-06-19: gemini-cli 0.40.1 returns `IneligibleTierError` / `UNSUPPORTED_CLIENT` for Gemini Code Assist individuals. Prefer Antigravity or other harnesses until account/client eligibility changes. |
@@ -354,6 +354,7 @@ Check `~/.local/share/rally/relays/<repo>/relay-N.log` for "freeze detected" vs 
 These are agent-CLI behaviours that affect how tests appear. None are rally bugs.
 
 - **Gemini**: Not currently usable in this environment. On 2026-06-19, gemini-cli 0.40.1 returned `IneligibleTierError` / `UNSUPPORTED_CLIENT`: the client is no longer supported for Gemini Code Assist individuals and suggests migrating to Antigravity. Rally should classify this as `auth_or_proxy`, not `agent_error`, and should end with `all agents unavailable` rather than frozen state when no fallback exists.
+- **Antigravity**: `agy` 1.0.15 can create files under `~/.gemini/antigravity-cli/scratch/` when the prompt does not explicitly identify the target workspace, even though `cmd.Dir` is set. Rally v0.13.0 fixed this by adding a `## Workspace` section to generated prompts. If Antigravity real-backend tests fail with `no changes made`, inspect the try summary links for `scratch/` before assuming an auth/model issue.
 - **Codex**: `--full-auto` / `--dangerously-bypass-approvals-and-sandbox` conflict resolved (commit history) — only the bypass flag is passed now. `TestRealBackend_CodexRelay` guards this.
 - **OpenCode**: Model availability varies by provider. Use the built-in `op` alias — NOT a custom harness with `command = ["opencode"]` (which starts TUI mode). Rally warns on this at startup. For the current opencode-go monthly limit, opencode maintained a silent connected process until Rally's connected-idle path fired at ~5m; Rally then surfaced server-log-tail evidence as `usage_limit`, displayed `usage limit, resets in 96h0m`, and benched quota scope `opencode:opencode-go`.
 
