@@ -61,11 +61,11 @@
       "title": "Recording-sink event-order tests for the flow paths",
       "description": "Context: Phase 3 (tasks.md 3.3), building on the parallel-emit lap and the Recording sink.\n\nOutcome: Event-order tests using the recording sink for: simple success, retry-then-fail, operator cancellation (skip and quit), stall, rate-limit wait, and all-paused wait paths. Assert emitted event ORDER only -- no styling/byte assertions (rendering is not wired yet).\n\nFiles \u0026 scope: test files under internal/relay/runner (recording-sink driven). Follow existing runner test harness patterns for driving these flows.\n\nDesign: Assert the sequence and kinds of events per path against the inventory; these tests lock the emit contract before the phase-4 cut-over relies on it. Keep them order-focused so they survive the later rendering changes unchanged.\n\nAcceptance: go test -count=1 ./internal/relay/... green with the new order tests included.",
       "assignee": "JUNIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 393216,
       "createdAt": "2026-07-02T11:28:44.89530561Z",
-      "updatedAt": "2026-07-02T11:28:44.89530561Z",
-      "completedAt": null
+      "updatedAt": "2026-07-02T16:09:35.091575875Z",
+      "completedAt": "2026-07-02T16:09:35.091575875Z"
     },
     {
       "id": "rall-b852",
