@@ -545,3 +545,12 @@ func tallyRuns(tries []store.TryRecord, relayID int) (passCount, failCount, canc
 	}
 	return passCount, failCount, cancelledCount
 }
+
+func containsInt(slice []int, val int) bool {
+	for _, v := range slice {
+		if v == val {
+			return true
+		}
+	}
+	return false
+}
