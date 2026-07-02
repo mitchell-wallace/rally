@@ -102,19 +102,25 @@ type Sink interface {
   background renders and break the footer-parking contract.
 - Resolves the draft's `EventSink` vs callback-struct question in favour of
   the single interface (the draft's own lean).
-- A nil sink means silent: `runner.Config.EventSink == nil` → no-op sink. The
-  CLI always injects the terminal sink, so operator behaviour is unchanged;
-  the silent default applies only to direct library/test construction (the
-  affected runner tests are updated as part of this change).
+- A nil sink means no event-rendered output: `runner.Config.EventSink == nil`
+  → no-op sink. This suppresses only what the sink renders — the monitor
+  status line (`mon.Start(os.Stdout)`, Decision 8) remains a direct-stdout
+  residual for any caller that reaches an active try, until the TUI/monitor
+  follow-up rehomes it. The CLI always injects the terminal sink, so operator
+  behaviour is unchanged; the no-op default applies only to direct
+  library/test construction (the affected runner tests are updated as part of
+  this change).
 
 ### Decision 3 — event vocabulary tracks today's operator-facing output
 
 The initial vocabulary is derived from the output inventory (regenerate at
-implementation time); each event maps to output the runner currently prints:
+implementation time). Most events map one-to-one to output the runner
+currently prints; the exceptions are explicitly marked data-only below (the
+terminal sink no-ops them; they exist for alternate presentations):
 
 | Event | Replaces (today) |
 |---|---|
-| `RelayStarted` / `RelayCompleted` | header context + "Relay complete." stays app-side |
+| `RelayStarted` / `RelayCompleted` | **no current print** — data-only lifecycle markers for alternate presentations (TUI); the terminal sink SHALL no-op them, and `app.StartRelay` remains the sole owner of the literal `Relay complete.` line (`relay_start.go:201`) |
 | `RouteWarning` | route/selection warnings to stderr (`relay_steps.go:57,170`) |
 | `TaskFileWarning` | laps-instructions / free-run prompt warnings (`task.go:62,79`) |
 | `RunHeaderReady` | `style.RenderHeader` (`run_one.go:456`) |

@@ -5,7 +5,7 @@
 
 ## 2. Split internal/monitor (one commit)
 
-- [ ] 2.1 Split `monitor.go` per design Decision 2: lifecycle stays in `monitor.go` (`Monitor`, `NewMonitor`, `Start`/`Stop`/`Tick`, `UpdatePIDs`, indicator setters); rendering/formatting → `monitor_render.go` (`RenderStatus`, `RenderStatusExt`, `formatDuration`, `formatLastActivity`, `render`/`clear`); process/network inspection → `proc_stats.go` (`GitDirtyCount`, `LogLastActivity`, `GetPIDsInGroup`, `CountTCPConnections`, `ReadIOBytes`, `ReadSyscallBytes`); `NetworkMonitor` → `network_monitor.go`. Moves verbatim; shared unexported helpers go with their primary responsibility, no `helpers.go`.
+- [ ] 2.1 Split `monitor.go` per design Decision 2's full 34-function inventory: lifecycle + state stay in `monitor.go` (`NewMonitor`, `Start`, `Stop`, `Tick`, `run`, `computeIndicators`, `UpdatePIDs`, `SetProcessGroupID`, `SetStallThreshold`, `SetRetry`, `SetStalled`, `SetStopping`, `SetArmed`, `SetActing`, `SetRecovered`, `SetCursorUpLines`); rendering/formatting → `monitor_render.go` (`RenderStatus`, `RenderStatusExt`, `formatDuration`, `formatLastActivity`, `plural`, `Monitor.render`, `Monitor.clear`); process/network inspection → `proc_stats.go` (`GitDirtyCount`, `LogLastActivity`, `GetPIDsInGroup`, `readPGID`, `CountTCPConnections`, `socketInodesForPIDs`, `ReadIOBytes`, `ReadSyscallBytes`); `network_monitor.go` (`NewNetworkMonitor`, `NetworkMonitor.evaluate`, `NetworkMonitor.Check`). Moves verbatim; no `helpers.go`.
 - [ ] 2.2 `go test -count=1 ./internal/monitor ./internal/relay/...` green (runner consumes monitor); commit `decompose-remaining-source-files: split internal/monitor`.
 
 ## 3. Split internal/config providers (one commit)
@@ -15,12 +15,12 @@
 
 ## 4. Split internal/cli routes-check (one commit)
 
-- [ ] 4.1 Split `routes_check.go` per design Decision 2: Cobra wiring → `routes_cmd.go` (`NewRoutesCmd`, `runRoutesCheck`); check core stays in `routes_check.go` (`CheckRoutes`, `checkRoles`); rendering → `routes_render.go` (`renderRouteCheckResult` and formatting); reasoning/alias validation → `routes_validate.go`. Cobra imports remain confined to `internal/cli`.
+- [ ] 4.1 Split `routes_check.go` per design Decision 2's full 23-function inventory: Cobra wiring → `routes_cmd.go` (`NewRoutesCmd`, `runRoutesCheck`, `defaultResolveWorkspaceDir`); check core stays in `routes_check.go` (`CheckRoutes`, `checkRoles`, `removedAliasRouteError.Error`, `collectActiveAssignees`, `collectJSONAssignees`, `collectNestedAssignees`, `addAssignee`, `mergeAssignees`, `hasDefaultRoute`, `sortedRouteNames`); rendering → `routes_render.go` (`renderRouteCheckResult`, `pluralize`); reasoning/alias validation → `routes_validate.go` (`validateReasoning`, `reasoningTokenRecognised`, `validateRouteEntry`, `decorateResolveError`, `topAliasSuggestions`, `aliasCandidates`, `levenshtein`, `min`). Cobra imports remain confined to `internal/cli`.
 - [ ] 4.2 `go test -count=1 ./internal/cli ./cmd/rally` green; `rally routes check` output byte-identical on a representative config; commit.
 
 ## 5. Split internal/store (one commit)
 
-- [ ] 5.1 Split `store.go` per design Decision 2: `Store` type + open/init/layout migration stay in `store.go`; append/write paths → `store_write.go`; message read/query → `store_messages.go`; agent-status access → `store_agent_status.go`. Persisted shape untouched.
+- [ ] 5.1 Split `store.go` per design Decision 2's full 26-function inventory: `Store` type + `NewStore` stay in `store.go`; relay/try writes + ID allocation → `store_write.go` (`AppendTry`, `AppendRelay`, `UpdateRelay`, `NextRelayID`, `NextTryID`); relay/try queries → `store_read.go` (`GetTry`, `GetRelay`, `RecentTries`, `RecentRelays`, `AllRelays`, `AllTries`); message subsystem → `store_messages.go` (`AddMessage`, `UpdateMessage`, `maybeTruncateMessages`, `NextMessageID`, `GetMessages`, `PendingMessages`, `RelayScopedMessages`, `EligibleRelayScopedMessages`, `ConsumedRunScopedMessageForRun`); agent-status → `store_agent_status.go` (`AppendAgentStatus`, `ResetAgentStatus`, `truncateAgentStatus`, `GetAgentStatus`, `AllAgentStatus`). Persisted shape untouched.
 - [ ] 5.2 `go test -count=1 ./internal/store ./internal/relay/...` green; commit.
 
 ## 6. Verification

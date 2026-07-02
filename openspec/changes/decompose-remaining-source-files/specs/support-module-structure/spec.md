@@ -27,8 +27,9 @@ signature changed, and rendered status output SHALL be byte-identical.
 
 `internal/store/store.go` SHALL be split into responsibility-named files in the
 same `package store`, separating the `Store` type with open/init/layout
-migration (retained in `store.go`), the append/write paths, the message
-read/query paths, and agent-status access. The split SHALL be a file-only
+migration (retained in `store.go`), the relay/try write and ID-allocation
+paths, the relay/try query paths, the message subsystem, and agent-status
+access. The split SHALL be a file-only
 move: no exported identifier SHALL be added, removed, renamed, or have its
 signature changed, and the persisted store shape SHALL be unchanged.
 

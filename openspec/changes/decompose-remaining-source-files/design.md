@@ -47,13 +47,21 @@ review as small as four separate changes would.
 
 ### Decision 2 — file layouts (candidate seams, verify at implementation)
 
-**`internal/monitor`** (headline file keeps the lifecycle):
+**`internal/monitor`** (headline file keeps the lifecycle). Full name-to-file
+inventory of the 34 current functions/methods (2026-07-02; re-verify):
 
 ```text
-monitor.go          # Monitor, NewMonitor, Start/Stop/Tick, UpdatePIDs, indicator setters
-monitor_render.go   # RenderStatus, RenderStatusExt, formatDuration, formatLastActivity, render/clear
-proc_stats.go       # GitDirtyCount, LogLastActivity, GetPIDsInGroup, CountTCPConnections, ReadIOBytes, ReadSyscallBytes
-network_monitor.go  # NetworkMonitor
+monitor.go          # lifecycle + state: NewMonitor, Start, Stop, Tick, run,
+                    # computeIndicators, UpdatePIDs, SetProcessGroupID,
+                    # SetStallThreshold, SetRetry, SetStalled, SetStopping,
+                    # SetArmed, SetActing, SetRecovered, SetCursorUpLines
+monitor_render.go   # RenderStatus, RenderStatusExt, formatDuration,
+                    # formatLastActivity, plural, Monitor.render, Monitor.clear
+proc_stats.go       # GitDirtyCount, LogLastActivity, GetPIDsInGroup, readPGID,
+                    # CountTCPConnections, socketInodesForPIDs, ReadIOBytes,
+                    # ReadSyscallBytes
+network_monitor.go  # NewNetworkMonitor, NetworkMonitor.evaluate,
+                    # NetworkMonitor.Check
 ```
 
 **`internal/config`** (mirrors #2's `config_v2.go` split convention). Full
@@ -79,22 +87,41 @@ providers_wildcard.go  # wildcard matching + expansion: resolveProviderWildcardS
 `providers.go` itself disappears if nothing remains after the three moves
 (preferred), or stays only as a thin documented seam — never as a catch-all.
 
-**`internal/cli`**:
+**`internal/cli`**. Full name-to-file inventory of the 23 current
+functions/methods (2026-07-02; re-verify):
 
 ```text
-routes_cmd.go       # NewRoutesCmd, runRoutesCheck (Cobra wiring only)
-routes_check.go     # CheckRoutes, checkRoles (the check core; keeps the headline name)
-routes_render.go    # renderRouteCheckResult and output formatting
-routes_validate.go  # reasoning/alias validation helpers
+routes_cmd.go       # Cobra wiring: NewRoutesCmd, runRoutesCheck,
+                    # defaultResolveWorkspaceDir
+routes_check.go     # check core (keeps the headline name): CheckRoutes,
+                    # checkRoles, removedAliasRouteError.Error,
+                    # collectActiveAssignees, collectJSONAssignees,
+                    # collectNestedAssignees, addAssignee, mergeAssignees,
+                    # hasDefaultRoute, sortedRouteNames
+routes_render.go    # renderRouteCheckResult, pluralize
+routes_validate.go  # validateReasoning, reasoningTokenRecognised,
+                    # validateRouteEntry, decorateResolveError,
+                    # topAliasSuggestions, aliasCandidates, levenshtein, min
 ```
 
-**`internal/store`** (headline file keeps the type):
+**`internal/store`** (headline file keeps the type). Full name-to-file
+inventory of the 26 current functions/methods (2026-07-02; re-verify) — note
+the relay/try *read* paths get their own file, which the draft's four-way
+axis missed:
 
 ```text
-store.go              # Store type, Open/init, layout migration entry points
-store_write.go        # append/write paths
-store_messages.go     # message read/query paths
-store_agent_status.go # agent-status read/write
+store.go              # Store type + NewStore (open/init/layout migration)
+store_write.go        # relay/try writes + ID allocation: AppendTry,
+                      # AppendRelay, UpdateRelay, NextRelayID, NextTryID
+store_read.go         # relay/try queries: GetTry, GetRelay, RecentTries,
+                      # RecentRelays, AllRelays, AllTries
+store_messages.go     # the message subsystem (writes + queries): AddMessage,
+                      # UpdateMessage, maybeTruncateMessages, NextMessageID,
+                      # GetMessages, PendingMessages, RelayScopedMessages,
+                      # EligibleRelayScopedMessages,
+                      # ConsumedRunScopedMessageForRun
+store_agent_status.go # AppendAgentStatus, ResetAgentStatus,
+                      # truncateAgentStatus, GetAgentStatus, AllAgentStatus
 ```
 
 Exact membership follows the function inventory at implementation time; the
