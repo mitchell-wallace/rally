@@ -1,0 +1,137 @@
+{
+  "version": 2,
+  "tasks": [
+    {
+      "id": "rall-5f6e",
+      "title": "Baseline, re-ground scope, and record name-level inventory",
+      "description": "Context: OpenSpec change decompose-large-test-files (#8), tasks 1.1-1.3. This is the deliberately-last decomposition, planned for a post-#5/#6/#7 world; those production layouts land before this queue runs. design.md Decisions 4 and 5 govern: the acceptance criterion is an EMPTY test grandfather map, not a fixed file list, and the move-and-verify inventory is the gate. Re-ground against the tree as it actually is now — do not trust the proposal's baseline line numbers.\n\nOutcome: A confirmed-green tree, a recorded current target list (every _test.go entry in the archguard grandfather map), a per-package pre-change name-level function inventory, and the mirror-target file lists (#6's recorded runner files, #7's per-package files) captured for the downstream split laps and the final comparison.\n\nFiles \u0026 scope: No source edits in this lap — it runs commands and records artifacts only. Save the inventory/scope/mirror-target snapshots to a scratch file under openspec/changes/decompose-large-test-files/ (input for task 4.2's comparison), not a freeform report.\n\nDesign: Run go build ./..., go test -count=1 ./..., go test -race -shuffle=on -count=1 ./internal/relay/... ./internal/config ./internal/store, and go run ./tools/archguard --ci (exit 0). If any test fails under -shuffle=on BEFORE a single move, STOP and report — a pre-existing ordering defect is not this change's to fix silently. Regenerate the map with go run ./tools/archguard --report; the authoritative scope is exactly the _test.go entries it lists (eight at the f55712c baseline, minus any suite #5/#6/#7 already split when they ran). Record per-package inventory with grep -hoE '^func (Test|Benchmark|Fuzz)[A-Za-z0-9_]*' \u003cfiles\u003e | sort. Read #6's recorded runner file list and #7's per-package lists as the mirror axes each split lap will follow.\n\nAcceptance: Green baseline confirmed; scope list, per-package inventories, and #6/#7 mirror-target file lists recorded and available to the split laps. Do NOT tick tasks.md — verification is the gate for that.",
+      "assignee": "SENIOR",
+      "isDone": false,
+      "order": 65536,
+      "createdAt": "2026-07-02T09:03:55.101589675Z",
+      "updatedAt": "2026-07-02T09:03:55.101589675Z",
+      "completedAt": null
+    },
+    {
+      "id": "rall-0237",
+      "title": "Split resilience_test.go by resilience concern",
+      "description": "Context: task 2.1. internal/relay/resilience_test.go has NO upstream dependency and can land first. design.md Decision 2 gives the split axis.\n\nOutcome: resilience_test.go split into responsibility-named _test.go files in internal/relay, each under the 1,000-line cap, grouped by resilience concern: state machine/persistence vs stall/frozen transitions vs benched/probation/decay. Shared fixtures/builders extracted into a single per-package helper test file (extend an existing one; create at most one new helper_test.go if none exists).\n\nFiles \u0026 scope: internal/relay/*_test.go only. Zero production-file edits — not even renames. A test spanning multiple concerns goes with the behaviour it primarily pins; never split a single test function.\n\nDesign: Arrangement only — no assertion, fixture-meaning, or coverage change; extract only verbatim-shared setup, leave case-local variants inline (Decision 3). Move-and-verify inventory per commit (Decision 4): grep the Test*/Benchmark*/Fuzz* names for the package before and after; the multiset must be identical, each declared exactly once. Helper files are subject to the 1,000-line cap too.\n\nAcceptance: go test -race -shuffle=on -count=1 ./internal/relay green; before/after name inventory identical; one commit for this suite. Report the resulting file list. Do not tick tasks.md.",
+      "assignee": "JUNIOR",
+      "isDone": false,
+      "order": 131072,
+      "createdAt": "2026-07-02T09:03:55.101598311Z",
+      "updatedAt": "2026-07-02T09:03:55.101598311Z",
+      "completedAt": null
+    },
+    {
+      "id": "rall-ac01",
+      "title": "Split config_v2_test.go mirroring the config production layout",
+      "description": "Context: task 2.2 — after #7's config layout is final (it runs before this queue). internal/config/config_v2_test.go mirrors the production split. Use #7's recorded per-package file list captured in the baseline lap as the mirror target; if names drifted from the proposal, follow the recorded list.\n\nOutcome: config_v2_test.go split into responsibility-named _test.go files in internal/config mirroring the production files (load/decode/validate/resolve/save from #2, plus #7's providers files where those cases belong), each under 1,000 lines. Shared fixtures into one per-package helper test file.\n\nFiles \u0026 scope: internal/config/*_test.go only. Zero production-file edits. Never split a single test function; a cross-file test goes with the behaviour it primarily pins.\n\nDesign: Arrangement only (Decision 2/3) — verbatim helper relocation, no fixture-semantics change. Move-and-verify inventory per commit: before/after grep of Test*/Benchmark*/Fuzz* names identical, each declared once. Helper file under the cap.\n\nAcceptance: go test -race -shuffle=on -count=1 ./internal/config green; inventory identical; one commit. Report resulting file list. Do not tick tasks.md.",
+      "assignee": "JUNIOR",
+      "isDone": false,
+      "order": 196608,
+      "createdAt": "2026-07-02T09:03:55.101600202Z",
+      "updatedAt": "2026-07-02T09:03:55.101600202Z",
+      "completedAt": null
+    },
+    {
+      "id": "rall-d6dc",
+      "title": "Split store_test.go mirroring the store production layout",
+      "description": "Context: task 2.3 — after #7's store layout is final. internal/store/store_test.go mirrors #7's store_write.go / store_read.go / store_messages.go / store_agent_status.go. Use #7's recorded store file list from the baseline lap as the mirror target; follow the recorded names if they drifted.\n\nOutcome: store_test.go split into responsibility-named _test.go files in internal/store mirroring #7's store source files, each under 1,000 lines. Shared fixtures into one per-package helper test file.\n\nFiles \u0026 scope: internal/store/*_test.go only. Zero production-file edits. Never split a single test function.\n\nDesign: Arrangement only — verbatim helper relocation, no fixture-semantics or coverage change. Move-and-verify inventory per commit: before/after name grep identical, each declared once. Helper file under the cap.\n\nAcceptance: go test -race -shuffle=on -count=1 ./internal/store green; inventory identical; one commit. Report resulting file list. Do not tick tasks.md.",
+      "assignee": "JUNIOR",
+      "isDone": false,
+      "order": 262144,
+      "createdAt": "2026-07-02T09:03:55.101601644Z",
+      "updatedAt": "2026-07-02T09:03:55.101601644Z",
+      "completedAt": null
+    },
+    {
+      "id": "rall-cf8c",
+      "title": "Verify the stable-package suite splits (tasks 2.1-2.3)",
+      "description": "Context: verification gate at the stable-package slice boundary, covering tasks 2.1 (resilience), 2.2 (config), 2.3 (store). Use the openspec-verify-change skill against decompose-large-test-files, then focus the report on these three suites.\n\nOutcome: Confirmation that the three stable-package suites are correctly and thoroughly split, arrangement-only, with preserved inventories — or head laps for any gap.\n\nScope \u0026 method: Identify the intended merge target (ask the user / PR metadata / branch config / recent history — do not assume main) and the first lap/try in this batch; treat earlier branch work as pre-existing. Trace real evidence, not just green tests: compare the per-package before/after Test*/Benchmark*/Fuzz* inventories from the baseline snapshot (identical multiset, each declared once); confirm every new internal/relay, internal/config, internal/store _test.go file is under 1,000 lines; confirm the diff for these suites touches only _test.go files (zero production edits, no assertion changes). Run go test -race -shuffle=on -count=1 ./internal/relay ./internal/config ./internal/store.\n\nAcceptance: If solid, check the tasks.md boxes for 2.1-2.3. For any substantive gap, add a focused head lap (additive/revert commits only — never rewrite git history) rather than fixing large work inline; only tiny safe one-liners may be fixed here. Report findings first.",
+      "assignee": "VERIFY",
+      "isDone": false,
+      "order": 327680,
+      "createdAt": "2026-07-02T09:03:55.101602649Z",
+      "updatedAt": "2026-07-02T09:03:55.101602649Z",
+      "completedAt": null
+    },
+    {
+      "id": "rall-2bd6",
+      "title": "Split run_one_test.go per-phase against the run_attempt_* layout",
+      "description": "Context: task 3.1 — after #6's runner layout is final (it runs before this queue). internal/relay/runner/run_one_test.go (largest suite) mirrors #6's per-phase run_attempt_*.go files. Use #6's recorded runner file list from the baseline lap as the mirror target.\n\nOutcome: run_one_test.go split into per-phase _test.go files mirroring run_attempt_*.go (e.g. run_attempt_prepare_test.go, run_attempt_classify_test.go, run_retry_decide_test.go, ...), with run_one_test.go retaining only the top-level runOne flow cases. Each file under 1,000 lines. Shared fixtures move into the EXISTING internal/relay/runner/helpers_test.go, not a new parallel helper.\n\nFiles \u0026 scope: internal/relay/runner/*_test.go only. Zero production-file edits. Never split a single test function; a cross-phase test goes with the behaviour it primarily pins.\n\nDesign: Arrangement only (Decision 2/3) — verbatim helper relocation into helpers_test.go, no fixture-semantics change. Move-and-verify inventory per commit: before/after grep of Test*/Benchmark*/Fuzz* names for the package identical, each declared once. helpers_test.go stays under the cap.\n\nAcceptance: go test -race -shuffle=on -count=1 ./internal/relay/runner green; inventory identical; one commit. Report resulting file list. Do not tick tasks.md.",
+      "assignee": "JUNIOR",
+      "isDone": false,
+      "order": 393216,
+      "createdAt": "2026-07-02T09:03:55.101613477Z",
+      "updatedAt": "2026-07-02T09:03:55.101613477Z",
+      "completedAt": null
+    },
+    {
+      "id": "rall-b2ef",
+      "title": "Split runner_outcome_test.go by outcome family",
+      "description": "Context: task 3.2 — after #6's layout. internal/relay/runner/runner_outcome_test.go splits by outcome family mirroring run_attempt_classify.go / run_attempt_record.go. Use #6's recorded runner file list as the mirror target.\n\nOutcome: runner_outcome_test.go split into outcome-family _test.go files (classify vs record) mirroring the production files, each under 1,000 lines. Shared fixtures extend the existing helpers_test.go.\n\nFiles \u0026 scope: internal/relay/runner/*_test.go only. Zero production-file edits. Never split a single test function.\n\nDesign: Arrangement only — verbatim helper relocation, no fixture-semantics change. Move-and-verify inventory per commit: before/after name grep identical, each declared once.\n\nAcceptance: go test -race -shuffle=on -count=1 ./internal/relay/runner green; inventory identical; one commit. Report resulting file list. Do not tick tasks.md.",
+      "assignee": "JUNIOR",
+      "isDone": false,
+      "order": 458752,
+      "createdAt": "2026-07-02T09:03:55.101615151Z",
+      "updatedAt": "2026-07-02T09:03:55.101615151Z",
+      "completedAt": null
+    },
+    {
+      "id": "rall-1cba",
+      "title": "Split route_runtime_test.go mirroring the route_runtime_* layout",
+      "description": "Context: task 3.3 — after #6's layout. internal/relay/runner/route_runtime_test.go mirrors route_runtime_construct.go / route_runtime_select.go / route_runtime_recovery.go / route_runtime_bench.go. Use #6's recorded runner file list as the mirror target.\n\nOutcome: route_runtime_test.go split into _test.go files mirroring those four production files, each under 1,000 lines. Shared fixtures extend the existing helpers_test.go.\n\nFiles \u0026 scope: internal/relay/runner/*_test.go only. Zero production-file edits. Never split a single test function.\n\nDesign: Arrangement only — verbatim helper relocation, no fixture-semantics change. Move-and-verify inventory per commit: before/after name grep identical, each declared once.\n\nAcceptance: go test -race -shuffle=on -count=1 ./internal/relay/runner green; inventory identical; one commit. Report resulting file list. Do not tick tasks.md.",
+      "assignee": "JUNIOR",
+      "isDone": false,
+      "order": 524288,
+      "createdAt": "2026-07-02T09:03:55.10161609Z",
+      "updatedAt": "2026-07-02T09:03:55.10161609Z",
+      "completedAt": null
+    },
+    {
+      "id": "rall-ba9b",
+      "title": "Verify the first runner suite splits (tasks 3.1-3.3)",
+      "description": "Context: mid-runner verification gate covering tasks 3.1 (run_one), 3.2 (runner_outcome), 3.3 (route_runtime). Use the openspec-verify-change skill against decompose-large-test-files, then focus the report on these three suites.\n\nOutcome: Confirmation the three runner suites are correctly split, arrangement-only, inventories preserved, mirroring #6's recorded layout — or head laps for gaps.\n\nScope \u0026 method: Identify the intended merge target (do not assume main) and this batch's first lap/try; treat earlier work as pre-existing. Trace real evidence, not just green tests: compare before/after Test*/Benchmark*/Fuzz* inventory for internal/relay/runner (identical multiset, each declared once); confirm each new _test.go file (helpers_test.go included) is under 1,000 lines and that shared setup lives in the single helpers_test.go, not parallel helpers; confirm the diff touches only _test.go files. Run go test -race -shuffle=on -count=1 ./internal/relay/runner.\n\nAcceptance: If solid, check the tasks.md boxes for 3.1-3.3. Add focused head laps for substantive gaps (additive/revert commits only, never rewrite history); only tiny safe one-liners inline. Report findings first.",
+      "assignee": "VERIFY",
+      "isDone": false,
+      "order": 589824,
+      "createdAt": "2026-07-02T09:03:55.101616959Z",
+      "updatedAt": "2026-07-02T09:03:55.101616959Z",
+      "completedAt": null
+    },
+    {
+      "id": "rall-b321",
+      "title": "Split relay_steps_test.go mirroring the relay step layout",
+      "description": "Context: task 3.4 — after #6's layout (post-#5 membership). internal/relay/runner/relay_steps_test.go mirrors relay_route_wait.go / relay_run_progress.go / relay_summary.go. Use #6's recorded runner file list as the mirror target and follow the recorded names if membership shifted.\n\nOutcome: relay_steps_test.go split into _test.go files mirroring those production files, each under 1,000 lines. Shared fixtures extend the existing helpers_test.go.\n\nFiles \u0026 scope: internal/relay/runner/*_test.go only. Zero production-file edits. Never split a single test function.\n\nDesign: Arrangement only — verbatim helper relocation, no fixture-semantics change. Move-and-verify inventory per commit: before/after name grep identical, each declared once.\n\nAcceptance: go test -race -shuffle=on -count=1 ./internal/relay/runner green; inventory identical; one commit. Report resulting file list. Do not tick tasks.md.",
+      "assignee": "JUNIOR",
+      "isDone": false,
+      "order": 655360,
+      "createdAt": "2026-07-02T09:03:55.101620159Z",
+      "updatedAt": "2026-07-02T09:03:55.101620159Z",
+      "completedAt": null
+    },
+    {
+      "id": "rall-b390",
+      "title": "Split runner_failure_telemetry_test.go by failure family",
+      "description": "Context: task 3.5 — after #6's layout. internal/relay/runner/runner_failure_telemetry_test.go splits by failure family: harness failure evidence vs benching/reset vs diagnostics/events (names like runner_failure_telemetry_*_test.go).\n\nOutcome: runner_failure_telemetry_test.go split into failure-family _test.go files, each under 1,000 lines. Shared fixtures extend the existing helpers_test.go.\n\nFiles \u0026 scope: internal/relay/runner/*_test.go only. Zero production-file edits. Never split a single test function; a case that spans families goes with the failure it primarily pins.\n\nDesign: Arrangement only — verbatim helper relocation, no fixture-semantics change. Move-and-verify inventory per commit: before/after name grep identical, each declared once.\n\nAcceptance: go test -race -shuffle=on -count=1 ./internal/relay/runner green; inventory identical; one commit. Report resulting file list. Do not tick tasks.md.",
+      "assignee": "JUNIOR",
+      "isDone": false,
+      "order": 720896,
+      "createdAt": "2026-07-02T09:03:55.101621148Z",
+      "updatedAt": "2026-07-02T09:03:55.101621148Z",
+      "completedAt": null
+    },
+    {
+      "id": "rall-44cc",
+      "title": "Ratchet the archguard baseline and verify the full change",
+      "description": "Context: tasks 3.4, 3.5, and phase 4 (4.1-4.4) plus the whole-change gate. Covers the last two runner splits and the ratchet+verification. Use the openspec-verify-change skill for the full change decompose-large-test-files and inspect the entire diff. design.md Decision 5: the acceptance criterion is the EMPTY test grandfather map, not a fixed file list.\n\nOutcome: The #3 test grandfather map is empty, the whole change is confirmed arrangement-only with preserved inventories, and every suite is under the cap — or head laps for any gap.\n\nScope \u0026 method: First verify 3.4 (relay_steps) and 3.5 (runner_failure_telemetry) like the earlier runner gate — inventory preserved, files under cap, _test.go-only diff, package tests green under -race -shuffle=on. Then the ratchet: regenerate the baseline with go run ./tools/archguard --report and confirm ZERO _test.go grandfather entries remain, every new _test.go file (helpers included) is under 1,000 lines, and go run ./tools/archguard --ci exits 0 with NO policy-table edit (baseline regeneration only, per the #4/#6 precedent). Final inventory comparison per package against the baseline lap's snapshot: identical multisets, each Test/Benchmark/Fuzz declared exactly once. Full verification: go test -count=1 ./..., go test -race -shuffle=on -count=1 ./..., go vet ./..., gofmt -l . empty, just check green. Confirm the whole diff touches only _test.go files plus the regenerated baseline — zero production-file edits, no assertion changes, internal/buildinfo/VERSION untouched, no version bump/release. Identify the intended merge target (do not assume main) and this batch's first lap/try; treat earlier work as pre-existing.\n\nAcceptance: If everything holds, check the remaining tasks.md boxes (1.1-1.3, 3.4, 3.5, 4.1-4.4). Add focused head laps for substantive gaps (additive/revert commits only, never rewrite history); only tiny safe one-liners inline. Report findings first.",
+      "assignee": "VERIFY",
+      "isDone": false,
+      "order": 786432,
+      "createdAt": "2026-07-02T09:03:55.10162201Z",
+      "updatedAt": "2026-07-02T09:03:55.10162201Z",
+      "completedAt": null
+    }
+  ]
+}
