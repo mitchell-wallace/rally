@@ -237,11 +237,11 @@
       "title": "Verify run_one.go decomposition (phases 1-2)",
       "description": "Use the openspec-verify-change skill against decompose-run-one, focused on phases 1 and 2 (baseline/re-grounding and the run_one.go split).\n\nBefore diffing: identify the intended merge target from the user, PR metadata, repo docs, branch config, or recent history, and use that target in git diff \u003ctarget\u003e...HEAD. Identify the first lap/try of this batch and treat earlier branch work as pre-existing unless the user asks otherwise.\n\nTrace, do not just run tests: run_one.go is now index-only (Runner.runOne + newRunOneState + runOneState.outcome); each phase lives in its named sibling file; verify the moves are verbatim via git diff --color-moved on the split commits; confirm the sub-step helpers in classify/record are the ONLY new functions and that error strings and telemetry fields are byte-identical. Confirm go build ./..., go test -count=1 ./internal/relay/..., and the race suite are green.\n\nCheck off tasks.md boxes 1.1-1.3 and 2.1-2.4, but ONLY for work verified correct and sufficiently thorough. Substantive gaps become new head laps (laps add head); fix only tiny safe one-liners inline. Do not rewrite git history.",
       "assignee": "VERIFY",
-      "isDone": false,
+      "isDone": true,
       "order": 1441792,
       "createdAt": "2026-07-02T11:29:04.858235952Z",
-      "updatedAt": "2026-07-02T11:29:04.858235952Z",
-      "completedAt": null
+      "updatedAt": "2026-07-02T20:15:07.915746525Z",
+      "completedAt": "2026-07-02T20:15:07.915746525Z"
     },
     {
       "id": "rall-4a96",
