@@ -180,6 +180,7 @@ func (c V2Config) resolveProviderConcreteSpec(spec string) (harnessapi.ResolvedA
 		return harnessapi.ResolvedAgent{}, fmt.Errorf("ambiguous model alias %q matches %s; qualify it as harness:alias", spec, strings.Join(labels, ", "))
 	}
 }
+
 func sortedHarnessKeys(harnesses map[string]*HarnessConfig) []string {
 	keys := make([]string, 0, len(harnesses))
 	for key := range harnesses {
@@ -277,6 +278,7 @@ func (c V2Config) ProviderMemberCounts() (map[string]int, error) {
 	}
 	return counts, nil
 }
+
 func runnerLabel(a harnessapi.ResolvedAgent) string {
 	if a.Model == "" {
 		return a.Harness
