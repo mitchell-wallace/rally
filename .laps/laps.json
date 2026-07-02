@@ -83,11 +83,11 @@
       "title": "Build terminal.Sink adapter and wire it in cli/start.go",
       "description": "Context: Phase 4 (tasks.md 4.1-4.2), design Decision 5/6. First step of the high-risk output cut-over; still parallel with runner prints until the next lap deletes them.\n\nOutcome: New package internal/presentation/terminal with terminal.Sink implementing runtimeevent.Sink over out/err writers, relocating each print's format strings and escape sequences (\\r\\x1b[2K, \\r\\x1b[J, the \\r\\n raw-mode countdown, footer in-place redraw with cursor parking) VERBATIM from the runner. internal/cli/start.go constructs the terminal sink over os.Stdout/os.Stderr and passes it through RelayStartOptions (replacing the nil sink).\n\nFiles \u0026 scope: new internal/presentation/terminal/*.go; internal/cli/start.go wiring. terminal package internal imports limited to runtimeevent, style, keyboard -- not relay/runner, harness*, config, store, telemetry. Do NOT delete runner prints yet (that is the next lap); at end of this lap both the sink and the inline prints run, so output may double -- acceptable transient, resolved by the cut-over lap.\n\nDesign: Byte-parity depends on relocating format strings call-for-call, one render per former print site, same writer targets. Copy the exact strings/escapes from the runner source; do not re-derive them. RelayStarted/RelayCompleted and active-try OperatorAction events SHALL no-op in this sink (Decision 3); app.StartRelay remains sole owner of the literal 'Relay complete.' line.\n\nAcceptance: go build ./... green; archguard still green for the new package's imports (formal policy row lands in phase 6, but keep imports within the intended allow-list). Full parity is asserted after the cut-over + test relocation laps.",
       "assignee": "SENIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 524288,
       "createdAt": "2026-07-02T11:28:44.895307618Z",
-      "updatedAt": "2026-07-02T11:28:44.895307618Z",
-      "completedAt": null
+      "updatedAt": "2026-07-02T16:35:12.963438128Z",
+      "completedAt": "2026-07-02T16:35:12.963438128Z"
     },
     {
       "id": "rall-15c4",
