@@ -369,11 +369,11 @@
       "title": "Split internal/store into write/read/messages/agent-status files",
       "description": "Context: tasks.md task 5, using design Decision 2's full 26-function store inventory. Note store_read.go is a new file the draft's four-way axis missed (relay/try read paths get their own home). Do not re-list functions here; follow Decision 2's exact name-to-file mapping.\n\nOutcome: internal/store/store.go split into store.go (Store type + NewStore, open/init/layout migration), store_write.go (relay/try writes + ID allocation), store_read.go (relay/try queries), store_messages.go (message subsystem writes+queries), and store_agent_status.go (agent-status). Verbatim moves; persisted store shape untouched.\n\nFiles \u0026 scope: internal/store only. No test edits. Every symbol keeps one home; no catch-all file.\n\nDesign: move functions whole; keep error strings byte-identical; self-review with `git diff --color-moved`.\n\nAcceptance: `go test -count=1 ./internal/store ./internal/relay/...` green. One commit for the split. Do not tick tasks.md.",
       "assignee": "JUNIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 2228224,
       "createdAt": "2026-07-02T11:29:17.157490413Z",
-      "updatedAt": "2026-07-02T11:29:17.157490413Z",
-      "completedAt": null
+      "updatedAt": "2026-07-02T21:18:23.234302088Z",
+      "completedAt": "2026-07-02T21:18:23.234302088Z"
     },
     {
       "id": "rall-529c",
