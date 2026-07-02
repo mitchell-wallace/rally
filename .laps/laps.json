@@ -270,11 +270,11 @@
       "title": "Verify route_runtime and relay_steps splits (phases 3-4)",
       "description": "Use the openspec-verify-change skill against decompose-run-one, focused on phases 3 and 4.\n\nBefore diffing: identify the intended merge target (user/PR/repo docs/branch config/recent history) and diff against it; treat pre-batch branch work as pre-existing.\n\nTrace: route_runtime.go is reduced to the routeRuntime type, its accessors, and routeSelectionError; relay_steps.go is reduced to the relay-level start/resume, spans, and scoped-message index; all moves are verbatim (git diff --color-moved); no new functions were introduced in these two splits; the resilience vocabulary (stall/frozen/benched) is intact. Confirm go test -count=1 ./internal/relay/... green.\n\nCheck off tasks.md boxes 3.1-3.2 and 4.1-4.2 for verified-correct work only. Substantive gaps become new head laps; only tiny safe one-liners fixed inline. Do not rewrite git history.",
       "assignee": "VERIFY",
-      "isDone": false,
+      "isDone": true,
       "order": 1638400,
       "createdAt": "2026-07-02T11:29:04.858239044Z",
-      "updatedAt": "2026-07-02T11:29:04.858239044Z",
-      "completedAt": null
+      "updatedAt": "2026-07-02T20:33:58.526245258Z",
+      "completedAt": "2026-07-02T20:33:58.526245258Z"
     },
     {
       "id": "rall-e548",

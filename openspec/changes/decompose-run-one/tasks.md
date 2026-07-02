@@ -13,13 +13,13 @@
 
 ## 3. Split route_runtime.go
 
-- [ ] 3.1 Create `route_runtime_construct.go`, `route_runtime_select.go`, `route_runtime_recovery.go`, `route_runtime_bench.go` per design Decision 4; `route_runtime.go` keeps the `routeRuntime` type, accessors, and `routeSelectionError`. All moves verbatim; `next` and `selectionWaitError` stay whole.
-- [ ] 3.2 `go test -count=1 ./internal/relay/...` green.
+- [x] 3.1 Create `route_runtime_construct.go`, `route_runtime_select.go`, `route_runtime_recovery.go`, `route_runtime_bench.go` per design Decision 4; `route_runtime.go` keeps the `routeRuntime` type, accessors, and `routeSelectionError`. All moves verbatim; `next` and `selectionWaitError` stay whole.
+- [x] 3.2 `go test -count=1 ./internal/relay/...` green.
 
 ## 4. Split relay_steps.go
 
-- [ ] 4.1 Create `relay_route_wait.go`, `relay_run_progress.go`, `relay_summary.go` per design Decision 5 (membership re-grounded per task 1.2, since #5 relocates summary/warning rendering); `relay_steps.go` keeps start/resume, spans, and scoped-message consumption.
-- [ ] 4.2 `go test -count=1 ./internal/relay/...` green.
+- [x] 4.1 Create `relay_route_wait.go`, `relay_run_progress.go`, `relay_summary.go` per design Decision 5 (membership re-grounded per task 1.2, since #5 relocates summary/warning rendering); `relay_steps.go` keeps start/resume, spans, and scoped-message consumption.
+- [x] 4.2 `go test -count=1 ./internal/relay/...` green.
 
 ## 5. Guardrail ratchet and verification
 
