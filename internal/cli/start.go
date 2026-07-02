@@ -206,6 +206,7 @@ func runRelay(cmd *cobra.Command, args []string, opts RootOptions) error {
 	}
 
 	terminalSink := terminal.NewSink(os.Stdout, os.Stderr)
+	terminalControls := terminal.NewControls(os.Stdin, os.Stdout)
 	return app.StartRelay(context.Background(), app.RelayStartOptions{
 		WorkspaceDir:           workspaceDir,
 		Config:                 cfg,
@@ -220,7 +221,7 @@ func runRelay(cmd *cobra.Command, args []string, opts RootOptions) error {
 		ResetAgentStatus:       resetAgentStatus,
 		OverwriteMixOnResume:   overwriteMixOnResume,
 		EventSink:              terminalSink,
-		Controls:               nil,
+		Controls:               terminalControls,
 		Out:                    os.Stdout,
 		Err:                    os.Stderr,
 	})
