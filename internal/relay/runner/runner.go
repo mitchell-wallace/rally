@@ -10,6 +10,7 @@ import (
 
 	"github.com/mitchell-wallace/rally/internal/harnessapi"
 	relaycore "github.com/mitchell-wallace/rally/internal/relay"
+	"github.com/mitchell-wallace/rally/internal/relay/runner/runtimeevent"
 	"github.com/mitchell-wallace/rally/internal/reliability"
 	"github.com/mitchell-wallace/rally/internal/routing"
 	"github.com/mitchell-wallace/rally/internal/store"
@@ -47,6 +48,25 @@ type Config struct {
 	RecentTryCount         int
 	RecentTryCharLimit     int
 	RecentContextCharLimit int
+
+	// EventSink receives presentation-neutral runtime events emitted by the
+	// runner at the call sites that render operator-facing output today. It is
+	// the seam a presentation adapter (today's terminal sink, a future TUI)
+	// subscribes to. A nil EventSink is treated as a no-op sink: [Runner.eventSink]
+	// substitutes [runtimeevent.NoopSink] so emit sites never need a nil check.
+	// The runner never inspects the concrete sink, keeping the seam
+	// presentation-neutral. Nothing is emitted through this field yet; phase 3.1
+	// wires the field only and phase 3.2 begins emitting alongside existing
+	// prints.
+	EventSink runtimeevent.Sink
+
+	// Controls is the operator-input source the runner consumes for per-phase
+	// control sessions (wait countdown, active try, pause-resume). A nil
+	// Controls means no operator input, as in headless/library construction: the
+	// runner takes no action from operator presses. The CLI injects a real
+	// terminal control source. Nothing consumes this field yet; phase 3.1 wires
+	// the field only and phase 5 cuts the keyboard sessions over to it.
+	Controls runtimeevent.ControlSource
 }
 
 type Runner struct {
@@ -123,6 +143,18 @@ func (r *Runner) tel() telemetry.Sink {
 		return telemetry.NoopSink{}
 	}
 	return r.telemetry
+}
+
+// eventSink returns the active runtime-event sink, defaulting to a no-op so
+// emit sites never need a nil check. A nil [Config.EventSink] (direct
+// library/test construction, or the CLI before it wires a real sink) means no
+// presentation is attached; [runtimeevent.NoopSink] keeps call sites branch-free
+// so emitting through a headless runner is silently discarded.
+func (r *Runner) eventSink() runtimeevent.Sink {
+	if r.cfg.EventSink == nil {
+		return runtimeevent.NoopSink{}
+	}
+	return r.cfg.EventSink
 }
 
 func NewRunner(s *store.Store, cfg Config, executors map[string]harnessapi.Executor) *Runner {

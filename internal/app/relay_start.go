@@ -13,6 +13,7 @@ import (
 	"github.com/mitchell-wallace/rally/internal/harnessapi"
 	"github.com/mitchell-wallace/rally/internal/relay"
 	"github.com/mitchell-wallace/rally/internal/relay/runner"
+	"github.com/mitchell-wallace/rally/internal/relay/runner/runtimeevent"
 	"github.com/mitchell-wallace/rally/internal/routing"
 	"github.com/mitchell-wallace/rally/internal/store"
 	"github.com/mitchell-wallace/rally/internal/telemetry"
@@ -28,6 +29,14 @@ type RelayStartOptions struct {
 	LapsEnabled   bool
 	DataDir       string
 	Telemetry     TelemetryBuild
+
+	// EventSink and Controls are opaque runtime-event contract values forwarded
+	// into runner.Config untouched. StartRelay never inspects them and the app
+	// package never imports a concrete presentation package; the CLI constructs
+	// the terminal adapter and passes it down. Both default to nil until the CLI
+	// wires a real presentation (no-op sink / no operator input).
+	EventSink runtimeevent.Sink
+	Controls  runtimeevent.ControlSource
 
 	DiscardUnfinishedRelay bool
 	ResetAgentStatus       bool
@@ -117,6 +126,8 @@ func StartRelay(ctx context.Context, opts RelayStartOptions) error {
 		RecentContextCharLimit: opts.Config.Reliability.RecentContextCharLimit,
 		TaskPrompt:             opts.TaskPrompt,
 		OverwriteMixOnResume:   opts.OverwriteMixOnResume,
+		EventSink:              opts.EventSink,
+		Controls:               opts.Controls,
 	}
 
 	runnerCfg.Resolver = func(spec string) (harnessapi.ResolvedAgent, error) {

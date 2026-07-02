@@ -135,8 +135,8 @@ var allowList = map[string]map[string]bool{
 	"telemetry":              {"buildinfo": true},
 	"release":                {"buildinfo": true},
 	"relay":                  {"harnessapi": true, "store": true},
-	"relay/runner":           {"harnessapi": true, "agent_prompt": true, "gitx": true, "keyboard": true, "laps": true, "monitor": true, "progress": true, "relay": true, "reliability": true, "routing": true, "store": true, "style": true, "telemetry": true, "textutil": true, "user_prompt/roleloader": true},
-	"app":                    {"harnessapi": true, "harness": true, "config": true, "relay": true, "relay/runner": true, "routing": true, "store": true, "telemetry": true},
+	"relay/runner":           {"harnessapi": true, "agent_prompt": true, "gitx": true, "keyboard": true, "laps": true, "monitor": true, "progress": true, "relay": true, "reliability": true, "routing": true, "store": true, "style": true, "telemetry": true, "textutil": true, "user_prompt/roleloader": true, "relay/runner/runtimeevent": true},
+	"app":                    {"harnessapi": true, "harness": true, "config": true, "relay": true, "relay/runner": true, "relay/runner/runtimeevent": true, "routing": true, "store": true, "telemetry": true},
 	"user_prompt/roleloader": {"store": true},
 }
 

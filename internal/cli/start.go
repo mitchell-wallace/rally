@@ -217,7 +217,11 @@ func runRelay(cmd *cobra.Command, args []string, opts RootOptions) error {
 		DiscardUnfinishedRelay: discardUnfinishedRelay,
 		ResetAgentStatus:       resetAgentStatus,
 		OverwriteMixOnResume:   overwriteMixOnResume,
-		Out:                    os.Stdout,
-		Err:                    os.Stderr,
+		// Presentation seam: nil for now — phase 4.2 wires the terminal adapter
+		// over os.Stdout/os.Stderr here.
+		EventSink: nil,
+		Controls:  nil,
+		Out:       os.Stdout,
+		Err:       os.Stderr,
 	})
 }
