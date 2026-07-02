@@ -303,11 +303,11 @@
       "title": "Code review: decompose-run-one (queue 6)",
       "description": "Run the auto-code-review skill (see .opencode/skills/auto-code-review/SKILL.md, also available under .claude/skills and .codex/skills) over the full decompose-run-one lap batch that just completed above.\n\nScope: the accumulated diff for this batch only (the internal/relay/runner run_one.go / route_runtime.go / relay_steps.go verbatim-split refactor). Identify the first lap/try commit of this queue-6 batch and use git merge-base / branch tracking / recent log to pick the correct diff base; treat earlier branch work as pre-existing unless instructed otherwise. Do not pull in unrelated commits.\n\nFocus: behaviour preservation — confirm the splits are pure relocations via git diff --color-moved, that error strings and telemetry fields are byte-identical, no misc/helpers catch-all was introduced, and the only new functions are the intended extracted sub-step helpers. Verify go build ./... and go test -count=1 ./internal/relay/... are green. Findings first; auto-fix only low-risk local issues; surface architecture/product calls with a default recommendation instead of silently deciding them. Commit each coherent fix cluster only if asked.",
       "assignee": "senior",
-      "isDone": false,
+      "isDone": true,
       "order": 1835008,
       "createdAt": "2026-07-02T11:29:14.312904439Z",
-      "updatedAt": "2026-07-02T11:29:14.312904439Z",
-      "completedAt": null
+      "updatedAt": "2026-07-02T20:47:33.86206565Z",
+      "completedAt": "2026-07-02T20:47:33.86206565Z"
     },
     {
       "id": "rall-6ae0",
