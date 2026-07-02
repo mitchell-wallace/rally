@@ -281,11 +281,11 @@
       "title": "Regenerate the archguard grandfather baseline",
       "description": "Context: task 5.1 and design Decision 6. Runs after all three files are split.\n\nOutcome: the grandfather map is regenerated so the internal/relay/runner/run_one.go production entry is gone and no internal/relay/runner production file needs an entry.\n\nFiles \u0026 scope: run go run ./tools/archguard --report to regenerate the grandfather baseline file (and whatever --report writes). Do NOT touch the runner _test.go grandfather entries — those are owned by #8 decompose-large-test-files.\n\nDesign: target every new production file under the 500-line warning band; hard-require under the 800-line budget. If any new internal/relay/runner production file still needs a grandfather entry, STOP and add a head lap — the split is supposed to leave all files small.\n\nAcceptance: go run ./tools/archguard --ci exits 0; runner _test.go grandfather entries unchanged; git diff of the baseline shows the run_one.go entry removed with no unexpected additions. Do NOT tick tasks.md boxes.",
       "assignee": "JUNIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 1703936,
       "createdAt": "2026-07-02T11:29:04.858240008Z",
-      "updatedAt": "2026-07-02T11:29:04.858240008Z",
-      "completedAt": null
+      "updatedAt": "2026-07-02T20:35:33.411624883Z",
+      "completedAt": "2026-07-02T20:35:33.411624883Z"
     },
     {
       "id": "rall-a5ee",
