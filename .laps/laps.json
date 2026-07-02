@@ -204,11 +204,11 @@
       "title": "Baseline the tree and re-ground the inventories",
       "description": "Context: OpenSpec change decompose-run-one (#6) is a behaviour-preserving, same-package file split of internal/relay/runner. It is sequenced AFTER #5 separate-runtime-presentation-boundary, which runs first and moves rendering (style/keyboard, printRelaySummary, route-warning stderr writes) out of the exact files this change splits. The design was baselined at commit f55712c, BEFORE #5 landed, so its line counts and per-file membership tables WILL have drifted. Read openspec/changes/decompose-run-one/{proposal.md,design.md,tasks.md} phase 1.\n\nOutcome: the tree is confirmed green, the inventories are re-grounded against the actual post-#5 tree, and the pre-change function inventory is recorded so the later split can be verified one-for-one.\n\nFiles \u0026 scope: read-only investigation plus notes on internal/relay/runner/{run_one.go,route_runtime.go,relay_steps.go}. Do NOT begin any split in this lap. Do not fold unrelated fixes into this refactor.\n\nDesign (this is the change's re-grounding gate — do it carefully): (1) Confirm green: go build ./..., go vet ./..., gofmt -l . (must be empty), go test -count=1 ./internal/relay/..., go run ./tools/archguard --ci (exit 0). If red, STOP and report — do not absorb unrelated failures into this refactor. (2) Regenerate current line counts for the three files and the func inventory via grep -n \"^func\" internal/relay/runner/{run_one,route_runtime,relay_steps}.go. (3) Because #5 ran first, expect drift: note any functions #5 rehomed, renamed, or removed (watch captureRunStartWorkspaceState, setupRunBudget, printRelaySummary and the route-warning writers) and adjust the design.md per-file membership tables to match the real tree — the per-phase-file DECISIONS (Decisions 2/4/5) hold regardless of exact membership. (4) Record a name-\u003efile map of every pre-change function across the three files (append to design.md or wrapup notes) so the move can be checked one-for-one afterward.\n\nAcceptance: all baseline commands green (or a clear STOP report); design.md membership tables reconciled to the post-#5 tree; pre-change function inventory recorded. Report the drift found versus the artifacts. Do NOT tick any tasks.md boxes.",
       "assignee": "SENIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 1245184,
       "createdAt": "2026-07-02T11:29:04.858226594Z",
-      "updatedAt": "2026-07-02T11:29:04.858226594Z",
-      "completedAt": null
+      "updatedAt": "2026-07-02T19:34:08.453473579Z",
+      "completedAt": "2026-07-02T19:34:08.453473579Z"
     },
     {
       "id": "rall-e2c2",

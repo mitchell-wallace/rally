@@ -62,8 +62,9 @@ Same `package runner`, responsibility-named files behind the `runOne` index
 (names indicative; verify function inventory at implementation time):
 
 ```text
-run_one.go                  # Runner.runOne + newRunOneState/runOneState.outcome (index + state)
-run_attempt_prepare.go      # captureRunStartWorkspaceState, setupRunBudget, prepareRunAttempt
+run_one.go                  # Runner.runOne + runOneState.outcome (index only)
+run_one_state.go            # (pre-existing from #5, left untouched) newRunOneState, captureRunStartWorkspaceState
+run_attempt_prepare.go      # setupRunBudget, prepareRunAttempt
 run_attempt_monitor.go      # runMonitoredAttempt, executeTry, resolveAttemptFinalSnippet
 run_attempt_reconcile.go    # reconcileAttemptProgress
 run_attempt_classify.go     # classifyAttemptOutcome + extracted sub-steps
@@ -73,6 +74,15 @@ run_retry_decide.go         # decideRetryOrComplete, routeFallbackCause.addTo
 run_handoff.go              # runHandoffContinuation
 run_finalize.go             # finalizeRunProgress
 ```
+
+> Re-grounded post-#5: `#5` already split `newRunOneState` and
+> `captureRunStartWorkspaceState` out of `run_one.go` into the new sibling
+> `run_one_state.go`. They are therefore NOT in `run_one.go` to move, and
+> `run_one_state.go` is left exactly as #5 placed it. `run_one.go`'s index thus
+> reduces to `Runner.runOne` + `runOneState.outcome`; `run_attempt_prepare.go`
+> receives `setupRunBudget` + `prepareRunAttempt` (no `captureRunStartWorkspaceState`).
+> The per-phase-file DECISION itself is unchanged — every phase body still moves
+> verbatim to its named file.
 
 Small utilities (`containsInt`) move with their only caller. Every symbol keeps
 exactly one home; no `misc`/`helpers` catch-all file — the same rule the
@@ -171,3 +181,106 @@ release surface involved.
 ## Open Questions
 
 _None — the draft's two open questions are resolved by Decisions 1 and 5._
+
+## Re-grounding — post-#5 (tasks 1.2 / 1.3)
+
+Recorded at the implementation-time baseline gate (after #5
+`separate-runtime-presentation-boundary` landed). The `f55712c` line counts in
+the Context/proposal are intentionally left as the *historical* baseline; the
+numbers here are the live, re-grounded values.
+
+### Baseline gate (task 1.1) — all GREEN
+
+- `go build ./...` — exit 0
+- `go vet ./...` — exit 0
+- `gofmt -l .` — empty (exit 0)
+- `go test -count=1 ./internal/relay/...` — ok (relay, runner, runtimeevent)
+- `go run ./tools/archguard --ci` — exit 0 (grandfathered warn-band entries
+  reported, none denied; no `runner` production file is over the hard cap)
+
+### Re-grounded line counts (task 1.2)
+
+| file | baseline `f55712c` | post-#5 (live) | Δ |
+| --- | --- | --- | --- |
+| `run_one.go` | 1,510 | **1,476** | −34 |
+| `route_runtime.go` | 752 | **752** | 0 |
+| `relay_steps.go` | 526 | **547** | +21 |
+
+Phase-body sizes are essentially unchanged from baseline (post-#5 spans):
+`prepareRunAttempt` 120, `runMonitoredAttempt` 106, `reconcileAttemptProgress`
+105, `recordCancelledAttempt` 132, `classifyAttemptOutcome` **229**,
+`recordAttemptOutcome` **262**, `decideRetryOrComplete` 89, `finalizeRunProgress`
+51. The two deep bodies (Decisions 3) are unchanged, so the sub-step extraction
+plan holds.
+
+### Drift vs the artifacts (task 1.2)
+
+1. **`captureRunStartWorkspaceState` + `newRunOneState`** — `#5` already moved
+   these OUT of `run_one.go` into the new sibling `run_one_state.go` (still
+   called from `run_one.go:225` / `run_one.go:231`). Decision 2's table is
+   reconciled above: `run_one.go` index drops to `runOne` + `outcome`;
+   `run_attempt_prepare.go` gets `setupRunBudget` + `prepareRunAttempt` only;
+   `run_one_state.go` is left untouched. The per-phase-file DECISION holds.
+2. **`setupRunBudget`** — still in `run_one.go` (line 295). No drift; moves to
+   `run_attempt_prepare.go` as planned.
+3. **`printRelaySummary`** — still in `relay_steps.go` (line 481), but its body
+   was transformed by `#5` from operator-facing stdout/stderr rendering into
+   event emission (`r.eventSink().Emit(RelaySummaryReady{...})` +
+   `RelayCompleted{...}`). Decision 5's parenthetical "(or its post-#5
+   event-emitting successor)" anticipated this exactly. Membership unchanged.
+4. **Route-warning stderr writers + `style`/`keyboard`** — confirmed GONE from
+   all three files. No `style`/`keyboard` imports remain; the only `os.Stdout`
+   is `mon.Start(os.Stdout)` at `run_one.go:486` (the documented `#5` residual —
+   monitor status-line wiring stays runner-driven). All remaining
+   `fmt.Fprint*` calls write to the relay `log` writer, not stderr/stdout. No
+   membership-table consequence (these were inline writes, not functions).
+5. **`route_runtime.go`** — zero drift. The live function inventory matches
+   Decision 4's membership table exactly. No edit.
+6. **`relay_steps.go`** — membership matches Decision 5; the `printRelaySummary`
+   event-emit note is confirmed. No table edit beyond the existing parenthetical.
+7. **`containsInt` (subtlety)** — defined in `run_one.go:1469`, but its ONLY
+   callers are `updateRunProgress` in `relay_steps.go` (lines 441, 453). The
+   "move small utilities with their only caller" rule therefore routes it into
+   the **`relay_steps` split** (`relay_run_progress.go`, with
+   `updateRunProgress`), NOT a `run_one` phase file.
+
+### Pre-change function inventory (task 1.3) — name → file
+
+`run_one.go` (16 funcs):
+`routeFallbackCause.addTo` · `runOneState.outcome` · `Runner.runOne` ·
+`Runner.setupRunBudget` · `Runner.prepareRunAttempt` · `Runner.runMonitoredAttempt` ·
+`Runner.resolveAttemptFinalSnippet` · `Runner.reconcileAttemptProgress` ·
+`Runner.recordCancelledAttempt` · `Runner.classifyAttemptOutcome` ·
+`Runner.recordAttemptOutcome` · `Runner.decideRetryOrComplete` ·
+`Runner.runHandoffContinuation` · `Runner.finalizeRunProgress` ·
+`Runner.executeTry` · `containsInt` (only callers live in `relay_steps.go`).
+
+`route_runtime.go` (29 funcs):
+`routeRuntime.quotaScope` · `routeRuntime.applyProviders` · `routeRuntime.Warnings` ·
+`routeSelectionError.Error` · `newRouteRuntimeFromConfig` ·
+`newRouteRuntimeFromStoredLabel` · `newLegacyMixRouteRuntime` ·
+`newOverrideRouteRuntime` · `newOverrideRouteRuntimeWithReasoning` ·
+`newResolvedRouteRuntime` · `newResolvedRouteRuntimeWithReasoning` ·
+`routeRuntime.next` · `joinRouteWarnings` · `routeRuntime.overrideRoute` ·
+`routeRuntime.syncRecoverySignals` · `routeRuntime.hasProbationEventForCurrentFreeze` ·
+`persistProbationEvent` · `routeRuntime.selectionWaitError` ·
+`routeRuntime.forceUnpauseAll` · `routeRuntime.benchQuotaScope` ·
+`routeRuntime.resilienceKeyForEntry` · `routeRuntime.resolvedEntryAgent` ·
+`routeRuntime.roleForScheduler` · `routeRuntime.benchResetAt` ·
+`legacyMixRouteEntries` · `resolveRouteEntries` · `resolveAgentSpec` ·
+`agentRouteSpec` · `cloneParsedEntries` · `Runner.prepareExecutorForSelection`.
+
+`relay_steps.go` (14 funcs):
+`Runner.startOrResumeRelay` · `Runner.startRelaySpan` ·
+`Runner.consumeRelayScopedMessage` · `Runner.selectRouteOrWait` ·
+`Runner.startRunSpan` · `Runner.emitFallbackEvents` ·
+`Runner.consumeRunScopedMessage` · `Runner.resolveFallbackCause` ·
+`Runner.updateSkippedRunProgress` · `Runner.applyRunOutcomeToResilience` ·
+`Runner.updateRunProgress` · `Runner.completeRelayIfTargetMet` ·
+`Runner.printRelaySummary` · `tallyRuns`.
+
+Reference: post-#5 `internal/relay/runner` production files (for tasks 5.5 / #8):
+`action_loop.go`, `failure_display.go`, `final_snippet.go`, `git.go`,
+`handoff_only.go`, `liveness.go`, `log.go`, `progress.go`, `relay_steps.go`,
+`route_runtime.go`, `runner.go`, `run_one.go`, `run_one_state.go`, `task.go`,
+`telemetry.go`, `terminal.go` (16 production files).
