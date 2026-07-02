@@ -63,7 +63,7 @@ Split axes (candidate, verify against the post-#6 layout at implementation):
   `decode`, `validate`, `resolve`, `save`, plus #7's providers files where the
   cases belong there).
 - `store_test.go` (1,112) → mirroring #7's `store_write.go` /
-  `store_messages.go` / `store_agent_status.go`.
+  `store_read.go` / `store_messages.go` / `store_agent_status.go`.
 - `resilience_test.go` (1,063) → by resilience concern using the established
   vocabulary: state machine/persistence vs **stall**/**frozen** transitions vs
   **benched**/probation/decay.

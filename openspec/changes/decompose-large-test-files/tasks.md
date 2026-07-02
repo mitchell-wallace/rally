@@ -8,7 +8,7 @@
 
 - [ ] 2.1 (No upstream dependency — can land first.) Split `internal/relay/resilience_test.go` (1,063) by resilience concern — state machine/persistence vs stall/frozen transitions vs benched/probation/decay — extracting shared fixtures into a single helper test file for the package. Inventory check + `go test -race -shuffle=on -count=1 ./internal/relay`; commit.
 - [ ] 2.2 (After #7's config layout is final.) Split `internal/config/config_v2_test.go` (1,801) mirroring the production layout (`load`/`decode`/`validate`/`resolve`/`save` from #2, providers files from #7); shared fixtures into one helper test file. Inventory check + `go test -race -shuffle=on -count=1 ./internal/config`; commit.
-- [ ] 2.3 (After #7's store layout is final.) Split `internal/store/store_test.go` (1,112) mirroring #7's `store_write.go`/`store_messages.go`/`store_agent_status.go`. Inventory check + `go test -race -shuffle=on -count=1 ./internal/store`; commit.
+- [ ] 2.3 (After #7's store layout is final.) Split `internal/store/store_test.go` (1,112) mirroring #7's `store_write.go`/`store_read.go`/`store_messages.go`/`store_agent_status.go`. Inventory check + `go test -race -shuffle=on -count=1 ./internal/store`; commit.
 
 ## 3. Runner suites (after #6's layout is final)
 
