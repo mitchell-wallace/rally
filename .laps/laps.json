@@ -215,11 +215,11 @@
       "title": "Split run_one.go into per-phase files (verbatim moves)",
       "description": "Context: builds on the re-grounded inventory from the baseline lap. Follow design Decision 2 (openspec/changes/decompose-run-one/design.md) for the target layout.\n\nOutcome: run_one.go is reduced to Runner.runOne, newRunOneState, and runOneState.outcome (index + state only); every run/try phase body is moved verbatim into its own responsibility-named sibling file.\n\nFiles \u0026 scope: create run_attempt_prepare.go, run_attempt_monitor.go, run_attempt_reconcile.go, run_attempt_classify.go, run_attempt_record.go, run_attempt_cancel.go, run_retry_decide.go, run_handoff.go, run_finalize.go (use the baseline lap's re-grounded membership where it differs from the design table). Move captureRunStartWorkspaceState and setupRunBudget into run_attempt_prepare.go UNLESS the re-grounded inventory shows #5 removed/renamed them. Move small utilities (containsInt) with their only caller. Stay in package runner. Do NOT extract sub-steps in this lap — move classifyAttemptOutcome and recordAttemptOutcome verbatim for now; their extraction is the next lap.\n\nDesign: pure relocation. No signature, error-string, telemetry-field, or control-flow edits. No misc/helpers catch-all file. Every symbol keeps exactly one home.\n\nAcceptance: go build ./... and go test -count=1 ./internal/relay/... green; review the split with git diff --color-moved to confirm the moves are moves (no incidental edits). Do NOT tick tasks.md boxes.",
       "assignee": "JUNIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 1310720,
       "createdAt": "2026-07-02T11:29:04.858231658Z",
-      "updatedAt": "2026-07-02T11:29:04.858231658Z",
-      "completedAt": null
+      "updatedAt": "2026-07-02T19:46:12.821964719Z",
+      "completedAt": "2026-07-02T19:46:12.821964719Z"
     },
     {
       "id": "rall-6ed3",
