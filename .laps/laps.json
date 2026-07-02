@@ -336,11 +336,11 @@
       "title": "Split internal/config providers into parse/resolve/wildcard files",
       "description": "Context: tasks.md task 3, using design Decision 2's full 26-function providers inventory; mirrors #2's config_v2.go split convention. Do not re-list functions here; follow Decision 2's exact name-to-file mapping.\n\nOutcome: internal/config/providers.go split into providers_parse.go (raw-TOML \u003c-\u003e ProviderConfig), providers_resolve.go (resolution + index/count surface + ordering/label helpers), and providers_wildcard.go (wildcard matching/expansion + modelFilter type). Delete providers.go if nothing remains (preferred); never leave it as a catch-all.\n\nFiles \u0026 scope: internal/config only. No test edits. Every symbol keeps exactly one home; go-toml stays confined to internal/config.\n\nDesign: verbatim moves; deprecation/validation message strings byte-identical; self-review with `git diff --color-moved`.\n\nAcceptance: `go test -count=1 ./internal/config ./cmd/rally` green; deprecation/validation messages unchanged. One commit for the split. Do not tick tasks.md.",
       "assignee": "JUNIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 2031616,
       "createdAt": "2026-07-02T11:29:17.157485242Z",
-      "updatedAt": "2026-07-02T11:29:17.157485242Z",
-      "completedAt": null
+      "updatedAt": "2026-07-02T21:00:09.673836272Z",
+      "completedAt": "2026-07-02T21:00:09.673836272Z"
     },
     {
       "id": "rall-dcc3",
