@@ -28,11 +28,11 @@
       "title": "Unit-test runtimeevent (message parity, sinks, leaf-only deps)",
       "description": "Context: Phase 2 (tasks.md 2.3), following the package created in the prior lap.\n\nOutcome: Unit tests for internal/relay/runner/runtimeevent covering: ArmMessage/ActMessage text parity against today's internal/keyboard message strings (assert byte-equal text and the 4s ConfirmWindow); the no-op sink (Emit is a safe no-op) and the Recording sink (captures events in order for later order-assertion tests).\n\nFiles \u0026 scope: internal/relay/runner/runtimeevent/*_test.go only.\n\nDesign: The parity test is the guardrail that keeps the moved arm/act vocabulary faithful to keyboard's originals -- reference the actual keyboard source strings, not a retyped copy. Assert event ordering semantics on the Recording sink since phase-3 order tests will lean on it.\n\nAcceptance: go test -count=1 ./internal/relay/runner/runtimeevent green; re-confirm go list -deps ./internal/relay/runner/runtimeevent shows no internal package.",
       "assignee": "JUNIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 196608,
       "createdAt": "2026-07-02T11:28:44.895301993Z",
-      "updatedAt": "2026-07-02T11:28:44.895301993Z",
-      "completedAt": null
+      "updatedAt": "2026-07-02T15:20:46.558879044Z",
+      "completedAt": "2026-07-02T15:20:46.558879044Z"
     },
     {
       "id": "rall-0c2a",
