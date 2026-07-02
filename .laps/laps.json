@@ -193,11 +193,11 @@
       "title": "Code review: separate-runtime-presentation-boundary (queue 5)",
       "description": "Run the auto-code-review skill (see .opencode/skills/auto-code-review/SKILL.md, also available under .claude/skills and .codex/skills) over the full separate-runtime-presentation-boundary lap batch that just completed above.\n\nScope: the accumulated diff for this batch only. Identify the first lap/try commit of this queue-5 batch and use git merge-base / branch tracking / recent log to pick the correct diff base; treat earlier branch work as pre-existing unless instructed otherwise. Do not pull in unrelated commits.\n\nFocus: behaviour preservation (rendering/style/keyboard/route-warning stderr moves actually are moves with no incidental edits), package boundaries, and test/regression coverage for the presentation/runtime split. Findings first; auto-fix only low-risk local issues; surface any product/architecture calls with a default recommendation instead of silently deciding them. Commit each coherent fix cluster only if asked.",
       "assignee": "senior",
-      "isDone": false,
+      "isDone": true,
       "order": 1179648,
       "createdAt": "2026-07-02T11:28:59.525734875Z",
-      "updatedAt": "2026-07-02T11:28:59.525734875Z",
-      "completedAt": null
+      "updatedAt": "2026-07-02T19:29:40.656360214Z",
+      "completedAt": "2026-07-02T19:29:40.656360214Z"
     },
     {
       "id": "rall-5e83",
