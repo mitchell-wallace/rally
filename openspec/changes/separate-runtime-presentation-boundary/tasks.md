@@ -18,8 +18,8 @@
 
 ## 4. Terminal sink and output cut-over
 
-- [ ] 4.1 Create `internal/presentation/terminal`: `Sink` implementing `runtimeevent.Sink` over out/err writers, relocating each print's format strings/escape sequences (`\r\x1b[2K`, `\r\x1b[J`, `\r\n` raw-mode countdown, footer in-place redraw with cursor parking) **verbatim** from the runner; internal imports limited to `runtimeevent`, `style`, `keyboard`.
-- [ ] 4.2 Wire `internal/cli/start.go` to construct the terminal sink over `os.Stdout`/`os.Stderr` and pass it through `RelayStartOptions`.
+- [x] 4.1 Create `internal/presentation/terminal`: `Sink` implementing `runtimeevent.Sink` over out/err writers, relocating each print's format strings/escape sequences (`\r\x1b[2K`, `\r\x1b[J`, `\r\n` raw-mode countdown, footer in-place redraw with cursor parking) **verbatim** from the runner; internal imports limited to `runtimeevent`, `style`, `keyboard`.
+- [x] 4.2 Wire `internal/cli/start.go` to construct the terminal sink over `os.Stdout`/`os.Stderr` and pass it through `RelayStartOptions`.
 - [ ] 4.3 Cut over print-site-by-print-site: delete each runner inline print once the sink renders its event; preserve exact call order relative to `mon.Stop()`/monitor renders (footer-parking contract). Finish with zero direct operator-facing `fmt.Print*`/`Fprint*` writes to `os.Stdout`/`os.Stderr` in runner production code (the one permitted direct-stream use is the monitor residual `mon.Start(os.Stdout)`) and the `internal/style` import removed from all runner files.
 - [ ] 4.4 Relocate the byte-level output tests (`terminal_test.go` wait-loop/footer cases, footer-cadence tests from `run_one`/`runner_*` suites that assert on `r.out` bytes) to `internal/presentation/terminal`, preserving expected bytes; replace their runner-side originals with recording-sink assertions where run-flow coverage must stay in-package.
 - [ ] 4.5 `go test -count=1 ./internal/relay/... ./internal/presentation/... ./internal/app ./cmd/rally` green; manually smoke one relay run (`test-driving-rally` style) confirming header/status/footer/summary render identically, including an interrupted (Ctrl+C-armed) run.

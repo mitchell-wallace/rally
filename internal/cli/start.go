@@ -11,6 +11,7 @@ import (
 	"github.com/mitchell-wallace/rally/internal/config"
 	"github.com/mitchell-wallace/rally/internal/gitx"
 	"github.com/mitchell-wallace/rally/internal/laps"
+	"github.com/mitchell-wallace/rally/internal/presentation/terminal"
 	"github.com/mitchell-wallace/rally/internal/relay"
 	"github.com/mitchell-wallace/rally/internal/store"
 	"github.com/mitchell-wallace/rally/internal/user_prompt"
@@ -204,6 +205,7 @@ func runRelay(cmd *cobra.Command, args []string, opts RootOptions) error {
 		taskPrompt = strings.Join(args, " ")
 	}
 
+	terminalSink := terminal.NewSink(os.Stdout, os.Stderr)
 	return app.StartRelay(context.Background(), app.RelayStartOptions{
 		WorkspaceDir:           workspaceDir,
 		Config:                 cfg,
@@ -217,11 +219,9 @@ func runRelay(cmd *cobra.Command, args []string, opts RootOptions) error {
 		DiscardUnfinishedRelay: discardUnfinishedRelay,
 		ResetAgentStatus:       resetAgentStatus,
 		OverwriteMixOnResume:   overwriteMixOnResume,
-		// Presentation seam: nil for now — phase 4.2 wires the terminal adapter
-		// over os.Stdout/os.Stderr here.
-		EventSink: nil,
-		Controls:  nil,
-		Out:       os.Stdout,
-		Err:       os.Stderr,
+		EventSink:              terminalSink,
+		Controls:               nil,
+		Out:                    os.Stdout,
+		Err:                    os.Stderr,
 	})
 }
