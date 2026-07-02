@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/mitchell-wallace/rally/internal/harnessapi"
-	"github.com/mitchell-wallace/rally/internal/keyboard"
 	"github.com/mitchell-wallace/rally/internal/relay/runner/runtimeevent"
 	"github.com/mitchell-wallace/rally/internal/store"
 )
@@ -57,7 +56,7 @@ func TestWaitWithCountdownCancellable(t *testing.T) {
 		cancel()
 	}()
 	start := time.Now()
-	outcome, err := waitWithCountdown(ctx, runtimeevent.NoopSink{}, 10*time.Second, "test %s")
+	outcome, err := waitWithCountdown(ctx, runtimeevent.NoopSink{}, nil, 10*time.Second, "test %s")
 	elapsed := time.Since(start)
 	if err == nil {
 		t.Fatal("expected context error, got nil")
@@ -71,8 +70,8 @@ func TestWaitWithCountdownCancellable(t *testing.T) {
 }
 
 func TestWaitLoopSkipOnAction(t *testing.T) {
-	actionCh := make(chan keyboard.Press, 1)
-	actionCh <- keyboard.Press{Action: keyboard.ActionSkip, Confirmed: true}
+	actionCh := make(chan runtimeevent.Press, 1)
+	actionCh <- runtimeevent.Press{Action: runtimeevent.OperatorActionSkip, Confirmed: true}
 	start := time.Now()
 	outcome := waitLoop(context.Background(), runtimeevent.NoopSink{}, 10*time.Second, "test %s", actionCh, 50*time.Millisecond)
 	elapsed := time.Since(start)
@@ -85,8 +84,8 @@ func TestWaitLoopSkipOnAction(t *testing.T) {
 }
 
 func TestWaitLoopStopOnQuit(t *testing.T) {
-	actionCh := make(chan keyboard.Press, 1)
-	actionCh <- keyboard.Press{Action: keyboard.ActionQuit, Confirmed: true}
+	actionCh := make(chan runtimeevent.Press, 1)
+	actionCh <- runtimeevent.Press{Action: runtimeevent.OperatorActionQuit, Confirmed: true}
 	outcome := waitLoop(context.Background(), runtimeevent.NoopSink{}, 10*time.Second, "test %s", actionCh, 50*time.Millisecond)
 	if outcome != waitStopped {
 		t.Errorf("outcome = %v, want waitStopped", outcome)
@@ -94,7 +93,7 @@ func TestWaitLoopStopOnQuit(t *testing.T) {
 }
 
 func TestWaitLoopElapses(t *testing.T) {
-	actionCh := make(chan keyboard.Press)
+	actionCh := make(chan runtimeevent.Press)
 	start := time.Now()
 	outcome := waitLoop(context.Background(), runtimeevent.NoopSink{}, 200*time.Millisecond, "test %s", actionCh, 30*time.Millisecond)
 	elapsed := time.Since(start)
@@ -107,8 +106,8 @@ func TestWaitLoopElapses(t *testing.T) {
 }
 
 func TestWaitLoopRendersHintAndCountdown(t *testing.T) {
-	actionCh := make(chan keyboard.Press, 1)
-	actionCh <- keyboard.Press{Action: keyboard.ActionSkip, Confirmed: true}
+	actionCh := make(chan runtimeevent.Press, 1)
+	actionCh <- runtimeevent.Press{Action: runtimeevent.OperatorActionSkip, Confirmed: true}
 	rec := runtimeevent.NewRecordingSink()
 	_ = waitLoop(context.Background(), rec, 5*time.Second, "agents frozen, waiting %s...", actionCh, 50*time.Millisecond)
 	events := rec.Events()
@@ -127,10 +126,10 @@ func TestWaitLoopRendersHintAndCountdown(t *testing.T) {
 // TestWaitLoopArmedPressShowsHint pins that a first (unconfirmed) press during a
 // wait surfaces the "press X again" hint instead of acting.
 func TestWaitLoopArmedPressShowsHint(t *testing.T) {
-	actionCh := make(chan keyboard.Press, 2)
+	actionCh := make(chan runtimeevent.Press, 2)
 	// Arm a quit, then confirm a skip so the loop ends deterministically.
-	actionCh <- keyboard.Press{Action: keyboard.ActionQuit, Confirmed: false}
-	actionCh <- keyboard.Press{Action: keyboard.ActionSkip, Confirmed: true}
+	actionCh <- runtimeevent.Press{Action: runtimeevent.OperatorActionQuit, Confirmed: false}
+	actionCh <- runtimeevent.Press{Action: runtimeevent.OperatorActionSkip, Confirmed: true}
 	rec := runtimeevent.NewRecordingSink()
 	outcome := waitLoop(context.Background(), rec, 5*time.Second, "agents paused, waiting %s...", actionCh, 50*time.Millisecond)
 	if outcome != waitSkipped {
@@ -156,7 +155,7 @@ func TestWaitWithCountdownElapses(t *testing.T) {
 		_ = devnull.Close()
 	}()
 
-	outcome, err := waitWithCountdown(context.Background(), runtimeevent.NoopSink{}, 1500*time.Millisecond, "test %s")
+	outcome, err := waitWithCountdown(context.Background(), runtimeevent.NoopSink{}, nil, 1500*time.Millisecond, "test %s")
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}

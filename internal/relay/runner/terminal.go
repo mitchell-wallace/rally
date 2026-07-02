@@ -3,10 +3,8 @@ package runner
 import (
 	"context"
 	"fmt"
-	"os"
 	"time"
 
-	"github.com/mitchell-wallace/rally/internal/keyboard"
 	"github.com/mitchell-wallace/rally/internal/relay/runner/runtimeevent"
 )
 
@@ -35,17 +33,20 @@ const (
 // waitWithCountdown blocks for `total`, redrawing a one-line countdown +
 // shortcut hint on stdout once per second. See [waitLoop] for the core logic;
 // this wrapper handles the keyboard, terminal raw mode, and stdout rendering.
-func waitWithCountdown(ctx context.Context, sink runtimeevent.Sink, total time.Duration, msgFmt string) (waitOutcome, error) {
+func waitWithCountdown(ctx context.Context, sink runtimeevent.Sink, controls runtimeevent.ControlSource, total time.Duration, msgFmt string) (waitOutcome, error) {
 	if total <= 0 {
 		return waitElapsed, nil
 	}
 
-	kb := keyboard.NewKeyboard(os.Stdin, os.Stdout)
-	_ = kb.SetRawMode()
-	defer func() { _ = kb.Stop() }()
-	kbCtx, kbCancel := context.WithCancel(ctx)
-	defer kbCancel()
-	actionCh := kb.Start(kbCtx)
+	var actionCh <-chan runtimeevent.Press
+	if controls != nil {
+		var err error
+		actionCh, err = controls.Start(ctx)
+		if err != nil {
+			return waitCancelled, err
+		}
+		defer controls.Stop()
+	}
 
 	outcome := waitLoop(ctx, sink, total, msgFmt, actionCh, time.Second)
 	if outcome == waitCancelled {
@@ -58,12 +59,12 @@ func waitWithCountdown(ctx context.Context, sink runtimeevent.Sink, total time.D
 // `tickInterval`, emits the countdown + shortcut hint to the sink, and returns
 // when the timer elapses, ctx is cancelled, or an action arrives on actionCh.
 // Split out from waitWithCountdown for testability.
-func waitLoop(ctx context.Context, sink runtimeevent.Sink, total time.Duration, msgFmt string, actionCh <-chan keyboard.Press, tickInterval time.Duration) waitOutcome {
+func waitLoop(ctx context.Context, sink runtimeevent.Sink, total time.Duration, msgFmt string, actionCh <-chan runtimeevent.Press, tickInterval time.Duration) waitOutcome {
 	deadline := time.Now().Add(total)
 	ticker := time.NewTicker(tickInterval)
 	defer ticker.Stop()
 
-	var armedAction keyboard.Action
+	var armedAction runtimeevent.OperatorAction
 	var armedUntil time.Time
 	lastFrame := ""
 	started := false
@@ -75,11 +76,11 @@ func waitLoop(ctx context.Context, sink runtimeevent.Sink, total time.Duration, 
 		remaining = remaining.Round(time.Second)
 		msg := fmt.Sprintf(msgFmt, formatRemaining(remaining))
 		hintText := ""
-		if armedAction != keyboard.ActionNone {
+		if armedAction != runtimeevent.OperatorActionNone {
 			if time.Now().Before(armedUntil) {
-				hintText = runtimeevent.ArmMessage(operatorAction(armedAction))
+				hintText = runtimeevent.ArmMessage(armedAction)
 			} else {
-				armedAction = keyboard.ActionNone
+				armedAction = runtimeevent.OperatorActionNone
 			}
 		}
 		// Only repaint when the visible frame actually changes. With a
@@ -112,22 +113,22 @@ func waitLoop(ctx context.Context, sink runtimeevent.Sink, total time.Duration, 
 			if !press.Confirmed {
 				// Ignore pause arming entirely — there is no try to pause —
 				// otherwise show the "press again" hint for this shortcut.
-				if press.Action != keyboard.ActionPause {
+				if press.Action != runtimeevent.OperatorActionPause {
 					armedAction = press.Action
-					armedUntil = time.Now().Add(keyboard.ConfirmWindow)
+					armedUntil = time.Now().Add(runtimeevent.ConfirmWindow)
 					sink.Emit(ctx, runtimeevent.OperatorActionArmed{
-						Action:  operatorAction(press.Action),
-						Message: runtimeevent.ArmMessage(operatorAction(press.Action)),
+						Action:  press.Action,
+						Message: runtimeevent.ArmMessage(press.Action),
 					})
 					render(time.Until(deadline))
 				}
 				continue
 			}
 			switch press.Action {
-			case keyboard.ActionSkip:
+			case runtimeevent.OperatorActionSkip:
 				clear()
 				return waitSkipped
-			case keyboard.ActionStop, keyboard.ActionQuit:
+			case runtimeevent.OperatorActionStop, runtimeevent.OperatorActionQuit:
 				clear()
 				return waitStopped
 			}

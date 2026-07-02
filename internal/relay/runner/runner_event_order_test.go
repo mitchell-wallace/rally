@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/mitchell-wallace/rally/internal/harnessapi"
-	"github.com/mitchell-wallace/rally/internal/keyboard"
 	"github.com/mitchell-wallace/rally/internal/relay/runner/runtimeevent"
 	"github.com/mitchell-wallace/rally/internal/reliability"
 	"github.com/mitchell-wallace/rally/internal/store"
@@ -312,7 +311,7 @@ func TestEventOrderStallRecovery(t *testing.T) {
 // exact paused-wait message format from relay_steps.go.
 func TestEventOrderAllPausedWait(t *testing.T) {
 	rec := runtimeevent.NewRecordingSink()
-	actionCh := make(chan keyboard.Press) // no operator input: wait runs to elapsed
+	actionCh := make(chan runtimeevent.Press) // no operator input: wait runs to elapsed
 	outcome := waitLoop(context.Background(), rec, 600*time.Millisecond, "agents paused, waiting %s...", actionCh, 100*time.Millisecond)
 	if outcome != waitElapsed {
 		t.Fatalf("outcome = %v, want waitElapsed", outcome)
@@ -332,8 +331,8 @@ func TestEventOrderAllPausedWait(t *testing.T) {
 func TestEventOrderOperatorCancellation(t *testing.T) {
 	t.Run("wait_skip", func(t *testing.T) {
 		rec := runtimeevent.NewRecordingSink()
-		actionCh := make(chan keyboard.Press, 1)
-		actionCh <- keyboard.Press{Action: keyboard.ActionSkip, Confirmed: true}
+		actionCh := make(chan runtimeevent.Press, 1)
+		actionCh <- runtimeevent.Press{Action: runtimeevent.OperatorActionSkip, Confirmed: true}
 		// A large tick interval guarantees no ticker frame interleaves with the
 		// buffered action, so the order is exactly start → finish.
 		outcome := waitLoop(context.Background(), rec, 5*time.Second, "agents paused, waiting %s...", actionCh, time.Second)
@@ -348,11 +347,11 @@ func TestEventOrderOperatorCancellation(t *testing.T) {
 
 	t.Run("wait_quit_armed", func(t *testing.T) {
 		rec := runtimeevent.NewRecordingSink()
-		actionCh := make(chan keyboard.Press, 2)
+		actionCh := make(chan runtimeevent.Press, 2)
 		// First press arms (OperatorActionArmed + a repaint frame as WaitTick,
 		// since the hint line changes); the confirmed press clears (WaitFinished).
-		actionCh <- keyboard.Press{Action: keyboard.ActionQuit, Confirmed: false}
-		actionCh <- keyboard.Press{Action: keyboard.ActionQuit, Confirmed: true}
+		actionCh <- runtimeevent.Press{Action: runtimeevent.OperatorActionQuit, Confirmed: false}
+		actionCh <- runtimeevent.Press{Action: runtimeevent.OperatorActionQuit, Confirmed: true}
 		outcome := waitLoop(context.Background(), rec, 5*time.Second, "agents paused, waiting %s...", actionCh, time.Second)
 		if outcome != waitStopped {
 			t.Fatalf("outcome = %v, want waitStopped", outcome)
@@ -370,9 +369,9 @@ func TestEventOrderOperatorCancellation(t *testing.T) {
 		rec := runtimeevent.NewRecordingSink()
 		r.cfg.EventSink = rec
 		tryCh := make(chan tryResult, 1)
-		actionCh := make(chan keyboard.Press, 2)
-		actionCh <- keyboard.Press{Action: keyboard.ActionSkip, Confirmed: false}
-		actionCh <- keyboard.Press{Action: keyboard.ActionSkip, Confirmed: true}
+		actionCh := make(chan runtimeevent.Press, 2)
+		actionCh <- runtimeevent.Press{Action: runtimeevent.OperatorActionSkip, Confirmed: false}
+		actionCh <- runtimeevent.Press{Action: runtimeevent.OperatorActionSkip, Confirmed: true}
 		attemptCtx, cancelAttempt := context.WithCancel(context.Background())
 		defer cancelAttempt()
 		go func() {

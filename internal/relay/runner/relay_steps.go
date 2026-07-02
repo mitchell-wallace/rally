@@ -154,7 +154,7 @@ func (r *Runner) selectRouteOrWait(
 				return runTask{}, routeSelection{}, false, false, fmt.Errorf("relay failed: %s", routeErr.Error())
 			}
 			fmt.Fprintf(log, "relay %d all agents paused, waiting %v\n", relay.ID, routeErr.Wait)
-			outcome, waitErr := waitWithCountdown(ctx, r.eventSink(), routeErr.Wait, "agents paused, waiting %s...")
+			outcome, waitErr := waitWithCountdown(ctx, r.eventSink(), r.cfg.Controls, routeErr.Wait, "agents paused, waiting %s...")
 			if waitErr != nil {
 				return runTask{}, routeSelection{}, false, false, waitErr
 			}

@@ -1,7 +1,6 @@
 package runner
 
 import (
-	"bufio"
 	"context"
 	"fmt"
 	"io"
@@ -13,7 +12,6 @@ import (
 
 	"github.com/mitchell-wallace/rally/internal/gitx"
 	"github.com/mitchell-wallace/rally/internal/harnessapi"
-	"github.com/mitchell-wallace/rally/internal/keyboard"
 	"github.com/mitchell-wallace/rally/internal/monitor"
 	"github.com/mitchell-wallace/rally/internal/progress"
 	relaycore "github.com/mitchell-wallace/rally/internal/relay"
@@ -452,10 +450,14 @@ func (r *Runner) prepareRunAttempt(ctx context.Context, relay *store.RelayRecord
 }
 
 func (r *Runner) runMonitoredAttempt(ctx context.Context, relay *store.RelayRecord, runIndex int, picked harnessapi.ResolvedAgent, state *runOneState, attempt *runAttemptState, onStall func(), log io.Writer) {
-	kb := keyboard.NewKeyboard(os.Stdin, os.Stdout)
-	_ = kb.SetRawMode()
-	kbCtx, kbCancel := context.WithCancel(ctx)
-	actionCh := kb.Start(kbCtx)
+	var actionCh <-chan runtimeevent.Press
+	if r.cfg.Controls != nil {
+		var err error
+		actionCh, err = r.cfg.Controls.Start(ctx)
+		if err != nil {
+			fmt.Fprintf(log, "relay %d run %d attempt %d controls warning: %v\n", relay.ID, runIndex+1, attempt.attempt, err)
+		}
+	}
 
 	mon := monitor.NewMonitor(r.cfg.WorkspaceDir, attempt.tryLogPath, 0)
 	attempt.mon = mon
@@ -545,8 +547,9 @@ func (r *Runner) runMonitoredAttempt(ctx context.Context, relay *store.RelayReco
 	attempt.cancellationSource = loopOut.cancellationSource
 
 	mon.Stop()
-	kbCancel()
-	_ = kb.Stop()
+	if r.cfg.Controls != nil {
+		r.cfg.Controls.Stop()
+	}
 
 	attempt.endedAt = time.Now().UTC()
 	attempt.headAfter, _ = r.headHash()
@@ -1298,7 +1301,9 @@ func (r *Runner) decideRetryOrComplete(task runTask, state *runOneState, attempt
 		}
 		pausePrompt := "Paused — press Enter to resume"
 		r.eventSink().Emit(context.Background(), runtimeevent.PausePromptShown{Message: pausePrompt})
-		bufio.NewReader(os.Stdin).ReadString('\n')
+		if r.cfg.Controls != nil {
+			_ = r.cfg.Controls.WaitResume(context.Background())
+		}
 		if attempt.result != nil {
 			state.previousSummary = attempt.result.Summary
 			state.lastResult = attempt.result

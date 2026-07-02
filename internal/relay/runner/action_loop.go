@@ -7,30 +7,9 @@ import (
 	"time"
 
 	"github.com/mitchell-wallace/rally/internal/harnessapi"
-	"github.com/mitchell-wallace/rally/internal/keyboard"
 	"github.com/mitchell-wallace/rally/internal/relay/runner/runtimeevent"
 	"github.com/mitchell-wallace/rally/internal/reliability"
 )
-
-// operatorAction maps an internal/keyboard Action onto its presentation-neutral
-// [runtimeevent.OperatorAction]. The two enumerations share a 1:1 value order
-// (None, Quit, Skip, Pause, Stop) — pinned by runtimeevent's parity test — so
-// the mapping is an explicit switch rather than a numeric cast, keeping the
-// runner readable and robust if either enum is reordered.
-func operatorAction(a keyboard.Action) runtimeevent.OperatorAction {
-	switch a {
-	case keyboard.ActionQuit:
-		return runtimeevent.OperatorActionQuit
-	case keyboard.ActionSkip:
-		return runtimeevent.OperatorActionSkip
-	case keyboard.ActionPause:
-		return runtimeevent.OperatorActionPause
-	case keyboard.ActionStop:
-		return runtimeevent.OperatorActionStop
-	default:
-		return runtimeevent.OperatorActionNone
-	}
-}
 
 // forceKillGroup escalates the cancel drain to an immediate group-wide SIGKILL,
 // routing through the injectable hook so tests can observe the escalation.
@@ -74,11 +53,11 @@ type actionMonitor interface {
 
 // actionLoopDeps bundles the channels and collaborators the in-try action loop
 // selects over. Splitting them out lets [Runner.runActionLoop] be driven by a
-// fake executor/try channel and simulated keyboard.Action values in tests.
+// fake executor/try channel and simulated runtimeevent.Press values in tests.
 type actionLoopDeps struct {
 	tryCh     <-chan tryResult
 	pidCh     <-chan int
-	actionCh  <-chan keyboard.Press
+	actionCh  <-chan runtimeevent.Press
 	stallTick <-chan time.Time
 	// runBudgetCh fires when the per-run wall-clock budget is exhausted. It is
 	// constructed ONCE before the attempt loop and the same channel is passed
@@ -214,22 +193,22 @@ actionLoop:
 				// First press only arms the action: surface a "press X again"
 				// hint on the live status line so the operator sees it
 				// registered and what a second press will do.
-				d.mon.SetArmed(keyboard.ArmMessage(press.Action), keyboard.ConfirmWindow)
+				d.mon.SetArmed(runtimeevent.ArmMessage(press.Action), runtimeevent.ConfirmWindow)
 				// Data-only mirror: during an active try the arm feedback shows on
 				// the monitor indicator, so a terminal sink no-ops this event; it
 				// exists for alternate presentations.
 				r.eventSink().Emit(d.attemptCtx, runtimeevent.OperatorActionArmed{
-					Action:  operatorAction(press.Action),
-					Message: runtimeevent.ArmMessage(operatorAction(press.Action)),
+					Action:  press.Action,
+					Message: runtimeevent.ArmMessage(press.Action),
 				})
 				continue
 			}
 			switch press.Action {
-			case keyboard.ActionSkip:
-				d.mon.SetActing(keyboard.ActMessage(press.Action))
+			case runtimeevent.OperatorActionSkip:
+				d.mon.SetActing(runtimeevent.ActMessage(press.Action))
 				r.eventSink().Emit(d.attemptCtx, runtimeevent.OperatorActionApplied{
-					Action:  operatorAction(press.Action),
-					Message: runtimeevent.ActMessage(operatorAction(press.Action)),
+					Action:  press.Action,
+					Message: runtimeevent.ActMessage(press.Action),
 				})
 				d.cancelAttempt()
 				r.skipFlag.Store(true)
@@ -237,11 +216,11 @@ actionLoop:
 				out.cancellationSource = CancellationSourceSkip
 				r.drainOperatorCancellation(d, &out)
 				break actionLoop
-			case keyboard.ActionPause:
-				d.mon.SetActing(keyboard.ActMessage(press.Action))
+			case runtimeevent.OperatorActionPause:
+				d.mon.SetActing(runtimeevent.ActMessage(press.Action))
 				r.eventSink().Emit(d.attemptCtx, runtimeevent.OperatorActionApplied{
-					Action:  operatorAction(press.Action),
-					Message: runtimeevent.ActMessage(operatorAction(press.Action)),
+					Action:  press.Action,
+					Message: runtimeevent.ActMessage(press.Action),
 				})
 				d.cancelAttempt()
 				out.actionTaken = true
@@ -249,7 +228,7 @@ actionLoop:
 				out.result = res.result
 				out.execErr = res.err
 				break actionLoop
-			case keyboard.ActionStop:
+			case runtimeevent.OperatorActionStop:
 				// Graceful stop (Ctrl+X): cancel the running try, drain the
 				// result, set stopFlag so the relay halts after recording the
 				// cancelled attempt. Unlike the old passive-wait behaviour,
@@ -263,7 +242,7 @@ actionLoop:
 				out.cancellationSource = CancellationSourceGracefulStop
 				r.drainOperatorCancellation(d, &out)
 				break actionLoop
-			case keyboard.ActionQuit:
+			case runtimeevent.OperatorActionQuit:
 				// Quit now (Ctrl+C): cancel the running try immediately and
 				// abort the relay. cancelAttempt fires Cmd.Cancel, which sends
 				// SIGINT to the process group then escalates to a group-wide
@@ -305,7 +284,7 @@ drainLoop:
 			// Only a confirmed (double-press) quit escalates the drain to an
 			// immediate force-kill; a lone arming press is ignored here since the
 			// drain is already cancelling.
-			if press.Action != keyboard.ActionQuit || !press.Confirmed {
+			if press.Action != runtimeevent.OperatorActionQuit || !press.Confirmed {
 				continue
 			}
 			r.stopFlag.Store(true)

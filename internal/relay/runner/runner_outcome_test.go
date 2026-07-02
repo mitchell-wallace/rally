@@ -12,46 +12,40 @@ import (
 
 	"github.com/mitchell-wallace/rally/internal/gitx"
 	"github.com/mitchell-wallace/rally/internal/harnessapi"
-	"github.com/mitchell-wallace/rally/internal/keyboard"
 	"github.com/mitchell-wallace/rally/internal/progress"
+	"github.com/mitchell-wallace/rally/internal/relay/runner/runtimeevent"
 	"github.com/mitchell-wallace/rally/internal/reliability"
 	"github.com/mitchell-wallace/rally/internal/store"
 )
 
-func installOperatorKeyboard(t *testing.T) *os.File {
-	t.Helper()
-	oldStdin := os.Stdin
-	reader, writer, err := os.Pipe()
-	if err != nil {
-		t.Fatalf("create keyboard pipe: %v", err)
-	}
-	os.Stdin = reader
-	t.Cleanup(func() {
-		os.Stdin = oldStdin
-		_ = writer.Close()
-		_ = reader.Close()
-	})
-	return writer
+type testControls struct {
+	ch chan runtimeevent.Press
 }
 
-func sendOperatorAction(t *testing.T, input *os.File, action keyboard.Action) {
+func installOperatorKeyboard(t *testing.T, r *Runner) *testControls {
 	t.Helper()
-	var b byte
-	switch action {
-	case keyboard.ActionQuit:
-		b = 0x03
-	case keyboard.ActionSkip:
-		b = 0x13
-	case keyboard.ActionPause:
-		b = 0x10
-	case keyboard.ActionStop:
-		b = 0x18
-	default:
-		t.Fatalf("unsupported keyboard action %v", action)
+	controls := &testControls{ch: make(chan runtimeevent.Press, 4)}
+	r.cfg.Controls = controls
+	return controls
+}
+
+func (c *testControls) Start(context.Context) (<-chan runtimeevent.Press, error) {
+	return c.ch, nil
+}
+
+func (c *testControls) Stop() {}
+
+func (c *testControls) WaitResume(context.Context) error {
+	return nil
+}
+
+func sendOperatorAction(t *testing.T, controls *testControls, action runtimeevent.OperatorAction) {
+	t.Helper()
+	if action == runtimeevent.OperatorActionNone {
+		t.Fatalf("unsupported operator action %v", action)
 	}
-	if _, err := input.Write([]byte{b, b}); err != nil {
-		t.Fatalf("write keyboard action %v: %v", action, err)
-	}
+	controls.ch <- runtimeevent.Press{Action: action, Confirmed: false}
+	controls.ch <- runtimeevent.Press{Action: action, Confirmed: true}
 }
 
 func awaitRunError(t *testing.T, done <-chan error) error {
@@ -343,7 +337,7 @@ func TestRunOneRetryThenDirtyHandoffUsesRunScopedDirtyDetection(t *testing.T) {
 func TestRunOneOperatorCancellationPersistsCancelledNotFailed(t *testing.T) {
 	tests := []struct {
 		name            string
-		action          keyboard.Action
+		action          runtimeevent.OperatorAction
 		source          string
 		cleanExit       bool
 		wantInterrupted bool
@@ -352,13 +346,13 @@ func TestRunOneOperatorCancellationPersistsCancelledNotFailed(t *testing.T) {
 	}{
 		{
 			name:         "ctrl+s skip",
-			action:       keyboard.ActionSkip,
+			action:       runtimeevent.OperatorActionSkip,
 			source:       "skip",
 			wantSkipFlag: true,
 		},
 		{
 			name:            "quit-now overrides harness error",
-			action:          keyboard.ActionQuit,
+			action:          runtimeevent.OperatorActionQuit,
 			source:          "quit_now",
 			wantInterrupted: true,
 			wantStopFlag:    true,
@@ -370,7 +364,7 @@ func TestRunOneOperatorCancellationPersistsCancelledNotFailed(t *testing.T) {
 			// drain window. The attempt must still persist as cancelled, not
 			// as a completed success.
 			name:            "quit-now overrides clean exit",
-			action:          keyboard.ActionQuit,
+			action:          runtimeevent.OperatorActionQuit,
 			source:          "quit_now",
 			cleanExit:       true,
 			wantInterrupted: true,
@@ -402,10 +396,10 @@ func TestRunOneOperatorCancellationPersistsCancelledNotFailed(t *testing.T) {
 			sink := &capturingSink{}
 			r.SetTelemetry(sink)
 
-			input := installOperatorKeyboard(t)
+			controls := installOperatorKeyboard(t, r)
 			done := driveRunOneTaskAsync(t, r, runTimeoutTask())
 			waitForAttempts(t, &attempts, 1)
-			sendOperatorAction(t, input, tt.action)
+			sendOperatorAction(t, controls, tt.action)
 
 			res := awaitRunOne(t, done)
 			if res.Success {
@@ -505,11 +499,11 @@ func TestRunGracefulStopCancellationPersistsAndStopsRelay(t *testing.T) {
 	sink := &capturingSink{}
 	r.SetTelemetry(sink)
 
-	input := installOperatorKeyboard(t)
+	controls := installOperatorKeyboard(t, r)
 	done := make(chan error, 1)
 	go func() { done <- r.Run(context.Background()) }()
 	waitForAttempts(t, &attempts, 1)
-	sendOperatorAction(t, input, keyboard.ActionStop)
+	sendOperatorAction(t, controls, runtimeevent.OperatorActionStop)
 
 	if err := awaitRunError(t, done); err != nil {
 		t.Fatalf("Run error = %v, want nil after graceful stop", err)

@@ -138,11 +138,11 @@
       "title": "Convert runner keyboard sessions + action-loop to runtimeevent.Press; drop keyboard import",
       "description": "Context: Phase 5 (tasks.md 5.2, 5.4), design Decision 4 and the cancellation-timing risk. THE control-correctness lap.\n\nOutcome: The runner's two keyboard sessions (terminal.go wait countdown; run_one.go active try) and the pause read (run_one.go, 'Paused -- press Enter to resume') use Config.Controls instead of constructing keyboard directly. runActionLoop / actionLoopDeps switch their channel element type to runtimeevent.Press; monitor armed/acting text now comes from runtimeevent.ArmMessage/ActMessage. The runner's internal/keyboard import is removed entirely and no runner production file reads os.Stdin.\n\nFiles \u0026 scope: internal/relay/runner (terminal.go, run_one.go, action_loop.go). Do not touch the terminal.Controls adapter (prior lap) or archguard tables (phase 6). Action-loop test updates are the next lap.\n\nDesign: Change ONLY the channel element type and the source of arm/act text. Make NO change to the runActionLoop select structure, flag mutations, drain-with-second-quit escalation, or late-PID force-kill targeting -- these are cancellation-timing-load-bearing (design Risk). WaitResume replaces the direct bufio stdin read. The app-level OS-signal double-Ctrl+C path (relay_start.go) is untouched.\n\nAcceptance: go build ./... green; go test -race -shuffle=on -count=1 ./internal/relay/... green (action-loop tests are updated in the next lap -- if they must compile here, adapt only their channel element type minimally, keeping substance); grep confirms no internal/keyboard import and no os.Stdin read in runner production files.",
       "assignee": "SENIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 851968,
       "createdAt": "2026-07-02T11:28:44.895314255Z",
-      "updatedAt": "2026-07-02T11:28:44.895314255Z",
-      "completedAt": null
+      "updatedAt": "2026-07-02T18:34:31.046529423Z",
+      "completedAt": "2026-07-02T18:34:31.046529423Z"
     },
     {
       "id": "rall-7f3d",

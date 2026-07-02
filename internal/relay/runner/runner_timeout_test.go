@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/mitchell-wallace/rally/internal/harnessapi"
-	"github.com/mitchell-wallace/rally/internal/keyboard"
+	"github.com/mitchell-wallace/rally/internal/relay/runner/runtimeevent"
 )
 
 // fireNow returns a time channel that has already fired, so the corresponding
@@ -50,7 +50,7 @@ func TestActionLoopRunBudgetCancelsAndStopsRetries(t *testing.T) {
 	done := runLoopAsync(r, actionLoopDeps{
 		tryCh:         tryCh,
 		pidCh:         make(chan int, 1),
-		actionCh:      make(chan keyboard.Press, 1),
+		actionCh:      make(chan runtimeevent.Press, 1),
 		stallTick:     neverTick(),
 		runBudgetCh:   fireNow(),
 		tryDeadline:   neverTick(),
@@ -96,7 +96,7 @@ func TestActionLoopTryCapCancelsButLeavesBudget(t *testing.T) {
 	done := runLoopAsync(r, actionLoopDeps{
 		tryCh:         tryCh,
 		pidCh:         make(chan int, 1),
-		actionCh:      make(chan keyboard.Press, 1),
+		actionCh:      make(chan runtimeevent.Press, 1),
 		stallTick:     neverTick(),
 		runBudgetCh:   neverTick(),
 		tryDeadline:   fireNow(),
@@ -137,7 +137,7 @@ func TestActionLoopUnderBudgetCompletesNormally(t *testing.T) {
 	done := runLoopAsync(r, actionLoopDeps{
 		tryCh:         tryCh,
 		pidCh:         make(chan int, 1),
-		actionCh:      make(chan keyboard.Press, 1),
+		actionCh:      make(chan runtimeevent.Press, 1),
 		stallTick:     neverTick(),
 		runBudgetCh:   neverTick(),
 		tryDeadline:   neverTick(),
@@ -187,7 +187,7 @@ func TestActionLoopStallPrecedesTimeout(t *testing.T) {
 	done := runLoopAsync(r, actionLoopDeps{
 		tryCh:           tryCh,
 		pidCh:           make(chan int, 1),
-		actionCh:        make(chan keyboard.Press, 1),
+		actionCh:        make(chan runtimeevent.Press, 1),
 		stallTick:       stallTick,
 		runBudgetCh:     neverTick(),
 		tryDeadline:     neverTick(),

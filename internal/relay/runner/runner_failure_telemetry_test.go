@@ -12,9 +12,9 @@ import (
 	"time"
 
 	"github.com/mitchell-wallace/rally/internal/harnessapi"
-	"github.com/mitchell-wallace/rally/internal/keyboard"
 	"github.com/mitchell-wallace/rally/internal/laps"
 	"github.com/mitchell-wallace/rally/internal/progress"
+	"github.com/mitchell-wallace/rally/internal/relay/runner/runtimeevent"
 	"github.com/mitchell-wallace/rally/internal/reliability"
 	"github.com/mitchell-wallace/rally/internal/store"
 	"github.com/mitchell-wallace/rally/internal/telemetry"
@@ -720,7 +720,7 @@ func TestRunOne_CancelledLapsAttemptDoesNotCaptureIncompleteFinalization(t *test
 	sink := &capturingSink{}
 	r.SetTelemetry(sink)
 
-	input := installOperatorKeyboard(t)
+	controls := installOperatorKeyboard(t, r)
 	done := driveRunOneTaskAsync(t, r, runTask{
 		Name:          "lap task",
 		Prompt:        "do work",
@@ -731,7 +731,7 @@ func TestRunOne_CancelledLapsAttemptDoesNotCaptureIncompleteFinalization(t *test
 		LapsRemaining: 1,
 	})
 	waitForAttempts(t, &attempts, 1)
-	sendOperatorAction(t, input, keyboard.ActionSkip)
+	sendOperatorAction(t, controls, runtimeevent.OperatorActionSkip)
 
 	res := awaitRunOne(t, done)
 	if res.Outcome != reliability.OutcomeCancelled {
