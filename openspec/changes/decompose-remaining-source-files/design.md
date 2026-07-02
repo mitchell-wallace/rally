@@ -188,3 +188,121 @@ green; rollback is a per-commit `git revert`.
 
 _None — the draft's two open questions are resolved by Decisions 1 and 3/4
 (one change, file splits only, harness files routed out)._
+
+## Re-grounding — post-#5 (tasks 1.1 / 1.2)
+
+Recorded at the implementation-time baseline gate. `#5`
+`separate-runtime-presentation-boundary` landed without touching
+`internal/monitor` internals (per its design Decision 8), so the only place
+drift could hide is monitor *consumption* in the runner — confirmed unchanged
+for this change's scope. The live inventories below match Decision 2 exactly;
+no head lap is required.
+
+### Baseline gate (task 1.1) — all GREEN
+
+- `go build ./...` — exit 0
+- `go vet ./...` — exit 0
+- `gofmt -l .` — empty (exit 0)
+- `go test -count=1 ./internal/monitor ./internal/config ./internal/cli ./internal/store` — ok (all four packages)
+- `go run ./tools/archguard --ci` — exit 0 (the four target files are reported
+  as warn-band advisories exactly as expected; nothing is denied or over the
+  hard cap)
+
+### Re-grounded line counts (task 1.2)
+
+| file | design Decision 2 funcs | live `grep -c "^func"` | live lines |
+| --- | ---: | ---: | ---: |
+| `internal/monitor/monitor.go` | 34 | **34** | 663 |
+| `internal/config/providers.go` | 26 | **26** | 621 |
+| `internal/cli/routes_check.go` | 23 | **23** | 619 |
+| `internal/store/store.go` | 26 | **26** | 541 |
+
+Line counts are byte-for-byte the design's values (663 / 621 / 619 / 541); no
+file has grown or shrunk since the `f55712c` baseline.
+
+### Drift vs Decision 2 (task 1.2)
+
+**None.** Every responsibility axis in Decision 2 resolves cleanly against the
+live `grep -n "^func"` output: each live function maps to exactly one target
+file, no function is missing or extra, and no `misc`/`helpers` catch-all is
+needed in any package. The per-function mapping is recorded below. No head lap
+is required; the split laps (tasks 2–5) can proceed one-for-one against the
+inventory.
+
+### Pre-change function inventory (task 1.2) — name → file
+
+Each current function and its planned target home per Decision 2's
+responsibility axes. Counts in parens are per target file.
+
+**`internal/monitor`** (34 → 4 files):
+
+- `monitor.go` stays (16): `NewMonitor`, `Monitor.Start`, `Monitor.Stop`,
+  `Monitor.Tick`, `Monitor.run`, `Monitor.computeIndicators`, `Monitor.UpdatePIDs`,
+  `Monitor.SetProcessGroupID`, `Monitor.SetStallThreshold`, `Monitor.SetRetry`,
+  `Monitor.SetStalled`, `Monitor.SetStopping`, `Monitor.SetArmed`,
+  `Monitor.SetActing`, `Monitor.SetRecovered`, `Monitor.SetCursorUpLines`.
+  Associated decls that stay: `TickInterval`, `Indicators`, `Monitor`.
+- `monitor_render.go` (7): `RenderStatus`, `RenderStatusExt`, `formatDuration`,
+  `formatLastActivity`, `plural`, `Monitor.render`, `Monitor.clear`.
+- `proc_stats.go` (8): `GitDirtyCount`, `LogLastActivity`, `GetPIDsInGroup`,
+  `readPGID`, `CountTCPConnections`, `socketInodesForPIDs`, `ReadIOBytes`,
+  `ReadSyscallBytes`.
+- `network_monitor.go` (3): `NewNetworkMonitor`, `NetworkMonitor.evaluate`,
+  `NetworkMonitor.Check`. Associated decl that travels: `NetworkMonitor`.
+
+**`internal/config`** (26 → 3 files; `providers.go` disappears):
+
+- `providers_parse.go` (5): `parseProviders`, `parseProviderValue`,
+  `toModelList`, `providersToRaw`, `toAnySlice`. The public
+  `ProviderConfig` type is the parsed raw-TOML shape and travels here (same
+  package, findability-only; referenced package-wide).
+- `providers_resolve.go` (12): `V2Config.resolveProviders`,
+  `V2Config.resolveProviderMembers`, `V2Config.resolveProviderSpec`,
+  `V2Config.resolveProviderConcreteSpec`, `V2Config.lookupBareModelAlias`,
+  `V2Config.BuildProviderIndex`, `V2Config.ProviderMemberCounts`,
+  `sortedHarnessKeys`, `sortedMapKeys`, `sortResolvedAgents`,
+  `builtInHarnessNames`, `runnerLabel`. Associated decls that travel:
+  `providerRunnerKey`, `resolvedProvider`.
+- `providers_wildcard.go` (9): `V2Config.resolveProviderWildcardSpec`,
+  `V2Config.resolveProviderWildcardHarness`, `providerPrefixWildcard`,
+  `providerSuffixWildcard`, `matchAll`, `matchPrefix`, `matchSuffix`,
+  `V2Config.expandProviderHarnessModels`, `V2Config.expandProviderModels`.
+  Associated decl that travels: `modelFilter`.
+
+**`internal/cli`** (23 → 4 files):
+
+- `routes_cmd.go` (3): `NewRoutesCmd`, `runRoutesCheck`,
+  `defaultResolveWorkspaceDir`. Associated decls that travel (Cobra-wiring
+  indirection vars): `resolveWorkspaceDir`, `loadConfig`.
+- `routes_check.go` stays (10): `CheckRoutes`, `checkRoles`,
+  `removedAliasRouteError.Error`, `collectActiveAssignees`,
+  `collectJSONAssignees`, `collectNestedAssignees`, `addAssignee`,
+  `mergeAssignees`, `hasDefaultRoute`, `sortedRouteNames`. Associated decls
+  that stay (result data model + check core): `defaultRouteKey`,
+  `removedAliasRouteError`, `RouteCheckResult`, `ProviderSummary`,
+  `RoleDiagnostic`, `RoleOverlap`, `RouteSummary`.
+- `routes_render.go` (2): `renderRouteCheckResult`, `pluralize`.
+- `routes_validate.go` (8): `validateReasoning`, `reasoningTokenRecognised`,
+  `validateRouteEntry`, `decorateResolveError`, `topAliasSuggestions`,
+  `aliasCandidates`, `levenshtein`, `min`.
+
+**`internal/store`** (26 → 5 files):
+
+- `store.go` stays (1): `NewStore`. Associated decls that stay: the
+  `Store` type and the cross-group window-size constants
+  (`agentStatusWindowSize`, `messagesWindowSize`) — both are read by the
+  messages and agent-status split files, so they stay in the anchor file
+  rather than spawning a shared `helpers.go`.
+- `store_write.go` (5): `AppendTry`, `AppendRelay`, `UpdateRelay`,
+  `NextRelayID`, `NextTryID`.
+- `store_read.go` (6): `GetTry`, `GetRelay`, `RecentTries`, `RecentRelays`,
+  `AllRelays`, `AllTries`.
+- `store_messages.go` (9): `AddMessage`, `UpdateMessage`,
+  `maybeTruncateMessages`, `NextMessageID`, `GetMessages`, `PendingMessages`,
+  `RelayScopedMessages`, `EligibleRelayScopedMessages`,
+  `ConsumedRunScopedMessageForRun`.
+- `store_agent_status.go` (5): `AppendAgentStatus`, `ResetAgentStatus`,
+  `truncateAgentStatus`, `GetAgentStatus`, `AllAgentStatus`.
+
+Totals reconcile to Decision 2 exactly: monitor 16+7+8+3 = 34, config
+5+12+9 = 26, cli 3+10+2+8 = 23, store 1+5+6+9+5 = 26.
