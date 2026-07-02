@@ -6,11 +6,11 @@
       "title": "Baseline green + regenerate presentation-wiring / emit-site inventory",
       "description": "Context: Change #5 separate-runtime-presentation-boundary, phase 1 (tasks.md 1.1-1.3). Design baselined at commit f55712c; #4 modularize-harness-adapters is landed in the tree at HEAD. This lap re-grounds the plan against the live tree and produces the emit-site checklist that phases 3-5 depend on. Do NOT start implementing the boundary here.\n\nOutcome: A confirmed-green tree and a regenerated, written-down inventory that later laps consume: (a) runner import sites for internal/style and internal/keyboard; (b) direct os.Stdout/os.Stderr/os.Stdin uses across run_one.go, relay_steps.go, task.go, terminal.go, handoff_only.go; (c) keyboard construction sites (terminal.go wait countdown, run_one.go active try); (d) monitor lifecycle calls (mon.Start/mon.Stop/renderRunFooter); (e) the print-site output inventory mapping each print to the design Decision 3 event vocabulary.\n\nFiles \u0026 scope: read-only against internal/relay/runner/*.go, internal/app/relay_start.go, internal/monitor, internal/style, internal/keyboard; capture the inventory in the lap report (or a scratch note) for downstream laps. No production changes.\n\nDesign: This is the load-bearing checklist. Getting emit-site coverage wrong cascades into phase-3 parallel-emit and phase-4 cut-over byte drift. Cross-check every row of the design Decision 3 table against the current source; flag any print site that has drifted from the design's line references since f55712c (line numbers will have moved). Also note the archive-order caveat from task 1.3: #4's OpenSpec change is landed in code but not yet archived, and this change's composition-root-structure delta MODIFIES the same 'Presentation-neutral relay-start seam' requirement as #4's un-archived delta -- surface this to the operator; do not attempt to resolve archive ordering here.\n\nAcceptance: go build ./..., go vet ./..., gofmt -l . (empty), go test -count=1 ./..., go run ./tools/archguard --ci (exit 0) all green -- if red, STOP and report. Inventory recorded and handed forward.",
       "assignee": "SENIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 65536,
       "createdAt": "2026-07-02T11:28:44.895295082Z",
-      "updatedAt": "2026-07-02T11:28:44.895295082Z",
-      "completedAt": null
+      "updatedAt": "2026-07-02T14:45:33.826773883Z",
+      "completedAt": "2026-07-02T14:45:33.826773883Z"
     },
     {
       "id": "rall-9495",
