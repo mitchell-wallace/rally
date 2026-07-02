@@ -23,8 +23,8 @@
 
 ## 5. Guardrail ratchet and verification
 
-- [ ] 5.1 Regenerate the grandfather baseline: `go run ./tools/archguard --report`; confirm the `internal/relay/runner/run_one.go` production entry is gone, no new `internal/relay/runner` production file needs an entry (target: all new files < 500 lines; hard-require < 800), and runner `_test.go` entries are unchanged.
-- [ ] 5.2 Verify the function inventory: every pre-change function from task 1.3 appears exactly once across the new files; the only new functions are the unexported sub-step helpers from tasks 2.2/2.3.
-- [ ] 5.3 Full verification: `go test -count=1 ./...`, `go test -race -shuffle=on -count=1 ./internal/relay/...`, `go vet ./...`, `gofmt -l .` empty, `go run ./tools/archguard --ci` exit 0, `just check` green.
-- [ ] 5.4 Confirm behaviour preservation: no CLI-output, telemetry-field, store-shape, laps-semantic, or error-string diff; exported `runner`/`relay` API unchanged; `internal/buildinfo/VERSION` untouched.
-- [ ] 5.5 Record the final production file list of `internal/relay/runner` in this change (append to design.md or the wrapup notes) so #8 `decompose-large-test-files` can mirror the test split one-for-one.
+- [x] 5.1 Regenerate the grandfather baseline: `go run ./tools/archguard --report`; confirm the `internal/relay/runner/run_one.go` production entry is gone, no new `internal/relay/runner` production file needs an entry (target: all new files < 500 lines; hard-require < 800), and runner `_test.go` entries are unchanged.
+- [x] 5.2 Verify the function inventory: every pre-change function from task 1.3 appears exactly once across the new files; the only new functions are the unexported sub-step helpers from tasks 2.2/2.3.
+- [x] 5.3 Full verification: `go test -count=1 ./...`, `go test -race -shuffle=on -count=1 ./internal/relay/...`, `go vet ./...`, `gofmt -l .` empty, `go run ./tools/archguard --ci` exit 0, `just check` green.
+- [x] 5.4 Confirm behaviour preservation: no CLI-output, telemetry-field, store-shape, laps-semantic, or error-string diff; exported `runner`/`relay` API unchanged; `internal/buildinfo/VERSION` untouched.
+- [x] 5.5 Record the final production file list of `internal/relay/runner` in this change (append to design.md or the wrapup notes) so #8 `decompose-large-test-files` can mirror the test split one-for-one.

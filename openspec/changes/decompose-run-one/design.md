@@ -284,3 +284,50 @@ Reference: post-#5 `internal/relay/runner` production files (for tasks 5.5 / #8)
 `handoff_only.go`, `liveness.go`, `log.go`, `progress.go`, `relay_steps.go`,
 `route_runtime.go`, `runner.go`, `run_one.go`, `run_one_state.go`, `task.go`,
 `telemetry.go`, `terminal.go` (16 production files).
+
+### Final post-change production file list (task 5.5)
+
+`internal/relay/runner` production files after this change (32 total; 
+`#8 decompose-large-test-files` should mirror this layout one-for-one):
+
+```text
+# Type/index level (unchanged from pre-change)
+action_loop.go
+failure_display.go
+final_snippet.go
+git.go
+handoff_only.go
+liveness.go
+log.go
+progress.go
+runner.go
+task.go
+telemetry.go
+terminal.go
+
+# run_one split (from run_one.go + pre-existing run_one_state.go)
+run_one.go                  # Runner.runOne + runOneState.outcome (index only)
+run_one_state.go            # newRunOneState, captureRunStartWorkspaceState (pre-existing from #5, untouched)
+run_attempt_prepare.go      # setupRunBudget, prepareRunAttempt
+run_attempt_monitor.go      # runMonitoredAttempt, executeTry, resolveAttemptFinalSnippet
+run_attempt_reconcile.go    # reconcileAttemptProgress
+run_attempt_classify.go     # classifyAttemptOutcome + 8 extracted sub-step helpers
+run_attempt_record.go       # recordAttemptOutcome + 3 extracted sub-step helpers
+run_attempt_cancel.go       # recordCancelledAttempt
+run_retry_decide.go         # decideRetryOrComplete, routeFallbackCause.addTo
+run_handoff.go              # runHandoffContinuation
+run_finalize.go             # finalizeRunProgress
+
+# route_runtime split
+route_runtime.go            # routeRuntime type, quotaScope/applyProviders/Warnings/routeSelectionError
+route_runtime_construct.go  # constructors + entry resolution
+route_runtime_select.go     # next, selectionWaitError, prepareExecutorForSelection
+route_runtime_recovery.go   # syncRecoverySignals, hasProbationEventForCurrentFreeze, persistProbationEvent, forceUnpauseAll
+route_runtime_bench.go      # benchQuotaScope, benchResetAt, resilienceKeyForEntry, resolvedEntryAgent, roleForScheduler
+
+# relay_steps split
+relay_steps.go              # startOrResumeRelay, startRelaySpan, startRunSpan, consume*ScopedMessage
+relay_route_wait.go         # selectRouteOrWait, emitFallbackEvents, resolveFallbackCause
+relay_run_progress.go       # updateRunProgress, updateSkippedRunProgress, applyRunOutcomeToResilience, completeRelayIfTargetMet, containsInt
+relay_summary.go            # printRelaySummary, tallyRuns
+```

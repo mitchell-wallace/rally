@@ -292,11 +292,11 @@
       "title": "Full-change verification and record final file list for #8",
       "description": "Final full-change verification. Use the openspec-verify-change skill against decompose-run-one and inspect the whole diff. Identify the intended merge target (user/PR/repo docs/branch config/recent history) and diff against it; identify the first lap of this batch and treat earlier branch work as pre-existing unless the user asks otherwise.\n\nRun every check and trace the load-bearing lines:\n- Function inventory (task 5.2): every pre-change function recorded in the baseline lap's inventory appears EXACTLY ONCE across the new files; the ONLY new functions are the sub-step helpers extracted from classifyAttemptOutcome/recordAttemptOutcome.\n- Archguard ratchet (task 5.1): confirm the internal/relay/runner/run_one.go production entry is gone, no runner production file needs a grandfather entry, runner _test.go entries are unchanged, and go run ./tools/archguard --ci exits 0.\n- Full verification (task 5.3): go test -count=1 ./..., go test -race -shuffle=on -count=1 ./internal/relay/..., go vet ./..., gofmt -l . (empty), go run ./tools/archguard --ci (exit 0), just check green.\n- Behaviour preservation (task 5.4): no CLI-output, telemetry-field, store-shape, laps-semantic, or error-string diff; exported runner/relay API unchanged; internal/buildinfo/VERSION untouched.\n- Record final file list (task 5.5): record the final production file list of internal/relay/runner in this change (append to design.md or wrapup notes) so #8 decompose-large-test-files can mirror the test split one-for-one.\n\nCheck off all remaining tasks.md boxes (5.1-5.5 and anything not yet ticked) for verified-correct work only. Substantive gaps become new head laps; fix only tiny safe one-liners inline. Do not rewrite git history.",
       "assignee": "VERIFY",
-      "isDone": false,
+      "isDone": true,
       "order": 1769472,
       "createdAt": "2026-07-02T11:29:04.858240896Z",
-      "updatedAt": "2026-07-02T11:29:04.858240896Z",
-      "completedAt": null
+      "updatedAt": "2026-07-02T20:39:53.399672037Z",
+      "completedAt": "2026-07-02T20:39:53.399672037Z"
     },
     {
       "id": "rall-19c3",
