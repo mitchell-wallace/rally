@@ -76,11 +76,13 @@ introducing a new one._
   test edits required by this change; the mirroring split of the runner test
   files is owned by #8 and must track the file boundaries this change creates.
 - **Sequencing**: after `separate-runtime-presentation-boundary` (#5), so the
-  phase files this change carves are orchestration-only (the presentation weight
-  — style/keyboard/monitor coupling and direct stdout writes in `run_one.go`,
-  `relay_steps.go`, `terminal.go`, `handoff_only.go` — leaves the runner in #5).
-  Re-ground line counts at implementation time; #5 will have moved rendering
-  code out of the files this change splits.
+  phase files this change carves are orchestration-plus-events rather than
+  orchestration-plus-rendering: #5 removes the runner's `style`/`keyboard`
+  rendering and its direct operator-facing stdout/stderr writes, but the
+  monitor status-line wiring (`mon.Start(os.Stdout)`, indicator setters)
+  deliberately **stays runner-driven** as #5's documented residual. Re-ground
+  line counts and function inventories at implementation time; #5 will have
+  moved rendering code out of the files this change splits.
 - **Out of scope**: any behaviour/telemetry/store/CLI change; harness files
   (#4, landed); non-runner source outliers (#7); test-file decomposition (#8);
   promoting the attempt logic to a child package (file split only, per the

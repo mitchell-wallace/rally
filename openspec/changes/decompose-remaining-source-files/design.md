@@ -56,14 +56,28 @@ proc_stats.go       # GitDirtyCount, LogLastActivity, GetPIDsInGroup, CountTCPCo
 network_monitor.go  # NetworkMonitor
 ```
 
-**`internal/config`** (mirrors #2's `config_v2.go` split convention):
+**`internal/config`** (mirrors #2's `config_v2.go` split convention). Full
+name-to-file inventory of the 26 current functions (2026-07-02; re-verify):
 
 ```text
-providers.go           # entry points the rest of config calls (parseProviders as the seam) — or renamed thin index if parsing moves whole
-providers_parse.go     # parseProviders, parseProviderValue, toModelList
-providers_resolve.go   # resolveProviders, member/spec resolution
-providers_wildcard.go  # provider*Wildcard helpers, modelFilter
+providers_parse.go     # raw-TOML shape ↔ ProviderConfig: parseProviders,
+                       # parseProviderValue, toModelList, providersToRaw, toAnySlice
+providers_resolve.go   # resolution + the index/count surface: resolveProviders,
+                       # resolveProviderMembers, resolveProviderSpec,
+                       # resolveProviderConcreteSpec, lookupBareModelAlias,
+                       # BuildProviderIndex, ProviderMemberCounts, plus the
+                       # ordering/label helpers they use (sortedHarnessKeys,
+                       # sortedMapKeys, sortResolvedAgents, builtInHarnessNames,
+                       # runnerLabel)
+providers_wildcard.go  # wildcard matching + expansion: resolveProviderWildcardSpec,
+                       # resolveProviderWildcardHarness, providerPrefixWildcard,
+                       # providerSuffixWildcard, matchAll, matchPrefix, matchSuffix,
+                       # expandProviderHarnessModels, expandProviderModels,
+                       # the modelFilter type
 ```
+
+`providers.go` itself disappears if nothing remains after the three moves
+(preferred), or stays only as a thin documented seam — never as a catch-all.
 
 **`internal/cli`**:
 
@@ -101,12 +115,14 @@ this change: rejected as churn without findability gain.
 
 ### Decision 4 — monitor split defers to #5's boundary
 
-#5 separates monitor *usage* (sampling vs rendering consumption) behind a
-presentation boundary but adapts `monitor.Monitor` behind an interface rather
-than rewriting it. This change owns the *file* split inside `internal/monitor`.
-Sequencing after #5 means the split carves whatever #5 left, and the
-`monitor_render.go` file is the natural future home boundary if rendering later
-moves to a presentation package — but this change does not move it there.
+#5 introduces the runtime event/control boundary but deliberately leaves
+`internal/monitor` internals untouched: the live status line stays
+runner-driven as #5's documented residual (its design Decision 8), with no
+monitor interface introduced. This change owns the *file* split inside
+`internal/monitor`. Sequencing after #5 means the split carves whatever #5
+left, and the `monitor_render.go` file is the natural future home boundary if
+rendering later moves to a presentation package (the `build-new-tui` change
+owns that replace-don't-adapt decision) — this change does not move it there.
 
 ### Decision 5 — spec homes
 

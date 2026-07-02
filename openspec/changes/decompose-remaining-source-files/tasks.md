@@ -10,7 +10,7 @@
 
 ## 3. Split internal/config providers (one commit)
 
-- [ ] 3.1 Split `providers.go` per design Decision 2: parsing → `providers_parse.go` (`parseProviders`, `parseProviderValue`, `toModelList`); resolution → `providers_resolve.go` (`resolveProviders` and member/spec resolution); wildcard matching → `providers_wildcard.go` (`provider*Wildcard`, `modelFilter`). Keep `providers.go` as the thin seam the rest of `config` calls, or move it whole and delete if nothing remains — every symbol exactly one home.
+- [ ] 3.1 Split `providers.go` per design Decision 2's full 26-function inventory: parsing/raw conversion → `providers_parse.go` (`parseProviders`, `parseProviderValue`, `toModelList`, `providersToRaw`, `toAnySlice`); resolution + index/count surface → `providers_resolve.go` (`resolveProviders`, `resolveProviderMembers`, `resolveProviderSpec`, `resolveProviderConcreteSpec`, `lookupBareModelAlias`, `BuildProviderIndex`, `ProviderMemberCounts`, `sortedHarnessKeys`, `sortedMapKeys`, `sortResolvedAgents`, `builtInHarnessNames`, `runnerLabel`); wildcard matching/expansion → `providers_wildcard.go` (`resolveProviderWildcardSpec`, `resolveProviderWildcardHarness`, `providerPrefixWildcard`, `providerSuffixWildcard`, `matchAll`, `matchPrefix`, `matchSuffix`, `expandProviderHarnessModels`, `expandProviderModels`, `modelFilter`). Delete `providers.go` if nothing remains (preferred) — every symbol exactly one home.
 - [ ] 3.2 `go test -count=1 ./internal/config ./cmd/rally` green; deprecation/validation messages byte-identical; commit.
 
 ## 4. Split internal/cli routes-check (one commit)

@@ -35,9 +35,11 @@ baseline (run header, retry/terminal/cancelled/handoff footers, wait countdown
 lifecycle, route and task-file warnings, rate-limit wait notice, pause prompt,
 operator action armed/applied, try-start status snapshot and shortcut hint,
 relay summary). After this change, runner production files SHALL NOT import
-`internal/style` or `internal/keyboard`, SHALL NOT write directly to
-`os.Stdout`/`os.Stderr` for operator-facing output, and SHALL NOT read
-`os.Stdin`. A nil `EventSink` SHALL behave as a no-op sink and a nil
+`internal/style` or `internal/keyboard`, SHALL NOT print operator-facing
+output directly to `os.Stdout`/`os.Stderr` (no `fmt.Print*`/`Fprint*`
+header, footer, warning, countdown, prompt, or summary writes) — the sole
+permitted direct-stream use being the documented monitor residual
+`mon.Start(os.Stdout)` — and SHALL NOT read `os.Stdin`. A nil `EventSink` SHALL behave as a no-op sink and a nil
 `Controls` SHALL mean no operator input, without affecting orchestration. The
 live monitor status line (`internal/monitor` usage, including
 `mon.Start(os.Stdout)`) SHALL remain runner-driven as a documented residual,
@@ -58,7 +60,9 @@ and relay-log lines SHALL remain log-only (not events).
 - **THEN** the emitted event sequence matches the pre-change print order for
   that path (header before status snapshot, armed before applied, wait started
   before ticks before finished, footer events at attempt completion, summary
-  last)
+  last), and the terminal sink renders operator armed/applied events only in
+  the wait loop — during an active try it no-ops them, because that feedback
+  remains monitor-indicator-driven (the documented residual)
 
 #### Scenario: Operator semantics preserved through ControlSource
 

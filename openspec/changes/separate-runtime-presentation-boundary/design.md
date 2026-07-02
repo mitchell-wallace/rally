@@ -125,7 +125,7 @@ implementation time); each event maps to output the runner currently prints:
 | `HandoffAttemptFinished` | handoff-only footer (`handoff_only.go:217`) |
 | `RateLimitWaitStarted` | dim rate-limit notice (`run_one.go:1014`) |
 | `WaitStarted` / `WaitTick` / `WaitFinished` | countdown frames + clear (`terminal.go`) |
-| `OperatorActionArmed` / `OperatorActionApplied` | armed/acting monitor text + wait armed hint |
+| `OperatorActionArmed` / `OperatorActionApplied` | **wait-loop armed hint only** (a real print, `terminal.go:87`); during an active try, arm/act feedback flows through the monitor indicators (`mon.SetArmed`/`mon.SetActing` in `action_loop.go`), which stay runner-driven (Decision 8) — the terminal sink SHALL no-op these events for active tries (they exist as data for alternate presentations) |
 | `PausePromptShown` | "Paused — press Enter to resume" (`run_one.go:1339`) |
 | `RelaySummaryReady` | `style.RenderSummary` (`relay_steps.go:481`) |
 
@@ -186,9 +186,12 @@ One new package owns both CLI-side implementations:
   `internal/style` to the out/err writers it is constructed with — the same
   strings, escape sequences (`\r\x1b[2K`, `\r\x1b[J`, `\r\n` in raw mode), and
   writer targets as today, call-for-call.
-- `terminal.Controls` (implements `runtimeevent.ControlSource`): wraps
-  `internal/keyboard` construction (`os.Stdin`/`os.Stdout`, raw mode),
-  translates presses, implements `WaitResume` as today's Enter read.
+- `terminal.Controls` (implements `runtimeevent.ControlSource`): constructed
+  over injectable streams (`terminal.NewControls(in io.Reader, out io.Writer)`;
+  the CLI passes `os.Stdin`/`os.Stdout`), wraps `internal/keyboard`
+  construction and raw mode, translates presses, implements `WaitResume` as
+  today's Enter read against `in` — pipe-testable without global stdin
+  mutation.
 
 Placement rationale: `internal/cli` stays the Cobra command layer;
 `internal/presentation/<surface>` is the durable home the draft anticipated

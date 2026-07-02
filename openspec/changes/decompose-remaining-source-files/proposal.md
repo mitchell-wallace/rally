@@ -83,10 +83,10 @@ bump, no release.
   ./internal/store ./internal/cli` stays green with no test edits; test-file
   decomposition remains owned by #8 (`config_v2_test.go` and `store_test.go`
   are #8's, and the new production file names give #8 its mirror).
-- **Sequencing**: after #5 (`separate-runtime-presentation-boundary`) so the
-  `monitor.go` split reflects any sampling-vs-rendering boundary #5 introduces
-  (#5 adapts the monitor behind an interface; this change owns the file split —
-  re-ground `monitor.go` at implementation time). Independent of #6 (different
+- **Sequencing**: after #5 (`separate-runtime-presentation-boundary`). #5
+  leaves `internal/monitor` internals untouched and keeps the live status line
+  runner-driven (its documented residual); this change re-grounds and splits
+  the `monitor.go` file after #5 lands. Independent of #6 (different
   packages, can run in parallel). Before `rename-rally-roles` (#9).
 - **Out of scope**: the runner core (#6), harness adapter files (routed above),
   test files (#8), any behaviour/schema/output change, and promoting any of the
