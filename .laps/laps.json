@@ -17,11 +17,11 @@
       "title": "Create runtimeevent contract package (events, Sink, control vocabulary)",
       "description": "Context: Phase 2 (tasks.md 2.1-2.2), design Decisions 1, 2, 4. The runtimeevent package is the presentation-neutral boundary both halves of the future TUI use. It does not exist yet.\n\nOutcome: New package internal/relay/runner/runtimeevent (package runtimeevent), stdlib-only, that builds. It defines: the Event interface (kind discriminator) over data-only typed payload structs for the Decision 3 vocabulary (RelayStarted/RelayCompleted, RouteWarning, TaskFileWarning, RunHeaderReady, TryStatusSnapshot, ShortcutHintReady, RetryFooterUpdated, AttemptFinished, AttemptCancelled, HandoffAttemptFinished, RateLimitWaitStarted, WaitStarted/WaitTick/WaitFinished, OperatorActionArmed/OperatorActionApplied, PausePromptShown, RelaySummaryReady); the synchronous Sink interface `Emit(context.Context, Event)`; a no-op sink; and a Recording sink for tests. Plus the operator-control vocabulary: OperatorAction (Quit/Skip/Pause/Stop; None excluded from Press), Press{Action, Confirmed}, ArmMessage(action)/ActMessage(action) helpers, ConfirmWindow = 4s, and the ControlSource interface (Start(ctx)(\u003c-chan Press,error), Stop(), WaitResume(ctx) error).\n\nFiles \u0026 scope: only internal/relay/runner/runtimeevent/*.go. Do not touch runner files, app, or cli yet -- this lap adds the contract; nothing consumes it. Payloads carry data only (names, durations, counts, message strings) -- never ANSI escapes or lipgloss values.\n\nDesign: Follow the exact type signatures in design Decision 2 and Decision 4. Critically, ArmMessage/ActMessage/ConfirmWindow must reproduce today's internal/keyboard semantics verbatim (same text, same 4s window) -- copy the literal message strings from internal/keyboard so parity holds; this is not a place to reword. runtimeevent must never import runner (no cycle) and must import only the standard library.\n\nAcceptance: go build ./... green; go list -deps ./internal/relay/runner/runtimeevent shows no internal package. (Unit tests land in the next lap.)",
       "assignee": "JUNIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 131072,
       "createdAt": "2026-07-02T11:28:44.895300438Z",
-      "updatedAt": "2026-07-02T11:28:44.895300438Z",
-      "completedAt": null
+      "updatedAt": "2026-07-02T15:10:11.593955809Z",
+      "completedAt": "2026-07-02T15:10:11.593955809Z"
     },
     {
       "id": "rall-3857",
