@@ -116,11 +116,11 @@
       "title": "VERIFY phase 4: terminal output cut-over byte-parity",
       "description": "Context: Verification gate immediately after the high-risk output cut-over (phase 4). Change #5 separate-runtime-presentation-boundary.\n\nOutcome: Confirmation that CLI output is byte-identical post cut-over and the runner no longer renders, with tasks.md phase-4 boxes checked only where verified.\n\nScope \u0026 method: Use openspec-verify-change against separate-runtime-presentation-boundary, focused on phase 4. Identify the merge target from the operator/PR/repo docs/branch config/history (not assumed main) and diff \u003ctarget\u003e...HEAD; treat pre-batch work as pre-existing; no history rewriting. Trace real evidence, not just green tests: the relocated byte-level tests preserve expected bytes; the terminal.Sink relocates format strings/escapes verbatim; runner has zero operator-facing os.Stdout/os.Stderr writes except mon.Start(os.Stdout); internal/style import gone from all runner files; render order relative to mon.Stop()/monitor renders preserved (footer-parking). Re-run or review the manual smoke including the armed-Ctrl+C path.\n\nAcceptance: go test -count=1 ./internal/relay/... ./internal/presentation/... ./internal/app ./cmd/rally green; go vet green. Tick tasks.md 4.1-4.5 only where verified byte-parity holds. Substantive gaps -\u003e focused head lap on the staging file (laps -f 5-separate-runtime-presentation-boundary.laps.json add head ...), not inline rework.",
       "assignee": "VERIFY",
-      "isDone": false,
+      "isDone": true,
       "order": 720896,
       "createdAt": "2026-07-02T11:28:44.895312109Z",
-      "updatedAt": "2026-07-02T11:28:44.895312109Z",
-      "completedAt": null
+      "updatedAt": "2026-07-02T17:41:10.17953672Z",
+      "completedAt": "2026-07-02T17:41:10.17953672Z"
     },
     {
       "id": "rall-12ff",
