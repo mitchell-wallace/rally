@@ -182,11 +182,11 @@
       "title": "VERIFY full change: byte/semantic parity, residuals, OpenSpec archive-order",
       "description": "Context: Final full-change verification for #5 separate-runtime-presentation-boundary (tasks.md phase 7). Behaviour-preserving change: byte-identical CLI output, identical keyboard/cancellation semantics, no config/telemetry/store/laps/commit-message change, no version bump, no release.\n\nOutcome: Whole-change verification with the phase-6/7 tasks.md boxes checked and a holistic confirmation that phases 1-5 hold together.\n\nScope \u0026 method: Run the COMPLETE openspec-verify-change against separate-runtime-presentation-boundary and inspect the whole diff. Identify the merge target (operator/PR/repo docs/branch config/history -- not assumed main), diff \u003ctarget\u003e...HEAD; identify this batch's first lap/try and treat earlier branch work as pre-existing (flag but do not remove unless the operator asks); never rewrite git history. Verify: (7.1) go test -count=1 ./..., go test -race -shuffle=on -count=1 ./internal/relay/... ./internal/presentation/..., go vet ./..., gofmt -l . empty, go mod tidy no diff, just check green. (7.2) CLI output byte-identical on the smoke flows; shortcut semantics identical (arm/confirm window, skip/pause/stop/quit, second-quit force-kill during drain, pause Enter-resume); no telemetry/store/laps/config/commit-message diff; internal/buildinfo/VERSION untouched. (7.3) residuals intact and documented: monitor status line still runner-driven (mon.Start(os.Stdout)); relay-log lines unchanged and not events; app OS-signal Ctrl+C path untouched.\n\nArchive-order caveat: this change's composition-root-structure delta MODIFIES the same 'Presentation-neutral relay-start seam' requirement as #4 modularize-harness-adapters' delta, and includes #4's harnessapi wording. #4 MUST archive/sync before this change archives; if that order is broken, whichever delta archives last must first be rebased to contain the other's full requirement text. Confirm #4's archive status and report any ordering hazard to the operator rather than archiving out of order.\n\nAcceptance: full verification suite green; behaviour-preservation and residuals confirmed by tracing actual code/output, not just passing tests. Tick tasks.md 6.1-6.3 and 7.1-7.3 (and confirm all earlier boxes) only where verified to sufficient quality. Any substantive gap -\u003e focused head lap on the staging file, not inline rework.",
       "assignee": "VERIFY",
-      "isDone": false,
+      "isDone": true,
       "order": 1114112,
       "createdAt": "2026-07-02T11:28:44.895324145Z",
-      "updatedAt": "2026-07-02T11:28:44.895324145Z",
-      "completedAt": null
+      "updatedAt": "2026-07-02T19:09:11.693780382Z",
+      "completedAt": "2026-07-02T19:09:11.693780382Z"
     },
     {
       "id": "rall-a2a2",
