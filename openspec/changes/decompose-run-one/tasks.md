@@ -1,15 +1,15 @@
 ## 1. Baseline and re-grounding
 
-- [ ] 1.1 Confirm the tree is green before refactoring: `go build ./...`, `go vet ./...`, `gofmt -l .` (empty), `go test -count=1 ./internal/relay/...`, `go run ./tools/archguard --ci` (exit 0). If red, STOP — do not fold unrelated fixes into this refactor.
-- [ ] 1.2 Re-ground the inventories (this change runs after #5, which moves rendering out of these files): regenerate line counts for `run_one.go` / `route_runtime.go` / `relay_steps.go` and the `func` inventory (`grep -n "^func" internal/relay/runner/{run_one,route_runtime,relay_steps}.go`). Adjust the design.md file layout membership if functions were rehomed by #5; the per-phase-file decisions hold regardless.
-- [ ] 1.3 Record the pre-change function inventory (name → file) for the three files so the move can be verified one-for-one afterward.
+- [x] 1.1 Confirm the tree is green before refactoring: `go build ./...`, `go vet ./...`, `gofmt -l .` (empty), `go test -count=1 ./internal/relay/...`, `go run ./tools/archguard --ci` (exit 0). If red, STOP — do not fold unrelated fixes into this refactor.
+- [x] 1.2 Re-ground the inventories (this change runs after #5, which moves rendering out of these files): regenerate line counts for `run_one.go` / `route_runtime.go` / `relay_steps.go` and the `func` inventory (`grep -n "^func" internal/relay/runner/{run_one,route_runtime,relay_steps}.go`). Adjust the design.md file layout membership if functions were rehomed by #5; the per-phase-file decisions hold regardless.
+- [x] 1.3 Record the pre-change function inventory (name → file) for the three files so the move can be verified one-for-one afterward.
 
 ## 2. Split run_one.go into per-phase files
 
-- [ ] 2.1 Create the phase files per design Decision 2 (`run_attempt_prepare.go`, `run_attempt_monitor.go`, `run_attempt_reconcile.go`, `run_attempt_classify.go`, `run_attempt_record.go`, `run_attempt_cancel.go`, `run_retry_decide.go`, `run_handoff.go`, `run_finalize.go`), moving each phase function **verbatim**; `run_one.go` keeps only `Runner.runOne`, `newRunOneState`, `runOneState.outcome`; move `captureRunStartWorkspaceState` and `setupRunBudget` to `run_attempt_prepare.go` unless the re-grounded inventory shows #5 removed or renamed them. Move small utilities (`containsInt`) with their only caller.
-- [ ] 2.2 Extract named unexported sub-step helpers inside `run_attempt_classify.go` (`classifyAttemptOutcome`, ~229 lines at baseline) — straight-line regions only, explicit inputs/outputs, byte-identical error strings and telemetry fields.
-- [ ] 2.3 Same for `run_attempt_record.go` (`recordAttemptOutcome`, ~261 lines at baseline). Apply to `recordCancelledAttempt` only if a clean seam exists; do not force it.
-- [ ] 2.4 `go build ./...` and `go test -count=1 ./internal/relay/...` green; review the commit with `git diff --color-moved` to confirm moves are moves.
+- [x] 2.1 Create the phase files per design Decision 2 (`run_attempt_prepare.go`, `run_attempt_monitor.go`, `run_attempt_reconcile.go`, `run_attempt_classify.go`, `run_attempt_record.go`, `run_attempt_cancel.go`, `run_retry_decide.go`, `run_handoff.go`, `run_finalize.go`), moving each phase function **verbatim**; `run_one.go` keeps only `Runner.runOne`, `newRunOneState`, `runOneState.outcome`; move `captureRunStartWorkspaceState` and `setupRunBudget` to `run_attempt_prepare.go` unless the re-grounded inventory shows #5 removed or renamed them. Move small utilities (`containsInt`) with their only caller.
+- [x] 2.2 Extract named unexported sub-step helpers inside `run_attempt_classify.go` (`classifyAttemptOutcome`, ~229 lines at baseline) — straight-line regions only, explicit inputs/outputs, byte-identical error strings and telemetry fields.
+- [x] 2.3 Same for `run_attempt_record.go` (`recordAttemptOutcome`, ~261 lines at baseline). Apply to `recordCancelledAttempt` only if a clean seam exists; do not force it.
+- [x] 2.4 `go build ./...` and `go test -count=1 ./internal/relay/...` green; review the commit with `git diff --color-moved` to confirm moves are moves.
 
 ## 3. Split route_runtime.go
 
