@@ -129,6 +129,41 @@ func TestBuildExecutors_ModelDefaultsReachAdapter(t *testing.T) {
 	}
 }
 
+// TestBuildExecutors_ResumeSupportImpliesSessionCapture restores the old
+// cross-adapter contract: every registry-built executor that reports resume
+// support must return a non-empty SessionID from its real Execute path.
+func TestBuildExecutors_ResumeSupportImpliesSessionCapture(t *testing.T) {
+	cases := []modelProbeCase{
+		{name: "claude", binName: "claude", script: claudeProbeScript},
+		{name: "codex", binName: "codex", script: codexProbeScript},
+		{name: "opencode", binName: "opencode", script: opencodeProbeScript},
+		{name: "antigravity", binName: "agy", script: antigravityProbeScript},
+	}
+
+	executors := BuildExecutors(Config{})
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			ex, ok := executors[tc.name]
+			if !ok {
+				t.Fatalf("missing executor %q", tc.name)
+			}
+			if !ex.ResumeSupported() {
+				t.Fatalf("%s ResumeSupported() = false, want true for resume contract probe", tc.name)
+			}
+			binDir := stageMockBin(t, tc.binName, tc.script)
+			t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+			res, err := ex.Execute(context.Background(), harnessapi.RunOptions{Prompt: "do work"})
+			if err != nil {
+				t.Fatalf("%s Execute failed: %v", tc.name, err)
+			}
+			if res.SessionID == "" {
+				t.Fatalf("%s reported resume support but returned empty SessionID", tc.name)
+			}
+		})
+	}
+}
+
 // TestBuildExecutors_GenericWithCommand confirms a Custom entry that declares a
 // command registers a generic adapter — observed through its all-false
 // capability profile, which is distinct from every built-in (all of which
@@ -167,6 +202,26 @@ func TestBuildExecutors_GenericWithCommand(t *testing.T) {
 	}
 }
 
+func TestBuildExecutors_CustomCanOverrideBuiltInKey(t *testing.T) {
+	executors := BuildExecutors(Config{
+		Custom: map[string]GenericConfig{
+			"claude": {Command: []string{"custom-claude"}},
+		},
+	})
+
+	ex, ok := executors["claude"]
+	if !ok {
+		t.Fatal(`missing executor "claude"`)
+	}
+	if ex.ResumeSupported() || ex.RotateSupported() || ex.LivenessProbeSupported() {
+		t.Errorf("custom claude capability profile = (resume=%v, rotate=%v, liveness=%v), want all false (generic override)",
+			ex.ResumeSupported(), ex.RotateSupported(), ex.LivenessProbeSupported())
+	}
+	if want := len(builtInProfiles); len(executors) != want {
+		t.Errorf("executor count = %d, want %d (custom claude replaces built-in): %v", len(executors), want, sortedKeys(executors))
+	}
+}
+
 // Mock CLI bodies for the resolved-model probe. Each emits exactly the shape its
 // adapter's parser accepts as a completed try; they mirror the proven stubs in
 // each adapter's own TestExecutor_PopulateResolvedModel.
@@ -187,11 +242,19 @@ done
 `
 	// opencodeProbeScript emits the text-part event whose embedded JSON the
 	// opencode parser decodes as a completed try.
-	opencodeProbeScript = `printf '%s\n' '{"type":"text","part":{"type":"text","text":"{\"completed\":true,\"summary\":\"ok\"}"}}'
+	opencodeProbeScript = `printf '%s\n' '{"type":"step_start","sessionID":"opencode-sess","part":{"type":"step-start"}}'
+printf '%s\n' '{"type":"text","sessionID":"opencode-sess","part":{"type":"text","text":"{\"completed\":true,\"summary\":\"ok\"}"}}'
 `
 	// antigravityProbeScript emits a TryResult JSON line the antigravity parser
 	// accepts in print mode.
-	antigravityProbeScript = `printf '%s\n' '{"completed":true,"summary":"ok"}'
+	antigravityProbeScript = `log_file=
+for i in "$@"; do
+  case "$i" in --log-file=*) log_file=${i#--log-file=};; esac
+done
+if [ -n "$log_file" ]; then
+  printf '%s\n' 'I0521 00:00:00.000000 printmode.go:130] Print mode: conversation=11111111-2222-3333-4444-555555555555, sending message' > "$log_file"
+fi
+printf '%s\n' '{"completed":true,"summary":"ok"}'
 `
 )
 

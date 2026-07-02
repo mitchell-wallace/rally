@@ -3,7 +3,6 @@ package main
 import (
 	"bytes"
 	"path/filepath"
-	"strings"
 	"testing"
 )
 
@@ -38,19 +37,9 @@ func TestMainCleanRepo(t *testing.T) {
 	for _, args := range [][]string{nil, {"--report"}, {"--ci"}} {
 		var stdout, stderr bytes.Buffer
 		if code := Main(args, &stdout, &stderr); code != 0 {
-			if isExpectedHarnessAPITransition(args, stdout.String()) {
-				continue
-			}
 			t.Errorf("Main(%v) = %d, want 0; stderr=%q", args, code, stderr.String())
 		}
 	}
-}
-
-func isExpectedHarnessAPITransition(args []string, stdout string) bool {
-	if len(args) == 1 && args[0] == "--report" {
-		return false
-	}
-	return strings.Contains(stdout, "imports internal/harnessapi")
 }
 
 func TestMainRejectsBadFlags(t *testing.T) {
