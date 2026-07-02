@@ -1,0 +1,104 @@
+{
+  "version": 2,
+  "tasks": [
+    {
+      "id": "rall-4977",
+      "title": "Baseline the tree and re-ground the inventories",
+      "description": "Context: OpenSpec change decompose-run-one (#6) is a behaviour-preserving, same-package file split of internal/relay/runner. It is sequenced AFTER #5 separate-runtime-presentation-boundary, which runs first and moves rendering (style/keyboard, printRelaySummary, route-warning stderr writes) out of the exact files this change splits. The design was baselined at commit f55712c, BEFORE #5 landed, so its line counts and per-file membership tables WILL have drifted. Read openspec/changes/decompose-run-one/{proposal.md,design.md,tasks.md} phase 1.\n\nOutcome: the tree is confirmed green, the inventories are re-grounded against the actual post-#5 tree, and the pre-change function inventory is recorded so the later split can be verified one-for-one.\n\nFiles \u0026 scope: read-only investigation plus notes on internal/relay/runner/{run_one.go,route_runtime.go,relay_steps.go}. Do NOT begin any split in this lap. Do not fold unrelated fixes into this refactor.\n\nDesign (this is the change's re-grounding gate — do it carefully): (1) Confirm green: go build ./..., go vet ./..., gofmt -l . (must be empty), go test -count=1 ./internal/relay/..., go run ./tools/archguard --ci (exit 0). If red, STOP and report — do not absorb unrelated failures into this refactor. (2) Regenerate current line counts for the three files and the func inventory via grep -n \"^func\" internal/relay/runner/{run_one,route_runtime,relay_steps}.go. (3) Because #5 ran first, expect drift: note any functions #5 rehomed, renamed, or removed (watch captureRunStartWorkspaceState, setupRunBudget, printRelaySummary and the route-warning writers) and adjust the design.md per-file membership tables to match the real tree — the per-phase-file DECISIONS (Decisions 2/4/5) hold regardless of exact membership. (4) Record a name-\u003efile map of every pre-change function across the three files (append to design.md or wrapup notes) so the move can be checked one-for-one afterward.\n\nAcceptance: all baseline commands green (or a clear STOP report); design.md membership tables reconciled to the post-#5 tree; pre-change function inventory recorded. Report the drift found versus the artifacts. Do NOT tick any tasks.md boxes.",
+      "assignee": "SENIOR",
+      "isDone": false,
+      "order": 65536,
+      "createdAt": "2026-07-02T03:40:39.719409105Z",
+      "updatedAt": "2026-07-02T03:40:39.719409105Z",
+      "completedAt": null
+    },
+    {
+      "id": "rall-dbe5",
+      "title": "Split run_one.go into per-phase files (verbatim moves)",
+      "description": "Context: builds on the re-grounded inventory from the baseline lap. Follow design Decision 2 (openspec/changes/decompose-run-one/design.md) for the target layout.\n\nOutcome: run_one.go is reduced to Runner.runOne, newRunOneState, and runOneState.outcome (index + state only); every run/try phase body is moved verbatim into its own responsibility-named sibling file.\n\nFiles \u0026 scope: create run_attempt_prepare.go, run_attempt_monitor.go, run_attempt_reconcile.go, run_attempt_classify.go, run_attempt_record.go, run_attempt_cancel.go, run_retry_decide.go, run_handoff.go, run_finalize.go (use the baseline lap's re-grounded membership where it differs from the design table). Move captureRunStartWorkspaceState and setupRunBudget into run_attempt_prepare.go UNLESS the re-grounded inventory shows #5 removed/renamed them. Move small utilities (containsInt) with their only caller. Stay in package runner. Do NOT extract sub-steps in this lap — move classifyAttemptOutcome and recordAttemptOutcome verbatim for now; their extraction is the next lap.\n\nDesign: pure relocation. No signature, error-string, telemetry-field, or control-flow edits. No misc/helpers catch-all file. Every symbol keeps exactly one home.\n\nAcceptance: go build ./... and go test -count=1 ./internal/relay/... green; review the split with git diff --color-moved to confirm the moves are moves (no incidental edits). Do NOT tick tasks.md boxes.",
+      "assignee": "JUNIOR",
+      "isDone": false,
+      "order": 131072,
+      "createdAt": "2026-07-02T03:40:39.719418091Z",
+      "updatedAt": "2026-07-02T03:40:39.719418091Z",
+      "completedAt": null
+    },
+    {
+      "id": "rall-28e7",
+      "title": "Extract named sub-steps in classify and record phase bodies",
+      "description": "Context: the two deep phase bodies are the ONLY internal-structure change in this refactor. Follow design Decision 3 and the Risks section (openspec/changes/decompose-run-one/design.md).\n\nOutcome: classifyAttemptOutcome (~229 lines at baseline) and recordAttemptOutcome (~261) each delegate to named unexported, package-local helpers inside their own phase file; no single function in the package approaches the pre-change ~260-line scale.\n\nFiles \u0026 scope: run_attempt_classify.go and run_attempt_record.go only. recordCancelledAttempt (~131) may get the same treatment ONLY if a clean seam presents itself — do not force it.\n\nDesign (SENIOR judgment — this is the change's highest-risk work): extract only straight-line regions with explicit inputs/outputs. Where a region reads/writes many locals, pass the existing runOneState/attempt structs rather than inventing new ones. Preserve statement order, control flow, and early returns exactly. Error strings and telemetry fields must be BYTE-IDENTICAL. These extracted helpers are the only new functions the entire change is allowed to introduce.\n\nAcceptance: go build ./..., go test -count=1 ./internal/relay/..., and go test -race -shuffle=on -count=1 ./internal/relay/... all green; the diff shows byte-identical error and telemetry strings. Do NOT tick tasks.md boxes.",
+      "assignee": "SENIOR",
+      "isDone": false,
+      "order": 196608,
+      "createdAt": "2026-07-02T03:40:39.719420589Z",
+      "updatedAt": "2026-07-02T03:40:39.719420589Z",
+      "completedAt": null
+    },
+    {
+      "id": "rall-e3f3",
+      "title": "Verify run_one.go decomposition (phases 1-2)",
+      "description": "Use the openspec-verify-change skill against decompose-run-one, focused on phases 1 and 2 (baseline/re-grounding and the run_one.go split).\n\nBefore diffing: identify the intended merge target from the user, PR metadata, repo docs, branch config, or recent history, and use that target in git diff \u003ctarget\u003e...HEAD. Identify the first lap/try of this batch and treat earlier branch work as pre-existing unless the user asks otherwise.\n\nTrace, do not just run tests: run_one.go is now index-only (Runner.runOne + newRunOneState + runOneState.outcome); each phase lives in its named sibling file; verify the moves are verbatim via git diff --color-moved on the split commits; confirm the sub-step helpers in classify/record are the ONLY new functions and that error strings and telemetry fields are byte-identical. Confirm go build ./..., go test -count=1 ./internal/relay/..., and the race suite are green.\n\nCheck off tasks.md boxes 1.1-1.3 and 2.1-2.4, but ONLY for work verified correct and sufficiently thorough. Substantive gaps become new head laps (laps add head); fix only tiny safe one-liners inline. Do not rewrite git history.",
+      "assignee": "VERIFY",
+      "isDone": false,
+      "order": 262144,
+      "createdAt": "2026-07-02T03:40:39.719422201Z",
+      "updatedAt": "2026-07-02T03:40:39.719422201Z",
+      "completedAt": null
+    },
+    {
+      "id": "rall-c510",
+      "title": "Split route_runtime.go (verbatim moves)",
+      "description": "Context: follow design Decision 4 (openspec/changes/decompose-run-one/design.md).\n\nOutcome: route_runtime.go keeps only the routeRuntime type, its accessors (quotaScope, Warnings, applyProviders), and routeSelectionError; construction/entry-resolution, selection/wait, recovery-signal sync, and bench/probation helpers move into their own named files.\n\nFiles \u0026 scope: create route_runtime_construct.go, route_runtime_select.go, route_runtime_recovery.go, route_runtime_bench.go per Decision 4 (reconcile membership against the baseline lap's re-grounded inventory if it drifted). All moves verbatim; next (~100) and selectionWaitError (~93) stay whole — no sub-step extraction here.\n\nDesign: pure relocation, same package runner, no misc/helpers catch-all, resilience vocabulary (stall / frozen / benched) untouched.\n\nAcceptance: go test -count=1 ./internal/relay/... green; git diff --color-moved confirms the moves are moves. Do NOT tick tasks.md boxes.",
+      "assignee": "JUNIOR",
+      "isDone": false,
+      "order": 327680,
+      "createdAt": "2026-07-02T03:40:39.719423682Z",
+      "updatedAt": "2026-07-02T03:40:39.719423682Z",
+      "completedAt": null
+    },
+    {
+      "id": "rall-2242",
+      "title": "Split relay_steps.go (verbatim moves)",
+      "description": "Context: follow design Decision 5 (openspec/changes/decompose-run-one/design.md). Membership was re-grounded in the baseline lap because #5 relocates printRelaySummary rendering and the route-warning stderr writes out of this file — printRelaySummary may already be an event-emitting successor.\n\nOutcome: relay_steps.go keeps only the relay-level index (startOrResumeRelay, startRelaySpan/startRunSpan, consume*ScopedMessage); route-wait/fallback, run-progress/resilience application, and summary/tally move into their own files.\n\nFiles \u0026 scope: create relay_route_wait.go, relay_run_progress.go, relay_summary.go per Decision 5, using the baseline lap's re-grounded membership. All moves verbatim.\n\nDesign: pure relocation, same package, no misc/helpers catch-all.\n\nAcceptance: go test -count=1 ./internal/relay/... green; git diff --color-moved confirms the moves. Do NOT tick tasks.md boxes.",
+      "assignee": "JUNIOR",
+      "isDone": false,
+      "order": 393216,
+      "createdAt": "2026-07-02T03:40:39.71942527Z",
+      "updatedAt": "2026-07-02T03:40:39.71942527Z",
+      "completedAt": null
+    },
+    {
+      "id": "rall-da6c",
+      "title": "Verify route_runtime and relay_steps splits (phases 3-4)",
+      "description": "Use the openspec-verify-change skill against decompose-run-one, focused on phases 3 and 4.\n\nBefore diffing: identify the intended merge target (user/PR/repo docs/branch config/recent history) and diff against it; treat pre-batch branch work as pre-existing.\n\nTrace: route_runtime.go is reduced to the routeRuntime type, its accessors, and routeSelectionError; relay_steps.go is reduced to the relay-level start/resume, spans, and scoped-message index; all moves are verbatim (git diff --color-moved); no new functions were introduced in these two splits; the resilience vocabulary (stall/frozen/benched) is intact. Confirm go test -count=1 ./internal/relay/... green.\n\nCheck off tasks.md boxes 3.1-3.2 and 4.1-4.2 for verified-correct work only. Substantive gaps become new head laps; only tiny safe one-liners fixed inline. Do not rewrite git history.",
+      "assignee": "VERIFY",
+      "isDone": false,
+      "order": 458752,
+      "createdAt": "2026-07-02T03:40:39.71942658Z",
+      "updatedAt": "2026-07-02T03:40:39.71942658Z",
+      "completedAt": null
+    },
+    {
+      "id": "rall-0c05",
+      "title": "Regenerate the archguard grandfather baseline",
+      "description": "Context: task 5.1 and design Decision 6. Runs after all three files are split.\n\nOutcome: the grandfather map is regenerated so the internal/relay/runner/run_one.go production entry is gone and no internal/relay/runner production file needs an entry.\n\nFiles \u0026 scope: run go run ./tools/archguard --report to regenerate the grandfather baseline file (and whatever --report writes). Do NOT touch the runner _test.go grandfather entries — those are owned by #8 decompose-large-test-files.\n\nDesign: target every new production file under the 500-line warning band; hard-require under the 800-line budget. If any new internal/relay/runner production file still needs a grandfather entry, STOP and add a head lap — the split is supposed to leave all files small.\n\nAcceptance: go run ./tools/archguard --ci exits 0; runner _test.go grandfather entries unchanged; git diff of the baseline shows the run_one.go entry removed with no unexpected additions. Do NOT tick tasks.md boxes.",
+      "assignee": "JUNIOR",
+      "isDone": false,
+      "order": 524288,
+      "createdAt": "2026-07-02T03:40:39.719427881Z",
+      "updatedAt": "2026-07-02T03:40:39.719427881Z",
+      "completedAt": null
+    },
+    {
+      "id": "rall-a03b",
+      "title": "Full-change verification and record final file list for #8",
+      "description": "Final full-change verification. Use the openspec-verify-change skill against decompose-run-one and inspect the whole diff. Identify the intended merge target (user/PR/repo docs/branch config/recent history) and diff against it; identify the first lap of this batch and treat earlier branch work as pre-existing unless the user asks otherwise.\n\nRun every check and trace the load-bearing lines:\n- Function inventory (task 5.2): every pre-change function recorded in the baseline lap's inventory appears EXACTLY ONCE across the new files; the ONLY new functions are the sub-step helpers extracted from classifyAttemptOutcome/recordAttemptOutcome.\n- Archguard ratchet (task 5.1): confirm the internal/relay/runner/run_one.go production entry is gone, no runner production file needs a grandfather entry, runner _test.go entries are unchanged, and go run ./tools/archguard --ci exits 0.\n- Full verification (task 5.3): go test -count=1 ./..., go test -race -shuffle=on -count=1 ./internal/relay/..., go vet ./..., gofmt -l . (empty), go run ./tools/archguard --ci (exit 0), just check green.\n- Behaviour preservation (task 5.4): no CLI-output, telemetry-field, store-shape, laps-semantic, or error-string diff; exported runner/relay API unchanged; internal/buildinfo/VERSION untouched.\n- Record final file list (task 5.5): record the final production file list of internal/relay/runner in this change (append to design.md or wrapup notes) so #8 decompose-large-test-files can mirror the test split one-for-one.\n\nCheck off all remaining tasks.md boxes (5.1-5.5 and anything not yet ticked) for verified-correct work only. Substantive gaps become new head laps; fix only tiny safe one-liners inline. Do not rewrite git history.",
+      "assignee": "VERIFY",
+      "isDone": false,
+      "order": 589824,
+      "createdAt": "2026-07-02T03:40:39.719429177Z",
+      "updatedAt": "2026-07-02T03:40:39.719429177Z",
+      "completedAt": null
+    }
+  ]
+}
