@@ -160,11 +160,11 @@
       "title": "VERIFY phase 5: ControlSource cut-over, cancellation + raw-mode parity",
       "description": "Context: Verification gate immediately after the high-risk control cut-over (phase 5). Change #5 separate-runtime-presentation-boundary.\n\nOutcome: Confirmation that operator-control semantics, cancellation timing, and raw-mode lifecycle are unchanged and the runner no longer touches keyboard/stdin, with tasks.md phase-5 boxes checked only where verified.\n\nScope \u0026 method: Use openspec-verify-change against separate-runtime-presentation-boundary, focused on phase 5. Identify the merge target (operator/PR/repo docs/branch/history; not assumed main), diff \u003ctarget\u003e...HEAD, treat pre-batch work as pre-existing, no history rewriting. Trace real evidence: runActionLoop select structure / drain / second-quit force-kill / late-PID targeting UNCHANGED except press element type; monitor arm/act text sourced from runtimeevent helpers; terminal.Controls per-phase Start/Stop mirrors the two former keyboard instances with no leaked readers; WaitResume reproduces the leave-raw-then-read-Enter pause sequence; runner has no internal/keyboard import and no os.Stdin read; app OS-signal Ctrl+C path untouched. Verify shortcut semantics hands-on if feasible (arm/confirm 4s window, skip/pause/stop/quit, second-quit force-kill during drain, pause Enter-resume).\n\nAcceptance: go test -race -shuffle=on -count=1 ./internal/relay/... ./internal/presentation/... green. Tick tasks.md 5.1-5.4 only where verified. Substantive gaps -\u003e focused head lap on the staging file, not inline rework.",
       "assignee": "VERIFY",
-      "isDone": false,
+      "isDone": true,
       "order": 983040,
       "createdAt": "2026-07-02T11:28:44.895318217Z",
-      "updatedAt": "2026-07-02T11:28:44.895318217Z",
-      "completedAt": null
+      "updatedAt": "2026-07-02T18:40:12.484915781Z",
+      "completedAt": "2026-07-02T18:40:12.484915781Z"
     },
     {
       "id": "rall-62e4",
