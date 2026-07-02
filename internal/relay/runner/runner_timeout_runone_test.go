@@ -164,7 +164,6 @@ func newTimeoutTestRunner(t *testing.T, exec harnessapi.Executor, cfg Config) (*
 		cfg.Resolver = cheapTestResolver
 	}
 	r := NewRunner(s, cfg, map[string]harnessapi.Executor{"opencode": exec})
-	r.out = io.Discard
 	return r, s, workspaceDir
 }
 

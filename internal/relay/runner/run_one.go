@@ -20,7 +20,6 @@ import (
 	"github.com/mitchell-wallace/rally/internal/relay/runner/runtimeevent"
 	"github.com/mitchell-wallace/rally/internal/reliability"
 	"github.com/mitchell-wallace/rally/internal/store"
-	"github.com/mitchell-wallace/rally/internal/style"
 	"github.com/mitchell-wallace/rally/internal/telemetry"
 )
 
@@ -412,7 +411,7 @@ func (r *Runner) prepareRunAttempt(ctx context.Context, relay *store.RelayRecord
 		if !task.IsLapsBacked && relay.CompletedIterations < relay.TargetIterations {
 			displayRunIndex = relay.CompletedIterations
 		}
-		headerOpts := style.HeaderOptions{
+		header := runtimeevent.RunHeaderReady{
 			RunIndex:     displayRunIndex,
 			TotalRuns:    relay.TargetIterations,
 			AgentName:    picked.Harness,
@@ -425,8 +424,7 @@ func (r *Runner) prepareRunAttempt(ctx context.Context, relay *store.RelayRecord
 			Model:        picked.Model,
 			RoleLabel:    task.Assignee,
 		}
-		fmt.Fprintln(r.outWriter(), style.RenderHeader(headerOpts))
-		r.eventSink().Emit(ctx, headerData(headerOpts))
+		r.eventSink().Emit(ctx, header)
 	}
 
 	if err := progress.SetActiveTry(r.cfg.WorkspaceDir, progress.ActiveTryMetadata{
@@ -478,11 +476,9 @@ func (r *Runner) runMonitoredAttempt(ctx context.Context, relay *store.RelayReco
 	// line a prior failing attempt parked here (see renderRunFooter).
 	cursorUp := 1
 	if strings.TrimSpace(initialStatus) != "" {
-		fmt.Printf("\r\x1b[2K%s\n", initialStatus)
 		r.eventSink().Emit(ctx, runtimeevent.TryStatusSnapshot{Status: initialStatus})
 		cursorUp = 2
 	}
-	fmt.Printf("\r\x1b[2K%s\n", style.ShortcutHint())
 	r.eventSink().Emit(ctx, runtimeevent.ShortcutHintReady{Width: 0})
 	mon.SetCursorUpLines(cursorUp)
 	mon.Start(os.Stdout)
@@ -694,7 +690,7 @@ func (r *Runner) recordCancelledAttempt(relay *store.RelayRecord, runIndex int, 
 	// Render a terminal footer for the cancelled attempt. The persisted
 	// outcome/source below are the source of truth; the style layer owns
 	// the muted cancelled presentation.
-	cancelledFooter := style.FooterOptions{
+	cancelledFooter := runtimeevent.FooterData{
 		Cancelled:          true,
 		Duration:           attempt.runRuntime,
 		FilesChanged:       attempt.filesChangedCount,
@@ -706,8 +702,7 @@ func (r *Runner) recordCancelledAttempt(relay *store.RelayRecord, runIndex int, 
 		Attempt:            attempt.attempt,
 		MaxAttempts:        state.maxAttempts,
 	}
-	renderRunFooter(r.outWriter(), cancelledFooter)
-	r.eventSink().Emit(context.Background(), runtimeevent.AttemptCancelled{FooterData: footerData(cancelledFooter)})
+	r.eventSink().Emit(context.Background(), runtimeevent.AttemptCancelled{FooterData: cancelledFooter})
 
 	tryRecord := store.TryRecord{
 		ID:                     attempt.tryID,
@@ -976,7 +971,6 @@ func (r *Runner) classifyAttemptOutcome(relay *store.RelayRecord, runIndex int, 
 				}
 				if cooldown > 0 {
 					r.eventSink().Emit(context.Background(), runtimeevent.RateLimitWaitStarted{Wait: cooldown})
-					fmt.Println(style.DimStyle.Render(fmt.Sprintf("waiting %v for rate limit...", cooldown)))
 					if r.sleepFunc != nil {
 						r.sleepFunc(cooldown)
 					} else {
@@ -1046,7 +1040,7 @@ func (r *Runner) recordAttemptOutcome(relay *store.RelayRecord, runIndex int, pi
 	if !willRetry {
 		footerDuration = attempt.runRuntime
 	}
-	outcomeFooter := style.FooterOptions{
+	outcomeFooter := runtimeevent.FooterData{
 		Passed:       !attempt.failed,
 		Duration:     footerDuration,
 		FilesChanged: attempt.filesChangedCount,
@@ -1057,7 +1051,6 @@ func (r *Runner) recordAttemptOutcome(relay *store.RelayRecord, runIndex int, pi
 		Attempt:      attempt.attempt,
 		MaxAttempts:  state.maxAttempts,
 	}
-	renderRunFooter(r.outWriter(), outcomeFooter)
 	r.emitAttemptFooter(context.Background(), outcomeFooter)
 
 	tryRecord := store.TryRecord{
@@ -1304,7 +1297,6 @@ func (r *Runner) decideRetryOrComplete(task runTask, state *runOneState, attempt
 			return runOneAttemptDecision{action: runOneAttemptReturn, outcome: state.outcome(task, false, false, false)}
 		}
 		pausePrompt := "Paused — press Enter to resume"
-		fmt.Println(pausePrompt)
 		r.eventSink().Emit(context.Background(), runtimeevent.PausePromptShown{Message: pausePrompt})
 		bufio.NewReader(os.Stdin).ReadString('\n')
 		if attempt.result != nil {

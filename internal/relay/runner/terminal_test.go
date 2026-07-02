@@ -13,9 +13,9 @@ import (
 
 	"github.com/mitchell-wallace/rally/internal/harnessapi"
 	"github.com/mitchell-wallace/rally/internal/keyboard"
+	presentationterminal "github.com/mitchell-wallace/rally/internal/presentation/terminal"
 	"github.com/mitchell-wallace/rally/internal/relay/runner/runtimeevent"
 	"github.com/mitchell-wallace/rally/internal/store"
-	"github.com/mitchell-wallace/rally/internal/style"
 )
 
 func TestFormatRemaining(t *testing.T) {
@@ -77,7 +77,7 @@ func TestWaitLoopSkipOnAction(t *testing.T) {
 	actionCh := make(chan keyboard.Press, 1)
 	actionCh <- keyboard.Press{Action: keyboard.ActionSkip, Confirmed: true}
 	start := time.Now()
-	outcome := waitLoop(context.Background(), runtimeevent.NoopSink{}, 10*time.Second, "test %s", actionCh, io.Discard, 50*time.Millisecond)
+	outcome := waitLoop(context.Background(), runtimeevent.NoopSink{}, 10*time.Second, "test %s", actionCh, 50*time.Millisecond)
 	elapsed := time.Since(start)
 	if outcome != waitSkipped {
 		t.Errorf("outcome = %v, want waitSkipped", outcome)
@@ -90,7 +90,7 @@ func TestWaitLoopSkipOnAction(t *testing.T) {
 func TestWaitLoopStopOnQuit(t *testing.T) {
 	actionCh := make(chan keyboard.Press, 1)
 	actionCh <- keyboard.Press{Action: keyboard.ActionQuit, Confirmed: true}
-	outcome := waitLoop(context.Background(), runtimeevent.NoopSink{}, 10*time.Second, "test %s", actionCh, io.Discard, 50*time.Millisecond)
+	outcome := waitLoop(context.Background(), runtimeevent.NoopSink{}, 10*time.Second, "test %s", actionCh, 50*time.Millisecond)
 	if outcome != waitStopped {
 		t.Errorf("outcome = %v, want waitStopped", outcome)
 	}
@@ -99,7 +99,7 @@ func TestWaitLoopStopOnQuit(t *testing.T) {
 func TestWaitLoopElapses(t *testing.T) {
 	actionCh := make(chan keyboard.Press)
 	start := time.Now()
-	outcome := waitLoop(context.Background(), runtimeevent.NoopSink{}, 200*time.Millisecond, "test %s", actionCh, io.Discard, 30*time.Millisecond)
+	outcome := waitLoop(context.Background(), runtimeevent.NoopSink{}, 200*time.Millisecond, "test %s", actionCh, 30*time.Millisecond)
 	elapsed := time.Since(start)
 	if outcome != waitElapsed {
 		t.Errorf("outcome = %v, want waitElapsed", outcome)
@@ -112,14 +112,18 @@ func TestWaitLoopElapses(t *testing.T) {
 func TestWaitLoopRendersHintAndCountdown(t *testing.T) {
 	actionCh := make(chan keyboard.Press, 1)
 	actionCh <- keyboard.Press{Action: keyboard.ActionSkip, Confirmed: true}
-	var buf bytes.Buffer
-	_ = waitLoop(context.Background(), runtimeevent.NoopSink{}, 5*time.Second, "agents frozen, waiting %s...", actionCh, &buf, 50*time.Millisecond)
-	got := buf.String()
-	if !strings.Contains(got, "agents frozen, waiting 5s...") {
-		t.Errorf("output missing countdown line: %q", got)
+	rec := runtimeevent.NewRecordingSink()
+	_ = waitLoop(context.Background(), rec, 5*time.Second, "agents frozen, waiting %s...", actionCh, 50*time.Millisecond)
+	events := rec.Events()
+	if len(events) == 0 {
+		t.Fatal("wait loop emitted no events")
 	}
-	if !strings.Contains(got, "Ctrl+S skip") {
-		t.Errorf("output missing shortcut hint: %q", got)
+	start, ok := events[0].(runtimeevent.WaitStarted)
+	if !ok {
+		t.Fatalf("first event = %T, want WaitStarted", events[0])
+	}
+	if start.Message != "agents frozen, waiting 5s..." {
+		t.Errorf("countdown message = %q", start.Message)
 	}
 }
 
@@ -130,31 +134,19 @@ func TestWaitLoopArmedPressShowsHint(t *testing.T) {
 	// Arm a quit, then confirm a skip so the loop ends deterministically.
 	actionCh <- keyboard.Press{Action: keyboard.ActionQuit, Confirmed: false}
 	actionCh <- keyboard.Press{Action: keyboard.ActionSkip, Confirmed: true}
-	var buf bytes.Buffer
-	outcome := waitLoop(context.Background(), runtimeevent.NoopSink{}, 5*time.Second, "agents paused, waiting %s...", actionCh, &buf, 50*time.Millisecond)
+	rec := runtimeevent.NewRecordingSink()
+	outcome := waitLoop(context.Background(), rec, 5*time.Second, "agents paused, waiting %s...", actionCh, 50*time.Millisecond)
 	if outcome != waitSkipped {
 		t.Errorf("outcome = %v, want waitSkipped", outcome)
 	}
-	got := buf.String()
-	if !strings.Contains(got, "press Ctrl+C again to quit now") {
-		t.Errorf("armed press did not render the press-again hint: %q", got)
+	found := false
+	for _, event := range rec.Events() {
+		if tick, ok := event.(runtimeevent.WaitTick); ok && tick.Hint == "press Ctrl+C again to quit now" {
+			found = true
+		}
 	}
-}
-
-// TestWaitLoopRendersOnNewLineSafely pins the raw-mode fix: the two rendered
-// lines are separated by a carriage-return + line-feed, not a bare line feed
-// (which stair-stepped the hint onto fresh lines in raw mode).
-func TestWaitLoopRendersOnNewLineSafely(t *testing.T) {
-	actionCh := make(chan keyboard.Press, 1)
-	actionCh <- keyboard.Press{Action: keyboard.ActionSkip, Confirmed: true}
-	var buf bytes.Buffer
-	_ = waitLoop(context.Background(), runtimeevent.NoopSink{}, 5*time.Second, "agents paused, waiting %s...", actionCh, &buf, 50*time.Millisecond)
-	got := buf.String()
-	if strings.Contains(got, "...\n") && !strings.Contains(got, "...\r\n") {
-		t.Errorf("countdown line followed by bare LF (raw-mode unsafe): %q", got)
-	}
-	if !strings.Contains(got, "\r\n") {
-		t.Errorf("expected a CR+LF between countdown and hint, got %q", got)
+	if !found {
+		t.Errorf("armed press did not emit the press-again hint: %v", rec.Events())
 	}
 }
 
@@ -173,51 +165,6 @@ func TestWaitWithCountdownElapses(t *testing.T) {
 	}
 	if outcome != waitElapsed {
 		t.Errorf("outcome = %v, want waitElapsed", outcome)
-	}
-}
-
-func TestRenderRunFooterInterimRedrawsInPlace(t *testing.T) {
-	var buf bytes.Buffer
-	renderRunFooter(&buf, style.FooterOptions{
-		Passed:      false,
-		Interim:     true,
-		Duration:    12 * time.Second,
-		FailReason:  "agent error",
-		Attempt:     2,
-		MaxAttempts: 5,
-	})
-	got := buf.String()
-	// Interim lines clear the current line and park the cursor at column 0 with
-	// no committed newline, so the next attempt's status line overwrites them.
-	if !strings.HasPrefix(got, "\r\x1b[2K") {
-		t.Errorf("interim footer should begin with a clear-line sequence, got: %q", got)
-	}
-	if !strings.HasSuffix(got, "\r") {
-		t.Errorf("interim footer should park the cursor at the line start, got: %q", got)
-	}
-	if strings.Contains(got, "\n") {
-		t.Errorf("interim footer must not commit a newline, got: %q", got)
-	}
-	if !strings.Contains(stripFooterAnsi(got), "↻ retrying 2/5") {
-		t.Errorf("interim footer missing retry text, got: %q", got)
-	}
-}
-
-func TestRenderRunFooterTerminalCommits(t *testing.T) {
-	var buf bytes.Buffer
-	renderRunFooter(&buf, style.FooterOptions{
-		Passed:      false,
-		Duration:    12 * time.Second,
-		FailReason:  "agent error",
-		Attempt:     5,
-		MaxAttempts: 5,
-	})
-	got := buf.String()
-	if !strings.HasSuffix(got, "\n") {
-		t.Errorf("terminal footer should commit with a trailing newline, got: %q", got)
-	}
-	if !strings.Contains(stripFooterAnsi(got), "failed after 5 tries") {
-		t.Errorf("terminal footer missing outcome text, got: %q", got)
 	}
 }
 
@@ -245,8 +192,8 @@ func TestRunFooterCadenceExhausted(t *testing.T) {
 		AgentMixSpecs:    []string{"cc:1"},
 		TargetIterations: 1,
 		RetryBudget:      5,
+		EventSink:        presentationterminal.NewSink(&buf, io.Discard),
 	}, executors)
-	r.out = &buf
 
 	if err := r.Run(context.Background()); err != nil {
 		if !strings.Contains(err.Error(), "all agents unavailable") {
@@ -302,8 +249,8 @@ func TestRunFooterCadenceRecovery(t *testing.T) {
 		AgentMixSpecs:    []string{"cc:1"},
 		TargetIterations: 1,
 		RetryBudget:      5,
+		EventSink:        presentationterminal.NewSink(&buf, io.Discard),
 	}, executors)
-	r.out = &buf
 
 	if err := r.Run(context.Background()); err != nil {
 		t.Fatalf("run failed: %v", err)
@@ -356,8 +303,8 @@ func TestRunHeaderDoesNotExceedTargetAfterFailedRun(t *testing.T) {
 		TargetIterations: 2,
 		RetryBudget:      1,
 		Resolver:         cheapTestResolver,
+		EventSink:        presentationterminal.NewSink(&buf, io.Discard),
 	}, executors)
-	r.out = &buf
 
 	if err := r.Run(context.Background()); err != nil {
 		t.Fatalf("run failed: %v", err)
@@ -398,8 +345,8 @@ func TestRunFooterSingleAttemptColoursImmediately(t *testing.T) {
 		AgentMixSpecs:    []string{"cc:1"},
 		TargetIterations: 1,
 		RetryBudget:      1,
+		EventSink:        presentationterminal.NewSink(&buf, io.Discard),
 	}, executors)
-	r.out = &buf
 
 	if err := r.Run(context.Background()); err != nil {
 		if !strings.Contains(err.Error(), "all agents unavailable") {

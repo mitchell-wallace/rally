@@ -61,7 +61,6 @@ func (r *Runner) resolveInstructions() string {
 	if err != nil {
 		if !r.lapsWarned {
 			msg := fmt.Sprintf("warning: laps instructions file %q not readable: %v; using default", r.cfg.LapsInstructionsFile, err)
-			fmt.Fprintln(os.Stderr, msg)
 			r.eventSink().Emit(context.Background(), runtimeevent.TaskFileWarning{Message: msg})
 			r.lapsWarned = true
 		}
@@ -80,7 +79,6 @@ func (r *Runner) loadFreeRunPrompt() string {
 		if err != nil {
 			if !r.freeRunWarned {
 				msg := fmt.Sprintf("warning: free-run prompt file %q not readable: %v; using built-in default", r.cfg.FreeRunPromptFile, err)
-				fmt.Fprintln(os.Stderr, msg)
 				r.eventSink().Emit(context.Background(), runtimeevent.TaskFileWarning{Message: msg})
 				r.freeRunWarned = true
 			}

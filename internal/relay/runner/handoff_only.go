@@ -16,7 +16,6 @@ import (
 	"github.com/mitchell-wallace/rally/internal/relay/runner/runtimeevent"
 	"github.com/mitchell-wallace/rally/internal/reliability"
 	"github.com/mitchell-wallace/rally/internal/store"
-	"github.com/mitchell-wallace/rally/internal/style"
 	"github.com/mitchell-wallace/rally/internal/telemetry"
 )
 
@@ -215,15 +214,14 @@ func (r *Runner) runBoundedHandoffOnly(
 	}
 
 	runtime := endedAt.Sub(startedAt)
-	footerOpts := style.FooterOptions{
+	footer := runtimeevent.FooterData{
 		Passed:      succeeded,
 		Duration:    runtime,
 		FailReason:  failReason,
 		Attempt:     attemptNumber,
 		MaxAttempts: maxAttempts,
 	}
-	renderRunFooter(r.outWriter(), footerOpts)
-	r.eventSink().Emit(ctx, runtimeevent.HandoffAttemptFinished{FooterData: footerData(footerOpts)})
+	r.eventSink().Emit(ctx, runtimeevent.HandoffAttemptFinished{FooterData: footer})
 
 	tryRecord := store.TryRecord{
 		ID:                     tryID,

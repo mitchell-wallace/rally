@@ -23,11 +23,8 @@ import (
 // presentation adapter subscribes to: Config.EventSink (relay/run paths) and the
 // waitLoop/runActionLoop cores that the runner calls inline at its print sites.
 
-// suppressStdout redirects os.Stdout to devnull for the test's lifetime. The
-// runner emits ALONGSIDE its existing prints (phase 3.2), and several print
-// sites write straight to os.Stdout (the rate-limit line, raw-mode countdown);
-// silencing them keeps the test log readable while the recording sink captures
-// the events under test.
+// suppressStdout redirects the monitor residual to devnull for the test's
+// lifetime. The recording sink captures the events under test.
 func suppressStdout(t *testing.T) {
 	t.Helper()
 	devnull, err := os.OpenFile(os.DevNull, os.O_WRONLY, 0)
@@ -79,8 +76,8 @@ func assertWaitCountdownOrder(t *testing.T, rec *runtimeevent.RecordingSink) {
 }
 
 // orderTestWorkspace builds an initialised git workspace + store pair for a
-// relay-level order test, suppressing stdout and returning a runner wired to rec
-// whose console writer is discarded (events are asserted via rec, not bytes).
+// relay-level order test, suppressing stdout. Events are asserted via the
+// recording sink, not terminal bytes.
 func orderTestWorkspace(t *testing.T) (workspaceDir string, s *store.Store) {
 	t.Helper()
 	suppressStdout(t)
@@ -117,7 +114,6 @@ func TestEventOrderSimpleSuccess(t *testing.T) {
 		TargetIterations: 1,
 		EventSink:        rec,
 	}, map[string]harnessapi.Executor{"claude": exec})
-	r.out = io.Discard
 
 	if err := r.Run(context.Background()); err != nil {
 		t.Fatalf("Run: %v", err)
@@ -155,7 +151,6 @@ func TestEventOrderRetryThenFail(t *testing.T) {
 		RetryBudget:      3,
 		EventSink:        rec,
 	}, map[string]harnessapi.Executor{"claude": exec})
-	r.out = io.Discard
 
 	_ = r.Run(context.Background())
 
@@ -208,7 +203,6 @@ func TestEventOrderRateLimitWait(t *testing.T) {
 		Resolver:         testResolver,
 		EventSink:        rec,
 	}, map[string]harnessapi.Executor{"claude": exec})
-	r.out = io.Discard
 	r.sleepFunc = func(time.Duration) {} // stub the cooldown sleep so the retry is immediate
 
 	if err := r.Run(context.Background()); err != nil {
@@ -266,7 +260,6 @@ func TestEventOrderStallRecovery(t *testing.T) {
 		RetryBudget:      1,
 		EventSink:        rec,
 	}, map[string]harnessapi.Executor{"claude": exec})
-	r.out = io.Discard
 
 	controllerCount := 0
 	r.stallControllerFactory = func(string) reliability.StallController {
@@ -320,7 +313,7 @@ func TestEventOrderStallRecovery(t *testing.T) {
 func TestEventOrderAllPausedWait(t *testing.T) {
 	rec := runtimeevent.NewRecordingSink()
 	actionCh := make(chan keyboard.Press) // no operator input: wait runs to elapsed
-	outcome := waitLoop(context.Background(), rec, 600*time.Millisecond, "agents paused, waiting %s...", actionCh, io.Discard, 100*time.Millisecond)
+	outcome := waitLoop(context.Background(), rec, 600*time.Millisecond, "agents paused, waiting %s...", actionCh, 100*time.Millisecond)
 	if outcome != waitElapsed {
 		t.Fatalf("outcome = %v, want waitElapsed", outcome)
 	}
@@ -343,7 +336,7 @@ func TestEventOrderOperatorCancellation(t *testing.T) {
 		actionCh <- keyboard.Press{Action: keyboard.ActionSkip, Confirmed: true}
 		// A large tick interval guarantees no ticker frame interleaves with the
 		// buffered action, so the order is exactly start → finish.
-		outcome := waitLoop(context.Background(), rec, 5*time.Second, "agents paused, waiting %s...", actionCh, io.Discard, time.Second)
+		outcome := waitLoop(context.Background(), rec, 5*time.Second, "agents paused, waiting %s...", actionCh, time.Second)
 		if outcome != waitSkipped {
 			t.Fatalf("outcome = %v, want waitSkipped", outcome)
 		}
@@ -360,7 +353,7 @@ func TestEventOrderOperatorCancellation(t *testing.T) {
 		// since the hint line changes); the confirmed press clears (WaitFinished).
 		actionCh <- keyboard.Press{Action: keyboard.ActionQuit, Confirmed: false}
 		actionCh <- keyboard.Press{Action: keyboard.ActionQuit, Confirmed: true}
-		outcome := waitLoop(context.Background(), rec, 5*time.Second, "agents paused, waiting %s...", actionCh, io.Discard, time.Second)
+		outcome := waitLoop(context.Background(), rec, 5*time.Second, "agents paused, waiting %s...", actionCh, time.Second)
 		if outcome != waitStopped {
 			t.Fatalf("outcome = %v, want waitStopped", outcome)
 		}

@@ -5,14 +5,12 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"os"
 	"time"
 
 	relaycore "github.com/mitchell-wallace/rally/internal/relay"
 	"github.com/mitchell-wallace/rally/internal/relay/runner/runtimeevent"
 	"github.com/mitchell-wallace/rally/internal/reliability"
 	"github.com/mitchell-wallace/rally/internal/store"
-	"github.com/mitchell-wallace/rally/internal/style"
 	"github.com/mitchell-wallace/rally/internal/telemetry"
 )
 
@@ -56,7 +54,6 @@ func (r *Runner) startOrResumeRelay() (*store.RelayRecord, *routeRuntime, io.Wri
 	routeRuntime.store = r.store
 
 	for _, w := range routeRuntime.Warnings() {
-		fmt.Fprintln(os.Stderr, w)
 		r.eventSink().Emit(context.Background(), runtimeevent.RouteWarning{Message: w})
 	}
 
@@ -177,7 +174,6 @@ func (r *Runner) selectRouteOrWait(
 		return runTask{}, routeSelection{}, false, false, err
 	}
 	if selection.Route.Warning != "" {
-		fmt.Fprintln(os.Stderr, selection.Route.Warning)
 		fmt.Fprintln(log, selection.Route.Warning)
 		r.eventSink().Emit(ctx, runtimeevent.RouteWarning{Message: selection.Route.Warning})
 	}
@@ -488,8 +484,6 @@ func (r *Runner) printRelaySummary(relay *store.RelayRecord) {
 	totalRuns := passCount + failCount + cancelledCount
 	totalDuration := time.Since(r.relayStart)
 	if totalRuns > 0 {
-		summary := style.RenderSummary(totalRuns, passCount, failCount, totalDuration, cancelledCount)
-		fmt.Println(summary)
 		r.eventSink().Emit(context.Background(), runtimeevent.RelaySummaryReady{
 			TotalRuns:     totalRuns,
 			Passed:        passCount,

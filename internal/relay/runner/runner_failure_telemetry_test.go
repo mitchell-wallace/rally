@@ -1634,7 +1634,6 @@ func newBudgetKillRunner(t *testing.T, s *store.Store, workspaceDir string, sink
 	}
 	r := NewRunner(s, cfg, map[string]harnessapi.Executor{"opencode": exec})
 	r.SetTelemetry(sink)
-	r.out = io.Discard
 	return r
 }
 
@@ -1660,7 +1659,6 @@ func successfulFileChangingExecutor(t *testing.T, workspaceDir string) harnessap
 func TestRunOne_AppendTryFailureDoesNotEmitRallyTry(t *testing.T) {
 	s, workspaceDir, sink := setupRunnerForFailureTest(t)
 	r := makeRunner(t, s, workspaceDir, sink, successfulFileChangingExecutor(t, workspaceDir), 1)
-	r.out = io.Discard
 	blockTryPersistence(t, workspaceDir)
 
 	_, err := r.runOne(
@@ -1685,7 +1683,6 @@ func TestRunOne_AppendTryFailureDoesNotEmitRallyTry(t *testing.T) {
 func TestRunOne_PersistedTryEmitsExactlyOneRallyTry(t *testing.T) {
 	s, workspaceDir, sink := setupRunnerForFailureTest(t)
 	r := makeRunner(t, s, workspaceDir, sink, successfulFileChangingExecutor(t, workspaceDir), 1)
-	r.out = io.Discard
 
 	res, err := r.runOne(
 		context.Background(),
@@ -1720,7 +1717,6 @@ func TestRunBoundedHandoffOnly_AppendTryFailureDoesNotEmitRallyTry(t *testing.T)
 			return &harnessapi.TryResult{Completed: false, Summary: "handoff not completed"}, nil
 		},
 	}, 1)
-	r.out = io.Discard
 	blockTryPersistence(t, workspaceDir)
 	relay := &store.RelayRecord{ID: 1, TargetIterations: 1}
 
@@ -1758,7 +1754,6 @@ func TestRunBoundedHandoffOnly_PersistedTryEmitsExactlyOneRallyTry(t *testing.T)
 			return &harnessapi.TryResult{Completed: false, Summary: "handoff not completed"}, nil
 		},
 	}, 1)
-	r.out = io.Discard
 	relay := &store.RelayRecord{ID: 1, TargetIterations: 1}
 
 	outcome, _, succeeded, _, err := r.runBoundedHandoffOnly(

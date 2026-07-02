@@ -10,8 +10,7 @@ import (
 )
 
 // Sink renders runtime events to terminal writers using the CLI's existing
-// byte format. It is additive during the parallel-emit phase: runner inline
-// prints still run until the output cut-over lap removes them.
+// byte format.
 type Sink struct {
 	out io.Writer
 	err io.Writer

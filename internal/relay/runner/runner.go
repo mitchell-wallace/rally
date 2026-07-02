@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"os"
 	"sync/atomic"
 	"time"
 
@@ -101,11 +100,6 @@ type Runner struct {
 	// process group.
 	forceKillFunc func(pgid int) error
 
-	// out is the console writer for run headers and outcome footers. Defaults
-	// to os.Stdout via outWriter; tests inject a buffer to assert on footer
-	// cadence and colouring.
-	out io.Writer
-
 	telemetry telemetry.Sink
 }
 
@@ -119,15 +113,6 @@ func (r *Runner) newBoundTimer(d time.Duration) (<-chan time.Time, func() bool) 
 	}
 	t := time.NewTimer(d)
 	return t.C, t.Stop
-}
-
-// outWriter returns the console writer for headers/footers, defaulting to
-// os.Stdout so call sites never need a nil check.
-func (r *Runner) outWriter() io.Writer {
-	if r.out == nil {
-		return os.Stdout
-	}
-	return r.out
 }
 
 // SetTelemetry wires a telemetry sink into the runner. When unset, telemetry

@@ -94,11 +94,11 @@
       "title": "Cut over runner prints to the sink; remove internal/style from runner",
       "description": "Context: Phase 4 (tasks.md 4.3), design Decision 5 and the byte-parity + footer-parking risks. This is THE output-correctness lap.\n\nOutcome: Print-site-by-print-site, each runner inline print is deleted once the terminal sink renders its event. At the end: zero direct operator-facing fmt.Print*/Fprint* writes to os.Stdout/os.Stderr in runner production code (the single permitted direct-stream residual is the monitor's mon.Start(os.Stdout), Decision 8), and the internal/style import is removed from ALL runner files. Runner.out/outWriter() seam is subsumed by the sink.\n\nFiles \u0026 scope: internal/relay/runner/*.go (run_one.go, relay_steps.go, terminal.go, handoff_only.go, task.go). Do not touch keyboard/ControlSource here (phase 5). Do not route the monitor status line through events (Decision 8 residual stays).\n\nDesign: Preserve the EXACT call order of each render relative to mon.Stop() and monitor renders -- the footer-parking / cursor-reservation interleaving is the most fragile contract in this area; reordering breaks it. Delete one print at a time and keep the tree buildable. Byte output must stay identical to pre-change for the same flows.\n\nAcceptance: go build ./... green; go test -count=1 ./internal/relay/... ./internal/presentation/... ./internal/app ./cmd/rally green; grep confirms no runner-side os.Stdout/os.Stderr operator prints remain (except mon.Start(os.Stdout)) and no internal/style import in runner files. Byte-parity is fully asserted by the test-relocation lap next.",
       "assignee": "SENIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 589824,
       "createdAt": "2026-07-02T11:28:44.895308642Z",
-      "updatedAt": "2026-07-02T11:28:44.895308642Z",
-      "completedAt": null
+      "updatedAt": "2026-07-02T17:11:33.576358181Z",
+      "completedAt": "2026-07-02T17:11:33.576358181Z"
     },
     {
       "id": "rall-7abd",

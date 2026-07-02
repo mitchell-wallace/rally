@@ -3,7 +3,6 @@ package runner
 import (
 	"context"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"testing"
@@ -51,7 +50,6 @@ func TestRunWritesActiveTryMetadataBeforeExecutor(t *testing.T) {
 		AgentMixSpecs:    []string{"cc:1"},
 		TargetIterations: 1,
 	}, map[string]harnessapi.Executor{"claude": exec})
-	r.out = io.Discard
 
 	if err := r.Run(context.Background()); err != nil {
 		t.Fatalf("run failed: %v", err)
