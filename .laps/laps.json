@@ -105,11 +105,11 @@
       "title": "Relocate byte-level output tests to terminal package; smoke a relay",
       "description": "Context: Phase 4 (tasks.md 4.4-4.5), design Risk 1 (byte-parity held by relocating existing byte-level tests before/at cut-over).\n\nOutcome: The byte-level output tests move to internal/presentation/terminal with expected bytes preserved: terminal_test.go wait-loop/footer cases, plus footer-cadence tests from run_one/runner_* suites that assert on r.out bytes. Where run-flow coverage must stay in-package (runner-side), replace the byte assertions with recording-sink event assertions rather than deleting coverage. A manual smoke of one relay run confirms header/status/footer/summary render identically, including an interrupted (Ctrl+C-armed) run.\n\nFiles \u0026 scope: internal/presentation/terminal/*_test.go (relocated byte tests); internal/relay/runner/*_test.go (byte assertions swapped to recording-sink assertions where flow coverage stays). Preserve the exact expected-byte strings when relocating.\n\nDesign: These relocated tests ARE the byte-parity gate -- do not soften expected bytes to make them pass; if they fail, the fix belongs in the sink rendering, not the test. Judge case-by-case which tests move wholesale vs which convert to recording-sink assertions.\n\nAcceptance: go test -count=1 ./internal/relay/... ./internal/presentation/... ./internal/app ./cmd/rally green; test-driving-rally-style manual smoke shows byte-identical header/status/footer/summary and a clean armed-Ctrl+C interrupted run. Report the smoke observations.",
       "assignee": "SENIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 655360,
       "createdAt": "2026-07-02T11:28:44.895310929Z",
-      "updatedAt": "2026-07-02T11:28:44.895310929Z",
-      "completedAt": null
+      "updatedAt": "2026-07-02T17:27:09.959972098Z",
+      "completedAt": "2026-07-02T17:27:09.959972098Z"
     },
     {
       "id": "rall-de45",
