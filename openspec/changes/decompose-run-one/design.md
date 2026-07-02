@@ -287,7 +287,7 @@ Reference: post-#5 `internal/relay/runner` production files (for tasks 5.5 / #8)
 
 ### Final post-change production file list (task 5.5)
 
-`internal/relay/runner` production files after this change (32 total; 
+`internal/relay/runner` production files after this change (32 total;
 `#8 decompose-large-test-files` should mirror this layout one-for-one):
 
 ```text
