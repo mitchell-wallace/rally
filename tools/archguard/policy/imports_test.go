@@ -131,8 +131,11 @@ func TestImportBoundaryFlagshipEdgesComplete(t *testing.T) {
 // encoded graph while the self-check below only proves that the encoded edges
 // pass. The harness-layer rows (harnessapi, harness/process, the adapters, the
 // registry) and the `agent` → `harnessapi` consumer swaps come from
-// modularize-harness-adapters Decision 8; the remaining rows are the original
-// add-architecture-guardrails Decision 4 baseline.
+// modularize-harness-adapters Decision 8; the relay/runner −style −keyboard
+// +runtimeevent edit, the new presentation/terminal row, and the app
+// +runtimeevent edit come from separate-runtime-presentation-boundary Decision 7;
+// the remaining rows are the original add-architecture-guardrails Decision 4
+// baseline.
 func TestImportBoundaryAllowListMatchesProductionGraph(t *testing.T) {
 	want := map[string]map[string]bool{
 		// Harness layer (Decision 8).
@@ -146,16 +149,19 @@ func TestImportBoundaryAllowListMatchesProductionGraph(t *testing.T) {
 		"harness/fixture":     {"harnessapi": true},
 		"harness":             {"harnessapi": true, "harness/antigravity": true, "harness/claude": true, "harness/codex": true, "harness/generic": true, "harness/opencode": true},
 		// Consumers (agent -> harnessapi per Decision 8).
-		"config":                 {"harnessapi": true, "routing": true, "store": true},
-		"routing":                {"harnessapi": true},
-		"store":                  {"reliability": true, "textutil": true},
-		"reliability":            {"monitor": true},
-		"laps":                   {"release": true},
-		"progress":               {"laps": true, "store": true},
-		"telemetry":              {"buildinfo": true},
-		"release":                {"buildinfo": true},
-		"relay":                  {"harnessapi": true, "store": true},
-		"relay/runner":           {"harnessapi": true, "agent_prompt": true, "gitx": true, "keyboard": true, "laps": true, "monitor": true, "progress": true, "relay": true, "reliability": true, "routing": true, "store": true, "style": true, "telemetry": true, "textutil": true, "user_prompt/roleloader": true, "relay/runner/runtimeevent": true},
+		"config":      {"harnessapi": true, "routing": true, "store": true},
+		"routing":     {"harnessapi": true},
+		"store":       {"reliability": true, "textutil": true},
+		"reliability": {"monitor": true},
+		"laps":        {"release": true},
+		"progress":    {"laps": true, "store": true},
+		"telemetry":   {"buildinfo": true},
+		"release":     {"buildinfo": true},
+		"relay":       {"harnessapi": true, "store": true},
+		// Presentation boundary (Decision 7): runner drops style/keyboard
+		// (keeps monitor — Decision 8 residual); presentation/terminal renders.
+		"relay/runner":           {"harnessapi": true, "agent_prompt": true, "gitx": true, "laps": true, "monitor": true, "progress": true, "relay": true, "relay/runner/runtimeevent": true, "reliability": true, "routing": true, "store": true, "telemetry": true, "textutil": true, "user_prompt/roleloader": true},
+		"presentation/terminal":  {"keyboard": true, "relay/runner/runtimeevent": true, "style": true},
 		"app":                    {"harnessapi": true, "harness": true, "config": true, "relay": true, "relay/runner": true, "relay/runner/runtimeevent": true, "routing": true, "store": true, "telemetry": true},
 		"user_prompt/roleloader": {"store": true},
 	}
@@ -250,6 +256,84 @@ func TestImportBoundaryAdapterConfinementDiagnostic(t *testing.T) {
 	}
 }
 
+// TestImportBoundaryPresentationDenyDirection confirms the no-internal-imports-
+// presentation rule from Decision 7: any internal package importing a concrete
+// presentation package (presentation/*) hard-fails with the explicit runner-
+// emits / adapters-render reason, but internal/cli (which wires the adapter) is
+// exempt.
+func TestImportBoundaryPresentationDenyDirection(t *testing.T) {
+	r := NewImportBoundary()
+	// The runner importing the terminal adapter fails with the presentation
+	// deny-direction reason — this is the headline invariant of Decision 7.
+	got := r.Check([]FileInfo{importFileInfo("relay/runner", "presentation/terminal")})
+	if len(got) != 1 || got[0].Severity != Hard {
+		t.Fatalf("want one hard violation, got %+v", got)
+	}
+	wantReason := "imports " + importPath("presentation/terminal") +
+		" — concrete presentation packages (presentation/*) may only be imported by internal/cli; the runner emits events and controls through relay/runner/runtimeevent and adapters render them"
+	if got[0].Reason != wantReason {
+		t.Errorf("Reason:\n got %q\nwant %q", got[0].Reason, wantReason)
+	}
+	if !HasHard(got) {
+		t.Error("HasHard = false, want true (presentation deny-direction must fail CI)")
+	}
+
+	// A non-runner peer importing presentation fails too (the rule is a
+	// deny-by-target, not runner-specific): nothing under internal/ may reach a
+	// concrete presentation package except cli.
+	if got := r.Check([]FileInfo{importFileInfo("store", "presentation/terminal")}); len(got) != 1 || got[0].Severity != Hard {
+		t.Fatalf("store importing presentation must fail, got %+v", got)
+	}
+
+	// internal/cli importing the adapter is fine: it wires the adapter in.
+	cliFile := FileInfo{
+		Path:    "internal/cli/root.go",
+		Package: "internal/cli",
+		Imports: []string{importPath("presentation/terminal")},
+	}
+	if got := r.Check([]FileInfo{cliFile}); len(got) != 0 {
+		t.Errorf("internal/cli importing presentation/terminal must be allowed, got %+v", got)
+	}
+}
+
+// TestImportBoundaryPresentationConfinementDiagnostic confirms a presentation
+// package importing outside its tight allow-list raises the architectural
+// renderer-confinement reason from Decision 7 (not the generic allow-list
+// reason): a presentation adapter must not reach back into runner internals,
+// harness, config, or store.
+func TestImportBoundaryPresentationConfinementDiagnostic(t *testing.T) {
+	r := NewImportBoundary()
+	// presentation/terminal may import {keyboard, relay/runner/runtimeevent,
+	// style}; importing relay/runner is a renderer-confinement breach.
+	got := r.Check([]FileInfo{importFileInfo("presentation/terminal", "relay/runner")})
+	if len(got) != 1 || got[0].Severity != Hard {
+		t.Fatalf("want one hard violation, got %+v", got)
+	}
+	if got[0].Category != "import boundary" {
+		t.Errorf("Category = %q, want import boundary", got[0].Category)
+	}
+	// The confinement diagnostic must name the offending import, the confined
+	// package, and the architectural intent — and must NOT use the generic
+	// "Decision 4 is exhaustive" reason.
+	rendered := got[0].String()
+	for _, want := range []string{
+		"imports " + importPath("relay/runner"),
+		"internal/presentation/terminal is confined to its tight presentation allow-list",
+		"presentation adapters must not import runner internals, harness, config, or store",
+		"the runner emits events and controls through relay/runner/runtimeevent and adapters render them",
+	} {
+		if !strings.Contains(rendered, want) {
+			t.Errorf("rendered diagnostic missing %q\n got %q", want, rendered)
+		}
+	}
+	if strings.Contains(got[0].Reason, "Decision 4 is exhaustive") {
+		t.Errorf("confinement breach must not use the generic allow-list reason, got %q", got[0].Reason)
+	}
+	if !HasHard(got) {
+		t.Error("HasHard = false, want true (renderer confinement breach must fail CI)")
+	}
+}
+
 // TestImportBoundaryLeafPackageRejectsAnyInternal confirms a leaf package (one
 // with no internal imports in the current graph, e.g. textutil) may not import
 // any internal package.
@@ -286,7 +370,7 @@ func TestImportBoundaryAllowedImportsPass(t *testing.T) {
 	})
 	files = append(files, FileInfo{
 		Path: "internal/cli/root.go", Package: "internal/cli",
-		Imports: []string{importPath("app"), importPath("laps"), importPath("store")},
+		Imports: []string{importPath("app"), importPath("laps"), importPath("presentation/terminal"), importPath("store")},
 	})
 	if got := r.Check(files); len(got) != 0 {
 		t.Errorf("every allow-listed edge must pass, got violations: %+v", got)

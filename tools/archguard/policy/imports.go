@@ -32,6 +32,18 @@ import (
 // Decision 8 and are deliberately tight: a harness package that reaches for
 // relay/runtime/presentation is a confinement breach and raises the
 // adapter-confinement diagnostic rather than the generic allow-list reason.
+//
+// The presentation boundary (separate-runtime-presentation-boundary Decision 7)
+// splits the CLI rendering out of the runner: the runner emits events/controls
+// through relay/runner/runtimeevent and concrete presentation packages render
+// them. That adds three pieces of policy: (1) the runner drops style/keyboard
+// from its allow-list (it now imports runtimeevent instead); (2) a new
+// presentation/terminal allow-list row; and (3) two diagnostics that make the
+// one-way intent explicit — a presentation deny-direction (nothing under
+// internal/ may import a concrete presentation package except cli, which wires
+// the adapter) and a presentation-confinement reason (a presentation package
+// may not import runner internals, harness, config, or store). runtimeevent is
+// a stdlib-only leaf, so it gets no allow-list row (absence = leaf, enforced).
 
 // moduleInternalPrefix is the import-path prefix of every internal package.
 // archguard is stdlib-only and dependency-free, so the module path is a compile
@@ -126,24 +138,30 @@ var allowList = map[string]map[string]bool{
 	"harness/fixture":     {"harnessapi": true},
 	"harness":             {"harnessapi": true, "harness/antigravity": true, "harness/claude": true, "harness/codex": true, "harness/generic": true, "harness/opencode": true},
 	// Consumers (agent -> harnessapi per Decision 8).
-	"config":                 {"harnessapi": true, "routing": true, "store": true},
-	"routing":                {"harnessapi": true},
-	"store":                  {"reliability": true, "textutil": true},
-	"reliability":            {"monitor": true},
-	"laps":                   {"release": true},
-	"progress":               {"laps": true, "store": true},
-	"telemetry":              {"buildinfo": true},
-	"release":                {"buildinfo": true},
-	"relay":                  {"harnessapi": true, "store": true},
-	"relay/runner":           {"harnessapi": true, "agent_prompt": true, "gitx": true, "keyboard": true, "laps": true, "monitor": true, "progress": true, "relay": true, "reliability": true, "routing": true, "store": true, "style": true, "telemetry": true, "textutil": true, "user_prompt/roleloader": true, "relay/runner/runtimeevent": true},
+	"config":      {"harnessapi": true, "routing": true, "store": true},
+	"routing":     {"harnessapi": true},
+	"store":       {"reliability": true, "textutil": true},
+	"reliability": {"monitor": true},
+	"laps":        {"release": true},
+	"progress":    {"laps": true, "store": true},
+	"telemetry":   {"buildinfo": true},
+	"release":     {"buildinfo": true},
+	"relay":       {"harnessapi": true, "store": true},
+	// Presentation boundary (Decision 7): the runner emits events/controls
+	// through runtimeevent and no longer renders directly, so style/keyboard
+	// leave its allow-list (monitor stays — Decision 8 residual).
+	"relay/runner": {"harnessapi": true, "agent_prompt": true, "gitx": true, "laps": true, "monitor": true, "progress": true, "relay": true, "relay/runner/runtimeevent": true, "reliability": true, "routing": true, "store": true, "telemetry": true, "textutil": true, "user_prompt/roleloader": true},
+	// Concrete presentation adapter (Decision 7): renders runtimeevent events
+	// and translates keyboard presses to runtimeevent controls — nothing else
+	// internal (notably not relay/runner, harness*, config, store, telemetry).
 	"presentation/terminal":  {"keyboard": true, "relay/runner/runtimeevent": true, "style": true},
 	"app":                    {"harnessapi": true, "harness": true, "config": true, "relay": true, "relay/runner": true, "relay/runner/runtimeevent": true, "routing": true, "store": true, "telemetry": true},
 	"user_prompt/roleloader": {"store": true},
 }
 
 // ImportBoundary enforces the production internal import rules: flagship deny
-// edges, the cli deny-direction, and per-package allow-lists. It skips test
-// files (v1 boundaries are production-only).
+// edges, the cli and presentation deny-directions, and per-package allow-lists.
+// It skips test files (v1 boundaries are production-only).
 type ImportBoundary struct{}
 
 // NewImportBoundary builds the import-boundary rule. It is stateless today;
@@ -157,9 +175,9 @@ func (*ImportBoundary) Name() string { return "import boundary" }
 
 // Check walks every production file and raises a Hard "import boundary"
 // violation for each internal import that violates a flagship edge, the cli
-// deny-direction, or the importing package's allow-list. An offending import
-// yields exactly one violation (the most specific reason), anchored at line 1
-// of the offending file.
+// deny-direction, the presentation deny-direction, or the importing package's
+// allow-list. An offending import yields exactly one violation (the most
+// specific reason), anchored at line 1 of the offending file.
 //
 // _test.go files are skipped deliberately: v1 internal boundaries are
 // production-only. This exemption is load-bearing for the harness layer, whose
@@ -187,6 +205,10 @@ func (*ImportBoundary) Check(files []FileInfo) []Violation {
 				continue
 			}
 			if reason, ok := cliDenyReason(from, to); ok {
+				vs = append(vs, boundaryViolation(f.Path, imp, reason))
+				continue
+			}
+			if reason, ok := presentationDenyReason(from, to); ok {
 				vs = append(vs, boundaryViolation(f.Path, imp, reason))
 				continue
 			}
@@ -218,6 +240,23 @@ func cliDenyReason(from, to string) (string, bool) {
 	return "", false
 }
 
+// presentationDenyReason returns the reason if an internal package imports a
+// concrete presentation package (presentation/*). internal/cli is exempt: it is
+// the layer that wires the terminal adapter into the composition root. The
+// runner emits events and controls through runtimeevent and adapters render
+// them, so nothing else under internal/ may reach a concrete presentation
+// package — that would re-couple the runner (or any peer) to a renderer and
+// undo the boundary Decision 7 draws.
+func presentationDenyReason(from, to string) (string, bool) {
+	if !isPresentationLayer(to) {
+		return "", false
+	}
+	if from == cmdRallyPackage || from == "cli" {
+		return "", false
+	}
+	return "concrete presentation packages (presentation/*) may only be imported by internal/cli; the runner emits events and controls through relay/runner/runtimeevent and adapters render them", true
+}
+
 // allowListReason returns the reason if `to` is not permitted for `from`.
 // cmd/rally (composition root) and internal/cli (broad presentation layer) may
 // import any internal package, so they never fail this check.
@@ -246,15 +285,34 @@ func isHarnessLayer(key string) bool {
 	return key == "harnessapi" || key == "harness" || strings.HasPrefix(key, "harness/")
 }
 
+// isPresentationLayer reports whether the internal-name key is a concrete
+// presentation adapter (presentation or presentation/<surface>). These packages
+// carry the renderer-confinement invariant (Decision 7): they consume
+// runtimeevent events/controls and render them, so they must not reach back
+// into runner internals, harness, config, or store. A disallowed import from
+// one of them raises the presentation-confinement reason instead of the
+// generic allow-list one.
+func isPresentationLayer(key string) bool {
+	return key == "presentation" || strings.HasPrefix(key, "presentation/")
+}
+
 // allowListDisallow renders the allow-list violation reason for an import that
 // the importing package's allow-list does not permit. A harness-layer package
 // gets the architectural adapter-confinement reason (it must stay isolated from
-// relay/runtime/presentation); every other package gets the generic reason that
-// points at the exhaustive allow-list.
+// relay/runtime/presentation); a presentation package gets the renderer-
+// confinement reason (it must stay isolated from runner internals/harness/
+// config/store); every other package gets the generic reason that points at the
+// exhaustive allow-list.
 func allowListDisallow(from, to string) string {
 	if isHarnessLayer(from) {
 		return fmt.Sprintf(
 			"imports internal/%s but internal/%s is confined to its tight harness-layer allow-list; harness adapters (and their contract/registry) must not depend on relay/runtime/presentation — they execute and return typed evidence",
+			to, from,
+		)
+	}
+	if isPresentationLayer(from) {
+		return fmt.Sprintf(
+			"imports internal/%s but internal/%s is confined to its tight presentation allow-list; presentation adapters must not import runner internals, harness, config, or store — the runner emits events and controls through relay/runner/runtimeevent and adapters render them",
 			to, from,
 		)
 	}

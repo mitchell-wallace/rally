@@ -28,8 +28,9 @@ The v0.1.x TUI was a simple line-based Bubble Tea app tightly coupled to the old
 These are carried forward from the original consolidate-rally-gry design and should be validated against the actual v0.2.0 architecture when this change is picked up:
 
 - **Layout**: gitui-style bordered panels using bubbles, responsive to terminal size
+- **Runtime boundary**: The TUI consumes the presentation-neutral contract in `internal/relay/runner/runtimeevent` that `separate-runtime-presentation-boundary` introduced — runtime events in (via `runtimeevent.Sink`), `runtimeevent.Press` controls out (via `runtimeevent.ControlSource`). The runner emits data; the TUI renders. The TUI is a concrete presentation adapter: it may import only `relay/runner/runtimeevent`, `style`, and `keyboard`, and must not import runner internals, harness, config, or store (enforced by archguard's presentation boundary).
+- **Monitor status line**: Replace, do not adapt. The live status-line subsystem (`mon.Start(os.Stdout)` with cursor-reservation) is a documented runner-driven residual that the TUI supersedes wholesale — see Decision 8 of `separate-runtime-presentation-boundary`.
 - **Data source**: In-memory cache loaded from JSONL — the TUI reads from the store, not from files directly
-- **Relay runner integration**: OnStatus callbacks for pushing live updates to the TUI
 - **No stdout streaming**: Show stats only (runtime, git diff summary), not raw agent output
 - **Relay resume**: Modal prompt on startup if incomplete relay exists — this replaces the CLI prompt added in v0.2.0
 
@@ -43,7 +44,7 @@ These are carried forward from the original consolidate-rally-gry design and sho
 - New packages: `internal/tui/dashboard/`, `internal/tui/inbox/`, `internal/tui/runstatus/`
 - Go dependencies added: `github.com/charmbracelet/bubbles`
 - CLI interface change: default (no subcommand) launches TUI instead of showing help
-- Relay runner gains OnStatus callback interface for TUI integration
+- Consumes the existing `internal/relay/runner/runtimeevent` contract (events in via `Sink`, `Press` controls out via `ControlSource`) — no new runner callback interface; the runner already emits, the TUI renders
 
 ## Update Notes
 
@@ -60,3 +61,14 @@ These are carried forward from the original consolidate-rally-gry design and sho
   flow is not ideal. A menu-like config surface, where the operator can navigate
   to one option and change it, may be the better shared model for startup config
   and any future inflight config update command.
+
+### 2026-07-02
+
+- Re-grounded against `separate-runtime-presentation-boundary` (Decisions 5/7/8).
+  The runner↔presentation boundary the TUI consumes now exists as
+  `internal/relay/runner/runtimeevent`: the runner emits typed events through a
+  `Sink` and reads `Press` controls through a `ControlSource`; a concrete
+  presentation package (the CLI's `internal/presentation/terminal` adapter today,
+  a TUI later) renders them. Dropped the stale "OnStatus callback" framing — no
+  new runner callback interface is needed. Noted that the monitor status line is
+  replaced wholesale, not adapted (Decision 8 residual).
