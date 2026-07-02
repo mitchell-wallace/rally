@@ -226,11 +226,11 @@
       "title": "Extract named sub-steps in classify and record phase bodies",
       "description": "Context: the two deep phase bodies are the ONLY internal-structure change in this refactor. Follow design Decision 3 and the Risks section (openspec/changes/decompose-run-one/design.md).\n\nOutcome: classifyAttemptOutcome (~229 lines at baseline) and recordAttemptOutcome (~261) each delegate to named unexported, package-local helpers inside their own phase file; no single function in the package approaches the pre-change ~260-line scale.\n\nFiles \u0026 scope: run_attempt_classify.go and run_attempt_record.go only. recordCancelledAttempt (~131) may get the same treatment ONLY if a clean seam presents itself — do not force it.\n\nDesign (SENIOR judgment — this is the change's highest-risk work): extract only straight-line regions with explicit inputs/outputs. Where a region reads/writes many locals, pass the existing runOneState/attempt structs rather than inventing new ones. Preserve statement order, control flow, and early returns exactly. Error strings and telemetry fields must be BYTE-IDENTICAL. These extracted helpers are the only new functions the entire change is allowed to introduce.\n\nAcceptance: go build ./..., go test -count=1 ./internal/relay/..., and go test -race -shuffle=on -count=1 ./internal/relay/... all green; the diff shows byte-identical error and telemetry strings. Do NOT tick tasks.md boxes.",
       "assignee": "SENIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 1376256,
       "createdAt": "2026-07-02T11:29:04.858232932Z",
-      "updatedAt": "2026-07-02T11:29:04.858232932Z",
-      "completedAt": null
+      "updatedAt": "2026-07-02T20:09:42.209429733Z",
+      "completedAt": "2026-07-02T20:09:42.209429733Z"
     },
     {
       "id": "rall-5639",
