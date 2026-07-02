@@ -43,7 +43,13 @@ func waitWithCountdown(ctx context.Context, sink runtimeevent.Sink, controls run
 		var err error
 		actionCh, err = controls.Start(ctx)
 		if err != nil {
-			return waitCancelled, err
+			// Baseline ignored kb.SetRawMode() failures and always ran the
+			// countdown (SetRawMode is a no-op on non-TTY stdin), and the
+			// active-try control site degrades the same way. Degrade to a
+			// no-operator-input wait rather than surfacing the error and
+			// failing the relay. Controls.Start returns its error before
+			// initializing a session, so Stop is a safe no-op below.
+			actionCh = nil
 		}
 		defer controls.Stop()
 	}

@@ -38,6 +38,41 @@ func TestControlsTranslateKeyboardPresses(t *testing.T) {
 	mustControlPress(t, ch, runtimeevent.OperatorActionSkip, true)
 }
 
+// TestControlsOperatorActionAllShortcuts drives every branch of operatorAction,
+// not just Skip/Stop. A swapped case here (e.g. ActionQuit → OperatorActionStop)
+// would otherwise slip past operator_parity_test, which pins the enum mapping,
+// not this adapter translation function.
+func TestControlsOperatorActionAllShortcuts(t *testing.T) {
+	tests := []struct {
+		name string
+		byte byte
+		want runtimeevent.OperatorAction
+	}{
+		{"quit", 0x03, runtimeevent.OperatorActionQuit},
+		{"skip", 0x13, runtimeevent.OperatorActionSkip},
+		{"pause", 0x10, runtimeevent.OperatorActionPause},
+		{"stop", 0x18, runtimeevent.OperatorActionStop},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r, w := mustPipe(t)
+			defer w.Close()
+			defer r.Close()
+			controls := NewControls(r, io.Discard)
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			ch, err := controls.Start(ctx)
+			if err != nil {
+				t.Fatalf("Start: %v", err)
+			}
+			defer controls.Stop()
+
+			writeByte(t, w, tt.byte)
+			mustControlPress(t, ch, tt.want, false)
+		})
+	}
+}
+
 func TestControlsStartStopCyclesDoNotLeakReaders(t *testing.T) {
 	r, w := mustPipe(t)
 	defer w.Close()

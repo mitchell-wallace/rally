@@ -170,6 +170,83 @@ func TestSinkRendersFooterRedrawBytes(t *testing.T) {
 	}
 }
 
+// TestSinkDispatchRendersEachCase pins every render branch of the sink switch
+// that the byte-specific tests above do not already cover. A dropped case would
+// otherwise silently vanish operator-facing output while the suite stays green;
+// this guards the byte-identity contract for the cancelled/handoff footers, the
+// pause prompt, the header/status/shortcut/rate-limit lines, and the summary.
+func TestSinkDispatchRendersEachCase(t *testing.T) {
+	tests := []struct {
+		name string
+		emit func(s *Sink)
+		want string
+	}{
+		{
+			name: "RunHeaderReady",
+			emit: func(s *Sink) {
+				s.Emit(context.Background(), runtimeevent.RunHeaderReady{RunIndex: 1, TotalRuns: 3, AgentName: "sonnet", Attempt: 1, Model: "claude-4", RoleLabel: "senior"})
+			},
+			want: style.RenderHeader(headerOptions(runtimeevent.RunHeaderReady{RunIndex: 1, TotalRuns: 3, AgentName: "sonnet", Attempt: 1, Model: "claude-4", RoleLabel: "senior"})) + "\n",
+		},
+		{
+			name: "TryStatusSnapshot",
+			emit: func(s *Sink) { s.Emit(context.Background(), runtimeevent.TryStatusSnapshot{Status: "running..."}) },
+			want: "\r\x1b[2Krunning...\n",
+		},
+		{
+			name: "ShortcutHintReady",
+			emit: func(s *Sink) { s.Emit(context.Background(), runtimeevent.ShortcutHintReady{Width: 0}) },
+			want: fmt.Sprintf("\r\x1b[2K%s\n", style.ShortcutHint()),
+		},
+		{
+			name: "AttemptCancelled",
+			emit: func(s *Sink) {
+				s.Emit(context.Background(), runtimeevent.AttemptCancelled{FooterData: runtimeevent.FooterData{Cancelled: true, Duration: 5 * time.Second, CancellationSource: "quit_now", Attempt: 2, MaxAttempts: 5}})
+			},
+			want: fmt.Sprintf("\r\x1b[2K%s\n", style.RenderFooter(footerOptions(runtimeevent.FooterData{Cancelled: true, Duration: 5 * time.Second, CancellationSource: "quit_now", Attempt: 2, MaxAttempts: 5}))),
+		},
+		{
+			name: "HandoffAttemptFinished",
+			emit: func(s *Sink) {
+				s.Emit(context.Background(), runtimeevent.HandoffAttemptFinished{FooterData: runtimeevent.FooterData{Passed: false, Duration: 9 * time.Second, FailReason: "blocked", Attempt: 3, MaxAttempts: 3}})
+			},
+			want: fmt.Sprintf("\r\x1b[2K%s\n", style.RenderFooter(footerOptions(runtimeevent.FooterData{Passed: false, Duration: 9 * time.Second, FailReason: "blocked", Attempt: 3, MaxAttempts: 3}))),
+		},
+		{
+			name: "RateLimitWaitStarted",
+			emit: func(s *Sink) { s.Emit(context.Background(), runtimeevent.RateLimitWaitStarted{Wait: 30 * time.Second}) },
+			want: style.DimStyle.Render(fmt.Sprintf("waiting %v for rate limit...", 30*time.Second)) + "\n",
+		},
+		{
+			name: "PausePromptShown",
+			emit: func(s *Sink) {
+				s.Emit(context.Background(), runtimeevent.PausePromptShown{Message: "Paused — press Enter to resume"})
+			},
+			want: "Paused — press Enter to resume\n",
+		},
+		{
+			name: "RelaySummaryReady",
+			emit: func(s *Sink) {
+				s.Emit(context.Background(), runtimeevent.RelaySummaryReady{TotalRuns: 4, Passed: 3, Failed: 1, Cancelled: 0, TotalDuration: 2 * time.Minute})
+			},
+			want: style.RenderSummary(4, 3, 1, 2*time.Minute, 0) + "\n",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var out, errw bytes.Buffer
+			sink := NewSink(&out, &errw)
+			tt.emit(sink)
+			if got := out.String(); got != tt.want {
+				t.Fatalf("stdout = %q, want %q", got, tt.want)
+			}
+			if got := errw.String(); got != "" {
+				t.Fatalf("stderr = %q, want empty", got)
+			}
+		})
+	}
+}
+
 func TestSinkNoopsLifecycleAndOperatorActions(t *testing.T) {
 	var out, err bytes.Buffer
 	sink := NewSink(&out, &err)
