@@ -171,11 +171,11 @@
       "title": "Update archguard policy tables/tests and build-new-tui stub",
       "description": "Context: Phase 6 (tasks.md 6.1-6.3), design Decision 7/8. Mechanical guardrail + guidance updates now that the boundary is in place.\n\nOutcome: tools/archguard policy tables updated per Decision 7 -- relay/runner: -style -keyboard +relay/runner/runtimeevent (keep monitor); app: +relay/runner/runtimeevent; new presentation/terminal row (may import relay/runner/runtimeevent, style, keyboard, nothing else internal); diagnostics wording explains the runner-emits / adapters-render intent (runner must not import concrete presentation packages; presentation must not import runner internals/harness/config/store). Pinned policy tests updated to match. archguard --report regenerated with NO new grandfather entries (note any runner line-count reductions for #6's re-grounding). The build-new-tui stub proposal is updated to name internal/relay/runner/runtimeevent as the boundary the TUI consumes (events in, Press controls out; monitor status line to be replaced, not adapted -- Decision 8).\n\nFiles \u0026 scope: tools/archguard/policy/imports.go + imports_test.go (and report artifacts); the build-new-tui stub proposal under openspec/changes/. runtimeevent gets no policy row (stdlib-only leaf, enforced by absence).\n\nDesign: Table edits follow Decision 7 exactly; keep consistent with the existing architecture-guardrails spec (policy-table update only, same precedent as #4). Do not add grandfather entries -- if the report wants one, the boundary is wrong; report it instead.\n\nAcceptance: go run ./tools/archguard --report regenerated cleanly; go run ./tools/archguard --ci exit 0; go test -count=1 ./tools/archguard/... green.",
       "assignee": "JUNIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 1048576,
       "createdAt": "2026-07-02T11:28:44.895322845Z",
-      "updatedAt": "2026-07-02T11:28:44.895322845Z",
-      "completedAt": null
+      "updatedAt": "2026-07-02T19:04:09.795768811Z",
+      "completedAt": "2026-07-02T19:04:09.795768811Z"
     },
     {
       "id": "rall-74de",
