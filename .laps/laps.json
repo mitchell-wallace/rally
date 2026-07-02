@@ -72,11 +72,11 @@
       "title": "VERIFY phases 1-3: contract package, injection, parallel-emit",
       "description": "Context: Verification gate at the natural slice boundary where all inert scaffolding (runtimeevent contract, injection plumbing, parallel-emit + order tests) is complete, BEFORE the correctness-sensitive cut-overs in phases 4-5. Change #5 separate-runtime-presentation-boundary.\n\nOutcome: Confirmation that the boundary contract and emit scaffolding are sound and behaviour-neutral, with tasks.md boxes for phases 1-3 checked off only for work verified correct and thorough.\n\nScope \u0026 method: Use the openspec-verify-change skill against separate-runtime-presentation-boundary, then focus the report on phases 1-3. Identify the intended merge target (ask the operator / infer from PR metadata, repo docs, branch config, or recent history -- do not assume main) and use it for git diff \u003ctarget\u003e...HEAD; treat any work predating this batch's first lap as pre-existing. Do not rewrite git history. Trace the actual added symbols: runtimeevent type signatures vs design Decisions 2/4; ArmMessage/ActMessage/ConfirmWindow byte-parity vs internal/keyboard; runtimeevent has zero internal deps (go list -deps); injection is nil-safe and app never imports presentation; parallel-emit added emissions WITHOUT moving code across setupRunBudget/runBudgetCh and WITHOUT changing output (headless byte-identical); recording-sink order tests cover all six flow paths.\n\nAcceptance: go build ./..., go vet ./..., go test -count=1 ./internal/relay/... ./internal/app ./cmd/rally green; archguard --ci exit 0. Tick tasks.md 1.1-1.3, 2.1-2.3, 3.1-3.3 only where verified done to sufficient quality. For any substantive gap, add a focused head lap (laps -f 5-separate-runtime-presentation-boundary.laps.json add head ...) rather than fixing large issues inline.",
       "assignee": "VERIFY",
-      "isDone": false,
+      "isDone": true,
       "order": 458752,
       "createdAt": "2026-07-02T11:28:44.895306634Z",
-      "updatedAt": "2026-07-02T11:28:44.895306634Z",
-      "completedAt": null
+      "updatedAt": "2026-07-02T16:12:55.008415296Z",
+      "completedAt": "2026-07-02T16:12:55.008415296Z"
     },
     {
       "id": "rall-522b",
