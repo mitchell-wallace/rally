@@ -1,0 +1,192 @@
+{
+  "version": 2,
+  "tasks": [
+    {
+      "id": "rall-4e71",
+      "title": "Baseline green + regenerate presentation-wiring / emit-site inventory",
+      "description": "Context: Change #5 separate-runtime-presentation-boundary, phase 1 (tasks.md 1.1-1.3). Design baselined at commit f55712c; #4 modularize-harness-adapters is landed in the tree at HEAD. This lap re-grounds the plan against the live tree and produces the emit-site checklist that phases 3-5 depend on. Do NOT start implementing the boundary here.\n\nOutcome: A confirmed-green tree and a regenerated, written-down inventory that later laps consume: (a) runner import sites for internal/style and internal/keyboard; (b) direct os.Stdout/os.Stderr/os.Stdin uses across run_one.go, relay_steps.go, task.go, terminal.go, handoff_only.go; (c) keyboard construction sites (terminal.go wait countdown, run_one.go active try); (d) monitor lifecycle calls (mon.Start/mon.Stop/renderRunFooter); (e) the print-site output inventory mapping each print to the design Decision 3 event vocabulary.\n\nFiles \u0026 scope: read-only against internal/relay/runner/*.go, internal/app/relay_start.go, internal/monitor, internal/style, internal/keyboard; capture the inventory in the lap report (or a scratch note) for downstream laps. No production changes.\n\nDesign: This is the load-bearing checklist. Getting emit-site coverage wrong cascades into phase-3 parallel-emit and phase-4 cut-over byte drift. Cross-check every row of the design Decision 3 table against the current source; flag any print site that has drifted from the design's line references since f55712c (line numbers will have moved). Also note the archive-order caveat from task 1.3: #4's OpenSpec change is landed in code but not yet archived, and this change's composition-root-structure delta MODIFIES the same 'Presentation-neutral relay-start seam' requirement as #4's un-archived delta -- surface this to the operator; do not attempt to resolve archive ordering here.\n\nAcceptance: go build ./..., go vet ./..., gofmt -l . (empty), go test -count=1 ./..., go run ./tools/archguard --ci (exit 0) all green -- if red, STOP and report. Inventory recorded and handed forward.",
+      "assignee": "SENIOR",
+      "isDone": false,
+      "order": 65536,
+      "createdAt": "2026-07-02T03:37:05.050877041Z",
+      "updatedAt": "2026-07-02T03:37:05.050877041Z",
+      "completedAt": null
+    },
+    {
+      "id": "rall-4d96",
+      "title": "Create runtimeevent contract package (events, Sink, control vocabulary)",
+      "description": "Context: Phase 2 (tasks.md 2.1-2.2), design Decisions 1, 2, 4. The runtimeevent package is the presentation-neutral boundary both halves of the future TUI use. It does not exist yet.\n\nOutcome: New package internal/relay/runner/runtimeevent (package runtimeevent), stdlib-only, that builds. It defines: the Event interface (kind discriminator) over data-only typed payload structs for the Decision 3 vocabulary (RelayStarted/RelayCompleted, RouteWarning, TaskFileWarning, RunHeaderReady, TryStatusSnapshot, ShortcutHintReady, RetryFooterUpdated, AttemptFinished, AttemptCancelled, HandoffAttemptFinished, RateLimitWaitStarted, WaitStarted/WaitTick/WaitFinished, OperatorActionArmed/OperatorActionApplied, PausePromptShown, RelaySummaryReady); the synchronous Sink interface `Emit(context.Context, Event)`; a no-op sink; and a Recording sink for tests. Plus the operator-control vocabulary: OperatorAction (Quit/Skip/Pause/Stop; None excluded from Press), Press{Action, Confirmed}, ArmMessage(action)/ActMessage(action) helpers, ConfirmWindow = 4s, and the ControlSource interface (Start(ctx)(\u003c-chan Press,error), Stop(), WaitResume(ctx) error).\n\nFiles \u0026 scope: only internal/relay/runner/runtimeevent/*.go. Do not touch runner files, app, or cli yet -- this lap adds the contract; nothing consumes it. Payloads carry data only (names, durations, counts, message strings) -- never ANSI escapes or lipgloss values.\n\nDesign: Follow the exact type signatures in design Decision 2 and Decision 4. Critically, ArmMessage/ActMessage/ConfirmWindow must reproduce today's internal/keyboard semantics verbatim (same text, same 4s window) -- copy the literal message strings from internal/keyboard so parity holds; this is not a place to reword. runtimeevent must never import runner (no cycle) and must import only the standard library.\n\nAcceptance: go build ./... green; go list -deps ./internal/relay/runner/runtimeevent shows no internal package. (Unit tests land in the next lap.)",
+      "assignee": "JUNIOR",
+      "isDone": false,
+      "order": 131072,
+      "createdAt": "2026-07-02T03:37:05.050884004Z",
+      "updatedAt": "2026-07-02T03:37:05.050884004Z",
+      "completedAt": null
+    },
+    {
+      "id": "rall-fd55",
+      "title": "Unit-test runtimeevent (message parity, sinks, leaf-only deps)",
+      "description": "Context: Phase 2 (tasks.md 2.3), following the package created in the prior lap.\n\nOutcome: Unit tests for internal/relay/runner/runtimeevent covering: ArmMessage/ActMessage text parity against today's internal/keyboard message strings (assert byte-equal text and the 4s ConfirmWindow); the no-op sink (Emit is a safe no-op) and the Recording sink (captures events in order for later order-assertion tests).\n\nFiles \u0026 scope: internal/relay/runner/runtimeevent/*_test.go only.\n\nDesign: The parity test is the guardrail that keeps the moved arm/act vocabulary faithful to keyboard's originals -- reference the actual keyboard source strings, not a retyped copy. Assert event ordering semantics on the Recording sink since phase-3 order tests will lean on it.\n\nAcceptance: go test -count=1 ./internal/relay/runner/runtimeevent green; re-confirm go list -deps ./internal/relay/runner/runtimeevent shows no internal package.",
+      "assignee": "JUNIOR",
+      "isDone": false,
+      "order": 196608,
+      "createdAt": "2026-07-02T03:37:05.050885598Z",
+      "updatedAt": "2026-07-02T03:37:05.050885598Z",
+      "completedAt": null
+    },
+    {
+      "id": "rall-c37f",
+      "title": "Plumb EventSink/Controls through cli -\u003e app -\u003e runner.Config (nil-safe)",
+      "description": "Context: Phase 3 (tasks.md 3.1), design Decision 6. Wire the injection path with no behaviour change; nothing renders through it yet.\n\nOutcome: runner.Config gains `EventSink runtimeevent.Sink` and `Controls runtimeevent.ControlSource` (nil-safe: nil sink -\u003e no-op sink; nil controls -\u003e no operator input). app.RelayStartOptions gains the same two fields as opaque contract values; app.StartRelay (internal/app/relay_start.go) forwards them into runner.Config untouched, without inspecting them. internal/cli/start.go passes nil for both for now.\n\nFiles \u0026 scope: internal/relay/runner (Config type + nil-safe defaulting), internal/app/relay_start.go (RelayStartOptions + forward), internal/cli/start.go (pass nil). internal/app imports runtimeevent for types only and must never import internal/presentation/*; the seam stays presentation-neutral and never reads input.\n\nDesign: Mechanical plumbing -- do not emit or render anything here. Keep app oblivious to concrete presentation. Ensure existing runner construction/tests still compile with the new optional fields defaulting safely.\n\nAcceptance: go build ./... green; go test -count=1 ./internal/relay/... ./internal/app ./cmd/rally green (no behaviour change).",
+      "assignee": "JUNIOR",
+      "isDone": false,
+      "order": 262144,
+      "createdAt": "2026-07-02T03:37:05.050891143Z",
+      "updatedAt": "2026-07-02T03:37:05.050891143Z",
+      "completedAt": null
+    },
+    {
+      "id": "rall-c38f",
+      "title": "Parallel-emit events at every print site (no output change)",
+      "description": "Context: Phase 3 (tasks.md 3.2), design Decision 2/3 and the run-budget risk note. Uses the emit-site inventory from the baseline lap.\n\nOutcome: The runner emits the correct runtimeevent Event at every print site from the inventory, ALONGSIDE the existing prints (parallel-emit) -- synchronous, same-goroutine, at the exact points that print today. No output changes: prints stay; emissions are additive. The no-op default means headless callers see nothing new.\n\nFiles \u0026 scope: internal/relay/runner/*.go (run_one.go, relay_steps.go, terminal.go, handoff_only.go, task.go, action_loop.go emit sites). Do not create the terminal sink yet; do not delete any print.\n\nDesign: This is architecture-sensitive. Insert emissions at print sites only -- NEVER move any code across setupRunBudget / runBudgetCh construction (the same-deadline guard and once-built budget channel are timing-load-bearing; design Risk on run-budget boundary). Map each print to its Decision 3 event exactly as inventoried. Emit synchronously via Config.EventSink (no-op when nil). Respect the data-only vs no-print event distinctions in the Decision 3 table (e.g. RelayStarted/RelayCompleted and active-try OperatorAction events have no current print).\n\nAcceptance: go build ./... green; existing runner/app/cmd tests still green; output byte-for-byte unchanged in a headless run (no sink) and unchanged with a recording sink attached (recording sink writes nothing). Order tests follow in the next lap.",
+      "assignee": "SENIOR",
+      "isDone": false,
+      "order": 327680,
+      "createdAt": "2026-07-02T03:37:05.050892265Z",
+      "updatedAt": "2026-07-02T03:37:05.050892265Z",
+      "completedAt": null
+    },
+    {
+      "id": "rall-1fe5",
+      "title": "Recording-sink event-order tests for the flow paths",
+      "description": "Context: Phase 3 (tasks.md 3.3), building on the parallel-emit lap and the Recording sink.\n\nOutcome: Event-order tests using the recording sink for: simple success, retry-then-fail, operator cancellation (skip and quit), stall, rate-limit wait, and all-paused wait paths. Assert emitted event ORDER only -- no styling/byte assertions (rendering is not wired yet).\n\nFiles \u0026 scope: test files under internal/relay/runner (recording-sink driven). Follow existing runner test harness patterns for driving these flows.\n\nDesign: Assert the sequence and kinds of events per path against the inventory; these tests lock the emit contract before the phase-4 cut-over relies on it. Keep them order-focused so they survive the later rendering changes unchanged.\n\nAcceptance: go test -count=1 ./internal/relay/... green with the new order tests included.",
+      "assignee": "JUNIOR",
+      "isDone": false,
+      "order": 393216,
+      "createdAt": "2026-07-02T03:37:05.050901645Z",
+      "updatedAt": "2026-07-02T03:37:05.050901645Z",
+      "completedAt": null
+    },
+    {
+      "id": "rall-281b",
+      "title": "VERIFY phases 1-3: contract package, injection, parallel-emit",
+      "description": "Context: Verification gate at the natural slice boundary where all inert scaffolding (runtimeevent contract, injection plumbing, parallel-emit + order tests) is complete, BEFORE the correctness-sensitive cut-overs in phases 4-5. Change #5 separate-runtime-presentation-boundary.\n\nOutcome: Confirmation that the boundary contract and emit scaffolding are sound and behaviour-neutral, with tasks.md boxes for phases 1-3 checked off only for work verified correct and thorough.\n\nScope \u0026 method: Use the openspec-verify-change skill against separate-runtime-presentation-boundary, then focus the report on phases 1-3. Identify the intended merge target (ask the operator / infer from PR metadata, repo docs, branch config, or recent history -- do not assume main) and use it for git diff \u003ctarget\u003e...HEAD; treat any work predating this batch's first lap as pre-existing. Do not rewrite git history. Trace the actual added symbols: runtimeevent type signatures vs design Decisions 2/4; ArmMessage/ActMessage/ConfirmWindow byte-parity vs internal/keyboard; runtimeevent has zero internal deps (go list -deps); injection is nil-safe and app never imports presentation; parallel-emit added emissions WITHOUT moving code across setupRunBudget/runBudgetCh and WITHOUT changing output (headless byte-identical); recording-sink order tests cover all six flow paths.\n\nAcceptance: go build ./..., go vet ./..., go test -count=1 ./internal/relay/... ./internal/app ./cmd/rally green; archguard --ci exit 0. Tick tasks.md 1.1-1.3, 2.1-2.3, 3.1-3.3 only where verified done to sufficient quality. For any substantive gap, add a focused head lap (laps -f 5-separate-runtime-presentation-boundary.laps.json add head ...) rather than fixing large issues inline.",
+      "assignee": "VERIFY",
+      "isDone": false,
+      "order": 458752,
+      "createdAt": "2026-07-02T03:37:05.05090294Z",
+      "updatedAt": "2026-07-02T03:37:05.05090294Z",
+      "completedAt": null
+    },
+    {
+      "id": "rall-7030",
+      "title": "Build terminal.Sink adapter and wire it in cli/start.go",
+      "description": "Context: Phase 4 (tasks.md 4.1-4.2), design Decision 5/6. First step of the high-risk output cut-over; still parallel with runner prints until the next lap deletes them.\n\nOutcome: New package internal/presentation/terminal with terminal.Sink implementing runtimeevent.Sink over out/err writers, relocating each print's format strings and escape sequences (\\r\\x1b[2K, \\r\\x1b[J, the \\r\\n raw-mode countdown, footer in-place redraw with cursor parking) VERBATIM from the runner. internal/cli/start.go constructs the terminal sink over os.Stdout/os.Stderr and passes it through RelayStartOptions (replacing the nil sink).\n\nFiles \u0026 scope: new internal/presentation/terminal/*.go; internal/cli/start.go wiring. terminal package internal imports limited to runtimeevent, style, keyboard -- not relay/runner, harness*, config, store, telemetry. Do NOT delete runner prints yet (that is the next lap); at end of this lap both the sink and the inline prints run, so output may double -- acceptable transient, resolved by the cut-over lap.\n\nDesign: Byte-parity depends on relocating format strings call-for-call, one render per former print site, same writer targets. Copy the exact strings/escapes from the runner source; do not re-derive them. RelayStarted/RelayCompleted and active-try OperatorAction events SHALL no-op in this sink (Decision 3); app.StartRelay remains sole owner of the literal 'Relay complete.' line.\n\nAcceptance: go build ./... green; archguard still green for the new package's imports (formal policy row lands in phase 6, but keep imports within the intended allow-list). Full parity is asserted after the cut-over + test relocation laps.",
+      "assignee": "SENIOR",
+      "isDone": false,
+      "order": 524288,
+      "createdAt": "2026-07-02T03:37:05.050903856Z",
+      "updatedAt": "2026-07-02T03:37:05.050903856Z",
+      "completedAt": null
+    },
+    {
+      "id": "rall-2bcb",
+      "title": "Cut over runner prints to the sink; remove internal/style from runner",
+      "description": "Context: Phase 4 (tasks.md 4.3), design Decision 5 and the byte-parity + footer-parking risks. This is THE output-correctness lap.\n\nOutcome: Print-site-by-print-site, each runner inline print is deleted once the terminal sink renders its event. At the end: zero direct operator-facing fmt.Print*/Fprint* writes to os.Stdout/os.Stderr in runner production code (the single permitted direct-stream residual is the monitor's mon.Start(os.Stdout), Decision 8), and the internal/style import is removed from ALL runner files. Runner.out/outWriter() seam is subsumed by the sink.\n\nFiles \u0026 scope: internal/relay/runner/*.go (run_one.go, relay_steps.go, terminal.go, handoff_only.go, task.go). Do not touch keyboard/ControlSource here (phase 5). Do not route the monitor status line through events (Decision 8 residual stays).\n\nDesign: Preserve the EXACT call order of each render relative to mon.Stop() and monitor renders -- the footer-parking / cursor-reservation interleaving is the most fragile contract in this area; reordering breaks it. Delete one print at a time and keep the tree buildable. Byte output must stay identical to pre-change for the same flows.\n\nAcceptance: go build ./... green; go test -count=1 ./internal/relay/... ./internal/presentation/... ./internal/app ./cmd/rally green; grep confirms no runner-side os.Stdout/os.Stderr operator prints remain (except mon.Start(os.Stdout)) and no internal/style import in runner files. Byte-parity is fully asserted by the test-relocation lap next.",
+      "assignee": "SENIOR",
+      "isDone": false,
+      "order": 589824,
+      "createdAt": "2026-07-02T03:37:05.050904765Z",
+      "updatedAt": "2026-07-02T03:37:05.050904765Z",
+      "completedAt": null
+    },
+    {
+      "id": "rall-439d",
+      "title": "Relocate byte-level output tests to terminal package; smoke a relay",
+      "description": "Context: Phase 4 (tasks.md 4.4-4.5), design Risk 1 (byte-parity held by relocating existing byte-level tests before/at cut-over).\n\nOutcome: The byte-level output tests move to internal/presentation/terminal with expected bytes preserved: terminal_test.go wait-loop/footer cases, plus footer-cadence tests from run_one/runner_* suites that assert on r.out bytes. Where run-flow coverage must stay in-package (runner-side), replace the byte assertions with recording-sink event assertions rather than deleting coverage. A manual smoke of one relay run confirms header/status/footer/summary render identically, including an interrupted (Ctrl+C-armed) run.\n\nFiles \u0026 scope: internal/presentation/terminal/*_test.go (relocated byte tests); internal/relay/runner/*_test.go (byte assertions swapped to recording-sink assertions where flow coverage stays). Preserve the exact expected-byte strings when relocating.\n\nDesign: These relocated tests ARE the byte-parity gate -- do not soften expected bytes to make them pass; if they fail, the fix belongs in the sink rendering, not the test. Judge case-by-case which tests move wholesale vs which convert to recording-sink assertions.\n\nAcceptance: go test -count=1 ./internal/relay/... ./internal/presentation/... ./internal/app ./cmd/rally green; test-driving-rally-style manual smoke shows byte-identical header/status/footer/summary and a clean armed-Ctrl+C interrupted run. Report the smoke observations.",
+      "assignee": "SENIOR",
+      "isDone": false,
+      "order": 655360,
+      "createdAt": "2026-07-02T03:37:05.050907494Z",
+      "updatedAt": "2026-07-02T03:37:05.050907494Z",
+      "completedAt": null
+    },
+    {
+      "id": "rall-b19d",
+      "title": "VERIFY phase 4: terminal output cut-over byte-parity",
+      "description": "Context: Verification gate immediately after the high-risk output cut-over (phase 4). Change #5 separate-runtime-presentation-boundary.\n\nOutcome: Confirmation that CLI output is byte-identical post cut-over and the runner no longer renders, with tasks.md phase-4 boxes checked only where verified.\n\nScope \u0026 method: Use openspec-verify-change against separate-runtime-presentation-boundary, focused on phase 4. Identify the merge target from the operator/PR/repo docs/branch config/history (not assumed main) and diff \u003ctarget\u003e...HEAD; treat pre-batch work as pre-existing; no history rewriting. Trace real evidence, not just green tests: the relocated byte-level tests preserve expected bytes; the terminal.Sink relocates format strings/escapes verbatim; runner has zero operator-facing os.Stdout/os.Stderr writes except mon.Start(os.Stdout); internal/style import gone from all runner files; render order relative to mon.Stop()/monitor renders preserved (footer-parking). Re-run or review the manual smoke including the armed-Ctrl+C path.\n\nAcceptance: go test -count=1 ./internal/relay/... ./internal/presentation/... ./internal/app ./cmd/rally green; go vet green. Tick tasks.md 4.1-4.5 only where verified byte-parity holds. Substantive gaps -\u003e focused head lap on the staging file (laps -f 5-separate-runtime-presentation-boundary.laps.json add head ...), not inline rework.",
+      "assignee": "VERIFY",
+      "isDone": false,
+      "order": 720896,
+      "createdAt": "2026-07-02T03:37:05.05090844Z",
+      "updatedAt": "2026-07-02T03:37:05.05090844Z",
+      "completedAt": null
+    },
+    {
+      "id": "rall-bf1c",
+      "title": "Implement terminal.Controls ControlSource adapter + Start/Stop test",
+      "description": "Context: Phase 5 (tasks.md 5.1), design Decision 4/5 and the raw-mode-lifecycle + WaitResume risks. First step of the control cut-over; runner still uses keyboard directly until the next lap.\n\nOutcome: terminal.Controls implementing runtimeevent.ControlSource, with an injectable-stream constructor terminal.NewControls(in io.Reader, out io.Writer) (CLI passes os.Stdin/os.Stdout). It wraps keyboard.NewKeyboard(in, out) with a raw-mode session per Start/Stop, translates keyboard.Press -\u003e runtimeevent.Press, and WaitResume performs today's leave-raw-mode-then-read-Enter sequence against `in`. An adapter test exercises repeated Start/Stop cycles using pipes with no leaked readers.\n\nFiles \u0026 scope: internal/presentation/terminal (Controls + test). Mirror internal/keyboard's keyboard_test.go pipe-driven approach -- no global os.Stdin mutation. Do not yet convert the runner's keyboard sessions (next lap).\n\nDesign: Per-phase Start/Stop must mirror today's two independent keyboard instances exactly, preserving raw-mode enter/leave points and the no-leaked-reader property. WaitResume must reproduce the exact pause sequence (leave raw mode via Stop, then read a line) so pause semantics are unchanged (design Risk on WaitResume).\n\nAcceptance: go build ./... green; go test -race -count=1 ./internal/presentation/... green including the repeated Start/Stop pipe test (no leaked readers).",
+      "assignee": "SENIOR",
+      "isDone": false,
+      "order": 786432,
+      "createdAt": "2026-07-02T03:37:05.050909305Z",
+      "updatedAt": "2026-07-02T03:37:05.050909305Z",
+      "completedAt": null
+    },
+    {
+      "id": "rall-360a",
+      "title": "Convert runner keyboard sessions + action-loop to runtimeevent.Press; drop keyboard import",
+      "description": "Context: Phase 5 (tasks.md 5.2, 5.4), design Decision 4 and the cancellation-timing risk. THE control-correctness lap.\n\nOutcome: The runner's two keyboard sessions (terminal.go wait countdown; run_one.go active try) and the pause read (run_one.go, 'Paused -- press Enter to resume') use Config.Controls instead of constructing keyboard directly. runActionLoop / actionLoopDeps switch their channel element type to runtimeevent.Press; monitor armed/acting text now comes from runtimeevent.ArmMessage/ActMessage. The runner's internal/keyboard import is removed entirely and no runner production file reads os.Stdin.\n\nFiles \u0026 scope: internal/relay/runner (terminal.go, run_one.go, action_loop.go). Do not touch the terminal.Controls adapter (prior lap) or archguard tables (phase 6). Action-loop test updates are the next lap.\n\nDesign: Change ONLY the channel element type and the source of arm/act text. Make NO change to the runActionLoop select structure, flag mutations, drain-with-second-quit escalation, or late-PID force-kill targeting -- these are cancellation-timing-load-bearing (design Risk). WaitResume replaces the direct bufio stdin read. The app-level OS-signal double-Ctrl+C path (relay_start.go) is untouched.\n\nAcceptance: go build ./... green; go test -race -shuffle=on -count=1 ./internal/relay/... green (action-loop tests are updated in the next lap -- if they must compile here, adapt only their channel element type minimally, keeping substance); grep confirms no internal/keyboard import and no os.Stdin read in runner production files.",
+      "assignee": "SENIOR",
+      "isDone": false,
+      "order": 851968,
+      "createdAt": "2026-07-02T03:37:05.050910332Z",
+      "updatedAt": "2026-07-02T03:37:05.050910332Z",
+      "completedAt": null
+    },
+    {
+      "id": "rall-fc59",
+      "title": "Update action-loop and timeout tests to runtimeevent.Press fakes",
+      "description": "Context: Phase 5 (tasks.md 5.3), following the control conversion lap.\n\nOutcome: runner_action_loop_test.go and any timeout tests that feed presses now drive runtimeevent.Press fakes (via a fake ControlSource / press channel) instead of keyboard.Press. All seven action-loop cases plus the stall/timeout precedence cases stay green and unchanged in substance.\n\nFiles \u0026 scope: internal/relay/runner/*_test.go (action-loop and timeout suites). Mechanical type/fixture conversion following the existing test structure; do not change what the tests assert about cancellation ordering or precedence.\n\nDesign: Keep the test intent identical -- only the press type and its source change. Preserve the exact scenarios (arm/confirm, skip, pause, stop, quit, second-quit force-kill during drain, stall/timeout precedence).\n\nAcceptance: go test -race -shuffle=on -count=1 ./internal/relay/... green with all action-loop and timeout cases intact.",
+      "assignee": "JUNIOR",
+      "isDone": false,
+      "order": 917504,
+      "createdAt": "2026-07-02T03:37:05.050911244Z",
+      "updatedAt": "2026-07-02T03:37:05.050911244Z",
+      "completedAt": null
+    },
+    {
+      "id": "rall-83c7",
+      "title": "VERIFY phase 5: ControlSource cut-over, cancellation + raw-mode parity",
+      "description": "Context: Verification gate immediately after the high-risk control cut-over (phase 5). Change #5 separate-runtime-presentation-boundary.\n\nOutcome: Confirmation that operator-control semantics, cancellation timing, and raw-mode lifecycle are unchanged and the runner no longer touches keyboard/stdin, with tasks.md phase-5 boxes checked only where verified.\n\nScope \u0026 method: Use openspec-verify-change against separate-runtime-presentation-boundary, focused on phase 5. Identify the merge target (operator/PR/repo docs/branch/history; not assumed main), diff \u003ctarget\u003e...HEAD, treat pre-batch work as pre-existing, no history rewriting. Trace real evidence: runActionLoop select structure / drain / second-quit force-kill / late-PID targeting UNCHANGED except press element type; monitor arm/act text sourced from runtimeevent helpers; terminal.Controls per-phase Start/Stop mirrors the two former keyboard instances with no leaked readers; WaitResume reproduces the leave-raw-then-read-Enter pause sequence; runner has no internal/keyboard import and no os.Stdin read; app OS-signal Ctrl+C path untouched. Verify shortcut semantics hands-on if feasible (arm/confirm 4s window, skip/pause/stop/quit, second-quit force-kill during drain, pause Enter-resume).\n\nAcceptance: go test -race -shuffle=on -count=1 ./internal/relay/... ./internal/presentation/... green. Tick tasks.md 5.1-5.4 only where verified. Substantive gaps -\u003e focused head lap on the staging file, not inline rework.",
+      "assignee": "VERIFY",
+      "isDone": false,
+      "order": 983040,
+      "createdAt": "2026-07-02T03:37:05.050914263Z",
+      "updatedAt": "2026-07-02T03:37:05.050914263Z",
+      "completedAt": null
+    },
+    {
+      "id": "rall-1afa",
+      "title": "Update archguard policy tables/tests and build-new-tui stub",
+      "description": "Context: Phase 6 (tasks.md 6.1-6.3), design Decision 7/8. Mechanical guardrail + guidance updates now that the boundary is in place.\n\nOutcome: tools/archguard policy tables updated per Decision 7 -- relay/runner: -style -keyboard +relay/runner/runtimeevent (keep monitor); app: +relay/runner/runtimeevent; new presentation/terminal row (may import relay/runner/runtimeevent, style, keyboard, nothing else internal); diagnostics wording explains the runner-emits / adapters-render intent (runner must not import concrete presentation packages; presentation must not import runner internals/harness/config/store). Pinned policy tests updated to match. archguard --report regenerated with NO new grandfather entries (note any runner line-count reductions for #6's re-grounding). The build-new-tui stub proposal is updated to name internal/relay/runner/runtimeevent as the boundary the TUI consumes (events in, Press controls out; monitor status line to be replaced, not adapted -- Decision 8).\n\nFiles \u0026 scope: tools/archguard/policy/imports.go + imports_test.go (and report artifacts); the build-new-tui stub proposal under openspec/changes/. runtimeevent gets no policy row (stdlib-only leaf, enforced by absence).\n\nDesign: Table edits follow Decision 7 exactly; keep consistent with the existing architecture-guardrails spec (policy-table update only, same precedent as #4). Do not add grandfather entries -- if the report wants one, the boundary is wrong; report it instead.\n\nAcceptance: go run ./tools/archguard --report regenerated cleanly; go run ./tools/archguard --ci exit 0; go test -count=1 ./tools/archguard/... green.",
+      "assignee": "JUNIOR",
+      "isDone": false,
+      "order": 1048576,
+      "createdAt": "2026-07-02T03:37:05.050916451Z",
+      "updatedAt": "2026-07-02T03:37:05.050916451Z",
+      "completedAt": null
+    },
+    {
+      "id": "rall-f5c2",
+      "title": "VERIFY full change: byte/semantic parity, residuals, OpenSpec archive-order",
+      "description": "Context: Final full-change verification for #5 separate-runtime-presentation-boundary (tasks.md phase 7). Behaviour-preserving change: byte-identical CLI output, identical keyboard/cancellation semantics, no config/telemetry/store/laps/commit-message change, no version bump, no release.\n\nOutcome: Whole-change verification with the phase-6/7 tasks.md boxes checked and a holistic confirmation that phases 1-5 hold together.\n\nScope \u0026 method: Run the COMPLETE openspec-verify-change against separate-runtime-presentation-boundary and inspect the whole diff. Identify the merge target (operator/PR/repo docs/branch config/history -- not assumed main), diff \u003ctarget\u003e...HEAD; identify this batch's first lap/try and treat earlier branch work as pre-existing (flag but do not remove unless the operator asks); never rewrite git history. Verify: (7.1) go test -count=1 ./..., go test -race -shuffle=on -count=1 ./internal/relay/... ./internal/presentation/..., go vet ./..., gofmt -l . empty, go mod tidy no diff, just check green. (7.2) CLI output byte-identical on the smoke flows; shortcut semantics identical (arm/confirm window, skip/pause/stop/quit, second-quit force-kill during drain, pause Enter-resume); no telemetry/store/laps/config/commit-message diff; internal/buildinfo/VERSION untouched. (7.3) residuals intact and documented: monitor status line still runner-driven (mon.Start(os.Stdout)); relay-log lines unchanged and not events; app OS-signal Ctrl+C path untouched.\n\nArchive-order caveat: this change's composition-root-structure delta MODIFIES the same 'Presentation-neutral relay-start seam' requirement as #4 modularize-harness-adapters' delta, and includes #4's harnessapi wording. #4 MUST archive/sync before this change archives; if that order is broken, whichever delta archives last must first be rebased to contain the other's full requirement text. Confirm #4's archive status and report any ordering hazard to the operator rather than archiving out of order.\n\nAcceptance: full verification suite green; behaviour-preservation and residuals confirmed by tracing actual code/output, not just passing tests. Tick tasks.md 6.1-6.3 and 7.1-7.3 (and confirm all earlier boxes) only where verified to sufficient quality. Any substantive gap -\u003e focused head lap on the staging file, not inline rework.",
+      "assignee": "VERIFY",
+      "isDone": false,
+      "order": 1114112,
+      "createdAt": "2026-07-02T03:37:05.050917338Z",
+      "updatedAt": "2026-07-02T03:37:05.050917338Z",
+      "completedAt": null
+    }
+  ]
+}
