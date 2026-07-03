@@ -479,11 +479,11 @@
       "title": "Split route_runtime_test.go mirroring the route_runtime_* layout",
       "description": "Context: task 3.3 — after #6's layout. internal/relay/runner/route_runtime_test.go mirrors route_runtime_construct.go / route_runtime_select.go / route_runtime_recovery.go / route_runtime_bench.go. Use #6's recorded runner file list as the mirror target.\n\nOutcome: route_runtime_test.go split into _test.go files mirroring those four production files, each under 1,000 lines. Shared fixtures extend the existing helpers_test.go.\n\nFiles \u0026 scope: internal/relay/runner/*_test.go only. Zero production-file edits. Never split a single test function.\n\nDesign: Arrangement only — verbatim helper relocation, no fixture-semantics change. Move-and-verify inventory per commit: before/after name grep identical, each declared once.\n\nAcceptance: go test -race -shuffle=on -count=1 ./internal/relay/runner green; inventory identical; one commit. Report resulting file list. Do not tick tasks.md.",
       "assignee": "JUNIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 2883584,
       "createdAt": "2026-07-02T11:29:31.785816568Z",
-      "updatedAt": "2026-07-02T11:29:31.785816568Z",
-      "completedAt": null
+      "updatedAt": "2026-07-03T08:10:34.522859281Z",
+      "completedAt": "2026-07-03T08:10:34.522859281Z"
     },
     {
       "id": "rall-00ca",

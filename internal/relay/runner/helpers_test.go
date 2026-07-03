@@ -182,3 +182,132 @@ func awaitRunError(t *testing.T, done <-chan error) error {
 		return nil
 	}
 }
+
+func newRouteRuntimeHarness(t *testing.T) *Resilience {
+	t.Helper()
+
+	s := newTestStore(t, t.TempDir())
+	r := NewResilience(s)
+	r.PauseDuration = time.Hour
+	r.NowFunc = func() time.Time {
+		return time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
+	}
+	return r
+}
+
+func newResolvedRouteRuntimeOrDie(t *testing.T, routeSpecs map[string][]string, noBackend bool) (*routeRuntime, *Resilience) {
+	t.Helper()
+
+	rt, err := newResolvedRouteRuntime(routeSpecs, testResolver, noBackend, nil)
+	if err != nil {
+		t.Fatalf("newResolvedRouteRuntime() error = %v", err)
+	}
+	return rt, newRouteRuntimeHarness(t)
+}
+
+func newOverrideRouteRuntimeOrDie(t *testing.T, specs []string, routeSpecs map[string][]string, noBackend bool) (*routeRuntime, *Resilience) {
+	t.Helper()
+
+	rt, _, err := newOverrideRouteRuntime(specs, routeSpecs, testResolver, noBackend)
+	if err != nil {
+		t.Fatalf("newOverrideRouteRuntime() error = %v", err)
+	}
+	return rt, newRouteRuntimeHarness(t)
+}
+
+const (
+	reasoningBaseModel   = "gpt-5.5"
+	reasoningVerifyModel = "gpt-5.5-extra-high"
+	reasoningJuniorModel = "gpt-5.5-low"
+)
+
+func newReasoningRouteRuntimeOrDie(t *testing.T, routeSpecs map[string][]string) (*routeRuntime, *Resilience) {
+	t.Helper()
+
+	resolver := func(spec string) (harnessapi.ResolvedAgent, error) {
+		if spec == "cx" || spec == "codex" {
+			return harnessapi.ResolvedAgent{Harness: "codex", Model: reasoningBaseModel}, nil
+		}
+		return testResolver(spec)
+	}
+	reasoning := map[string]string{
+		"verify": "g55-xh",
+		"junior": "g55-l",
+	}
+	reasoningResolver := func(role, selectedHarness, preference string) (string, string, error) {
+		if selectedHarness != "codex" {
+			return "", "", nil
+		}
+		switch {
+		case strings.EqualFold(role, "verify") && preference == "g55-xh":
+			return reasoningVerifyModel, "", nil
+		case strings.EqualFold(role, "junior") && preference == "g55-l":
+			return reasoningJuniorModel, "", nil
+		default:
+			return "", "", nil
+		}
+	}
+
+	rt, err := newResolvedRouteRuntimeWithReasoning(routeSpecs, resolver, reasoning, reasoningResolver, false, nil)
+	if err != nil {
+		t.Fatalf("newResolvedRouteRuntimeWithReasoning() error = %v", err)
+	}
+	return rt, newRouteRuntimeHarness(t)
+}
+
+func mustNextRouteSelection(t *testing.T, rt *routeRuntime, resilience *Resilience, assignee string, lapID ...string) routeSelection {
+	t.Helper()
+
+	task := runTask{Assignee: assignee}
+	if len(lapID) > 0 {
+		task.LapID = lapID[0]
+	}
+	selection, err := rt.next(task, resilience)
+	if err != nil {
+		t.Fatalf("next(%q) error = %v", assignee, err)
+	}
+	return selection
+}
+
+func appendEvent(t *testing.T, s *store.Store, key ResilienceKey, eventType string, relayID int) {
+	t.Helper()
+	if err := s.AppendAgentStatus(store.AgentStatusEvent{
+		AgentType: key.Harness,
+		Model:     key.Model,
+		EventType: eventType,
+		Timestamp: "2026-01-01T12:00:00Z",
+		RelayID:   relayID,
+	}); err != nil {
+		t.Fatalf("AppendAgentStatus(%s): %v", eventType, err)
+	}
+}
+
+func setupRouteRuntimeStore(t *testing.T) (string, *store.Store) {
+	t.Helper()
+	dir := t.TempDir()
+	rallyDir := store.RallyDir(dir)
+	if err := os.MkdirAll(rallyDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	s, err := store.NewStore(rallyDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return rallyDir, s
+}
+
+func newRouteRuntimeStore(t *testing.T, records ...store.TryRecord) *store.Store {
+	t.Helper()
+	_, s := setupRouteRuntimeStore(t)
+	for _, rec := range records {
+		mustAppendRouteTry(t, s, rec)
+	}
+	return s
+}
+
+func mustAppendRouteTry(t *testing.T, s *store.Store, rec store.TryRecord) {
+	t.Helper()
+	if err := s.AppendTry(rec); err != nil {
+		t.Fatalf("AppendTry(%+v): %v", rec, err)
+	}
+}
