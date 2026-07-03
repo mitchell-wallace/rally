@@ -12,12 +12,5 @@ package main
 // file is caught. Ratchet a cap down, never up; drop an entry once the tree has
 // shrunk the file below its standard hard budget.
 var grandfather = map[string]int{
-	"internal/config/config_v2_test.go":                      1801,
-	"internal/relay/resilience_test.go":                      1063,
-	"internal/relay/runner/relay_steps_test.go":              2226,
-	"internal/relay/runner/route_runtime_test.go":            1392,
-	"internal/relay/runner/run_one_test.go":                  2355,
 	"internal/relay/runner/runner_failure_telemetry_test.go": 2326,
-	"internal/relay/runner/runner_outcome_test.go":           1032,
-	"internal/store/store_test.go":                           1112,
 }
