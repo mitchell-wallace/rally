@@ -435,11 +435,11 @@
       "title": "Split store_test.go mirroring the store production layout",
       "description": "Context: task 2.3 — after #7's store layout is final. internal/store/store_test.go mirrors #7's store_write.go / store_read.go / store_messages.go / store_agent_status.go. Use #7's recorded store file list from the baseline lap as the mirror target; follow the recorded names if they drifted.\n\nOutcome: store_test.go split into responsibility-named _test.go files in internal/store mirroring #7's store source files, each under 1,000 lines. Shared fixtures into one per-package helper test file.\n\nFiles \u0026 scope: internal/store/*_test.go only. Zero production-file edits. Never split a single test function.\n\nDesign: Arrangement only — verbatim helper relocation, no fixture-semantics or coverage change. Move-and-verify inventory per commit: before/after name grep identical, each declared once. Helper file under the cap.\n\nAcceptance: go test -race -shuffle=on -count=1 ./internal/store green; inventory identical; one commit. Report resulting file list. Do not tick tasks.md.",
       "assignee": "JUNIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 2621440,
       "createdAt": "2026-07-02T11:29:31.78581324Z",
-      "updatedAt": "2026-07-02T11:29:31.78581324Z",
-      "completedAt": null
+      "updatedAt": "2026-07-03T07:03:17.136952937Z",
+      "completedAt": "2026-07-03T07:03:17.136952937Z"
     },
     {
       "id": "rall-3cc4",
