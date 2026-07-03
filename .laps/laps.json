@@ -512,11 +512,11 @@
       "title": "Split runner_failure_telemetry_test.go by failure family",
       "description": "Context: task 3.5 — after #6's layout. internal/relay/runner/runner_failure_telemetry_test.go splits by failure family: harness failure evidence vs benching/reset vs diagnostics/events (names like runner_failure_telemetry_*_test.go).\n\nOutcome: runner_failure_telemetry_test.go split into failure-family _test.go files, each under 1,000 lines. Shared fixtures extend the existing helpers_test.go.\n\nFiles \u0026 scope: internal/relay/runner/*_test.go only. Zero production-file edits. Never split a single test function; a case that spans families goes with the failure it primarily pins.\n\nDesign: Arrangement only — verbatim helper relocation, no fixture-semantics change. Move-and-verify inventory per commit: before/after name grep identical, each declared once.\n\nAcceptance: go test -race -shuffle=on -count=1 ./internal/relay/runner green; inventory identical; one commit. Report resulting file list. Do not tick tasks.md.",
       "assignee": "JUNIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 3080192,
       "createdAt": "2026-07-02T11:29:31.785818869Z",
-      "updatedAt": "2026-07-02T11:29:31.785818869Z",
-      "completedAt": null
+      "updatedAt": "2026-07-03T08:58:26.551445406Z",
+      "completedAt": "2026-07-03T08:58:26.551445406Z"
     },
     {
       "id": "rall-6fea",

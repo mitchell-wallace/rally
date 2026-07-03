@@ -3,7 +3,6 @@ package runner
 import (
 	"context"
 	"fmt"
-	"github.com/mitchell-wallace/rally/internal/harness/fixture"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -12,9 +11,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/mitchell-wallace/rally/internal/harness/fixture"
 	"github.com/mitchell-wallace/rally/internal/harnessapi"
 	"github.com/mitchell-wallace/rally/internal/relay/runner/runtimeevent"
 	"github.com/mitchell-wallace/rally/internal/store"
+	"github.com/mitchell-wallace/rally/internal/telemetry"
 	"github.com/mitchell-wallace/rally/internal/testutil"
 )
 
@@ -309,5 +310,337 @@ func mustAppendRouteTry(t *testing.T, s *store.Store, rec store.TryRecord) {
 	t.Helper()
 	if err := s.AppendTry(rec); err != nil {
 		t.Fatalf("AppendTry(%+v): %v", rec, err)
+	}
+}
+
+// ==========================================
+// Failure Telemetry Shared Fixtures/Helpers
+// ==========================================
+
+// capturedFailure records one CaptureFailure call so tests can assert on the
+// tags and contexts the runner attached at a capture site.
+type capturedFailure struct {
+	msg string
+	evt telemetry.FailureEvent
+}
+
+type capturedEvent struct {
+	msg string
+	evt telemetry.Event
+}
+
+type capturedSpan struct {
+	operation   string
+	description string
+	tags        map[string]string
+	data        map[string]interface{}
+}
+
+// capturingSink records telemetry calls so tests can assert Issue, event, span,
+// and structured-log fields together.
+type capturingSink struct {
+	telemetry.NoopSink
+	failures    []capturedFailure
+	events      []capturedEvent
+	logs        []map[string]interface{}
+	routeEvents []map[string]interface{}
+	spans       []*capturedSpan
+}
+
+type capturingSpan struct {
+	span *capturedSpan
+}
+
+func (c *capturingSink) StartSpan(ctx context.Context, operation, description string) (context.Context, telemetry.Span) {
+	span := &capturedSpan{
+		operation:   operation,
+		description: description,
+		tags:        map[string]string{},
+		data:        map[string]interface{}{},
+	}
+	c.spans = append(c.spans, span)
+	return ctx, &capturingSpan{span: span}
+}
+
+func (s *capturingSpan) SetTag(key, value string) {
+	s.span.tags[key] = value
+}
+
+func (s *capturingSpan) SetData(key string, value interface{}) {
+	s.span.data[key] = value
+}
+
+func (s *capturingSpan) Finish() {}
+
+func (c *capturingSink) EmitTryLog(_ context.Context, fields map[string]interface{}) {
+	copied := make(map[string]interface{}, len(fields))
+	for k, v := range fields {
+		copied[k] = v
+	}
+	c.logs = append(c.logs, copied)
+}
+
+func (c *capturingSink) EmitRouteEvent(_ context.Context, fields map[string]interface{}) {
+	copied := make(map[string]interface{}, len(fields))
+	for k, v := range fields {
+		copied[k] = v
+	}
+	c.routeEvents = append(c.routeEvents, copied)
+}
+
+func (c *capturingSink) CaptureFailure(_ context.Context, msg string, evt telemetry.FailureEvent) {
+	c.failures = append(c.failures, capturedFailure{msg: msg, evt: evt})
+}
+
+func (c *capturingSink) CaptureEvent(_ context.Context, msg string, evt telemetry.Event) {
+	c.events = append(c.events, capturedEvent{msg: msg, evt: evt})
+}
+
+// findFailure returns the single captured failure whose message contains substr,
+// failing if there is not exactly one. Used to disambiguate the terminal-try,
+// unfinalized, and relay-stall captures.
+func findFailure(t *testing.T, sink *capturingSink, substr string) telemetry.FailureEvent {
+	t.Helper()
+	var matches []telemetry.FailureEvent
+	for _, f := range sink.failures {
+		if strings.Contains(f.msg, substr) {
+			matches = append(matches, f.evt)
+		}
+	}
+	if len(matches) != 1 {
+		var msgs []string
+		for _, f := range sink.failures {
+			msgs = append(msgs, f.msg)
+		}
+		t.Fatalf("want exactly 1 captured failure containing %q, got %d (all: %v)", substr, len(matches), msgs)
+	}
+	return matches[0]
+}
+
+func wantTag(t *testing.T, tags map[string]string, key, want string) {
+	t.Helper()
+	if got := tags[key]; got != want {
+		t.Errorf("tag %q = %q, want %q", key, got, want)
+	}
+}
+
+func wantNoTag(t *testing.T, tags map[string]string, key string) {
+	t.Helper()
+	if got, found := tags[key]; found {
+		t.Errorf("tag %q must be omitted, got %q", key, got)
+	}
+}
+
+func wantFingerprintCategory(t *testing.T, evt telemetry.FailureEvent, want string) {
+	t.Helper()
+	if len(evt.Fingerprint) != 5 {
+		t.Fatalf("fingerprint = %v, want 5 stable components", evt.Fingerprint)
+	}
+	if evt.Fingerprint[0] != "rally" || evt.Fingerprint[1] != "failure" {
+		t.Errorf("fingerprint prefix = %v, want [rally failure]", evt.Fingerprint[:2])
+	}
+	if evt.Fingerprint[3] != want {
+		t.Errorf("fingerprint category = %q, want %q (full fingerprint %v)", evt.Fingerprint[3], want, evt.Fingerprint)
+	}
+}
+
+func findFailureCount(sink *capturingSink, substr string) int {
+	n := 0
+	for _, f := range sink.failures {
+		if strings.Contains(f.msg, substr) {
+			n++
+		}
+	}
+	return n
+}
+
+func findEvent(t *testing.T, sink *capturingSink, substr string) telemetry.Event {
+	t.Helper()
+	var matches []telemetry.Event
+	for _, e := range sink.events {
+		if strings.Contains(e.msg, substr) {
+			matches = append(matches, e.evt)
+		}
+	}
+	if len(matches) != 1 {
+		var msgs []string
+		for _, e := range sink.events {
+			msgs = append(msgs, e.msg)
+		}
+		t.Fatalf("want exactly 1 captured event containing %q, got %d (all: %v)", substr, len(matches), msgs)
+	}
+	return matches[0]
+}
+
+func wantNoContext(t *testing.T, evt telemetry.FailureEvent, name string) {
+	t.Helper()
+	if _, ok := evt.Contexts[name]; ok {
+		t.Errorf("context %q must not be present", name)
+	}
+}
+
+func wantContextKey(t *testing.T, evt telemetry.FailureEvent, block, key string, want string) {
+	t.Helper()
+	blk, ok := evt.Contexts[block]
+	if !ok {
+		t.Fatalf("context block %q missing", block)
+	}
+	got, _ := blk[key].(string)
+	if got != want {
+		t.Errorf("context[%q][%q] = %q, want %q", block, key, got, want)
+	}
+}
+
+func wantContextNotContains(t *testing.T, evt telemetry.FailureEvent, block, key, substr string) {
+	t.Helper()
+	blk, ok := evt.Contexts[block]
+	if !ok {
+		return
+	}
+	got, _ := blk[key].(string)
+	if strings.Contains(got, substr) {
+		t.Errorf("context[%q][%q] = %q must not contain %q", block, key, got, substr)
+	}
+}
+
+func findTryLogByOutcome(t *testing.T, sink *capturingSink, outcome string) map[string]interface{} {
+	t.Helper()
+	for _, fields := range sink.logs {
+		if fields["event"] == "try" && fields["outcome"] == outcome {
+			return fields
+		}
+	}
+	t.Fatalf("no try log with outcome %q found in %#v", outcome, sink.logs)
+	return nil
+}
+
+func findLogByEvent(t *testing.T, sink *capturingSink, event string) map[string]interface{} {
+	t.Helper()
+	for _, fields := range sink.logs {
+		if fields["event"] == event {
+			return fields
+		}
+	}
+	t.Fatalf("no log with event %q found in %#v", event, sink.logs)
+	return nil
+}
+
+func findRouteEventByEvent(t *testing.T, sink *capturingSink, event string) map[string]interface{} {
+	t.Helper()
+	for _, fields := range sink.routeEvents {
+		if fields["event"] == event {
+			return fields
+		}
+	}
+	t.Fatalf("no route event %q found in %#v", event, sink.routeEvents)
+	return nil
+}
+
+func assertNoTryLogEvent(t *testing.T, sink *capturingSink, event string) {
+	t.Helper()
+	for _, fields := range sink.logs {
+		if fields["event"] == event {
+			t.Fatalf("unexpected try log event %q in %#v", event, sink.logs)
+		}
+	}
+}
+
+func assertTryLogsHaveOutcome(t *testing.T, sink *capturingSink) {
+	t.Helper()
+	for _, fields := range sink.logs {
+		if fields["event"] != "try" {
+			continue
+		}
+		outcome, _ := fields["outcome"].(string)
+		if strings.TrimSpace(outcome) == "" {
+			t.Fatalf("try log missing non-empty outcome: %#v", fields)
+		}
+	}
+}
+
+func findTrySpanByOutcome(t *testing.T, sink *capturingSink, outcome string) *capturedSpan {
+	t.Helper()
+	for _, span := range sink.spans {
+		if span.operation == "try" && span.tags["outcome"] == outcome {
+			return span
+		}
+	}
+	t.Fatalf("no try span with outcome %q found in %#v", outcome, sink.spans)
+	return nil
+}
+
+func setupRunnerForFailureTest(t *testing.T) (*store.Store, string, *capturingSink) {
+	t.Helper()
+	workspaceDir := t.TempDir()
+	rallyDir := store.RallyDir(workspaceDir)
+	os.MkdirAll(rallyDir, 0o755)
+	initRepo(t, workspaceDir)
+	runGit(t, workspaceDir, "commit", "--allow-empty", "-m", "initial", "--no-verify")
+	s := newTestStore(t, rallyDir)
+	sink := &capturingSink{}
+	return s, workspaceDir, sink
+}
+
+func makeRunner(t *testing.T, s *store.Store, workspaceDir string, sink *capturingSink, exec harnessapi.Executor, budget int) *Runner {
+	r := NewRunner(s, Config{
+		WorkspaceDir:     workspaceDir,
+		DataDir:          t.TempDir(),
+		AgentMixSpecs:    []string{"op:dsf"},
+		TargetIterations: 1,
+		RetryBudget:      budget,
+		LapsEnabled:      true,
+		Resolver:         cheapTestResolver,
+	}, map[string]harnessapi.Executor{"opencode": exec})
+	r.SetTelemetry(sink)
+	return r
+}
+
+type failureTestContext struct {
+	store *store.Store
+	sink  *capturingSink
+}
+
+func setupRunnerForFailureTestDirty(t *testing.T) (failureTestContext, string) {
+	t.Helper()
+	workspaceDir := t.TempDir()
+	rallyDir := store.RallyDir(workspaceDir)
+	os.MkdirAll(rallyDir, 0o755)
+	initRepo(t, workspaceDir)
+	runGit(t, workspaceDir, "commit", "--allow-empty", "-m", "initial", "--no-verify")
+	s := newTestStore(t, rallyDir)
+	sink := &capturingSink{}
+	return failureTestContext{store: s, sink: sink}, workspaceDir
+}
+
+func newBudgetKillRunner(t *testing.T, s *store.Store, workspaceDir string, sink *capturingSink, exec harnessapi.Executor, cfg Config) *Runner {
+	t.Helper()
+	cfg.WorkspaceDir = workspaceDir
+	if cfg.DataDir == "" {
+		cfg.DataDir = t.TempDir()
+	}
+	if cfg.Resolver == nil {
+		cfg.Resolver = cheapTestResolver
+	}
+	r := NewRunner(s, cfg, map[string]harnessapi.Executor{"opencode": exec})
+	r.SetTelemetry(sink)
+	return r
+}
+
+func blockTryPersistence(t *testing.T, workspaceDir string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Join(store.RallyDir(workspaceDir), "state", "tries.jsonl"), 0o755); err != nil {
+		t.Fatalf("block try persistence: %v", err)
+	}
+}
+
+func successfulFileChangingExecutor(t *testing.T, workspaceDir string) harnessapi.Executor {
+	t.Helper()
+	return &funcExecutor{
+		fn: func(ctx context.Context, opts harnessapi.RunOptions) (*harnessapi.TryResult, error) {
+			if err := os.WriteFile(filepath.Join(workspaceDir, "done.txt"), []byte("done\n"), 0o644); err != nil {
+				return nil, err
+			}
+			return &harnessapi.TryResult{Completed: true, Summary: "done"}, nil
+		},
 	}
 }
