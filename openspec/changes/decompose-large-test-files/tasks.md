@@ -12,9 +12,9 @@
 
 ## 3. Runner suites (after #6's layout is final)
 
-- [ ] 3.1 Split `internal/relay/runner/run_one_test.go` (2,355) per-phase against #6's `run_attempt_*.go` files, keeping top-level `runOne` flow cases in `run_one_test.go`; move shared fixtures into the existing `helpers_test.go`. Inventory check + `go test -race -shuffle=on -count=1 ./internal/relay/runner`; commit.
-- [ ] 3.2 Split `internal/relay/runner/runner_outcome_test.go` (1,038) by outcome family mirroring `run_attempt_classify.go`/`run_attempt_record.go`. Inventory check + package tests; commit.
-- [ ] 3.3 Split `internal/relay/runner/route_runtime_test.go` (1,392) mirroring `route_runtime_construct.go`/`route_runtime_select.go`/`route_runtime_recovery.go`/`route_runtime_bench.go`. Inventory check + package tests; commit.
+- [x] 3.1 Split `internal/relay/runner/run_one_test.go` (2,355) per-phase against #6's `run_attempt_*.go` files, keeping top-level `runOne` flow cases in `run_one_test.go`; move shared fixtures into the existing `helpers_test.go`. Inventory check + `go test -race -shuffle=on -count=1 ./internal/relay/runner`; commit.
+- [x] 3.2 Split `internal/relay/runner/runner_outcome_test.go` (1,038) by outcome family mirroring `run_attempt_classify.go`/`run_attempt_record.go`. Inventory check + package tests; commit.
+- [x] 3.3 Split `internal/relay/runner/route_runtime_test.go` (1,392) mirroring `route_runtime_construct.go`/`route_runtime_select.go`/`route_runtime_recovery.go`/`route_runtime_bench.go`. Inventory check + package tests; commit.
 - [ ] 3.4 Split `internal/relay/runner/relay_steps_test.go` (2,226) mirroring `relay_route_wait.go`/`relay_run_progress.go`/`relay_summary.go` (post-#5 membership). Inventory check + package tests; commit.
 - [ ] 3.5 Split `internal/relay/runner/runner_failure_telemetry_test.go` (2,331) by failure family (harness failure evidence vs benching/reset vs diagnostics/events). Inventory check + package tests; commit.
 

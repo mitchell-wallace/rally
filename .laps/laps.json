@@ -490,11 +490,11 @@
       "title": "Verify the first runner suite splits (tasks 3.1-3.3)",
       "description": "Context: mid-runner verification gate covering tasks 3.1 (run_one), 3.2 (runner_outcome), 3.3 (route_runtime). Use the openspec-verify-change skill against decompose-large-test-files, then focus the report on these three suites.\n\nOutcome: Confirmation the three runner suites are correctly split, arrangement-only, inventories preserved, mirroring #6's recorded layout — or head laps for gaps.\n\nScope \u0026 method: Identify the intended merge target (do not assume main) and this batch's first lap/try; treat earlier work as pre-existing. Trace real evidence, not just green tests: compare before/after Test*/Benchmark*/Fuzz* inventory for internal/relay/runner (identical multiset, each declared once); confirm each new _test.go file (helpers_test.go included) is under 1,000 lines and that shared setup lives in the single helpers_test.go, not parallel helpers; confirm the diff touches only _test.go files. Run go test -race -shuffle=on -count=1 ./internal/relay/runner.\n\nAcceptance: If solid, check the tasks.md boxes for 3.1-3.3. Add focused head laps for substantive gaps (additive/revert commits only, never rewrite history); only tiny safe one-liners inline. Report findings first.",
       "assignee": "VERIFY",
-      "isDone": false,
+      "isDone": true,
       "order": 2949120,
       "createdAt": "2026-07-02T11:29:31.785817296Z",
-      "updatedAt": "2026-07-02T11:29:31.785817296Z",
-      "completedAt": null
+      "updatedAt": "2026-07-03T08:25:02.692997976Z",
+      "completedAt": "2026-07-03T08:25:02.692997976Z"
     },
     {
       "id": "rall-c557",
