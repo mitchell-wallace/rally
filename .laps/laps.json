@@ -534,11 +534,11 @@
       "title": "Code review: decompose-large-test-files (queue 8)",
       "description": "Run the auto-code-review skill (see .opencode/skills/auto-code-review/SKILL.md, also available under .claude/skills and .codex/skills) over the full decompose-large-test-files lap batch that just completed above.\n\nScope: the accumulated diff for this batch only (the large test-file decomposition). Identify the first lap/try commit of this queue-8 batch and use git merge-base / branch tracking / recent log to pick the correct diff base; treat earlier branch work as pre-existing unless instructed otherwise. Do not pull in unrelated commits.\n\nFocus: test integrity — confirm no tests were dropped, duplicated, or silently weakened, fixtures and table-driven cases are intact, helpers moved cleanly, and the test suite still exercises the same behaviour. Verify go test -count=1 ./internal/relay/... (and the race suite where relevant) are green. Findings first; auto-fix only low-risk local issues; surface architecture/product calls with a default recommendation instead of silently deciding them. Commit each coherent fix cluster only if asked.",
       "assignee": "senior",
-      "isDone": false,
+      "isDone": true,
       "order": 3211264,
       "createdAt": "2026-07-02T11:29:40.502923011Z",
-      "updatedAt": "2026-07-02T11:29:40.502923011Z",
-      "completedAt": null
+      "updatedAt": "2026-07-03T09:14:02.155249646Z",
+      "completedAt": "2026-07-03T09:14:02.155249646Z"
     }
   ]
 }
