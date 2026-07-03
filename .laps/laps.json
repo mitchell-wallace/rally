@@ -457,11 +457,11 @@
       "title": "Split run_one_test.go per-phase against the run_attempt_* layout",
       "description": "Context: task 3.1 — after #6's runner layout is final (it runs before this queue). internal/relay/runner/run_one_test.go (largest suite) mirrors #6's per-phase run_attempt_*.go files. Use #6's recorded runner file list from the baseline lap as the mirror target.\n\nOutcome: run_one_test.go split into per-phase _test.go files mirroring run_attempt_*.go (e.g. run_attempt_prepare_test.go, run_attempt_classify_test.go, run_retry_decide_test.go, ...), with run_one_test.go retaining only the top-level runOne flow cases. Each file under 1,000 lines. Shared fixtures move into the EXISTING internal/relay/runner/helpers_test.go, not a new parallel helper.\n\nFiles \u0026 scope: internal/relay/runner/*_test.go only. Zero production-file edits. Never split a single test function; a cross-phase test goes with the behaviour it primarily pins.\n\nDesign: Arrangement only (Decision 2/3) — verbatim helper relocation into helpers_test.go, no fixture-semantics change. Move-and-verify inventory per commit: before/after grep of Test*/Benchmark*/Fuzz* names for the package identical, each declared once. helpers_test.go stays under the cap.\n\nAcceptance: go test -race -shuffle=on -count=1 ./internal/relay/runner green; inventory identical; one commit. Report resulting file list. Do not tick tasks.md.",
       "assignee": "JUNIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 2752512,
       "createdAt": "2026-07-02T11:29:31.785814924Z",
-      "updatedAt": "2026-07-02T11:29:31.785814924Z",
-      "completedAt": null
+      "updatedAt": "2026-07-03T07:41:15.346341297Z",
+      "completedAt": "2026-07-03T07:41:15.346341297Z"
     },
     {
       "id": "rall-dfae",
