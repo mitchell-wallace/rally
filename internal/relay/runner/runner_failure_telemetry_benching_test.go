@@ -3,6 +3,7 @@ package runner
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -57,7 +58,7 @@ func TestRunOne_AgentClassFailureStaysSpanLogOnly(t *testing.T) {
 		0,
 		harnessapi.ResolvedAgent{Harness: "opencode", Model: cheapTestModel},
 		runTask{Name: "task", Prompt: "do work", Assignee: "senior"},
-		nil, nil, false, false, nil, nil, os.Stderr,
+		nil, nil, false, false, nil, nil, io.Discard,
 	)
 	if err != nil {
 		t.Fatalf("runOne error = %v", err)
@@ -148,9 +149,9 @@ func TestRun_RouteFallbackTelemetryIncludesTriggerCause(t *testing.T) {
 					},
 				}, nil
 			}
-			f, _ := os.Create(filepath.Join(workspaceDir, "done.txt"))
-			f.WriteString("done\n")
-			f.Close()
+			if err := os.WriteFile(filepath.Join(workspaceDir, "done.txt"), []byte("done\n"), 0o644); err != nil {
+				return nil, err
+			}
 			return &harnessapi.TryResult{Completed: true, Summary: "done"}, nil
 		},
 	}
@@ -239,9 +240,9 @@ func TestRunOneRecoveryClassificationTelemetryAndNeedsUserIssue(t *testing.T) {
 			s := newTestStore(t, rallyDir)
 			exec := &funcExecutor{
 				fn: func(ctx context.Context, opts harnessapi.RunOptions) (*harnessapi.TryResult, error) {
-					f, _ := os.Create(filepath.Join(workspaceDir, "done.txt"))
-					f.WriteString("done\n")
-					f.Close()
+					if err := os.WriteFile(filepath.Join(workspaceDir, "done.txt"), []byte("done\n"), 0o644); err != nil {
+						return nil, err
+					}
 					if err := progress.RecordLap(workspaceDir, "lap-1"); err != nil {
 						return nil, err
 					}
@@ -273,7 +274,7 @@ func TestRunOneRecoveryClassificationTelemetryAndNeedsUserIssue(t *testing.T) {
 				0,
 				harnessapi.ResolvedAgent{Harness: "opencode", Model: cheapTestModel},
 				runTask{Name: "task", Prompt: "do work", Assignee: "senior", EffectiveAssignee: "recovery", ResolvedRoute: "recovery", LapID: "lap-1", IsLapsBacked: true, LapsRemaining: 1},
-				nil, nil, false, false, nil, nil, os.Stderr,
+				nil, nil, false, false, nil, nil, io.Discard,
 			)
 			if err != nil {
 				t.Fatalf("runOne error = %v", err)
@@ -332,9 +333,9 @@ func TestRunRecoveryCapHitCapturesNeedsUserIssue(t *testing.T) {
 
 	exec := &funcExecutor{
 		fn: func(ctx context.Context, opts harnessapi.RunOptions) (*harnessapi.TryResult, error) {
-			f, _ := os.Create(filepath.Join(workspaceDir, "done.txt"))
-			f.WriteString("done\n")
-			f.Close()
+			if err := os.WriteFile(filepath.Join(workspaceDir, "done.txt"), []byte("done\n"), 0o644); err != nil {
+				return nil, err
+			}
 			if err := progress.RecordLap(workspaceDir, "lap-cap"); err != nil {
 				return nil, err
 			}
