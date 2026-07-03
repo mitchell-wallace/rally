@@ -413,11 +413,11 @@
       "title": "Split resilience_test.go by resilience concern",
       "description": "Context: task 2.1. internal/relay/resilience_test.go has NO upstream dependency and can land first. design.md Decision 2 gives the split axis.\n\nOutcome: resilience_test.go split into responsibility-named _test.go files in internal/relay, each under the 1,000-line cap, grouped by resilience concern: state machine/persistence vs stall/frozen transitions vs benched/probation/decay. Shared fixtures/builders extracted into a single per-package helper test file (extend an existing one; create at most one new helper_test.go if none exists).\n\nFiles \u0026 scope: internal/relay/*_test.go only. Zero production-file edits — not even renames. A test spanning multiple concerns goes with the behaviour it primarily pins; never split a single test function.\n\nDesign: Arrangement only — no assertion, fixture-meaning, or coverage change; extract only verbatim-shared setup, leave case-local variants inline (Decision 3). Move-and-verify inventory per commit (Decision 4): grep the Test*/Benchmark*/Fuzz* names for the package before and after; the multiset must be identical, each declared exactly once. Helper files are subject to the 1,000-line cap too.\n\nAcceptance: go test -race -shuffle=on -count=1 ./internal/relay green; before/after name inventory identical; one commit for this suite. Report the resulting file list. Do not tick tasks.md.",
       "assignee": "JUNIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 2490368,
       "createdAt": "2026-07-02T11:29:31.785811256Z",
-      "updatedAt": "2026-07-02T11:29:31.785811256Z",
-      "completedAt": null
+      "updatedAt": "2026-07-03T06:13:48.407533084Z",
+      "completedAt": "2026-07-03T06:13:48.407533084Z"
     },
     {
       "id": "rall-dcab",
