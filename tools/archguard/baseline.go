@@ -11,6 +11,4 @@ package main
 // map fails if it exceeds the standard hard budget — that is how a new oversize
 // file is caught. Ratchet a cap down, never up; drop an entry once the tree has
 // shrunk the file below its standard hard budget.
-var grandfather = map[string]int{
-	"internal/relay/runner/runner_failure_telemetry_test.go": 2326,
-}
+var grandfather = map[string]int{}
