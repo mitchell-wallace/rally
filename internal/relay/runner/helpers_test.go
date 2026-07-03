@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/mitchell-wallace/rally/internal/harnessapi"
+	"github.com/mitchell-wallace/rally/internal/relay/runner/runtimeevent"
 	"github.com/mitchell-wallace/rally/internal/store"
 	"github.com/mitchell-wallace/rally/internal/testutil"
 )
@@ -139,4 +140,45 @@ func CopyFixtureProject(t *testing.T, destDir string) {
 func InitGitRepo(t *testing.T, dir string) {
 	t.Helper()
 	testutil.InitGitRepo(t, dir)
+}
+
+type testControls struct {
+	ch chan runtimeevent.Press
+}
+
+func installOperatorKeyboard(t *testing.T, r *Runner) *testControls {
+	t.Helper()
+	controls := &testControls{ch: make(chan runtimeevent.Press, 4)}
+	r.cfg.Controls = controls
+	return controls
+}
+
+func (c *testControls) Start(context.Context) (<-chan runtimeevent.Press, error) {
+	return c.ch, nil
+}
+
+func (c *testControls) Stop() {}
+
+func (c *testControls) WaitResume(context.Context) error {
+	return nil
+}
+
+func sendOperatorAction(t *testing.T, controls *testControls, action runtimeevent.OperatorAction) {
+	t.Helper()
+	if action == runtimeevent.OperatorActionNone {
+		t.Fatalf("unsupported operator action %v", action)
+	}
+	controls.ch <- runtimeevent.Press{Action: action, Confirmed: false}
+	controls.ch <- runtimeevent.Press{Action: action, Confirmed: true}
+}
+
+func awaitRunError(t *testing.T, done <-chan error) error {
+	t.Helper()
+	select {
+	case err := <-done:
+		return err
+	case <-time.After(2 * time.Second):
+		t.Fatal("Run did not return")
+		return nil
+	}
 }
