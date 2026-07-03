@@ -523,11 +523,11 @@
       "title": "Ratchet the archguard baseline and verify the full change",
       "description": "Context: tasks 3.4, 3.5, and phase 4 (4.1-4.4) plus the whole-change gate. Covers the last two runner splits and the ratchet+verification. Use the openspec-verify-change skill for the full change decompose-large-test-files and inspect the entire diff. design.md Decision 5: the acceptance criterion is the EMPTY test grandfather map, not a fixed file list.\n\nOutcome: The #3 test grandfather map is empty, the whole change is confirmed arrangement-only with preserved inventories, and every suite is under the cap — or head laps for any gap.\n\nScope \u0026 method: First verify 3.4 (relay_steps) and 3.5 (runner_failure_telemetry) like the earlier runner gate — inventory preserved, files under cap, _test.go-only diff, package tests green under -race -shuffle=on. Then the ratchet: regenerate the baseline with go run ./tools/archguard --report and confirm ZERO _test.go grandfather entries remain, every new _test.go file (helpers included) is under 1,000 lines, and go run ./tools/archguard --ci exits 0 with NO policy-table edit (baseline regeneration only, per the #4/#6 precedent). Final inventory comparison per package against the baseline lap's snapshot: identical multisets, each Test/Benchmark/Fuzz declared exactly once. Full verification: go test -count=1 ./..., go test -race -shuffle=on -count=1 ./..., go vet ./..., gofmt -l . empty, just check green. Confirm the whole diff touches only _test.go files plus the regenerated baseline — zero production-file edits, no assertion changes, internal/buildinfo/VERSION untouched, no version bump/release. Identify the intended merge target (do not assume main) and this batch's first lap/try; treat earlier work as pre-existing.\n\nAcceptance: If everything holds, check the remaining tasks.md boxes (1.1-1.3, 3.4, 3.5, 4.1-4.4). Add focused head laps for substantive gaps (additive/revert commits only, never rewrite history); only tiny safe one-liners inline. Report findings first.",
       "assignee": "VERIFY",
-      "isDone": false,
+      "isDone": true,
       "order": 3145728,
       "createdAt": "2026-07-02T11:29:31.785819562Z",
-      "updatedAt": "2026-07-02T11:29:31.785819562Z",
-      "completedAt": null
+      "updatedAt": "2026-07-03T09:05:15.50229226Z",
+      "completedAt": "2026-07-03T09:05:15.50229226Z"
     },
     {
       "id": "rall-f116",
