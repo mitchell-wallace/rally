@@ -446,11 +446,11 @@
       "title": "Verify the stable-package suite splits (tasks 2.1-2.3)",
       "description": "Context: verification gate at the stable-package slice boundary, covering tasks 2.1 (resilience), 2.2 (config), 2.3 (store). Use the openspec-verify-change skill against decompose-large-test-files, then focus the report on these three suites.\n\nOutcome: Confirmation that the three stable-package suites are correctly and thoroughly split, arrangement-only, with preserved inventories — or head laps for any gap.\n\nScope \u0026 method: Identify the intended merge target (ask the user / PR metadata / branch config / recent history — do not assume main) and the first lap/try in this batch; treat earlier branch work as pre-existing. Trace real evidence, not just green tests: compare the per-package before/after Test*/Benchmark*/Fuzz* inventories from the baseline snapshot (identical multiset, each declared once); confirm every new internal/relay, internal/config, internal/store _test.go file is under 1,000 lines; confirm the diff for these suites touches only _test.go files (zero production edits, no assertion changes). Run go test -race -shuffle=on -count=1 ./internal/relay ./internal/config ./internal/store.\n\nAcceptance: If solid, check the tasks.md boxes for 2.1-2.3. For any substantive gap, add a focused head lap (additive/revert commits only — never rewrite git history) rather than fixing large work inline; only tiny safe one-liners may be fixed here. Report findings first.",
       "assignee": "VERIFY",
-      "isDone": false,
+      "isDone": true,
       "order": 2686976,
       "createdAt": "2026-07-02T11:29:31.785814211Z",
-      "updatedAt": "2026-07-02T11:29:31.785814211Z",
-      "completedAt": null
+      "updatedAt": "2026-07-03T07:08:03.028814772Z",
+      "completedAt": "2026-07-03T07:08:03.028814772Z"
     },
     {
       "id": "rall-a734",
