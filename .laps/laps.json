@@ -424,11 +424,11 @@
       "title": "Split config_v2_test.go mirroring the config production layout",
       "description": "Context: task 2.2 — after #7's config layout is final (it runs before this queue). internal/config/config_v2_test.go mirrors the production split. Use #7's recorded per-package file list captured in the baseline lap as the mirror target; if names drifted from the proposal, follow the recorded list.\n\nOutcome: config_v2_test.go split into responsibility-named _test.go files in internal/config mirroring the production files (load/decode/validate/resolve/save from #2, plus #7's providers files where those cases belong), each under 1,000 lines. Shared fixtures into one per-package helper test file.\n\nFiles \u0026 scope: internal/config/*_test.go only. Zero production-file edits. Never split a single test function; a cross-file test goes with the behaviour it primarily pins.\n\nDesign: Arrangement only (Decision 2/3) — verbatim helper relocation, no fixture-semantics change. Move-and-verify inventory per commit: before/after grep of Test*/Benchmark*/Fuzz* names identical, each declared once. Helper file under the cap.\n\nAcceptance: go test -race -shuffle=on -count=1 ./internal/config green; inventory identical; one commit. Report resulting file list. Do not tick tasks.md.",
       "assignee": "JUNIOR",
-      "isDone": false,
+      "isDone": true,
       "order": 2555904,
       "createdAt": "2026-07-02T11:29:31.785812421Z",
-      "updatedAt": "2026-07-02T11:29:31.785812421Z",
-      "completedAt": null
+      "updatedAt": "2026-07-03T06:48:57.117345776Z",
+      "completedAt": "2026-07-03T06:48:57.117345776Z"
     },
     {
       "id": "rall-d600",
