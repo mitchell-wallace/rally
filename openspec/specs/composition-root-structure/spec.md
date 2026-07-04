@@ -53,7 +53,12 @@ decisions (resume-vs-new, keep-vs-overwrite mix, and interactive route
 validation) SHALL be resolved in `internal/cli` and passed to `app.StartRelay` as
 concrete values, and laps hook installation SHALL remain CLI-side before
 `app.StartRelay`. The app layer MAY write progress to caller-supplied `Out`/`Err`
-writers but SHALL NOT read input to branch on it. A non-mutating
+writers but SHALL NOT read input to branch on it. `RelayStartOptions` SHALL
+carry the presentation adapters — the `runtimeevent.Sink` event sink and
+`runtimeevent.ControlSource` operator-control source — as opaque contract
+values constructed in `internal/cli`; `internal/app` SHALL import
+`internal/relay/runner/runtimeevent` for those contract types only and SHALL
+NOT import any `internal/presentation/*` package. A non-mutating
 `app.InspectResume(workspaceDir) (app.ResumeInfo, error)` SHALL expose the
 unfinished-relay summary the CLI needs to prompt without itself opening the store
 for runtime mutation; it SHALL use the same store initialization/layout migration
@@ -66,6 +71,14 @@ path as startup so legacy state is visible before the prompt.
   `internal/user_prompt` nor `internal/laps`, `go list -deps ./internal/app`
   completes without an import cycle, and `app.StartRelay` performs no stdin
   prompting
+
+#### Scenario: Presentation adapters pass through the seam opaquely
+
+- **WHEN** `rally` starts a relay
+- **THEN** `internal/cli` constructs the terminal event sink and control source
+  over the process streams, `app.StartRelay` forwards them into `runner.Config`
+  without importing `internal/presentation/*`, and the runner performs all
+  operator-facing output and control input through them
 
 #### Scenario: Interactive decisions resolved CLI-side
 
@@ -135,10 +148,12 @@ until the relay path, and `.goreleaser.yaml` SHALL be unchanged.
 
 `internal/config/config_v2.go` SHALL be split into responsibility-named files in
 the same `package config` (`types.go`, `load.go`, `decode.go`, `validate.go`,
-`resolve.go`, `save.go`; `providers.go` unchanged). The split SHALL be a
-file-only move: no exported identifier SHALL be added, removed, renamed, or have
-its signature changed, and no config error string or deprecation message SHALL
-change unless a test proves a move forces it.
+`resolve.go`, `save.go`). `internal/config/providers.go` SHALL likewise be
+split into responsibility-named files in the same package, separating provider
+parsing, provider resolution, and wildcard/model-filter matching. Each split
+SHALL be a file-only move: no exported identifier SHALL be added, removed,
+renamed, or have its signature changed, and no config error string or
+deprecation message SHALL change unless a test proves a move forces it.
 
 #### Scenario: Exported surface unchanged across the split
 
@@ -152,6 +167,12 @@ change unless a test proves a move forces it.
 - **THEN** it passes with no assertion changes beyond test relocations, and
   deprecation notes and validation errors surface through the CLI exactly as
   before
+
+#### Scenario: Provider concerns live apart
+
+- **WHEN** `internal/config` is read after the providers split
+- **THEN** provider parsing, provider resolution, and wildcard matching live in
+  separate responsibility-named files with every symbol in exactly one home
 
 ### Requirement: Behaviour, telemetry, release, and laps preservation
 
@@ -176,4 +197,26 @@ agent-authored git commit messages SHALL be unchanged. The change SHALL NOT bump
   `chooseRelayAgentSpecs`, `syncRoleFolders`, telemetry-config, command
   registration) appears exactly once in its new home, and no new behavioural test
   is required beyond the `app.StartRelay` / `app.InspectResume` unit coverage
+
+### Requirement: Routes command module structure
+
+The routes-check command surface in `internal/cli` SHALL be decomposed into
+responsibility-named files in the same package, separating Cobra command
+wiring, the route/role check core, result rendering, and reasoning/alias
+validation. The split SHALL be a file-only move: no exported identifier,
+command name, flag, help text, or operator-facing output string SHALL change.
+Cobra usage SHALL remain confined to `internal/cli` per the third-party
+dependency-confinement rules.
+
+#### Scenario: Routes-check concerns live apart
+
+- **WHEN** the routes-check code in `internal/cli` is read after the change
+- **THEN** command wiring, check core, rendering, and validation live in
+  separate responsibility-named files, and `rally routes check` output is
+  byte-identical for the same inputs
+
+#### Scenario: CLI behaviour preserved
+
+- **WHEN** `go test -count=1 ./internal/cli ./cmd/rally` runs after the split
+- **THEN** it passes with no assertion changes beyond test relocations
 

@@ -1,7 +1,7 @@
 # Next up — proposed change order
 
 Living planning note for the queued OpenSpec changes. Order reflects dependency
-and risk-of-drift, not final scope. Last reviewed 2026-07-01.
+and risk-of-drift, not final scope. Last reviewed 2026-07-04.
 
 ## Done (archived)
 
@@ -48,64 +48,49 @@ and risk-of-drift, not final scope. Last reviewed 2026-07-01.
   and the CI `lint` job. Enforces #1's one-way `runner → relay` edge and #2's
   composition-root edges; tooling-and-CI only (no runtime change, no version bump);
   added the `architecture-guardrails` spec.
+- **modularize-harness-adapters** (`2026-07-02`) — introduced the
+  `internal/harnessapi` contract package (`Executor`/`RunOptions`/`TryResult`/
+  `ResolvedAgent` + shared `BuildPrompt`/reasoning helpers), moved each built-in
+  harness into its own `internal/harness/<name>` deep module with shared
+  `internal/harness/process` support, and exposed `harness.BuildExecutors`
+  behind a thin `app.BuildExecutors` mapper; removed `internal/agent` (no shim).
+  Added the `harness-module-structure` spec; ratcheted #3's `opencode.go` cap
+  away and set up the parked `extract-prompt-builder`.
+- **separate-runtime-presentation-boundary** (`2026-07-04`) — introduced a
+  presentation-neutral runtime contract in
+  `internal/relay/runner/runtimeevent` (typed data-only events, synchronous
+  `Sink`, operator-control vocabulary + `ControlSource`) so the CLI and future
+  TUI consume runner-emitted events instead of runner internals; carried the
+  presentation adapters through the `app.StartRelay` seam. Added the
+  `runtime-presentation-boundary` spec; modified `composition-root-structure`.
+- **decompose-run-one** (`2026-07-04`) — split the runner orchestration core
+  (`run_one.go`, `route_runtime.go`, `relay_steps.go`) into responsibility-named
+  per-phase files behind the existing `runOne`/`routeRuntime`/relay-step index
+  functions. Behaviour-preserving same-package file split; ratcheted #3's
+  flagship `run_one.go` production cap. Modified `relay-module-structure`.
+- **decompose-remaining-source-files** (`2026-07-04`) — deep-module split of the
+  remaining production warning-band outliers (`monitor.go`,
+  `config/providers.go` + `config_v2.go`, `cli/routes_check.go`, `store.go`)
+  into responsibility-named files. Findability polish, all under #3's 800-line
+  hard budget. Added the `support-module-structure` spec; modified
+  `composition-root-structure`.
+- **decompose-large-test-files** (`2026-07-04`) — split the oversized `_test.go`
+  files along production file lines into responsibility-named test files with
+  shared per-package helpers, clearing #3's 1,000-line test cap. Added the
+  `test-module-structure` spec.
 
 ## Order
 
 The runner is the spine of this sequence: #1 gave it its own package
 (`internal/relay/runner`) and the one-way `runner → relay` boundary, #2 layered
 the composition root (`cmd/rally → internal/cli → internal/app`) above it, and #3
-added the `tools/archguard` guardrail that holds those edges one-way. The queued
-changes #4–#8 build on that structure rather than on a monolithic runner: the
-deep-module decompositions (#4 harness adapters, #5 presentation boundary, #6
-run/try loop, #7 remaining source files, #8 test files), each ratcheting #3's
-budgets down as it splits its outliers (e.g. `opencode.go` 801, `run_one.go`
-1,510).
-
-4. **modularize-harness-adapters** _(proposed)_
-   Give future first-class harnesses a clean place to grow (draft **Option B**,
-   chosen for cleaner terminology over churn): a dedicated `internal/harnessapi`
-   contract package (`Executor`/`RunOptions`/`TryResult`/`ResolvedAgent` + shared
-   `BuildPrompt`/reasoning helpers), one deep module per built-in harness under
-   `internal/harness/<name>` (each owning its CLI parsing and log recovery), a
-   shared `internal/harness/process` support package, and a top-level
-   `internal/harness.BuildExecutors(harness.Config)` registry (narrow,
-   config-decoupled input) whose `map[string]harnessapi.Executor` output feeds
-   `runner.NewRunner` via a thin `app.BuildExecutors` mapper. `internal/agent` is
-   removed (no shim). Behaviour-preserving except six same-package helpers that
-   become exported to cross the new boundaries. Consumes #3's guardrail (adds the
-   harness allow-lists, ratchets away the `opencode.go` 801 cap) and keeps the
-   `reliability` parsers in place. Adds the `harness-module-structure` spec; hands
-   #5 a harness layer that already cannot import presentation packages; sets up the
-   parked `extract-prompt-builder`.
-
-5. **separate-runtime-presentation-boundary** _(draft)_
-   Prepare for multiple presentation surfaces by introducing runtime events and
-   operator-control boundaries. Attaches to the `terminal.go`/`action_loop.go`/
-   `liveness.go` seams #1 already isolated inside `internal/relay/runner`, so the
-   CLI and future TUI consume a presentation-neutral runtime instead of runner
-   internals.
-
-6. **decompose-run-one** _(draft)_
-   Split the runner orchestration core (`run_one.go` 1,510 + `route_runtime.go`
-   752 + `relay_steps.go` 526) into responsibility-named files behind the existing
-   `runOne` index, and break up its two deepest phase bodies (classify/record).
-   Same-package file split like #2 did to config; behaviour-preserving, no API
-   change. Ratchets #3's flagship production cap (`run_one.go`) down. Sequence
-   after #5 so it splits orchestration-only code.
-
-7. **decompose-remaining-source-files** _(draft)_
-   Deep-module split of the production warning-band outliers no other change owns:
-   `monitor.go` (663), `config/providers.go` (621), `cli/routes_check.go` (619),
-   `store.go` (541). All under #3's 800-line hard budget, so this is findability
-   polish, not gate-clearing. Same-package file splits, behaviour-preserving.
-
-8. **decompose-large-test-files** _(draft)_
-   Split the nine `_test.go` files over #3's 1,000-line cap into responsibility-
-   named test files that mirror the post-#4/#6/#7 source layout, with shared setup
-   in per-package helper files. Pure test reorganization. Coordinates with #4/#6
-   (which may split their own tests) and directly owns the stable-package tests
-   (`config_v2_test`, `store_test`, `resilience_test`). Land last of the
-   decompositions; ratchets #3's test caps away.
+added the `tools/archguard` guardrail that holds those edges one-way. The
+modularization arc (#4–#8) then built on that structure rather than on a
+monolithic runner — harness adapters, the presentation boundary, the run/try
+loop, remaining source files, and test files — each ratcheting #3's budgets down
+as it split its outliers (`opencode.go` 801, `run_one.go` 1,510). That arc is now
+complete. What remains queued is the role rename (#9), which the TUI (#10) needs
+as stable concepts to render.
 
 9. **rename-rally-roles** _(author input captured; artifacts not drafted)_
    Rename routing roles from skill-hierarchy (JUNIOR/SENIOR/UI/VERIFY) to judgment
