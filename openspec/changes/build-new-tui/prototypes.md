@@ -198,6 +198,34 @@ code paths and was PTY-verified in --demo). Remaining, in suggested order:
    channel back through the CLI (presentation cannot import store) — design an
    operator-intent callback akin to ControlSource if pursued.
 
+## Stage 3 (2026-07-04): selection made — collapse to tui-3
+
+Operator decision after prototype review: **tui-3 wins** ("strong and seems
+safe"). Direction locked for this stage:
+
+1. Collapse: delete tui-1/tui-2 (tuisafe, tuipanels), fold Dashboard into
+   tuitabs, promote the command to `rally tui`, port `--view` to it.
+2. **Messages tab dropped.** The messaging system needs a ground-up redesign
+   before any UI commits to its semantics — captured in
+   `openspec/changes/redesign-messaging/draft.md`. The Agents tab stays.
+3. `adopt-racing-terminology` is pulled forward: formalised and implemented
+   (scheme B: relay > outing > try; runner→driver) *before* the new TUI
+   features bake more `run`/`runner` naming into fresh surfaces.
+4. New capability laps after the rename, on the renamed base:
+   - live agent terminal-output tab — tail the active try log
+     (`progress.RunState.ActiveLogPath` → `DataDir/tries/<repo>/try-N.log`),
+     CLI-side tailer mirroring `internal/cli/tail.go` semantics feeding lines
+     into the session (presentation stays store-free);
+   - operator actions — agent-status reset (one/all; store has
+     `ResetAgentStatus`, per-agent needs a new API), discoverable
+     start/stop/pause controls, set target iterations mid-relay (runner loop
+     checks `relay.TargetIterations` each pass — apply intent at the loop
+     boundary), and starting a new relay from inside the TUI (session
+     outlives relays; CLI injects a RelayLauncher callback + an
+     operator-intent seam akin to ControlSource);
+   - full interactive config menu (reuse the `rally config` huh forms,
+     embedded in or suspended from bubbletea).
+
 ## Prototype comparison (for selection — fill in as evaluated)
 
 | Criterion | tui-1 safe | tui-2 panels | tui-3 tabs |
