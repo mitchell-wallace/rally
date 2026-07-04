@@ -3,6 +3,9 @@
 Status: drafted 2026-07-04. Concept-only capture; low priority. Anchored
 loosely to `a9badbf` (tip of `feat/tui-prototypes`, after the TUI prototypes).
 Symbol/file references below will drift — re-verify when picked up.
+Updated same day: the original run → stint pick was superseded by
+run → **outing** after `stint` was claimed by an upcoming laps feature; the
+conflict and the naming principles it produced are recorded below.
 
 ## Why
 
@@ -55,20 +58,53 @@ take a racing name of its own (**race control** — `racecontrol` — is the
 authentic term for the thing that starts/stops running and enforces rules).
 That package rename is optional tier-3 polish; freeing the word is the win.
 
-### run (one runner on one lap) → **stint** — recommended, biggest clarity gain
+### run (one runner on one lap) → **outing** — recommended, biggest clarity gain
+
+**Why not stint (decision, 2026-07-04):** `stint` was the original pick — it
+is the racing-precise term for one driver's continuous turn, ended by a driver
+change, which matches the skip/reroute semantic exactly. But an upcoming laps
+feature already uses **stint** for a composable (potentially nested) sequence
+of laps inside `laps.json` — independently decomposed queues become stints. We
+considered reassigning: give laps the itinerary-pure terms (`leg` or
+`section` — rallies divide into legs, legs into sections) and take stint for
+rally. Rejected, on a principle worth keeping: **laps-facing vocabulary must
+carry safe first-read intuition for humans who author queues without rally in
+the picture.** "Leg" misleads a non-racing reader (it sounds like a *part of*
+a lap, not a group of them); "section" is generic and collides with markdown
+document sections in the very OpenSpec plans laps queues are prepared from.
+"Stint" for a run of consecutive laps trips neither wire even for readers who
+don't know racing. So stint is laps-owned; rally does not use it.
 
 | Option | For | Against |
 |---|---|---|
-| **stint** | Racing-precise: one driver's continuous turn at the wheel, ended by a driver change — which is exactly the skip/handoff-to-another-runner semantic; unique in the codebase and in Go idiom; perfectly greppable | Metaphor inversion: a real stint *spans* laps, whereas here a lap can have several stints. Acceptable — "the driver's turn on this lap" still reads naturally |
-| leg | Rally-authentic (rallies have legs) | Weak in code (`LegID`), collides with nothing but communicates little |
-| drive | Natural noun | Unusable as identifier prefix (verb collision same as run) |
-| outing | Real motorsport slang for one driver session | Too obscure for a fresh agent |
+| **outing** | Real motorsport usage ("a strong outing"); zero collisions in this tree, in Go idiom, or in comment prose; perfectly greppable | Mildly obscure on first read — acceptable here because operators only ever *consume* the term (headers, footers, records) and can pick it up from usage; nobody has to produce it the way laps authors produce laps vocabulary |
+| stint | Racing-precise for exactly this semantic | Taken by laps (above) |
+| drive | Natural noun, no Go-idiom collision | `drive`/`driver` substring adjacency degrades grep and reads awkwardly ("the drive's driver") |
+| leg | Rally-authentic | Reads as part-of-a-lap to non-racing readers; communicates little in code |
+| pass | Recce passes are real rallying | Dead on arrival: footers print "passed" — direct outcome collision |
 
 This is the highest-churn rename (persisted `run_id` in both `tries.jsonl`
 records and `summary.jsonl` `RunEntry`; `RunHeaderReady` and friends in the
 runtimeevent contract; operator-facing "run: 1/3" headers) and also the
 highest-payoff one: after it, the entity greps cleanly and prose like "the
-stint failed after two tries" is unambiguous where "the run failed" never was.
+outing failed after two tries" is unambiguous where "the run failed" never
+was.
+
+### Naming principles (recorded from the stint conflict)
+
+1. **Identifiers optimize for agents**: greppable, collision-free against Go
+   idiom, this codebase, and test-outcome words. This is the acceptance test
+   for any rename.
+2. **Terms humans must *produce*** (laps CLI verbs, queue authoring, config
+   keys) additionally need safe first-read intuition without racing knowledge
+   — laps' surface is used standalone, without rally in the picture.
+3. **Terms humans only *consume*** (operator output, record names) may be
+   mildly unfamiliar if they are unambiguous and learnable from usage —
+   `outing` qualifies; a misleading-but-familiar word does not.
+4. **Vocabulary ownership is split by tool**: laps owns the schedule/itinerary
+   nouns (lap, stint), rally owns the cockpit/execution nouns (driver, outing,
+   try, lane). Neither tool reaches across; conflicts get resolved in favor of
+   the owner.
 
 ### try (one invocation) → **keep "try"** — recommended; standardize the convention instead
 
@@ -128,13 +164,13 @@ no observed agent confusion. Sequence it last; drop it under time pressure.
 
 | | Hierarchy | Executor | Churn | Agent-facing clarity gained |
 |---|---|---|---|---|
-| A (full) | race > stint > try | driver | High (persisted names, events, CLI prose) | Full theme coherence; every entity greppable |
-| **B (recommended)** | relay > stint > try | driver | Medium (no relays.jsonl churn) | Fixes both observed confusions (runner collision, run overload); relay stays greppable |
+| A (full) | race > outing > try | driver | High (persisted names, events, CLI prose) | Full theme coherence; every entity greppable |
+| **B (recommended)** | relay > outing > try | driver | Medium (no relays.jsonl churn) | Fixes both observed confusions (runner collision, run overload); relay stays greppable |
 | C (minimal) | relay > run > try | driver | Low (docs + config/routing prose) | Fixes the worst collision only; "run" stays hostile to grep |
 
 Test sentence, scheme B: *"Rally routes the lap down its lane to a driver; the
-driver's stint may take several tries; if the driver can't finish, the lap
-gets a driver change — a new stint."* Every noun is distinct, greppable, and
+driver's outing may take several tries; if the driver can't finish, the lap
+gets a driver change — a new outing."* Every noun is distinct, greppable, and
 resolves without AGENTS.md open. That property — not metaphor purity — is the
 acceptance test for any final scheme.
 
