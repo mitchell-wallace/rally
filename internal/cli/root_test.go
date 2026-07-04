@@ -17,7 +17,7 @@ func TestNewRootCommandRegistersCommandSurface(t *testing.T) {
 		got = append(got, cmd.Name())
 	}
 	sort.Strings(got)
-	want := []string{"config", "hooks", "init", "init-roles", "instructions", "progress", "routes", "start", "tail", "tui-1", "update", "version"}
+	want := []string{"config", "hooks", "init", "init-roles", "instructions", "progress", "routes", "start", "tail", "tui-1", "tui-2", "update", "version"}
 	if len(got) != len(want) {
 		t.Fatalf("commands = %v, want %v", got, want)
 	}
