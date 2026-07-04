@@ -45,7 +45,7 @@ func runTui2(cmd *cobra.Command, args []string, opts RootOptions) error {
 	if err != nil {
 		return err
 	}
-	seed, err := loadTui2Seed(ro.WorkspaceDir)
+	seed, err := loadTuiFeedSeed(ro.WorkspaceDir)
 	if err != nil {
 		return fmt.Errorf("load TUI seed: %w", err)
 	}
@@ -60,7 +60,7 @@ func runTui2(cmd *cobra.Command, args []string, opts RootOptions) error {
 	})
 }
 
-func loadTui2Seed(workspaceDir string) ([]tuicore.FeedItem, error) {
+func loadTuiFeedSeed(workspaceDir string) ([]tuicore.FeedItem, error) {
 	s, err := store.NewStore(store.RallyDir(workspaceDir))
 	if err != nil {
 		return nil, err
