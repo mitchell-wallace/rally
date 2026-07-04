@@ -18,8 +18,7 @@ func TestModelTabSwitching(t *testing.T) {
 		want tab
 	}{
 		{tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("2")}, tabTranscript},
-		{tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("3")}, tabMessages},
-		{tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("4")}, tabAgents},
+		{tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("3")}, tabAgents},
 		{tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("1")}, tabDashboard},
 		{tea.KeyMsg{Type: tea.KeyTab}, tabTranscript},
 		{tea.KeyMsg{Type: tea.KeyShiftTab}, tabDashboard},
@@ -55,20 +54,13 @@ func TestModelEventFanoutUpdatesDashboardAndTranscript(t *testing.T) {
 	}
 }
 
-func TestModelMessagesAndAgentsRenderAtSizes(t *testing.T) {
+func TestModelAgentsRenderAtSizes(t *testing.T) {
 	for _, size := range []tea.WindowSizeMsg{{Width: 110, Height: 30}, {Width: 80, Height: 24}} {
 		m := newTestModel()
 		m = updateModel(t, m, size)
-		m = updateModel(t, m, seedMessagesMsg{items: tuicore.DemoMessages()})
 		m = updateModel(t, m, seedAgentsMsg{items: tuicore.DemoAgentStatuses()})
 
 		m = updateModel(t, m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("3")})
-		messagesView := m.View()
-		if !strings.Contains(messagesView, "read-only prototype") || !strings.Contains(messagesView, "pending") {
-			t.Fatalf("%dx%d messages view missing expected content:\n%s", size.Width, size.Height, messagesView)
-		}
-
-		m = updateModel(t, m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("4")})
 		agentsView := m.View()
 		if !strings.Contains(agentsView, "benched") || !strings.Contains(agentsView, "codex") {
 			t.Fatalf("%dx%d agents view missing expected content:\n%s", size.Width, size.Height, agentsView)
@@ -80,7 +72,6 @@ func TestModelDemoScriptPlaybackHeadless(t *testing.T) {
 	m := newTestModel()
 	m = updateModel(t, m, tea.WindowSizeMsg{Width: 110, Height: 30})
 	m.dashboard = m.dashboard.Seed(tuicore.DemoFeedSeed())
-	m.messages.Seed(tuicore.DemoMessages())
 	m.agents.Seed(tuicore.DemoAgentStatuses())
 	statuses := tuicore.DemoStatusFrames()
 	enrichments := demoEnrichments()
@@ -110,8 +101,60 @@ func TestModelDemoScriptPlaybackHeadless(t *testing.T) {
 	}
 }
 
+func TestModelTranscriptFollowMode(t *testing.T) {
+	m := newTestModel()
+	m = updateModel(t, m, tea.WindowSizeMsg{Width: 80, Height: 8})
+	m = updateModel(t, m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("2")})
+	for i := 0; i < 12; i++ {
+		m = updateModel(t, m, transcriptLineMsg{line: strings.Repeat("line ", 3) + time.Duration(i).String()})
+	}
+	if !m.following {
+		t.Fatal("expected transcript to start in follow mode")
+	}
+	m = updateModel(t, m, tea.KeyMsg{Type: tea.KeyUp})
+	if m.following {
+		t.Fatal("expected manual scroll to disable follow mode")
+	}
+	m = updateModel(t, m, tea.KeyMsg{Type: tea.KeyEnd})
+	if !m.following {
+		t.Fatal("expected end key to restore follow mode")
+	}
+}
+
+func TestModelSynthesizedReplayPopulatesTranscriptAndFeed(t *testing.T) {
+	m := newTestModel()
+	events := []runtimeevent.Event{
+		runtimeevent.RelayStarted{RelayID: 7, TargetIterations: 1, AgentMix: "codex"},
+		runtimeevent.RunHeaderReady{
+			RunIndex:     0,
+			TotalRuns:    1,
+			AgentName:    "codex",
+			Attempt:      1,
+			StartTime:    time.Date(2026, 7, 4, 16, 0, 0, 0, time.UTC),
+			IsLapsBacked: true,
+			LapTitle:     "historical replay",
+			LapsStarted:  1,
+			LapsTotal:    1,
+			Model:        "gpt-5",
+		},
+		runtimeevent.AttemptFinished{FooterData: runtimeevent.FooterData{Passed: true, Duration: time.Minute, FilesChanged: 1, CommitHash: "abc1234"}},
+		runtimeevent.RelaySummaryReady{TotalRuns: 1, Passed: 1, TotalDuration: time.Minute},
+		runtimeevent.RelayCompleted{RelayID: 7, TotalRuns: 1, Passed: 1, TotalDuration: time.Minute},
+	}
+	for _, event := range events {
+		m = updateModel(t, m, eventMsg{event: event})
+	}
+	feed := m.dashboard.Feed()
+	if got := len(feed.Items()); got != 1 {
+		t.Fatalf("dashboard feed items = %d, want 1", got)
+	}
+	if !strings.Contains(strings.Join(m.transcript.Lines(), "\n"), "historical replay") {
+		t.Fatalf("transcript missing synthesized replay: %v", m.transcript.Lines())
+	}
+}
+
 func newTestModel() model {
-	m := newModel("rally tui-3", newControls())
+	m := newModel("rally tui", newControls())
 	m.now = func() time.Time { return time.Date(2026, 7, 4, 15, 0, 0, 0, time.UTC) }
 	return m
 }

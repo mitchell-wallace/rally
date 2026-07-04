@@ -226,6 +226,23 @@ safe"). Direction locked for this stage:
    - full interactive config menu (reuse the `rally config` huh forms,
      embedded in or suspended from bubbletea).
 
+### Stage-3 progress log
+
+- 2026-07-04: Collapse lap landed (GPT-5.5). tuisafe/tuipanels and
+  tui-1/tui-2/tui-3 commands deleted; Dashboard folded into tuitabs
+  (dashboard{,_model,_view,_test}.go); Messages tab dropped (3 tabs:
+  Dashboard/Transcript/Agents); command promoted to `rally tui` with
+  --demo and --view (view replays synthesized events through the session
+  sink with a DoneHint); seed helpers moved to internal/cli/tui_seed.go;
+  agent-status view models split into tuicore/agent_status{,_demo}.go;
+  archguard rows pruned. Review: FIFO drainer + controls identity guard
+  preserved; gates + race re-run green. PTY-verified --demo; **first live
+  relay through the tabs TUI passed** (op:zai, 17s, real commit, q exits
+  clean); --view replays the store with the known replay gaps. Declared
+  gap: live free-run rows still title "relay run" — deriving from the task
+  prompt needs a runner-side event change (STOP-ruled here; fold into a
+  later lap).
+
 ## Prototype comparison (for selection — fill in as evaluated)
 
 | Criterion | tui-1 safe | tui-2 panels | tui-3 tabs |

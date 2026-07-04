@@ -17,15 +17,15 @@ import (
 
 type Options struct {
 	Title    string
+	DoneHint string
 	Seed     []tuicore.FeedItem
-	Messages []tuicore.MessageItem
 	Agents   []tuicore.AgentStatusItem
 }
 
 type Session struct {
 	title    string
+	doneHint string
 	seed     []tuicore.FeedItem
-	messages []tuicore.MessageItem
 	agents   []tuicore.AgentStatusItem
 	controls *controls
 
@@ -38,12 +38,12 @@ type Session struct {
 func NewSession(opts Options) *Session {
 	title := opts.Title
 	if title == "" {
-		title = "rally tui-3"
+		title = "rally tui"
 	}
 	return &Session{
 		title:    title,
+		doneHint: opts.DoneHint,
 		seed:     cloneFeedItems(opts.Seed),
-		messages: cloneMessages(opts.Messages),
 		agents:   cloneAgents(opts.Agents),
 		controls: newControls(),
 	}
@@ -85,8 +85,8 @@ func (s *Session) Run(ctx context.Context, work func(context.Context) error) err
 
 	doneCh := make(chan error, 1)
 	m := newModel(s.title, s.controls)
+	m.doneHint = s.doneHint
 	m.dashboard = m.dashboard.Seed(s.seed)
-	m.messages.Seed(s.messages)
 	m.agents.Seed(s.agents)
 	p := tea.NewProgram(m, tea.WithAltScreen(), tea.WithContext(ctx))
 	s.setSend(p.Send)
@@ -118,7 +118,6 @@ func (s *Session) Run(ctx context.Context, work func(context.Context) error) err
 
 func (s *Session) RunDemo(ctx context.Context) error {
 	s.seed = tuicore.DemoFeedSeed()
-	s.messages = tuicore.DemoMessages()
 	s.agents = tuicore.DemoAgentStatuses()
 	return s.Run(ctx, func(ctx context.Context) error {
 		statuses := tuicore.DemoStatusFrames()
@@ -165,6 +164,32 @@ func (s *Session) RunDemo(ctx context.Context) error {
 		<-done
 		return nil
 	})
+}
+
+func (s *Session) RunView(ctx context.Context, events []runtimeevent.Event) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	m := newModel(s.title, s.controls)
+	m.doneHint = s.doneHint
+	m.dashboard = m.dashboard.Seed(s.seed)
+	m.agents.Seed(s.agents)
+	p := tea.NewProgram(m, tea.WithAltScreen(), tea.WithContext(ctx))
+	s.setSend(p.Send)
+	defer s.setSend(nil)
+
+	go func() {
+		for _, event := range events {
+			s.Sink().Emit(ctx, event)
+		}
+		s.sendAsync(doneMsg{})
+	}()
+
+	finalModel, runErr := p.Run()
+	if runErr != nil && ctx.Err() == nil && !isOperatorQuit(finalModel) {
+		return runErr
+	}
+	return nil
 }
 
 func (s *Session) setSend(send func(tea.Msg)) {
@@ -316,12 +341,6 @@ func cloneFeedItems(items []tuicore.FeedItem) []tuicore.FeedItem {
 		item.Followups = append([]string(nil), item.Followups...)
 		out[i] = item
 	}
-	return out
-}
-
-func cloneMessages(items []tuicore.MessageItem) []tuicore.MessageItem {
-	out := make([]tuicore.MessageItem, len(items))
-	copy(out, items)
 	return out
 }
 

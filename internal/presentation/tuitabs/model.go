@@ -8,7 +8,6 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/mitchell-wallace/rally/internal/presentation/tuicore"
-	"github.com/mitchell-wallace/rally/internal/presentation/tuipanels"
 	"github.com/mitchell-wallace/rally/internal/relay/runner/runtimeevent"
 )
 
@@ -17,7 +16,6 @@ type tab int
 const (
 	tabDashboard tab = iota
 	tabTranscript
-	tabMessages
 	tabAgents
 )
 
@@ -27,19 +25,18 @@ type model struct {
 	now      func() time.Time
 
 	active     tab
-	dashboard  tuipanels.Dashboard
+	dashboard  dashboard
 	transcript tuicore.Transcript
 	viewport   viewport.Model
 	following  bool
-	messages   tuicore.MessageList
 	agents     tuicore.AgentStatusList
-	selected   int
 
 	statusLine string
 	armedHint  string
 	armedUntil time.Time
 
 	done     bool
+	doneHint string
 	workErr  error
 	quitting bool
 
@@ -49,16 +46,15 @@ type model struct {
 
 func newModel(title string, controls *controls) model {
 	if title == "" {
-		title = "rally tui-3"
+		title = "rally tui"
 	}
 	return model{
 		title:     title,
 		controls:  controls,
 		now:       time.Now,
-		dashboard: tuipanels.NewDashboard("rally tui-3"),
+		dashboard: newDashboard(title),
 		viewport:  viewport.New(80, 22),
 		following: true,
-		selected:  -1,
 		width:     100,
 		height:    30,
 	}
@@ -89,10 +85,6 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case transcriptLineMsg:
 		m.appendPlainLine(msg.line)
-		return m, nil
-	case seedMessagesMsg:
-		m.messages.Seed(msg.items)
-		m.syncMessageSelection()
 		return m, nil
 	case seedAgentsMsg:
 		m.agents.Seed(msg.items)
@@ -128,17 +120,13 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.active = tabTranscript
 		return m, nil
 	case "3":
-		m.active = tabMessages
-		m.syncMessageSelection()
-		return m, nil
-	case "4":
 		m.active = tabAgents
 		return m, nil
 	case "tab":
-		m.active = (m.active + 1) % 4
+		m.active = (m.active + 1) % 3
 		return m, nil
 	case "shift+tab":
-		m.active = (m.active + 3) % 4
+		m.active = (m.active + 2) % 3
 		return m, nil
 	case "enter":
 		m.controls.resume()
@@ -156,8 +144,6 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.dashboard = next
 	case tabTranscript:
 		m.handleTranscriptKey(key)
-	case tabMessages:
-		m.handleMessageKey(key)
 	}
 	return m, nil
 }
@@ -208,45 +194,6 @@ func (m *model) handleTranscriptKey(key string) {
 		m.following = true
 		m.viewport.GotoBottom()
 	}
-}
-
-func (m *model) handleMessageKey(key string) {
-	switch key {
-	case "up", "k":
-		m.selectMessage(m.selected - 1)
-	case "down", "j":
-		m.selectMessage(m.selected + 1)
-	case "home":
-		m.selectMessage(0)
-	case "end", "g":
-		m.selectMessage(len(m.messages.Items()) - 1)
-	}
-}
-
-func (m *model) syncMessageSelection() {
-	items := m.messages.Items()
-	if len(items) == 0 {
-		m.selected = -1
-		return
-	}
-	if m.selected < 0 || m.selected >= len(items) {
-		m.selected = 0
-	}
-}
-
-func (m *model) selectMessage(index int) {
-	items := m.messages.Items()
-	if len(items) == 0 {
-		m.selected = -1
-		return
-	}
-	if index < 0 {
-		index = 0
-	}
-	if index >= len(items) {
-		index = len(items) - 1
-	}
-	m.selected = index
 }
 
 func maxInt(a, b int) int {

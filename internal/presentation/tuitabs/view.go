@@ -3,24 +3,17 @@ package tuitabs
 import (
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
-
-	"github.com/mitchell-wallace/rally/internal/presentation/tuicore"
 )
 
 var (
-	tabStyle         = lipgloss.NewStyle().Padding(0, 1)
-	activeTabStyle   = lipgloss.NewStyle().Reverse(true).Padding(0, 1)
-	statusStyle      = lipgloss.NewStyle().Reverse(true)
-	borderStyle      = lipgloss.NewStyle().Border(lipgloss.NormalBorder()).BorderForeground(lipgloss.Color("8"))
-	selectedRowStyle = lipgloss.NewStyle().Reverse(true)
-	mutedStyle       = lipgloss.NewStyle().Foreground(lipgloss.Color("8"))
-	badgePending     = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("11"))
-	badgeAddressed   = lipgloss.NewStyle().Foreground(lipgloss.Color("10"))
-	badgeCancelled   = lipgloss.NewStyle().Foreground(lipgloss.Color("8"))
+	tabStyle       = lipgloss.NewStyle().Padding(0, 1)
+	activeTabStyle = lipgloss.NewStyle().Reverse(true).Padding(0, 1)
+	statusStyle    = lipgloss.NewStyle().Reverse(true)
+	borderStyle    = lipgloss.NewStyle().Border(lipgloss.NormalBorder()).BorderForeground(lipgloss.Color("8"))
+	mutedStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("8"))
 )
 
 func (m model) View() string {
@@ -32,7 +25,7 @@ func (m model) View() string {
 }
 
 func (m model) tabBar() string {
-	labels := []string{"[1] Dashboard", "[2] Transcript", "[3] Messages", "[4] Agents"}
+	labels := []string{"[1] Dashboard", "[2] Transcript", "[3] Agents"}
 	parts := make([]string, len(labels))
 	for i, label := range labels {
 		style := tabStyle
@@ -53,105 +46,11 @@ func (m model) bodyView(height int) string {
 		vp.Width = m.width
 		vp.Height = height
 		return fitBlock(vp.View(), m.width, height)
-	case tabMessages:
-		return fitBlock(m.messagesView(height), m.width, height)
 	case tabAgents:
 		return fitBlock(m.agentsView(height), m.width, height)
 	default:
 		return strings.Repeat("\n", height-1)
 	}
-}
-
-func (m model) messagesView(height int) string {
-	if m.width < 70 {
-		return m.messageListPanel(m.width, height)
-	}
-	leftWidth := m.width * 42 / 100
-	if leftWidth < 32 {
-		leftWidth = 32
-	}
-	rightWidth := m.width - leftWidth
-	left := m.messageListPanel(leftWidth, height)
-	right := m.messageDetailPanel(rightWidth, height)
-	return lipgloss.JoinHorizontal(lipgloss.Top, left, right)
-}
-
-func (m model) messageListPanel(totalWidth, totalHeight int) string {
-	width := maxInt(1, totalWidth-2)
-	height := maxInt(1, totalHeight-2)
-	items := m.messages.Items()
-	rows := make([]string, 0, height)
-	if len(items) == 0 {
-		rows = append(rows, mutedStyle.Render(fitLine("no messages", width)))
-	} else {
-		start := 0
-		if len(items) > height {
-			start = m.selected - height + 1
-			if start < 0 {
-				start = 0
-			}
-		}
-		end := minInt(len(items), start+height)
-		for i := start; i < end; i++ {
-			row := m.messageRow(items[i], i, width)
-			if i == m.selected {
-				row = selectedRowStyle.Width(width).Render(row)
-			}
-			rows = append(rows, row)
-		}
-	}
-	for len(rows) < height {
-		rows = append(rows, "")
-	}
-	return borderStyle.Width(width).Height(height).Render(strings.Join(rows, "\n"))
-}
-
-func (m model) messageRow(item tuicore.MessageItem, index, width int) string {
-	prefix := "  "
-	if index == m.selected {
-		prefix = "> "
-	}
-	scope := item.Scope
-	if scope == "" {
-		scope = "run"
-	}
-	left := fmt.Sprintf("%s#%d %s %s", prefix, item.ID, badge(item.Status), scope)
-	right := fmt.Sprintf("pos %d", item.Position)
-	available := width - cellWidth(left) - cellWidth(right) - 2
-	if available < 4 {
-		return fitLine(left, width)
-	}
-	return fitLine(left+" "+truncateCell(firstLine(item.Body), available)+" "+right, width)
-}
-
-func (m model) messageDetailPanel(totalWidth, totalHeight int) string {
-	width := maxInt(1, totalWidth-2)
-	height := maxInt(1, totalHeight-2)
-	var lines []string
-	if item, ok := m.selectedMessage(); ok {
-		lines = append(lines, fmt.Sprintf("message #%d  %s", item.ID, badge(item.Status)))
-		scope := item.Scope
-		if scope == "" {
-			scope = "run"
-		}
-		lines = append(lines, "scope: "+scope, fmt.Sprintf("position: %d", item.Position))
-		if !item.CreatedAt.IsZero() {
-			lines = append(lines, "created: "+item.CreatedAt.Format(time.RFC822))
-		}
-		lines = append(lines, "")
-		lines = append(lines, wrapLine(item.Body, width)...)
-	} else {
-		lines = append(lines, "no message selected")
-	}
-	return borderStyle.Width(width).Height(height).Render(fitLines(lines, width, height))
-}
-
-func (m model) selectedMessage() (tuicore.MessageItem, bool) {
-	items := m.messages.Items()
-	if m.selected < 0 || m.selected >= len(items) {
-		return tuicore.MessageItem{}, false
-	}
-	return items[m.selected], true
 }
 
 func (m model) agentsView(height int) string {
@@ -181,11 +80,13 @@ func (m model) statusBar() string {
 	width := maxInt(1, m.width)
 	left := m.title
 	middle := m.middleStatus()
-	right := m.tabLegend() + " · 1-4/Tab tabs · ^C quit  ^S skip  ^P pause  ^X stop"
+	right := m.tabLegend() + " · 1-3/Tab tabs · ^C quit  ^S skip  ^P pause  ^X stop"
 	if m.done {
 		right = "relay complete - q to exit"
 		if m.workErr != nil {
 			right = "relay failed - q to exit"
+		} else if m.doneHint != "" {
+			right = m.doneHint
 		}
 	}
 	return statusStyle.Width(width).Render(composeStatus(width, left, middle, right))
@@ -213,37 +114,11 @@ func (m model) tabLegend() string {
 		return "j/k select"
 	case tabTranscript:
 		return "j/k scroll"
-	case tabMessages:
-		return "j/k select · read-only prototype"
 	case tabAgents:
 		return "read-only status"
 	default:
 		return "q quit"
 	}
-}
-
-func badge(status string) string {
-	switch status {
-	case "pending":
-		return badgePending.Render("pending")
-	case "addressed":
-		return badgeAddressed.Render("addressed")
-	case "cancelled":
-		return badgeCancelled.Render("cancelled")
-	default:
-		if status == "" {
-			status = "unknown"
-		}
-		return status
-	}
-}
-
-func firstLine(value string) string {
-	value = strings.TrimSpace(value)
-	if idx := strings.IndexByte(value, '\n'); idx >= 0 {
-		return strings.TrimSpace(value[:idx])
-	}
-	return value
 }
 
 func wrapLine(s string, width int) []string {

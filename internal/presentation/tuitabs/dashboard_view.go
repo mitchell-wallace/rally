@@ -1,4 +1,4 @@
-package tuipanels
+package tuitabs
 
 import (
 	"fmt"
@@ -12,46 +12,46 @@ import (
 )
 
 var (
-	headerStyle      = lipgloss.NewStyle().Bold(true)
-	statusStyle      = lipgloss.NewStyle().Reverse(true)
-	borderStyle      = lipgloss.NewStyle().Border(lipgloss.NormalBorder()).BorderForeground(lipgloss.Color("8"))
-	focusedStyle     = lipgloss.NewStyle().Border(lipgloss.NormalBorder()).BorderForeground(lipgloss.Color("12"))
-	selectedRowStyle = lipgloss.NewStyle().Reverse(true)
-	mutedStyle       = lipgloss.NewStyle().Foreground(lipgloss.Color("8"))
+	dashboardHeaderStyle      = lipgloss.NewStyle().Bold(true)
+	dashboardStatusStyle      = lipgloss.NewStyle().Reverse(true)
+	dashboardBorderStyle      = lipgloss.NewStyle().Border(lipgloss.NormalBorder()).BorderForeground(lipgloss.Color("8"))
+	dashboardFocusedStyle     = lipgloss.NewStyle().Border(lipgloss.NormalBorder()).BorderForeground(lipgloss.Color("12"))
+	dashboardSelectedRowStyle = lipgloss.NewStyle().Reverse(true)
+	dashboardMutedStyle       = lipgloss.NewStyle().Foreground(lipgloss.Color("8"))
 )
 
-func (m model) View() string {
+func (m dashboardModel) View() string {
 	if m.height <= 1 {
 		return m.statusBar()
 	}
 	if m.isSmall() {
 		return m.smallView()
 	}
-	header := fitLine(m.headerLine(), m.width)
+	header := dashboardFitLine(m.headerLine(), m.width)
 	body := m.panelsView()
 	return header + "\n" + body + "\n" + m.statusBar()
 }
 
-func (m model) smallView() string {
-	header := fitLine(m.headerLine(), m.width)
+func (m dashboardModel) smallView() string {
+	header := dashboardFitLine(m.headerLine(), m.width)
 	var body string
 	if m.detailOpen {
-		body = m.detailPanel(m.width, maxInt(1, m.height-2), true)
+		body = m.detailPanel(m.width, dashboardMaxInt(1, m.height-2), true)
 	} else {
-		body = m.feedPanel(m.width, maxInt(1, m.height-2), true)
+		body = m.feedPanel(m.width, dashboardMaxInt(1, m.height-2), true)
 	}
 	return header + "\n" + body + "\n" + m.statusBar()
 }
 
-func (m model) panelsView() string {
+func (m dashboardModel) panelsView() string {
 	leftWidth, rightWidth, panelHeight := m.panelGeometry()
 	left := m.feedPanel(leftWidth, panelHeight, m.focus == focusFeed)
 	right := m.detailPanel(rightWidth, panelHeight, m.focus == focusDetail)
 	return lipgloss.JoinHorizontal(lipgloss.Top, left, right)
 }
 
-func (m model) panelGeometry() (leftWidth, rightWidth, panelHeight int) {
-	panelHeight = maxInt(1, m.height-2)
+func (m dashboardModel) panelGeometry() (leftWidth, rightWidth, panelHeight int) {
+	panelHeight = dashboardMaxInt(1, m.height-2)
 	if m.width < 60 {
 		return m.width, 0, panelHeight
 	}
@@ -66,23 +66,23 @@ func (m model) panelGeometry() (leftWidth, rightWidth, panelHeight int) {
 	return leftWidth, rightWidth, panelHeight
 }
 
-func (m model) feedPanel(totalWidth, totalHeight int, focused bool) string {
-	contentWidth := maxInt(1, totalWidth-2)
-	contentHeight := maxInt(1, totalHeight-2)
+func (m dashboardModel) feedPanel(totalWidth, totalHeight int, focused bool) string {
+	contentWidth := dashboardMaxInt(1, totalWidth-2)
+	contentHeight := dashboardMaxInt(1, totalHeight-2)
 	rows := m.feedRows(contentWidth, contentHeight)
-	style := borderStyle
+	style := dashboardBorderStyle
 	if focused {
-		style = focusedStyle
+		style = dashboardFocusedStyle
 	}
 	return style.Width(contentWidth).Height(contentHeight).Render(strings.Join(rows, "\n"))
 }
 
-func (m model) detailPanel(totalWidth, totalHeight int, focused bool) string {
-	contentWidth := maxInt(1, totalWidth-2)
-	contentHeight := maxInt(1, totalHeight-2)
-	style := borderStyle
+func (m dashboardModel) detailPanel(totalWidth, totalHeight int, focused bool) string {
+	contentWidth := dashboardMaxInt(1, totalWidth-2)
+	contentHeight := dashboardMaxInt(1, totalHeight-2)
+	style := dashboardBorderStyle
 	if focused {
-		style = focusedStyle
+		style = dashboardFocusedStyle
 	}
 	vp := m.detailViewport
 	vp.Width = contentWidth
@@ -90,10 +90,10 @@ func (m model) detailPanel(totalWidth, totalHeight int, focused bool) string {
 	return style.Width(contentWidth).Height(contentHeight).Render(vp.View())
 }
 
-func (m model) feedRows(width, height int) []string {
+func (m dashboardModel) feedRows(width, height int) []string {
 	items := m.feed.Items()
 	if len(items) == 0 {
-		return []string{mutedStyle.Render(fitLine("no runs yet", width))}
+		return []string{dashboardMutedStyle.Render(dashboardFitLine("no runs yet", width))}
 	}
 	start := 0
 	if len(items) > height {
@@ -105,12 +105,12 @@ func (m model) feedRows(width, height int) []string {
 			start = m.selected - height + 1
 		}
 	}
-	end := minInt(len(items), start+height)
+	end := dashboardMinInt(len(items), start+height)
 	rows := make([]string, 0, height)
 	for i := start; i < end; i++ {
 		row := m.feedRow(items[i], i, width)
 		if i == m.selected {
-			row = selectedRowStyle.Width(width).Render(row)
+			row = dashboardSelectedRowStyle.Width(width).Render(row)
 		}
 		rows = append(rows, row)
 	}
@@ -120,7 +120,7 @@ func (m model) feedRows(width, height int) []string {
 	return rows
 }
 
-func (m model) feedRow(item tuicore.FeedItem, index, width int) string {
+func (m dashboardModel) feedRow(item tuicore.FeedItem, index, width int) string {
 	prefix := "  "
 	if index == m.selected {
 		prefix = "▶ "
@@ -134,16 +134,16 @@ func (m model) feedRow(item tuicore.FeedItem, index, width int) string {
 	if title == "" {
 		title = "run"
 	}
-	right := strings.TrimSpace(fmt.Sprintf("%s  %d files", shortDuration(item.Duration), item.Files))
-	available := width - cellWidth(left) - cellWidth(right) - 3
+	right := strings.TrimSpace(fmt.Sprintf("%s  %s", shortDuration(item.Duration), fileCountLabel(item.Files)))
+	available := width - dashboardCellWidth(left) - dashboardCellWidth(right) - 3
 	if available < 1 {
-		return fitLine(left+" "+right, width)
+		return dashboardFitLine(left+" "+right, width)
 	}
-	row := left + " · " + truncateCell(title, available) + " " + right
-	return fitLine(row, width)
+	row := left + " · " + dashboardTruncateCell(title, available) + " " + right
+	return dashboardFitLine(row, width)
 }
 
-func (m model) headerLine() string {
+func (m dashboardModel) headerLine() string {
 	meta := m.feed.Meta()
 	left := m.title
 	if meta.RelayID > 0 {
@@ -165,11 +165,11 @@ func (m model) headerLine() string {
 	if meta.TotalDuration > 0 {
 		left += " · elapsed " + shortDuration(meta.TotalDuration)
 	}
-	return headerStyle.Render(left)
+	return dashboardHeaderStyle.Render(left)
 }
 
-func (m model) statusBar() string {
-	width := maxInt(1, m.width)
+func (m dashboardModel) statusBar() string {
+	width := dashboardMaxInt(1, m.width)
 	left := m.middleStatus()
 	right := "^C quit  ^S skip  ^P pause  ^X stop · Tab panes · j/k select · q quit"
 	if m.isSmall() {
@@ -184,10 +184,10 @@ func (m model) statusBar() string {
 			right = "relay failed — q to exit"
 		}
 	}
-	return statusStyle.Width(width).Render(composeStatus(width, left, "", right))
+	return dashboardStatusStyle.Width(width).Render(dashboardComposeStatus(width, left, "", right))
 }
 
-func (m model) middleStatus() string {
+func (m dashboardModel) middleStatus() string {
 	now := m.now()
 	if m.armedHint != "" && now.Before(m.armedUntil) {
 		return m.armedHint
@@ -207,7 +207,7 @@ func detailLines(item *tuicore.FeedItem, width int) []string {
 	if title == "" {
 		title = "Run"
 	}
-	lines = append(lines, wrapLine(title, width)...)
+	lines = append(lines, dashboardWrapLine(title, width)...)
 	lines = append(lines, "")
 	agent := item.Agent
 	if item.Model != "" {
@@ -216,40 +216,40 @@ func detailLines(item *tuicore.FeedItem, width int) []string {
 	if item.RoleLabel != "" {
 		agent += " · role " + item.RoleLabel
 	}
-	lines = append(lines, wrapLine(agent, width)...)
+	lines = append(lines, dashboardWrapLine(agent, width)...)
 	outcome := outcomeIcon(item.Outcome) + " " + item.Outcome
 	if item.Duration > 0 {
 		outcome += " · " + shortDuration(item.Duration)
 	}
 	if item.Files > 0 {
-		outcome += fmt.Sprintf(" · %d files", item.Files)
+		outcome += " · " + fileCountLabel(item.Files)
 	}
 	if item.Attempt > 0 {
-		outcome += fmt.Sprintf(" · attempt %d/%d", item.Attempt, maxInt(item.MaxAttempts, item.Attempt))
+		outcome += fmt.Sprintf(" · attempt %d/%d", item.Attempt, dashboardMaxInt(item.MaxAttempts, item.Attempt))
 	}
-	lines = append(lines, wrapLine(outcome, width)...)
+	lines = append(lines, dashboardWrapLine(outcome, width)...)
 	if item.CommitHash != "" {
 		commit := "commit " + item.CommitHash
 		if item.CommitTitle != "" {
 			commit += " " + item.CommitTitle
 		}
-		lines = append(lines, wrapLine(commit, width)...)
+		lines = append(lines, dashboardWrapLine(commit, width)...)
 	}
 	if item.FailReason != "" {
-		lines = append(lines, wrapLine("reason: "+item.FailReason, width)...)
+		lines = append(lines, dashboardWrapLine("reason: "+item.FailReason, width)...)
 	}
 	if item.Summary != "" {
 		lines = append(lines, "", "summary:")
-		lines = append(lines, wrapLine(item.Summary, width)...)
+		lines = append(lines, dashboardWrapLine(item.Summary, width)...)
 	}
 	if item.Classification != "" {
 		lines = append(lines, "", "classification:")
-		lines = append(lines, wrapLine(item.Classification, width)...)
+		lines = append(lines, dashboardWrapLine(item.Classification, width)...)
 	}
 	if len(item.Followups) > 0 {
 		lines = append(lines, "", "followups:")
 		for _, followup := range item.Followups {
-			for i, line := range wrapLine(followup, maxInt(1, width-2)) {
+			for i, line := range dashboardWrapLine(followup, dashboardMaxInt(1, width-2)) {
 				prefix := "  "
 				if i == 0 {
 					prefix = "- "
@@ -297,7 +297,14 @@ func shortDuration(d time.Duration) string {
 	return fmt.Sprintf("%ds", s)
 }
 
-func wrapLine(s string, width int) []string {
+func fileCountLabel(count int) string {
+	if count == 1 {
+		return "1 file"
+	}
+	return fmt.Sprintf("%d files", count)
+}
+
+func dashboardWrapLine(s string, width int) []string {
 	s = strings.TrimSpace(ansi.Strip(s))
 	if s == "" {
 		return []string{""}
@@ -312,15 +319,15 @@ func wrapLine(s string, width int) []string {
 		line := ""
 		for _, word := range words {
 			if line == "" {
-				line = truncateCell(word, width)
+				line = dashboardTruncateCell(word, width)
 				continue
 			}
-			if cellWidth(line)+1+cellWidth(word) <= width {
+			if dashboardCellWidth(line)+1+dashboardCellWidth(word) <= width {
 				line += " " + word
 				continue
 			}
 			lines = append(lines, line)
-			line = truncateCell(word, width)
+			line = dashboardTruncateCell(word, width)
 		}
 		if line != "" {
 			lines = append(lines, line)
@@ -329,7 +336,7 @@ func wrapLine(s string, width int) []string {
 	return lines
 }
 
-func composeStatus(width int, left, middle, right string) string {
+func dashboardComposeStatus(width int, left, middle, right string) string {
 	left = ansi.Strip(left)
 	middle = ansi.Strip(middle)
 	right = ansi.Strip(right)
@@ -337,60 +344,60 @@ func composeStatus(width int, left, middle, right string) string {
 		return ""
 	}
 	if width <= 1 {
-		return truncateCell(left, width)
+		return dashboardTruncateCell(left, width)
 	}
 
-	right = truncateCell(right, width/2)
-	leftMax := width - cellWidth(right) - 2
+	right = dashboardTruncateCell(right, width/2)
+	leftMax := width - dashboardCellWidth(right) - 2
 	if leftMax < 1 {
-		leftMax = width - cellWidth(right) - 1
+		leftMax = width - dashboardCellWidth(right) - 1
 	}
-	left = truncateCell(left, leftMax)
+	left = dashboardTruncateCell(left, leftMax)
 
-	remaining := width - cellWidth(left) - cellWidth(right)
+	remaining := width - dashboardCellWidth(left) - dashboardCellWidth(right)
 	if remaining <= 0 {
-		return truncateCell(left+right, width)
+		return dashboardTruncateCell(left+right, width)
 	}
 	if middle == "" {
 		return left + strings.Repeat(" ", remaining) + right
 	}
-	middle = truncateCell(middle, remaining-2)
+	middle = dashboardTruncateCell(middle, remaining-2)
 	line := left + " " + middle
-	padding := width - cellWidth(line) - cellWidth(right)
+	padding := width - dashboardCellWidth(line) - dashboardCellWidth(right)
 	if padding < 1 {
 		padding = 1
 	}
 	line += strings.Repeat(" ", padding) + right
-	return truncateCell(line, width)
+	return dashboardTruncateCell(line, width)
 }
 
-func fitLine(s string, width int) string {
-	s = truncateCell(s, width)
-	if pad := width - cellWidth(s); pad > 0 {
+func dashboardFitLine(s string, width int) string {
+	s = dashboardTruncateCell(s, width)
+	if pad := width - dashboardCellWidth(s); pad > 0 {
 		s += strings.Repeat(" ", pad)
 	}
 	return s
 }
 
-func truncateCell(s string, width int) string {
+func dashboardTruncateCell(s string, width int) string {
 	if width <= 0 {
 		return ""
 	}
-	if cellWidth(s) <= width {
+	if dashboardCellWidth(s) <= width {
 		return s
 	}
 	runes := []rune(s)
-	for len(runes) > 0 && cellWidth(string(runes)) > width {
+	for len(runes) > 0 && dashboardCellWidth(string(runes)) > width {
 		runes = runes[:len(runes)-1]
 	}
 	return string(runes)
 }
 
-func cellWidth(s string) int {
+func dashboardCellWidth(s string) int {
 	return lipgloss.Width(s)
 }
 
-func minInt(a, b int) int {
+func dashboardMinInt(a, b int) int {
 	if a < b {
 		return a
 	}

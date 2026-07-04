@@ -156,13 +156,9 @@ var allowList = map[string]map[string]bool{
 	// Concrete presentation adapter (Decision 7): renders runtimeevent events
 	// and translates keyboard presses to runtimeevent controls — nothing else
 	// internal (notably not relay/runner, harness*, config, store, telemetry).
-	"presentation/terminal": {"keyboard": true, "relay/runner/runtimeevent": true, "style": true},
-	// TUI-prototype rows (build-new-tui prototypes); may be pruned when one
-	// prototype is accepted.
+	"presentation/terminal":  {"keyboard": true, "relay/runner/runtimeevent": true, "style": true},
 	"presentation/tuicore":   {"relay/runner/runtimeevent": true, "style": true},
-	"presentation/tuisafe":   {"presentation/tuicore": true, "relay/runner/runtimeevent": true, "style": true, "keyboard": true},
-	"presentation/tuipanels": {"presentation/tuicore": true, "relay/runner/runtimeevent": true, "style": true, "keyboard": true},
-	"presentation/tuitabs":   {"presentation/tuicore": true, "presentation/tuipanels": true, "relay/runner/runtimeevent": true, "style": true, "keyboard": true},
+	"presentation/tuitabs":   {"presentation/tuicore": true, "relay/runner/runtimeevent": true, "style": true, "keyboard": true},
 	"app":                    {"harnessapi": true, "harness": true, "config": true, "relay": true, "relay/runner": true, "relay/runner/runtimeevent": true, "routing": true, "store": true, "telemetry": true},
 	"user_prompt/roleloader": {"store": true},
 }

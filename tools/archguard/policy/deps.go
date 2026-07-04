@@ -70,19 +70,19 @@ var confinedDeps = []confinedDep{
 	{
 		prefix: "github.com/charmbracelet/lipgloss",
 		name:   "lipgloss",
-		owners: []string{"internal/style", "internal/cli", "internal/presentation/tuicore", "internal/presentation/tuisafe", "internal/presentation/tuipanels", "internal/presentation/tuitabs"},
+		owners: []string{"internal/style", "internal/cli", "internal/presentation/tuicore", "internal/presentation/tuitabs"},
 		why:    "keep presentation logic in the presentation layer",
 	},
 	{
 		prefix: "github.com/charmbracelet/bubbletea",
 		name:   "bubbletea",
-		owners: []string{"internal/presentation/tuicore", "internal/presentation/tuisafe", "internal/presentation/tuipanels", "internal/presentation/tuitabs"},
+		owners: []string{"internal/presentation/tuicore", "internal/presentation/tuitabs"},
 		why:    "only TUI presentation adapters may own the terminal event loop",
 	},
 	{
 		prefix: "github.com/charmbracelet/bubbles",
 		name:   "bubbles",
-		owners: []string{"internal/presentation/tuicore", "internal/presentation/tuisafe", "internal/presentation/tuipanels", "internal/presentation/tuitabs"},
+		owners: []string{"internal/presentation/tuicore", "internal/presentation/tuitabs"},
 		why:    "only TUI presentation adapters may own the terminal component library",
 	},
 }

@@ -145,17 +145,17 @@ func TestDepConfinementEachDepDiagnosticText(t *testing.T) {
 		{
 			name: "lipgloss",
 			imp:  "github.com/charmbracelet/lipgloss",
-			want: "imports github.com/charmbracelet/lipgloss — lipgloss is owned by internal/cli, internal/presentation/tuicore, internal/presentation/tuipanels, internal/presentation/tuisafe, internal/presentation/tuitabs, internal/style; keep presentation logic in the presentation layer",
+			want: "imports github.com/charmbracelet/lipgloss — lipgloss is owned by internal/cli, internal/presentation/tuicore, internal/presentation/tuitabs, internal/style; keep presentation logic in the presentation layer",
 		},
 		{
 			name: "bubbletea",
 			imp:  "github.com/charmbracelet/bubbletea",
-			want: "imports github.com/charmbracelet/bubbletea — bubbletea is owned by internal/presentation/tuicore, internal/presentation/tuipanels, internal/presentation/tuisafe, internal/presentation/tuitabs; only TUI presentation adapters may own the terminal event loop",
+			want: "imports github.com/charmbracelet/bubbletea — bubbletea is owned by internal/presentation/tuicore, internal/presentation/tuitabs; only TUI presentation adapters may own the terminal event loop",
 		},
 		{
 			name: "bubbles",
 			imp:  "github.com/charmbracelet/bubbles",
-			want: "imports github.com/charmbracelet/bubbles — bubbles is owned by internal/presentation/tuicore, internal/presentation/tuipanels, internal/presentation/tuisafe, internal/presentation/tuitabs; only TUI presentation adapters may own the terminal component library",
+			want: "imports github.com/charmbracelet/bubbles — bubbles is owned by internal/presentation/tuicore, internal/presentation/tuitabs; only TUI presentation adapters may own the terminal component library",
 		},
 	}
 	r := NewDependencyConfinement()
@@ -251,9 +251,9 @@ func TestDepConfinementTableMatchesDecision5(t *testing.T) {
 		{"github.com/pelletier/go-toml", "go-toml", []string{"internal/config"}, "keep TOML decoding in the config layer"},
 		{"github.com/spf13/cobra", "cobra", []string{"cmd/rally", "internal/cli", "internal/progress"}, "it is the CLI framework; only command-shaped packages may depend on it"},
 		{"github.com/charmbracelet/huh", "huh", []string{"internal/cli", "internal/user_prompt"}, "it is the interactive-prompt library; only prompt packages may depend on it"},
-		{"github.com/charmbracelet/lipgloss", "lipgloss", []string{"internal/style", "internal/cli", "internal/presentation/tuicore", "internal/presentation/tuisafe", "internal/presentation/tuipanels", "internal/presentation/tuitabs"}, "keep presentation logic in the presentation layer"},
-		{"github.com/charmbracelet/bubbletea", "bubbletea", []string{"internal/presentation/tuicore", "internal/presentation/tuisafe", "internal/presentation/tuipanels", "internal/presentation/tuitabs"}, "only TUI presentation adapters may own the terminal event loop"},
-		{"github.com/charmbracelet/bubbles", "bubbles", []string{"internal/presentation/tuicore", "internal/presentation/tuisafe", "internal/presentation/tuipanels", "internal/presentation/tuitabs"}, "only TUI presentation adapters may own the terminal component library"},
+		{"github.com/charmbracelet/lipgloss", "lipgloss", []string{"internal/style", "internal/cli", "internal/presentation/tuicore", "internal/presentation/tuitabs"}, "keep presentation logic in the presentation layer"},
+		{"github.com/charmbracelet/bubbletea", "bubbletea", []string{"internal/presentation/tuicore", "internal/presentation/tuitabs"}, "only TUI presentation adapters may own the terminal event loop"},
+		{"github.com/charmbracelet/bubbles", "bubbles", []string{"internal/presentation/tuicore", "internal/presentation/tuitabs"}, "only TUI presentation adapters may own the terminal component library"},
 	}
 	got := confinedDepsForTest()
 	if len(got) != len(want) {

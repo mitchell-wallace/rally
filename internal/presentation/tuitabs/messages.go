@@ -28,8 +28,8 @@ type enrichMsg struct {
 	followups      []string
 }
 
-type seedMessagesMsg struct {
-	items []tuicore.MessageItem
+type seedFeedMsg struct {
+	items []tuicore.FeedItem
 }
 
 type seedAgentsMsg struct {

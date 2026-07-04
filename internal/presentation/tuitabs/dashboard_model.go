@@ -1,4 +1,4 @@
-package tuipanels
+package tuitabs
 
 import (
 	"regexp"
@@ -19,7 +19,7 @@ const (
 	focusDetail
 )
 
-type model struct {
+type dashboardModel struct {
 	title    string
 	controls *controls
 	now      func() time.Time
@@ -43,11 +43,11 @@ type model struct {
 	height int
 }
 
-func newModel(title string, controls *controls) model {
+func newDashboardModel(title string, controls *controls) dashboardModel {
 	if title == "" {
-		title = "rally tui-2"
+		title = "rally tui"
 	}
-	return model{
+	return dashboardModel{
 		title:          title,
 		controls:       controls,
 		now:            time.Now,
@@ -59,19 +59,19 @@ func newModel(title string, controls *controls) model {
 	}
 }
 
-func (m model) Init() tea.Cmd {
+func (m dashboardModel) Init() tea.Cmd {
 	return nil
 }
 
-func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (m dashboardModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
-		m.width = maxInt(1, msg.Width)
-		m.height = maxInt(1, msg.Height)
+		m.width = dashboardMaxInt(1, msg.Width)
+		m.height = dashboardMaxInt(1, msg.Height)
 		m.refit()
 		m.refreshDetail()
 		return m, nil
-	case seedMsg:
+	case seedFeedMsg:
 		m.feed.Seed(msg.items)
 		m.syncSelection()
 		m.refreshDetail()
@@ -107,7 +107,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+func (m dashboardModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	key := msg.String()
 	switch key {
 	case "ctrl+c", "ctrl+s", "ctrl+p", "ctrl+x":
@@ -189,17 +189,17 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m *model) refit() {
+func (m *dashboardModel) refit() {
 	_, detailWidth, panelHeight := m.panelGeometry()
-	m.detailViewport.Width = maxInt(1, detailWidth-4)
-	m.detailViewport.Height = maxInt(1, panelHeight-2)
+	m.detailViewport.Width = dashboardMaxInt(1, detailWidth-4)
+	m.detailViewport.Height = dashboardMaxInt(1, panelHeight-2)
 	if m.isSmall() && m.detailOpen {
-		m.detailViewport.Width = maxInt(1, m.width-4)
-		m.detailViewport.Height = maxInt(1, m.height-4)
+		m.detailViewport.Width = dashboardMaxInt(1, m.width-4)
+		m.detailViewport.Height = dashboardMaxInt(1, m.height-4)
 	}
 }
 
-func (m *model) syncSelection() {
+func (m *dashboardModel) syncSelection() {
 	items := m.feed.Items()
 	if len(items) == 0 {
 		m.selected = -1
@@ -216,11 +216,11 @@ func (m *model) syncSelection() {
 	}
 }
 
-func (m *model) moveSelection(delta int) {
+func (m *dashboardModel) moveSelection(delta int) {
 	m.selectIndex(m.selected + delta)
 }
 
-func (m *model) selectIndex(index int) {
+func (m *dashboardModel) selectIndex(index int) {
 	items := m.feed.Items()
 	if len(items) == 0 {
 		m.selected = -1
@@ -239,7 +239,7 @@ func (m *model) selectIndex(index int) {
 	m.refreshDetail()
 }
 
-func (m *model) toggleFocus() {
+func (m *dashboardModel) toggleFocus() {
 	if m.focus == focusFeed {
 		m.focus = focusDetail
 	} else {
@@ -247,7 +247,7 @@ func (m *model) toggleFocus() {
 	}
 }
 
-func (m *model) refreshDetail() {
+func (m *dashboardModel) refreshDetail() {
 	width := m.detailViewport.Width
 	if width <= 0 {
 		width = 48
@@ -255,7 +255,7 @@ func (m *model) refreshDetail() {
 	m.detailViewport.SetContent(strings.Join(detailLines(m.selectedItem(), width), "\n"))
 }
 
-func (m *model) updateLiveDuration() {
+func (m *dashboardModel) updateLiveDuration() {
 	live := m.feed.LiveIndex()
 	if live < 0 {
 		return
@@ -269,7 +269,7 @@ func (m *model) updateLiveDuration() {
 	m.feed.SetLiveStats(duration, files)
 }
 
-func (m model) selectedItem() *tuicore.FeedItem {
+func (m dashboardModel) selectedItem() *tuicore.FeedItem {
 	items := m.feed.Items()
 	if m.selected < 0 || m.selected >= len(items) {
 		return nil
@@ -278,11 +278,11 @@ func (m model) selectedItem() *tuicore.FeedItem {
 	return &item
 }
 
-func (m model) isSmall() bool {
+func (m dashboardModel) isSmall() bool {
 	return m.width < 60
 }
 
-func maxInt(a, b int) int {
+func dashboardMaxInt(a, b int) int {
 	if a > b {
 		return a
 	}

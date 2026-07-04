@@ -53,7 +53,7 @@ func DemoFeedSeed() []FeedItem {
 			Duration:       5*time.Minute + 42*time.Second,
 			Files:          1,
 			CommitHash:     "efb4baa",
-			CommitTitle:    "add tuisafe prototype",
+			CommitTitle:    "add safe tui prototype",
 			Summary:        "Confirmed the FIFO drainer, status frame capture, and double-press control bridge work under demo playback.",
 			Classification: "verification",
 		},

@@ -1,4 +1,4 @@
-package tuipanels
+package tuitabs
 
 import (
 	tea "github.com/charmbracelet/bubbletea"
@@ -7,23 +7,23 @@ import (
 	"github.com/mitchell-wallace/rally/internal/relay/runner/runtimeevent"
 )
 
-// Dashboard exposes prototype 2's run feed and detail panels as an embeddable
+// dashboard exposes prototype 2's run feed and detail panels as an embeddable
 // component for richer TUI layouts.
-type Dashboard model
+type dashboard dashboardModel
 
-func NewDashboard(title string) Dashboard {
-	return Dashboard(newModel(title, nil))
+func newDashboard(title string) dashboard {
+	return dashboard(newDashboardModel(title, nil))
 }
 
-func (d Dashboard) Update(msg tea.Msg) (Dashboard, tea.Cmd) {
-	m := model(d)
+func (d dashboard) Update(msg tea.Msg) (dashboard, tea.Cmd) {
+	m := dashboardModel(d)
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
-		m.width = maxInt(1, msg.Width)
-		m.height = maxInt(1, msg.Height)
+		m.width = dashboardMaxInt(1, msg.Width)
+		m.height = dashboardMaxInt(1, msg.Height)
 		m.refit()
 		m.refreshDetail()
-	case seedMsg:
+	case seedFeedMsg:
 		m.feed.Seed(msg.items)
 		m.syncSelection()
 		m.refreshDetail()
@@ -86,51 +86,51 @@ func (d Dashboard) Update(msg tea.Msg) (Dashboard, tea.Cmd) {
 			}
 		}
 	}
-	return Dashboard(m), nil
+	return dashboard(m), nil
 }
 
-func (d Dashboard) View(width, height int) string {
-	m := model(d)
-	m.width = maxInt(1, width)
-	m.height = maxInt(2, height+1)
+func (d dashboard) View(width, height int) string {
+	m := dashboardModel(d)
+	m.width = dashboardMaxInt(1, width)
+	m.height = dashboardMaxInt(2, height+1)
 	m.refit()
 	m.refreshDetail()
 	if height <= 1 {
-		return fitLine(m.headerLine(), m.width)
+		return dashboardFitLine(m.headerLine(), m.width)
 	}
 	if m.isSmall() {
-		header := fitLine(m.headerLine(), m.width)
+		header := dashboardFitLine(m.headerLine(), m.width)
 		var body string
 		if m.detailOpen {
-			body = m.detailPanel(m.width, maxInt(1, height-1), true)
+			body = m.detailPanel(m.width, dashboardMaxInt(1, height-1), true)
 		} else {
-			body = m.feedPanel(m.width, maxInt(1, height-1), true)
+			body = m.feedPanel(m.width, dashboardMaxInt(1, height-1), true)
 		}
 		return header + "\n" + body
 	}
-	return fitLine(m.headerLine(), m.width) + "\n" + m.panelsView()
+	return dashboardFitLine(m.headerLine(), m.width) + "\n" + m.panelsView()
 }
 
-func (d Dashboard) Seed(items []tuicore.FeedItem) Dashboard {
-	next, _ := d.Update(seedMsg{items: items})
+func (d dashboard) Seed(items []tuicore.FeedItem) dashboard {
+	next, _ := d.Update(seedFeedMsg{items: items})
 	return next
 }
 
-func (d Dashboard) Enrich(runIndex int, summary, classification string, followups []string) Dashboard {
+func (d dashboard) Enrich(runIndex int, summary, classification string, followups []string) dashboard {
 	next, _ := d.Update(enrichMsg{runIndex: runIndex, summary: summary, classification: classification, followups: followups})
 	return next
 }
 
-func (d Dashboard) Apply(event runtimeevent.Event) Dashboard {
+func (d dashboard) Apply(event runtimeevent.Event) dashboard {
 	next, _ := d.Update(eventMsg{event: event})
 	return next
 }
 
-func (d Dashboard) SetStatusLine(line string) Dashboard {
+func (d dashboard) SetStatusLine(line string) dashboard {
 	next, _ := d.Update(statusFrameMsg{line: line})
 	return next
 }
 
-func (d Dashboard) Feed() tuicore.RunFeed {
-	return model(d).feed
+func (d dashboard) Feed() tuicore.RunFeed {
+	return dashboardModel(d).feed
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"strings"
 
 	"github.com/mitchell-wallace/rally/internal/app"
 	"github.com/mitchell-wallace/rally/internal/presentation/tuicore"
@@ -12,13 +13,13 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func newTui3Cmd(opts RootOptions) *cobra.Command {
+func newTuiCmd(opts RootOptions) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:          "tui-3",
-		Short:        "TUI prototype 3: multi-tab relay view",
+		Use:          "tui",
+		Short:        "Run a relay in the terminal UI",
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runTui3(cmd, args, opts)
+			return runTui(cmd, args, opts)
 		},
 	}
 	cmd.Flags().IntP("iterations", "i", 0, "Number of iterations (default 50 unless laps-backed)")
@@ -27,12 +28,46 @@ func newTui3Cmd(opts RootOptions) *cobra.Command {
 	cmd.Flags().Bool("resume", false, "Resume the last unfinished batch explicitly")
 	cmd.Flags().Bool("new", false, "Start a new batch explicitly, discarding unfinished batch state")
 	cmd.Flags().Bool("demo", false, "Run synthetic TUI demo playback without a .rally workspace")
+	cmd.Flags().String("view", "", "View a historical relay (latest, or a relay ID)")
+	cmd.Flags().Lookup("view").NoOptDefVal = "latest"
 	return cmd
 }
 
-func runTui3(cmd *cobra.Command, args []string, opts RootOptions) error {
+func runTui(cmd *cobra.Command, args []string, opts RootOptions) error {
 	demo, _ := cmd.Flags().GetBool("demo")
-	session := tuitabs.NewSession(tuitabs.Options{Title: "rally tui-3"})
+	view, _ := cmd.Flags().GetString("view")
+	resume, _ := cmd.Flags().GetBool("resume")
+	newBatch, _ := cmd.Flags().GetBool("new")
+	if view != "" {
+		var conflicts []string
+		if demo {
+			conflicts = append(conflicts, "--demo")
+		}
+		if resume {
+			conflicts = append(conflicts, "--resume")
+		}
+		if newBatch {
+			conflicts = append(conflicts, "--new")
+		}
+		if len(conflicts) > 0 {
+			return fmt.Errorf("--view cannot be used with %s", strings.Join(conflicts, ", "))
+		}
+		workspaceDir, err := resolveWorkspaceDir()
+		if err != nil {
+			return err
+		}
+		events, relayID, err := synthesizeRelayEvents(workspaceDir, view)
+		if err != nil {
+			return err
+		}
+		session := tuitabs.NewSession(tuitabs.Options{
+			Title:    "rally tui",
+			DoneHint: fmt.Sprintf("historical view relay #%d - q to exit", relayID),
+		})
+		return session.RunView(context.Background(), events)
+	}
+
+	session := tuitabs.NewSession(tuitabs.Options{Title: "rally tui"})
 	if demo {
 		return session.RunDemo(context.Background())
 	}
@@ -45,11 +80,11 @@ func runTui3(cmd *cobra.Command, args []string, opts RootOptions) error {
 	if err != nil {
 		return fmt.Errorf("load TUI feed seed: %w", err)
 	}
-	messages, agents, err := loadTui3State(ro.WorkspaceDir)
+	agents, err := loadTuiState(ro.WorkspaceDir)
 	if err != nil {
 		return fmt.Errorf("load TUI state: %w", err)
 	}
-	session = tuitabs.NewSession(tuitabs.Options{Title: "rally tui-3", Seed: seed, Messages: messages, Agents: agents})
+	session = tuitabs.NewSession(tuitabs.Options{Title: "rally tui", Seed: seed, Agents: agents})
 	ro.EventSink = session.Sink()
 	ro.Controls = session.Controls()
 	ro.StatusWriter = session.StatusWriter()
@@ -60,27 +95,12 @@ func runTui3(cmd *cobra.Command, args []string, opts RootOptions) error {
 	})
 }
 
-func loadTui3State(workspaceDir string) ([]tuicore.MessageItem, []tuicore.AgentStatusItem, error) {
+func loadTuiState(workspaceDir string) ([]tuicore.AgentStatusItem, error) {
 	s, err := store.NewStore(store.RallyDir(workspaceDir))
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
-	return messageRecordsToItems(s.GetMessages()), agentStatusEventsToItems(s.AllAgentStatus()), nil
-}
-
-func messageRecordsToItems(records []store.MessageRecord) []tuicore.MessageItem {
-	items := make([]tuicore.MessageItem, 0, len(records))
-	for _, record := range records {
-		items = append(items, tuicore.MessageItem{
-			ID:        record.ID,
-			Body:      record.Body,
-			Status:    record.Status,
-			Position:  record.Position,
-			Scope:     record.Scope,
-			CreatedAt: parseRFC3339(record.CreatedAt),
-		})
-	}
-	return items
+	return agentStatusEventsToItems(s.AllAgentStatus()), nil
 }
 
 func agentStatusEventsToItems(events []store.AgentStatusEvent) []tuicore.AgentStatusItem {
