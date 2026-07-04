@@ -1,6 +1,6 @@
 ---
 name: crew-chief
-description: Lead a multi-agent implementation effort — you own architecture, lap specs, review, and commits while delegating implementation, exploration, and verification laps to other agents (codex/GPT, cheaper models, or rally). Use when the user asks you to orchestrate/delegate work on prototypes, refactors, features, migrations, or test campaigns rather than implement everything yourself.
+description: Lead a multi-agent implementation effort — you own architecture, lap specs, review, and commits while delegating implementation, exploration, and verification laps to other agents (codex/GPT, cheaper models, or rally). ALWAYS use this skill when the user addresses you as "crew chief" in any form ("Crew chief, get to work", "crew chief, your next tasks", ...) — direct address alone is the trigger. Also use when the user asks you to orchestrate/delegate work on prototypes, refactors, features, migrations, or test campaigns rather than implement everything yourself.
 metadata:
   author: rally
   version: "1.0"
