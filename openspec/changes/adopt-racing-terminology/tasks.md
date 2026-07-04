@@ -1,9 +1,9 @@
 ## 1. Tier 1 - Docs and Prompts
 
-- [ ] 1.1 Update `AGENTS.md` terminology to `relay > outing > try`, define driver as harness+model, and explicitly keep `internal/relay/runner.Runner` as the orchestrator.
-- [ ] 1.2 Update `README.md` and `.rally/README.md` operator/config prose from entity `run` to `outing` and harness+model `runner` to `driver`.
-- [ ] 1.3 Update `internal/agent_prompt/general/*`, `internal/agent_prompt/roles/*`, and generated `.rally/agents/*` templates for outing/driver vocabulary.
-- [ ] 1.4 Verify docs/prompts keep roles out of scope and do not preempt `rename-rally-roles`.
+- [x] 1.1 Update `AGENTS.md` terminology to `relay > outing > try`, define driver as harness+model, and explicitly keep `internal/relay/runner.Runner` as the orchestrator.
+- [x] 1.2 Update `README.md` and `.rally/README.md` operator/config prose from entity `run` to `outing` and harness+model `runner` to `driver`.
+- [x] 1.3 Update `internal/agent_prompt/general/*`, `internal/agent_prompt/roles/*`, and generated `.rally/agents/*` templates for outing/driver vocabulary.
+- [x] 1.4 Verify docs/prompts keep roles out of scope and do not preempt `rename-rally-roles`.
 
 ## 2. Tier 2 - Go Identifiers and Operator Prose
 

@@ -1,4 +1,4 @@
-Rally runs you in a headless, non-interactive session. There is no human watching this run who can answer questions, confirm choices, or unblock you inline — anything you print asking for confirmation will simply go unanswered.
+Rally starts you in a headless, non-interactive session. There is no human watching this outing who can answer questions, confirm choices, or unblock you inline — anything you print asking for confirmation will simply go unanswered.
 
 Because of that:
 

@@ -58,7 +58,7 @@ terminal width.
 
 | Shortcut | Action | Behaviour |
 |----------|--------|-----------|
-| Ctrl+X | Graceful stop | Sets a stop flag. The current try runs to completion, then the relay halts without launching further runs. |
+| Ctrl+X | Graceful stop | Sets a stop flag. The current try runs to completion, then the relay halts without launching further outings. |
 | Ctrl+C | Quit now | Cancels the active try immediately (SIGINT to the process group, 5-second drain, then SIGKILL). A second Ctrl+C during the drain window escalates to an immediate SIGKILL. |
 | Ctrl+P | Pause | Cancels the active try and prints "Paused — press Enter to resume". Pressing Enter resumes with session reuse. |
 | Ctrl+S | Skip | Skips the current agent and advances to the next route entry. |
@@ -72,8 +72,8 @@ Each iteration of `rally start` does this:
 
 1. **Pick a route.** `--agent` override wins, otherwise the lap's `assignee`
    matches a `[routes]` entry, otherwise `default`.
-2. **Pick an agent from that route.** Rally walks the route entries by
-   quota (e.g. `cc:2` runs twice before advancing). Failures and freezes
+2. **Pick a driver from that route.** Rally walks the route entries by
+   quota (e.g. `cc:2` gets two outings before advancing). Failures and freezes
    skip ahead.
 3. **Build a prompt** from your project instructions, inbox messages, recent
    try context, and any matching `.rally/agents/{ASSIGNEE}.md` file.
@@ -93,13 +93,13 @@ the `[reliability]` section for tunables.
 The two stop shortcuts differ in how aggressively they terminate the relay:
 
 - **Ctrl+X (graceful stop):** arms on first double-press, sets a stop flag
-  but does **not** cancel the running attempt. The current try finishes
+  but does **not** cancel the current try. The current try finishes
   naturally (bounded by the stall detector), then the relay exits without
-  starting further runs. Use this when you want the agent to wrap up its
+  starting further outings. Use this when you want the agent to wrap up its
   work cleanly.
 
 - **Ctrl+C (quit now):** arms on first double-press, immediately cancels
-  the running attempt's context. The harness sends SIGINT to the agent's
+  the current try's context. The harness sends SIGINT to the agent's
   process group, waits up to 5 seconds for a clean exit, then SIGKILL any
   survivors. A second Ctrl+C during the drain window skips the grace period
   entirely and force-kills the group. Use this when the agent is stuck or
@@ -138,16 +138,16 @@ when the repo lacks `user.name` / `user.email`.
 **State folding.** Rally's bookkeeping (`.rally/`, `.laps/`) is folded into
 the existing commit history rather than creating extra commits:
 
-- In the common path (code run), `autoCommit` stages everything including
+- In the common path (code outing), `autoCommit` stages everything including
   state — no separate commit is needed.
-- For no-code runs where only state changed, Rally amends a rally-authored
+- For no-code outings where only state changed, Rally amends a rally-authored
   HEAD (`rally:` prefix) and appends ` [+state]` to the message (never
   stacks the suffix).
 - If HEAD is not rally-authored, a single `rally: update state` commit is
   created.
 - Nothing happens if nothing is staged or the directory is not a git repo.
 
-**Leftover-work guidance.** When a run starts with a dirty working tree
+**Leftover-work guidance.** When an outing starts with a dirty working tree
 (excluding `.rally/` and `.laps/`), Rally injects a prompt section reminding
 the agent to review and commit those changes before starting new work.
 
@@ -167,16 +167,16 @@ CLI harness was removed in 0.12.0; antigravity serves the same Gemini model
 family on the same provider account. A stale `gemini`/`ge` route now warns
 once and recommends `antigravity` instead of failing late.
 
-For Opencode runs Rally automatically sets:
+For Opencode outings Rally automatically sets:
 
 ```sh
 OPENCODE_PERMISSION='{"*":"allow"}'
 ```
 
-For Antigravity runs Rally uses `agy --print` with
+For Antigravity outings Rally uses `agy --print` with
 `--dangerously-skip-permissions`. `agy` 1.0.0 does not expose a model flag, so
 when `antigravity_model` resolves to a value Rally temporarily writes that
-model label to `~/.gemini/antigravity-cli/settings.json` for the run and then
+model label to `~/.gemini/antigravity-cli/settings.json` for the outing and then
 restores the prior setting.
 
 ### Choosing agents with `--agent`
@@ -343,19 +343,19 @@ Each entry is one of:
 
 | Quota form | Behaviour                                                            |
 |------------|----------------------------------------------------------------------|
-| _none_     | **Stay on this entry until it fails.** Same harness reruns each pass. |
+| _none_     | **Stay on this entry until it fails.** Same driver gets each pass. |
 | `:N`       | Run exactly `N` consecutive iterations, then advance.                 |
 | `:N-M`     | Prefer rotating after `N`. Allow up to `M` if every other entry is exhausted or frozen. |
 
 **Important asymmetry between `[routes]` and `--agent`:**
 
-- In `--agent`, bare aliases mean "run once each, then rotate"
+- In `--agent`, bare aliases mean "use each once, then rotate"
   (`--agent "cc ag"` ⇒ `cc:1 ag:1`).
 - In `[routes]`, bare aliases mean "stay until failure". If you want
   one-iteration round-robin from `[routes]`, you must add `:1`:
 
 ```toml
-# Round-robin: one try per agent, then advance
+# Round-robin: one try per driver, then advance
 default = ["cc:1", "ag:1", "op:1"]
 
 # Stick on claude until it fails, then antigravity until it fails, …
@@ -378,11 +378,11 @@ In no-backend mode there is no lap and no `assignee`, so Rally always uses
 `default`. Non-default routes still load and validate, but are never
 selected.
 
-#### Single-runner lanes
+#### Single-driver lanes
 
-Rally warns at relay start when a lane has exactly one runner entry — a
+Rally warns at relay start when a lane has exactly one driver entry — a
 single dead harness stalls that lane with no fallback to rotate to. A
-single-runner lane is valid, just fragile. Prefer at least two entries per
+single-driver lane is valid, just fragile. Prefer at least two entries per
 lane so the scheduler can rotate past a failing harness.
 
 #### Role instruction files
@@ -395,7 +395,7 @@ When a lap has an `assignee`, Rally looks for a `{ASSIGNEE}.md` role file under
 3. the role default embedded in the binary
 
 `builtin/` files are **managed by Rally**: they are regenerated from the binary
-on each run, so they auto-update when you update Rally — don't hand-edit them.
+on each outing, so they auto-update when you update Rally — don't hand-edit them.
 Put customizations in `user/`, which always win over `builtin/` and are never
 touched. When Rally first runs after the upgrade that introduced this layout, it
 migrates any legacy flat `.rally/agents/{ROLE}.md` files: files matching content
@@ -435,9 +435,9 @@ Built-in harnesses (`ag`/`cc`/`cx`/`op`) can declare named models but
 
 ### `[providers]` — shared-quota groups
 
-`[providers]` groups runners that draw from the same usage-limit budget. By
+`[providers]` groups drivers that draw from the same usage-limit budget. By
 default Rally infers a quota bucket per harness (and per opencode provider /
-antigravity model family). When several runners actually share one account —
+antigravity model family). When several drivers actually share one account —
 e.g. multiple codex models behind one ChatGPT plan, or a codex model exposed
 both directly and through opencode — list them under a provider so a usage
 limit on **any** member benches **every** member until the reset. This avoids
@@ -452,7 +452,7 @@ Wildcards expand from your local config only: they include configured model
 aliases and matching default models, not an external catalog of every model a
 provider could offer. A bare shortcut must be defined under exactly one
 harness's `[harness.<h>.models]` table, otherwise qualify it (`cx:g55`). A given
-runner may belong to at most one provider.
+driver may belong to at most one provider.
 
 ```toml
 [providers]
@@ -483,15 +483,15 @@ models   = ["cc:opus", "cc:sonnet"]
 disabled = true
 ```
 
-A disabled provider's runners are skipped during selection; if a lane has no
-other runner it fails fast with a clear message rather than waiting. `rally
+A disabled provider's drivers are skipped during selection; if a lane has no
+other driver it fails fast with a clear message rather than waiting. `rally
 routes check` lists every provider, its member count, and whether it is
 disabled.
 
 To **carve a model out of a wildcard group** — for example when one model shares
 a harness but draws from a separate quota — pair `exclude` with the wildcard. An
 exclude uses the same spec forms as `models`; matching members are removed from
-the provider *before* the one-runner-one-provider rule is checked, so the carved
+the provider *before* the one-driver-one-provider rule is checked, so the carved
 out model can form its own provider without a conflict. An exclude that matches
 nothing is a no-op (handy for forward-looking filters), but a `models` wildcard
 that matches nothing is still a hard error.
@@ -539,10 +539,10 @@ A value may be one of three forms:
   | opencode    | `--variant <value>`                  | provider-specific, no fixed set                |
   | antigravity | unsupported as a flag                | reasoning encoded in the model alias/name      |
 
-Unknown effort tokens warn and pass through rather than failing the run (the
+Unknown effort tokens warn and pass through rather than failing the outing (the
 spike confirmed claude/opencode ignore many unsupported values and codex
 rejects invalid values at the API), so a forward-compatible default never
-pre-emptively kills a run on a token Rally doesn't recognise.
+pre-emptively kills an outing on a token Rally doesn't recognise.
 
 ### User-defined harnesses
 
@@ -587,25 +587,25 @@ config loader rejects it with an explicit error directing you to
 
 ### `[reliability]`
 
-Tunes retry, stall detection, the liveness probe, and per-run time budgets.
+Tunes retry, stall detection, the liveness probe, and per-outing time budgets.
 
 | Field                    | Type | Default | Purpose                                                            |
 |--------------------------|------|---------|--------------------------------------------------------------------|
 | `stall_threshold_secs`   | int  | `900`   | Seconds of log inactivity before a try is considered stalled       |
 | `liveness_probe`         | bool | `false` | Experimental side-channel probe for ambiguous stall signals        |
 | `retry_budget`           | int  | `5`     | Maximum retries per try before advancing to the next route entry   |
-| `run_timeout_secs`       | int  | `4500`  | Per-run wall-clock budget (75 m) measured **across all retries**   |
+| `run_timeout_secs`       | int  | `4500`  | Per-outing wall-clock budget (75 m) measured **across all retries** |
 | `try_timeout_secs`       | int  | `3600`  | Secondary per-attempt cap (60 m) guarding a single runaway try     |
-| `handoff_timeout_secs`   | int  | `300`   | Bounded handoff-only resume window (5 m), not counted in the run budget |
+| `handoff_timeout_secs`   | int  | `300`   | Bounded handoff-only resume window (5 m), not counted in the outing budget |
 
 `0`/unset yields the default. Positive timeout values below 300 seconds are
 rounded up to 300 seconds with a warning. `handoff_timeout_secs` is clamped
 below the effective `try_timeout_secs`/`run_timeout_secs` when possible while
 preserving that 5-minute minimum. When `try_timeout_secs >= run_timeout_secs`
-the run budget subsumes the per-try cap and the config is accepted rather
+the outing budget subsumes the per-try cap and the config is accepted rather
 than rejected. The two timeouts are orthogonal to the silence-based stall
 detector — whichever fires first wins. See
-[Recovery and per-run timeouts](#recovery-and-per-run-timeouts) for how they
+[Recovery and per-outing timeouts](#recovery-and-per-outing-timeouts) for how they
 combine with the `recovery` route.
 
 ```toml
@@ -632,48 +632,48 @@ not support it. It sends a lightweight "respond with OK" prompt when the
 stall signal is ambiguous (mtime advancing but IO idle for 60 s). A
 successful probe clears the stall flag.
 
-### Recovery and per-run timeouts
+### Recovery and per-outing timeouts
 
-Rally bounds how long a struggling run can grind, and routes genuinely
+Rally bounds how long a struggling outing can grind, and routes genuinely
 stuck, half-finished work to a dedicated recovery session instead of
-letting one attempt loop for hours. This is pure Rally routing and prompt
+letting one try loop for hours. This is pure Rally routing and prompt
 behavior — laps remains the queue backend, the lap's `assignee` is never
 rewritten, and recovery state is derived from the try records Rally already
 persists (so it survives relay restarts).
 
-**Per-run and per-try time budgets.** Each run has a hard wall-clock budget
+**Per-outing and per-try time budgets.** Each outing has a hard wall-clock budget
 measured *across all of its retry attempts* (`run_timeout_secs`, default
 75 m). A secondary per-attempt cap (`try_timeout_secs`, default 60 m) guards
-a single runaway try; the run budget sits slightly above it so a quick
+a single runaway try; the outing budget sits slightly above it so a quick
 non-blocking retry after a transient blip still has buffer. Whichever of the
-run budget, the per-try cap, or the silence stall detector fires first
-wins. A per-try cap firing with run budget left just ends that attempt and
-may retry within the remaining budget; when the **run budget** is exhausted,
-the run stops retrying and proceeds to a bounded handoff.
+outing budget, the per-try cap, or the silence stall detector fires first
+wins. A per-try cap firing with outing budget left just ends that try and
+may retry within the remaining budget; when the **outing budget** is exhausted,
+the outing stops retrying and proceeds to a bounded handoff.
 
-**Bounded handoff-only resume.** On run-budget exhaustion, if the harness
+**Bounded handoff-only resume.** On outing-budget exhaustion, if the harness
 supports session resume and a session was captured, Rally resumes that
 session *once* under a separate hard limit (`handoff_timeout_secs`, default
-5 m, not counted in the run budget) with a handoff-only prompt that forbids
+5 m, not counted in the outing budget) with a handoff-only prompt that forbids
 further implementation and instructs the agent to summarize the blocker and
 call `laps handoff` + `laps wrapup`. A successful handoff there is a normal
 (success-side) handoff, not a failure. If the harness cannot resume or no
-session exists, no synthetic handoff is fabricated and the run resolves
-without one. Worst-case wall clock per run is roughly `run_timeout_secs +
+session exists, no synthetic handoff is fabricated and the outing resolves
+without one. Worst-case wall clock per outing is roughly `run_timeout_secs +
 handoff_timeout_secs`.
 
 **The `recovery` role and route.** RECOVERY is a reasoning-heavy role like
 VERIFY but with the authority and coding ability to modify code and
-reconcile dirty state, like SENIOR. It defaults to a stronger runner
+reconcile dirty state, like SENIOR. It defaults to a stronger driver
 (`rally init roles` seeds a `recovery` route) and does not reuse SENIOR's
 prompt. Its prompt requires it to classify the leftover state into exactly
 one of `continue`, `discard`, `course_correct`, `repair_plan`, or
 `needs_user`, then *act* on that classification (never stopping at diagnosis
-unless `needs_user`). The classification is recorded on the run via
+unless `needs_user`). The classification is recorded on the outing via
 `laps wrapup --classification <value>` and surfaces as telemetry, so
 recovery outcomes stay filterable.
 
-**Two recovery triggers.** The next run for a lap is forced onto the
+**Two recovery triggers.** The next outing for a lap is forced onto the
 `recovery` route only for the two states that leave a suspect, half-finished
 tree needing reconciliation:
 
@@ -689,9 +689,9 @@ existing resilience paths. A plain `incomplete` outcome (changes, no
 handoff) keeps its existing resume-with-finalization retry, and a clean
 handoff (no leftover dirt) keeps its existing follow-up flow.
 
-**Anti-loop cap.** A recovery run can itself time out or leave another dirty
+**Anti-loop cap.** A recovery outing can itself time out or leave another dirty
 handoff, which would re-arm recovery forever. Rally therefore allows at most
-**two** consecutive recovery runs per lap; once the cap is reached it stops
+**two** consecutive recovery outings per lap; once the cap is reached it stops
 routing to recovery, raises a `needs_user` operator-attention issue, and
 falls back to the lap's normal route rather than looping. (This cap-hit
 decision happens at routing time with no recovery agent running; a missing
@@ -716,7 +716,7 @@ New patterns are added to `ErrorPatterns`; misses fall through to
 
 ### Other settings
 
-By default Rally uses `--no-verify` for its post-run autocommit checkpoint
+By default Rally uses `--no-verify` for its post-try autocommit checkpoint
 so repo hooks cannot block progress/logging commits. Set
 `run_hooks_on_autocommit = true` if you want those fallback commits to run
 your normal Git hooks.
@@ -787,7 +787,7 @@ Default data directory (override with `data_dir` in config):
 | `.rally/state/tries.jsonl`                            | Try records (read by `rally tail`)      |
 | `.rally/state/messages.jsonl`                         | Inbox messages                          |
 | `.rally/state/agent_status.jsonl`                     | Agent status events                     |
-| `.rally/summary.jsonl`                                | Run summaries and lap completions       |
+| `.rally/summary.jsonl`                                | Outing summaries and lap completions    |
 | `.rally/instructions.md`                              | Project instructions                    |
 | `.rally/agents/builtin/{ROLE}.md`                     | Rally-managed role instructions         |
 | `.rally/agents/user/{ROLE}.md`                        | Your role instruction overrides         |
@@ -866,10 +866,10 @@ Each event carries:
 | Tag | Example | Purpose |
 |---|---|---|
 | `relay_id` | `3` | Local relay counter (per workspace) |
-| `run_id` | `7` | Local run counter |
+| `run_id` | `7` | Historical telemetry key for the local outing counter |
 | `try_id` | `12` | Local try counter |
-| `role` | `junior` | Effective prompt role for the run/try |
-| `runner` | `claude:claude-sonnet-4` | Harness and model |
+| `role` | `junior` | Effective prompt role for the outing/try |
+| `runner` | `claude:claude-sonnet-4` | Historical telemetry key for the driver |
 | `repo` | `rally-a1b2c3` | Hashed repo identifier |
 | `lap_id` | `abc123` | Lap identifier |
 | `relay_guid` | `a1b2c3d4e5f6-rally-a1b2c3-20260610-3` | Globally unique relay id |
@@ -878,7 +878,7 @@ Each event carries:
 | `outcome` | `handoff_timeout` | Try lifecycle outcome (`completed`, `failed`, `run_timeout`, etc.) |
 | `failure_category` | `usage_limit` | Stable failure taxonomy |
 | `recovery_classification` | `repair_plan` | RECOVERY-only classification, when recorded |
-| `agent_state` | `active` | Runner resilience state |
+| `agent_state` | `active` | Driver resilience state |
 | `attempt` / `max_attempts` | `2` / `5` | Retry position and budget |
 | `quota_scope` / `reset_at` / `reset_after` | `claude:opus` / `2026-…Z` / `30s` | Limit reset info (limit categories only) |
 
@@ -889,10 +889,10 @@ Each event carries:
 | `rally` | `version`, `go_os`, `go_arch`, `term`, `machine_id`, `cwd` | Run environment |
 | `failure_evidence` | `raw_signal`, `message` | Bounded provider text (limit categories only) |
 
-Spans trace the relay → run → try hierarchy and carry prompt-size metrics
+Spans trace the relay → outing → try hierarchy and carry prompt-size metrics
 (total bytes plus a per-source breakdown). Try spans and structured logs
 also record the lifecycle `outcome`, mark bounded handoff continuations with
-`handoff_only=true`, and attach `recovery_classification` on RECOVERY runs
+`handoff_only=true`, and attach `recovery_classification` on RECOVERY outings
 when one was recorded.
 
 ### Anonymous machine identity
@@ -933,7 +933,7 @@ Rally **never** transmits:
 Failures are classified by the error-classification taxonomy
 (`usage_limit`, `short_rate_limit`, `provider_overloaded`,
 `incomplete_finalization`, `agent_error`, …). Telemetry does not
-re-classify — it reads the category straight off the runner's
+re-classify — it reads the category straight off the driver's
 `FailureEvidence`.
 
 For the three provider-limit categories (`usage_limit`,
@@ -973,15 +973,15 @@ dependency direction:
   files: `start`/`relay`, `init`, hidden `init-roles`, `instructions`,
   `routes`, `hooks`, `config`, `version`, `update`, `progress`, `tail`),
   user-facing prompts, laps hook install, and the config seed templates beside
-  `init`. It resolves every interactive start-of-run decision and hands the
+  `init`. It resolves every interactive start-of-relay decision and hands the
   runtime a fully-resolved `app.RelayStartOptions`.
 - `internal/app` — the presentation-neutral relay-start seam:
   `app.StartRelay`, `app.InspectResume`, and `app.BuildExecutors`. It turns
-  already-resolved inputs into a configured runner and runs it. **It imports
+  already-resolved inputs into a configured driver and runs it. **It imports
   neither `internal/user_prompt` nor `internal/laps`** — all prompting and
   laps hook installation stay CLI-side.
 - `internal/relay/runner` — the relay orchestrator (assemble `runner.Config`,
-  drive the run, manage retries/signal handling).
+  drive the outing, manage retries/signal handling).
 - `internal/relay` — the primitives: deterministic agent cycling, retries,
   error resilience, freeze detection, graceful stop.
 - `internal/harnessapi` — the executor contract package: the `Executor`
@@ -1136,15 +1136,15 @@ The historical incident IDs are:
 - `RALLY-2`, `RALLY-3`, `RALLY-4`, `RALLY-6`, `RALLY-8`, `RALLY-9`, `RALLY-B`, `RALLY-C`
 - `RALLY-Q`, `RALLY-K`, `RALLY-D`
 
-### v0.9.0 — recovery role and per-run timeouts
+### v0.9.0 — recovery role and per-outing timeouts
 
-Adds a hard per-run wall-clock budget (`run_timeout_secs`, default 75 m
+Adds a hard per-outing wall-clock budget (`run_timeout_secs`, default 75 m
 across all retries) plus a secondary per-try cap (`try_timeout_secs`,
 default 60 m), a bounded handoff-only resume on budget exhaustion
 (`handoff_timeout_secs`, default 5 m), and a `recovery` role/route that
 reconciles dirty handed-off state. RECOVERY engages on the two states that
 leave a suspect half-finished tree — a dirty handoff or a handoff timeout
-— is capped at two consecutive recovery runs per lap before escalating to a
+— is capped at two consecutive recovery outings per lap before escalating to a
 `needs_user` issue, and records a structured classification
 (`continue`/`discard`/`course_correct`/`repair_plan`/`needs_user`). Ordinary
 failures keep routing through the existing resilience paths.

@@ -22,19 +22,19 @@ const repoConfigTemplate = `# Rally repo-level config — OVERRIDES ONLY.
 # mix = "cc cx"
 #
 # [routes]
-# # Map a role to an ordered runner fallback list (first that works wins).
+# # Map a role to an ordered driver fallback list (first that works wins).
 # junior = ["op:zai", "cc:sonnet"]
 # senior = ["cc:opus", "cx:g55"]
 #
 # [providers]
-# # Group runners that share one usage-limit budget. When any member hits a
+# # Group drivers that share one usage-limit budget. When any member hits a
 # # usage limit, every member is benched until the reset — so rally stops
 # # retrying models that draw from the same exhausted account, even across
 # # harnesses. Entries are model aliases, harness:model specs, or wildcards
 # # such as codex:* and opencode-go/*.
 # codex = ["g55", "g54", "opencode:openai/gpt-5.5"]
 # # Use the table form to disable a whole provider (e.g. a known monthly cap,
-# # or to conserve usage while another session runs a big task):
+# # or to conserve usage while another session handles a large task):
 # # [providers.claude]
 # # models   = ["cc:opus", "cc:sonnet"]
 # # disabled = true
@@ -80,18 +80,18 @@ This directory contains rally's workspace configuration and local runtime data.
 - ` + "`agents/builtin/`" + ` — Rally-managed role instructions (auto-updated by rally; do not edit)
 - ` + "`agents/user/`" + ` — Your role instruction overrides (win over ` + "`builtin/`" + `)
 - ` + "`README.md`" + ` — This guide
-- ` + "`summary.jsonl`" + ` — Append-only run summary digest, when enabled by the current workflow
+- ` + "`summary.jsonl`" + ` — Append-only outing summary digest, when enabled by the current workflow
 
 ## Local State
 
 Machine-managed runtime records live under ` + "`.rally/state/`" + `. That directory is gitignored and not shared through repository history.
 
-- ` + "`state/tries.jsonl`" + ` — One line per agent execution attempt
+- ` + "`state/tries.jsonl`" + ` — One line per agent execution try
 - ` + "`state/messages.jsonl`" + ` — Inbox messages for agents
 - ` + "`state/relays.jsonl`" + ` — Relay session records
 - ` + "`state/agent_status.jsonl`" + ` — Agent pause/freeze state history
 - ` + "`state/hook-audit.jsonl`" + ` — Laps hook audit trail
-- ` + "`state/run-state.json`" + ` — Current run handoff and lap recording state
+- ` + "`state/run-state.json`" + ` — Current outing handoff and lap recording state
 - ` + "`state/current_task.md`" + ` — Most recent assembled prompt
 
 ## Quick Reference for Agents

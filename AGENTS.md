@@ -2,31 +2,37 @@
 
 ## Terminology
 
-### Hierarchy: relay > run > try
+### Hierarchy: relay > outing > try
 
-- **Relay**: a campaign of runs processing a queue of laps (tasks).
-- **Run**: one runner assigned to one lap. A lap can have multiple
-  runs if skipped to a different runner. Each run tracks its own retry budget.
-- **Try**: one invocation of a runner. A run can have multiple tries (retries).
+- **Relay**: a campaign of outings processing a queue of laps (tasks).
+- **Outing**: one driver assigned to one lap. A lap can have multiple
+  outings if skipped to a different driver. Each outing tracks its own retry
+  budget.
+- **Try**: one invocation of a driver. An outing can have multiple tries
+  (retries).
 
-### Runner
+### Driver
 
-A **runner** is a harness + model combination (e.g. `claude` harness with
+A **driver** is a harness + model combination (e.g. `claude` harness with
 `sonnet-4` model, or `opencode` harness with `gemini-2.5-pro` model). Distinct
-from a **role**, which is a semantic label for what the runner does.
+from a **role**, which is a semantic label for what the driver does.
+
+The orchestrator package `internal/relay/runner` and its `Runner` type keep
+their names; "attempt N of M" remains the ordinal phrasing for operator-facing
+output while `try` is the record noun.
 
 ### Rally, laps, hooks, and role instructions
 
-- **Rally** orchestrates runs: it selects a runner for the current lap, builds
-  the prompt, injects project and role instructions, records progress, and
-  manages retries or route fallback.
+- **Rally** orchestrates outings: it selects a driver for the current lap,
+  builds the prompt, injects project and role instructions, records progress,
+  and manages retries or route fallback.
 - **Laps** owns the work queue. A lap's `assignee` is a routing label such as
   `junior`, `senior`, `ui`, or `verify`; Rally maps that role to a configured
-  runner via `.rally/config.toml`.
-- **Role instructions** under `.rally/agents/` tell the already-assigned runner
+  driver via `.rally/config.toml`.
+- **Role instructions** under `.rally/agents/` tell the already-assigned driver
   how to perform that kind of work. They resolve `user/<role>.md` (your
   overrides) over `builtin/<role>.md` (Rally-managed, regenerated from the binary
-  each run) over the embedded default. They should not redefine routing or
+  each outing) over the embedded default. They should not redefine routing or
   encourage agents to create laps directly. New work is normally created
   indirectly through the handoff flow.
 - **Laps hooks** in `.laps/hooks.json` bridge the agent-facing commands back
@@ -39,10 +45,10 @@ The intended flow is:
 1. Rally reads the current lap from `.laps/` and routes it using the lap's
    assignee.
 2. Rally injects `.rally/agents/<assignee>.md` as role guidance for the chosen
-   runner.
-3. The runner performs the assigned work.
-4. The runner calls `laps done` when complete, or `laps handoff` when blocked.
-5. The Rally-installed laps hook asks the runner to call `laps wrapup ...`,
+   driver.
+3. The driver performs the assigned work.
+4. The driver calls `laps done` when complete, or `laps handoff` when blocked.
+5. The Rally-installed laps hook asks the driver to call `laps wrapup ...`,
    which records progress and, for handoff, creates follow-up laps at the head
    of the queue.
 
@@ -93,7 +99,7 @@ area, and keep the distinction intact.
 ## Observability (New Relic)
 
 Rally reports telemetry through the New Relic Go APM agent. When investigating
-relay/run/try failures, use New Relic APM transactions, errors, and custom
+relay/outing/try failures, use New Relic APM transactions, errors, and custom
 events (`RallyTry`, `RallyFailure`, `RallyDiagnostic`) to understand the
 failure.
 
@@ -131,7 +137,7 @@ In short:
   commit (amends rally-prefixed HEAD with ` [+state]`; creates a single
   `rally: update state` only when HEAD is not rally-authored).
 - **Leftover-work guidance** is injected when the working tree is dirty at
-  run start (excluding `.rally/`/`.laps/`), reminding the agent to review
+  outing start (excluding `.rally/`/`.laps/`), reminding the agent to review
   and commit those changes first.
 
 ## Skill-directed actions (commits and subagents)
