@@ -1,7 +1,9 @@
 package runner
 
 import (
+	"bytes"
 	"context"
+	"os"
 	"testing"
 
 	"github.com/mitchell-wallace/rally/internal/relay/runner/runtimeevent"
@@ -48,6 +50,28 @@ func TestRunnerEventSinkNilSafe(t *testing.T) {
 		// for consumers to nil-check (phase 5 wires the keyboard sessions).
 		if r.cfg.Controls != nil {
 			t.Fatalf("Controls must default to nil (no operator input), got %T", r.cfg.Controls)
+		}
+	})
+}
+
+func TestRunnerStatusWriterDefaulting(t *testing.T) {
+	s, err := store.NewStore(t.TempDir())
+	if err != nil {
+		t.Fatalf("new store: %v", err)
+	}
+
+	t.Run("nil writer defaults to stdout", func(t *testing.T) {
+		r := NewRunner(s, Config{}, nil)
+		if got := r.statusWriter(); got != os.Stdout {
+			t.Fatalf("nil StatusWriter must default to os.Stdout, got %T", got)
+		}
+	})
+
+	t.Run("injected writer is returned verbatim", func(t *testing.T) {
+		buf := &bytes.Buffer{}
+		r := NewRunner(s, Config{StatusWriter: buf}, nil)
+		if got := r.statusWriter(); got != buf {
+			t.Fatalf("injected StatusWriter must be returned verbatim, got %T", got)
 		}
 	})
 }

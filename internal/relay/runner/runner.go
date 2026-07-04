@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"os"
 	"sync/atomic"
 	"time"
 
@@ -58,6 +59,10 @@ type Config struct {
 	// wires the field only and phase 3.2 begins emitting alongside existing
 	// prints.
 	EventSink runtimeevent.Sink
+
+	// StatusWriter receives the runner-driven monitor status line. A nil writer
+	// preserves the terminal presentation path by writing to os.Stdout.
+	StatusWriter io.Writer
 
 	// Controls is the operator-input source the runner consumes for per-phase
 	// control sessions (wait countdown, active try, pause-resume). A nil
@@ -140,6 +145,15 @@ func (r *Runner) eventSink() runtimeevent.Sink {
 		return runtimeevent.NoopSink{}
 	}
 	return r.cfg.EventSink
+}
+
+// statusWriter returns the destination for the monitor status line. A nil
+// [Config.StatusWriter] writes to stdout for CLI callers.
+func (r *Runner) statusWriter() io.Writer {
+	if r.cfg.StatusWriter == nil {
+		return os.Stdout
+	}
+	return r.cfg.StatusWriter
 }
 
 func NewRunner(s *store.Store, cfg Config, executors map[string]harnessapi.Executor) *Runner {

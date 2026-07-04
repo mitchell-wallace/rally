@@ -38,6 +38,11 @@ type RelayStartOptions struct {
 	EventSink runtimeevent.Sink
 	Controls  runtimeevent.ControlSource
 
+	// StatusWriter is the opaque destination for runner-driven monitor status
+	// bytes forwarded into runner.Config untouched. A nil writer preserves the
+	// runner default.
+	StatusWriter io.Writer
+
 	DiscardUnfinishedRelay bool
 	ResetAgentStatus       bool
 	OverwriteMixOnResume   bool
@@ -128,6 +133,7 @@ func StartRelay(ctx context.Context, opts RelayStartOptions) error {
 		OverwriteMixOnResume:   opts.OverwriteMixOnResume,
 		EventSink:              opts.EventSink,
 		Controls:               opts.Controls,
+		StatusWriter:           opts.StatusWriter,
 	}
 
 	runnerCfg.Resolver = func(spec string) (harnessapi.ResolvedAgent, error) {

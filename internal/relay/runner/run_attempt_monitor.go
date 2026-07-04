@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"os"
 	"strings"
 	"time"
 
@@ -49,7 +48,7 @@ func (r *Runner) runMonitoredAttempt(ctx context.Context, relay *store.RelayReco
 	}
 	r.eventSink().Emit(ctx, runtimeevent.ShortcutHintReady{Width: 0})
 	mon.SetCursorUpLines(cursorUp)
-	mon.Start(os.Stdout)
+	mon.Start(r.statusWriter())
 
 	tryCh := make(chan tryResult, 1)
 	attemptCtx, cancelAttempt := context.WithCancel(ctx)
