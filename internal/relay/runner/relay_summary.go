@@ -11,12 +11,12 @@ import (
 
 func (r *Runner) printRelaySummary(relay *store.RelayRecord) {
 	// Print relay summary
-	passCount, failCount, cancelledCount := tallyRuns(r.store.AllTries(), relay.ID)
-	totalRuns := passCount + failCount + cancelledCount
+	passCount, failCount, cancelledCount := tallyOutings(r.store.AllTries(), relay.ID)
+	totalOutings := passCount + failCount + cancelledCount
 	totalDuration := time.Since(r.relayStart)
-	if totalRuns > 0 {
+	if totalOutings > 0 {
 		r.eventSink().Emit(context.Background(), runtimeevent.RelaySummaryReady{
-			TotalRuns:     totalRuns,
+			TotalOutings:  totalOutings,
 			Passed:        passCount,
 			Failed:        failCount,
 			Cancelled:     cancelledCount,
@@ -27,7 +27,7 @@ func (r *Runner) printRelaySummary(relay *store.RelayRecord) {
 	// no-ops it); it pairs with RelayStarted for alternate presentations.
 	r.eventSink().Emit(context.Background(), runtimeevent.RelayCompleted{
 		RelayID:       relay.ID,
-		TotalRuns:     totalRuns,
+		TotalOutings:  totalOutings,
 		Passed:        passCount,
 		Failed:        failCount,
 		Cancelled:     cancelledCount,
@@ -35,23 +35,23 @@ func (r *Runner) printRelaySummary(relay *store.RelayRecord) {
 	})
 }
 
-// tallyRuns aggregates try records into run-level pass/fail/cancelled counts
-// for the given relay. Each run (identified by OutingID) is counted exactly once:
+// tallyOutings aggregates try records into outing-level pass/fail/cancelled counts
+// for the given relay. Each outing (identified by OutingID) is counted exactly once:
 // it passes if any attempt ultimately completed, is cancelled if no attempt
-// completed and an operator-cancelled attempt resolved the run, and fails only
+// completed and an operator-cancelled attempt resolved the outing, and fails only
 // when every attempt exhausted without completion or cancellation.
-func tallyRuns(tries []store.TryRecord, relayID int) (passCount, failCount, cancelledCount int) {
-	type runState struct {
+func tallyOutings(tries []store.TryRecord, relayID int) (passCount, failCount, cancelledCount int) {
+	type outingState struct {
 		completed bool
 		cancelled bool
 	}
-	byRun := make(map[int]runState)
+	byOuting := make(map[int]outingState)
 	order := make([]int, 0)
 	for _, tr := range tries {
 		if tr.RelayID != relayID {
 			continue
 		}
-		state, seen := byRun[tr.OutingID]
+		state, seen := byOuting[tr.OutingID]
 		if !seen {
 			order = append(order, tr.OutingID)
 		}
@@ -61,10 +61,10 @@ func tallyRuns(tries []store.TryRecord, relayID int) (passCount, failCount, canc
 		if tr.Outcome == reliability.OutcomeCancelled {
 			state.cancelled = true
 		}
-		byRun[tr.OutingID] = state
+		byOuting[tr.OutingID] = state
 	}
-	for _, runID := range order {
-		state := byRun[runID]
+	for _, outingID := range order {
+		state := byOuting[outingID]
 		switch {
 		case state.completed:
 			passCount++

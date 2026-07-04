@@ -31,7 +31,7 @@ func (RelayStarted) Kind() Kind { return KindRelayStarted }
 // rendered relay summary block is a separate event ([RelaySummaryReady]).
 type RelayCompleted struct {
 	RelayID       int
-	TotalRuns     int
+	TotalOutings  int
 	Passed        int
 	Failed        int
 	Cancelled     int
@@ -62,14 +62,14 @@ type TaskFileWarning struct {
 // Kind implements [Event].
 func (TaskFileWarning) Kind() Kind { return KindTaskFileWarning }
 
-// --- Run header --------------------------------------------------------------
+// --- Outing header -----------------------------------------------------------
 
-// RunHeaderReady carries the data for a run header (replaces style.RenderHeader
+// OutingHeaderReady carries the data for an outing header (replaces style.RenderHeader
 // today). The fields are the data-only mirror of the header options; a sink
 // renders the separator/label block from them.
-type RunHeaderReady struct {
-	RunIndex     int
-	TotalRuns    int
+type OutingHeaderReady struct {
+	OutingIndex  int
+	TotalOutings int
 	AgentName    string
 	Attempt      int
 	StartTime    time.Time
@@ -82,7 +82,7 @@ type RunHeaderReady struct {
 }
 
 // Kind implements [Event].
-func (RunHeaderReady) Kind() Kind { return KindRunHeaderReady }
+func (OutingHeaderReady) Kind() Kind { return KindOutingHeaderReady }
 
 // --- Status / shortcut hint --------------------------------------------------
 
@@ -107,9 +107,9 @@ type ShortcutHintReady struct {
 // Kind implements [Event].
 func (ShortcutHintReady) Kind() Kind { return KindShortcutHintReady }
 
-// --- Run footers (shared data) -----------------------------------------------
+// --- Try footers (shared data) -----------------------------------------------
 
-// FooterData carries the per-attempt outcome fields a sink needs to render a run
+// FooterData carries the per-attempt outcome fields a sink needs to render a try
 // footer. It is the data-only mirror of style.FooterOptions; runtimeevent must
 // not import style (stdlib-only), so the fields are duplicated here by value
 // rather than by reference. The four footer events below embed it and are
@@ -253,7 +253,7 @@ func (PausePromptShown) Kind() Kind { return KindPausePromptShown }
 // RelaySummaryReady carries the data for the relay summary block (replaces
 // style.RenderSummary today). A sink renders the separator/counts block from it.
 type RelaySummaryReady struct {
-	TotalRuns     int
+	TotalOutings  int
 	Passed        int
 	Failed        int
 	Cancelled     int

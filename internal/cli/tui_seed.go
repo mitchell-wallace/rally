@@ -63,10 +63,10 @@ func tryRecordToFeedItem(tr store.TryRecord) tuicore.FeedItem {
 	}
 	title := feedTitleFromTry(tr)
 	if title == "" {
-		title = fmt.Sprintf("run %d", tr.OutingID)
+		title = fmt.Sprintf("outing %d", tr.OutingID)
 	}
 	return tuicore.FeedItem{
-		RunIndex:       tr.OutingID,
+		OutingIndex:    tr.OutingID,
 		Agent:          tr.AgentType,
 		RoleLabel:      tr.LapAssignee,
 		Title:          tui2FirstLine(title),

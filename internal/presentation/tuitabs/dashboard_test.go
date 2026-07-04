@@ -76,7 +76,7 @@ func TestDashboardDemoScriptPlaybackHeadless(t *testing.T) {
 		t.Fatal("expected relay to complete")
 	}
 	if len(m.feed.Items()) != len(tuicore.DemoFeedSeed())+4 {
-		t.Fatalf("items = %d, want seeded plus 4 live runs", len(m.feed.Items()))
+		t.Fatalf("items = %d, want seeded plus 4 live outings", len(m.feed.Items()))
 	}
 }
 
@@ -96,16 +96,16 @@ func updateDashboardModel(t *testing.T, m dashboardModel, msg tea.Msg) dashboard
 	return got
 }
 
-func dashboardHeaderEvent(runIndex int, title string) runtimeevent.RunHeaderReady {
-	return runtimeevent.RunHeaderReady{
-		RunIndex:     runIndex,
-		TotalRuns:    2,
+func dashboardHeaderEvent(outingIndex int, title string) runtimeevent.OutingHeaderReady {
+	return runtimeevent.OutingHeaderReady{
+		OutingIndex:  outingIndex,
+		TotalOutings: 2,
 		AgentName:    "codex",
 		Attempt:      1,
-		StartTime:    time.Date(2026, 7, 4, 14, runIndex, 0, 0, time.UTC),
+		StartTime:    time.Date(2026, 7, 4, 14, outingIndex, 0, 0, time.UTC),
 		IsLapsBacked: true,
 		LapTitle:     title,
-		LapsStarted:  runIndex + 1,
+		LapsStarted:  outingIndex + 1,
 		LapsTotal:    2,
 		Model:        "gpt-5.5",
 	}

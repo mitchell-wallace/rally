@@ -182,11 +182,11 @@ func TestSinkDispatchRendersEachCase(t *testing.T) {
 		want string
 	}{
 		{
-			name: "RunHeaderReady",
+			name: "OutingHeaderReady",
 			emit: func(s *Sink) {
-				s.Emit(context.Background(), runtimeevent.RunHeaderReady{RunIndex: 1, TotalRuns: 3, AgentName: "sonnet", Attempt: 1, Model: "claude-4", RoleLabel: "senior"})
+				s.Emit(context.Background(), runtimeevent.OutingHeaderReady{OutingIndex: 1, TotalOutings: 3, AgentName: "sonnet", Attempt: 1, Model: "claude-4", RoleLabel: "senior"})
 			},
-			want: style.RenderHeader(headerOptions(runtimeevent.RunHeaderReady{RunIndex: 1, TotalRuns: 3, AgentName: "sonnet", Attempt: 1, Model: "claude-4", RoleLabel: "senior"})) + "\n",
+			want: style.RenderHeader(headerOptions(runtimeevent.OutingHeaderReady{OutingIndex: 1, TotalOutings: 3, AgentName: "sonnet", Attempt: 1, Model: "claude-4", RoleLabel: "senior"})) + "\n",
 		},
 		{
 			name: "TryStatusSnapshot",
@@ -227,7 +227,7 @@ func TestSinkDispatchRendersEachCase(t *testing.T) {
 		{
 			name: "RelaySummaryReady",
 			emit: func(s *Sink) {
-				s.Emit(context.Background(), runtimeevent.RelaySummaryReady{TotalRuns: 4, Passed: 3, Failed: 1, Cancelled: 0, TotalDuration: 2 * time.Minute})
+				s.Emit(context.Background(), runtimeevent.RelaySummaryReady{TotalOutings: 4, Passed: 3, Failed: 1, Cancelled: 0, TotalDuration: 2 * time.Minute})
 			},
 			want: style.RenderSummary(4, 3, 1, 2*time.Minute, 0) + "\n",
 		},

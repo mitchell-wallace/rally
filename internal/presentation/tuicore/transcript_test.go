@@ -12,9 +12,9 @@ import (
 
 func TestTranscriptUsesStyleRenderers(t *testing.T) {
 	start := time.Date(2026, 7, 4, 9, 0, 0, 0, time.Local)
-	header := runtimeevent.RunHeaderReady{
-		RunIndex:     0,
-		TotalRuns:    2,
+	header := runtimeevent.OutingHeaderReady{
+		OutingIndex:  0,
+		TotalOutings: 2,
 		AgentName:    "codex",
 		Attempt:      1,
 		StartTime:    start,
@@ -33,7 +33,7 @@ func TestTranscriptUsesStyleRenderers(t *testing.T) {
 		MaxAttempts:  1,
 	}
 	summary := runtimeevent.RelaySummaryReady{
-		TotalRuns:     1,
+		TotalOutings:  1,
 		Passed:        1,
 		Failed:        0,
 		TotalDuration: 2*time.Minute + 3*time.Second,
@@ -49,7 +49,7 @@ func TestTranscriptUsesStyleRenderers(t *testing.T) {
 	want = append(want, strings.Split(style.RenderHeader(headerOptions(header)), "\n")...)
 	want = append(want, "⏱ 3s  │  📁 0 files  │  last activity: < 1m ago")
 	want = append(want, strings.Split(style.RenderFooter(footerOptions(footer)), "\n")...)
-	want = append(want, strings.Split(style.RenderSummary(summary.TotalRuns, summary.Passed, summary.Failed, summary.TotalDuration, summary.Cancelled), "\n")...)
+	want = append(want, strings.Split(style.RenderSummary(summary.TotalOutings, summary.Passed, summary.Failed, summary.TotalDuration, summary.Cancelled), "\n")...)
 	if got := tr.Lines(); !reflect.DeepEqual(got, want) {
 		t.Errorf("Lines:\n got %#v\nwant %#v", got, want)
 	}

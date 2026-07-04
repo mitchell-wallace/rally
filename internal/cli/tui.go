@@ -64,7 +64,7 @@ func runTui(cmd *cobra.Command, args []string, opts RootOptions) error {
 			Title:    "rally tui",
 			DoneHint: fmt.Sprintf("historical view relay #%d - q to exit", relayID),
 		})
-		return session.RunView(context.Background(), events)
+		return session.OutingView(context.Background(), events)
 	}
 
 	session := tuitabs.NewSession(tuitabs.Options{Title: "rally tui"})

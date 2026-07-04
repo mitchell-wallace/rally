@@ -32,9 +32,9 @@ func TestModelTabSwitching(t *testing.T) {
 
 func TestModelEventFanoutUpdatesDashboardAndTranscript(t *testing.T) {
 	m := newTestModel()
-	event := runtimeevent.RunHeaderReady{
-		RunIndex:     1,
-		TotalRuns:    2,
+	event := runtimeevent.OutingHeaderReady{
+		OutingIndex:  1,
+		TotalOutings: 2,
 		AgentName:    "codex",
 		Attempt:      1,
 		StartTime:    time.Date(2026, 7, 4, 14, 0, 0, 0, time.UTC),
@@ -75,19 +75,19 @@ func TestModelDemoScriptPlaybackHeadless(t *testing.T) {
 	m.agents.Seed(tuicore.DemoAgentStatuses())
 	statuses := tuicore.DemoStatusFrames()
 	enrichments := demoEnrichments()
-	currentRun := -1
+	currentOuting := -1
 	for i, step := range tuicore.DemoScript() {
 		if len(statuses) > 0 {
 			m = updateModel(t, m, statusFrameMsg{line: statuses[i%len(statuses)]})
 		}
-		if header, ok := step.Event.(runtimeevent.RunHeaderReady); ok {
-			currentRun = header.RunIndex
+		if header, ok := step.Event.(runtimeevent.OutingHeaderReady); ok {
+			currentOuting = header.OutingIndex
 		}
 		m = updateModel(t, m, eventMsg{event: step.Event})
 		switch step.Event.(type) {
 		case runtimeevent.AttemptFinished, runtimeevent.AttemptCancelled, runtimeevent.HandoffAttemptFinished:
-			if enrichment, ok := enrichments[currentRun]; ok {
-				m = updateModel(t, m, enrichMsg{runIndex: currentRun, summary: enrichment.summary, classification: enrichment.classification, followups: enrichment.followups})
+			if enrichment, ok := enrichments[currentOuting]; ok {
+				m = updateModel(t, m, enrichMsg{outingIndex: currentOuting, summary: enrichment.summary, classification: enrichment.classification, followups: enrichment.followups})
 			}
 		}
 		_ = m.View()
@@ -125,9 +125,9 @@ func TestModelSynthesizedReplayPopulatesTranscriptAndFeed(t *testing.T) {
 	m := newTestModel()
 	events := []runtimeevent.Event{
 		runtimeevent.RelayStarted{RelayID: 7, TargetIterations: 1, AgentMix: "codex"},
-		runtimeevent.RunHeaderReady{
-			RunIndex:     0,
-			TotalRuns:    1,
+		runtimeevent.OutingHeaderReady{
+			OutingIndex:  0,
+			TotalOutings: 1,
 			AgentName:    "codex",
 			Attempt:      1,
 			StartTime:    time.Date(2026, 7, 4, 16, 0, 0, 0, time.UTC),
@@ -138,8 +138,8 @@ func TestModelSynthesizedReplayPopulatesTranscriptAndFeed(t *testing.T) {
 			Model:        "gpt-5",
 		},
 		runtimeevent.AttemptFinished{FooterData: runtimeevent.FooterData{Passed: true, Duration: time.Minute, FilesChanged: 1, CommitHash: "abc1234"}},
-		runtimeevent.RelaySummaryReady{TotalRuns: 1, Passed: 1, TotalDuration: time.Minute},
-		runtimeevent.RelayCompleted{RelayID: 7, TotalRuns: 1, Passed: 1, TotalDuration: time.Minute},
+		runtimeevent.RelaySummaryReady{TotalOutings: 1, Passed: 1, TotalDuration: time.Minute},
+		runtimeevent.RelayCompleted{RelayID: 7, TotalOutings: 1, Passed: 1, TotalDuration: time.Minute},
 	}
 	for _, event := range events {
 		m = updateModel(t, m, eventMsg{event: event})

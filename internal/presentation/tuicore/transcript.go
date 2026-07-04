@@ -44,7 +44,7 @@ func (t *Transcript) Apply(e runtimeevent.Event) {
 		t.appendLine(e.Message)
 	case runtimeevent.TaskFileWarning:
 		t.appendLine(e.Message)
-	case runtimeevent.RunHeaderReady:
+	case runtimeevent.OutingHeaderReady:
 		t.appendBlock(style.RenderHeader(headerOptions(e)))
 	case runtimeevent.TryStatusSnapshot:
 		t.appendLine(e.Status)
@@ -76,7 +76,7 @@ func (t *Transcript) Apply(e runtimeevent.Event) {
 	case runtimeevent.PausePromptShown:
 		t.pauseLine = e.Message
 	case runtimeevent.RelaySummaryReady:
-		t.appendBlock(style.RenderSummary(e.TotalRuns, e.Passed, e.Failed, e.TotalDuration, e.Cancelled))
+		t.appendBlock(style.RenderSummary(e.TotalOutings, e.Passed, e.Failed, e.TotalDuration, e.Cancelled))
 	}
 }
 
@@ -148,10 +148,10 @@ func splitBlock(block string) []string {
 	return strings.Split(block, "\n")
 }
 
-func headerOptions(e runtimeevent.RunHeaderReady) style.HeaderOptions {
+func headerOptions(e runtimeevent.OutingHeaderReady) style.HeaderOptions {
 	return style.HeaderOptions{
-		RunIndex:     e.RunIndex,
-		TotalRuns:    e.TotalRuns,
+		OutingIndex:  e.OutingIndex,
+		TotalOutings: e.TotalOutings,
 		AgentName:    e.AgentName,
 		Attempt:      e.Attempt,
 		StartTime:    e.StartTime,

@@ -46,36 +46,36 @@ func synthesizeRelayEvents(workspaceDir string, relayNum string) ([]runtimeevent
 	}
 
 	lapTitles := loadLapTitles(workspaceDir)
-	runs := groupTriesByRun(relayTries)
-	for runIndex, run := range runs {
-		if len(run) == 0 {
+	outings := groupTriesByOuting(relayTries)
+	for outingIndex, outing := range outings {
+		if len(outing) == 0 {
 			continue
 		}
-		first := run[0]
-		events = append(events, runtimeevent.RunHeaderReady{
-			RunIndex:     runIndex,
-			TotalRuns:    relay.TargetIterations,
+		first := outing[0]
+		events = append(events, runtimeevent.OutingHeaderReady{
+			OutingIndex:  outingIndex,
+			TotalOutings: relay.TargetIterations,
 			AgentName:    first.AgentType,
 			Attempt:      first.AttemptNumber,
 			StartTime:    parseTime(first.StartedAt),
 			IsLapsBacked: first.LapID != "",
 			LapTitle:     lapTitle(first, lapTitles),
-			LapsStarted:  lapsStarted(first, runIndex),
+			LapsStarted:  lapsStarted(first, outingIndex),
 			Model:        "",
 			RoleLabel:    roleLabel(first),
 		})
 
-		maxAttempts := maxAttemptNumber(run)
-		runDuration := sumRunDuration(run)
-		for i, tr := range run {
+		maxAttempts := maxAttemptNumber(outing)
+		outingDuration := sumOutingDuration(outing)
+		for i, tr := range outing {
 			footer := footerDataFromTry(tr, maxAttempts)
-			final := i == len(run)-1
+			final := i == len(outing)-1
 			if !final {
 				footer.Interim = true
 				events = append(events, runtimeevent.RetryFooterUpdated{FooterData: footer})
 				continue
 			}
-			footer.Duration = runDuration
+			footer.Duration = outingDuration
 			switch {
 			case isCancelledTry(tr):
 				footer.Cancelled = true
@@ -89,20 +89,20 @@ func synthesizeRelayEvents(workspaceDir string, relayNum string) ([]runtimeevent
 		}
 	}
 
-	passed, failed, cancelled := tallySynthesizedRuns(runs)
-	totalRuns := passed + failed + cancelled
-	if relay.CompletedIterations > totalRuns {
-		totalRuns = relay.CompletedIterations
+	passed, failed, cancelled := tallySynthesizedOutings(outings)
+	totalOutings := passed + failed + cancelled
+	if relay.CompletedIterations > totalOutings {
+		totalOutings = relay.CompletedIterations
 	}
 	totalDuration := relayDuration(relay)
 	if totalDuration == 0 {
-		for _, run := range runs {
-			totalDuration += sumRunDuration(run)
+		for _, outing := range outings {
+			totalDuration += sumOutingDuration(outing)
 		}
 	}
-	if totalRuns > 0 {
+	if totalOutings > 0 {
 		events = append(events, runtimeevent.RelaySummaryReady{
-			TotalRuns:     totalRuns,
+			TotalOutings:  totalOutings,
 			Passed:        passed,
 			Failed:        failed,
 			Cancelled:     cancelled,
@@ -111,7 +111,7 @@ func synthesizeRelayEvents(workspaceDir string, relayNum string) ([]runtimeevent
 	}
 	events = append(events, runtimeevent.RelayCompleted{
 		RelayID:       relay.ID,
-		TotalRuns:     totalRuns,
+		TotalOutings:  totalOutings,
 		Passed:        passed,
 		Failed:        failed,
 		Cancelled:     cancelled,
@@ -140,8 +140,8 @@ func resolveRelayForView(s *store.Store, relayNum string) (store.RelayRecord, er
 	return *relay, nil
 }
 
-func groupTriesByRun(tries []store.TryRecord) [][]store.TryRecord {
-	byRun := make(map[int][]store.TryRecord)
+func groupTriesByOuting(tries []store.TryRecord) [][]store.TryRecord {
+	byOuting := make(map[int][]store.TryRecord)
 	order := make([]int, 0)
 	seen := make(map[int]bool)
 	for _, tr := range tries {
@@ -149,15 +149,15 @@ func groupTriesByRun(tries []store.TryRecord) [][]store.TryRecord {
 			seen[tr.OutingID] = true
 			order = append(order, tr.OutingID)
 		}
-		byRun[tr.OutingID] = append(byRun[tr.OutingID], tr)
+		byOuting[tr.OutingID] = append(byOuting[tr.OutingID], tr)
 	}
 	out := make([][]store.TryRecord, 0, len(order))
-	for _, runID := range order {
-		run := byRun[runID]
-		sort.SliceStable(run, func(i, j int) bool {
-			return run[i].ID < run[j].ID
+	for _, outingID := range order {
+		outing := byOuting[outingID]
+		sort.SliceStable(outing, func(i, j int) bool {
+			return outing[i].ID < outing[j].ID
 		})
-		out = append(out, run)
+		out = append(out, outing)
 	}
 	return out
 }
@@ -177,12 +177,12 @@ func footerDataFromTry(tr store.TryRecord, maxAttempts int) runtimeevent.FooterD
 	}
 }
 
-func tallySynthesizedRuns(runs [][]store.TryRecord) (passCount, failCount, cancelledCount int) {
-	for _, run := range runs {
-		if len(run) == 0 {
+func tallySynthesizedOutings(outings [][]store.TryRecord) (passCount, failCount, cancelledCount int) {
+	for _, outing := range outings {
+		if len(outing) == 0 {
 			continue
 		}
-		final := run[len(run)-1]
+		final := outing[len(outing)-1]
 		switch {
 		case final.Completed || final.Outcome.IsSuccess():
 			passCount++
@@ -195,9 +195,9 @@ func tallySynthesizedRuns(runs [][]store.TryRecord) (passCount, failCount, cance
 	return passCount, failCount, cancelledCount
 }
 
-func maxAttemptNumber(run []store.TryRecord) int {
+func maxAttemptNumber(outing []store.TryRecord) int {
 	max := 1
-	for _, tr := range run {
+	for _, tr := range outing {
 		if tr.AttemptNumber > max {
 			max = tr.AttemptNumber
 		}
@@ -205,9 +205,9 @@ func maxAttemptNumber(run []store.TryRecord) int {
 	return max
 }
 
-func sumRunDuration(run []store.TryRecord) time.Duration {
+func sumOutingDuration(outing []store.TryRecord) time.Duration {
 	var total time.Duration
-	for _, tr := range run {
+	for _, tr := range outing {
 		total += tryDuration(tr)
 	}
 	return total
@@ -265,11 +265,11 @@ func roleLabel(tr store.TryRecord) string {
 	return tr.ResolvedRoute
 }
 
-func lapsStarted(tr store.TryRecord, runIndex int) int {
+func lapsStarted(tr store.TryRecord, outingIndex int) int {
 	if tr.LapID == "" {
 		return 0
 	}
-	return runIndex + 1
+	return outingIndex + 1
 }
 
 func lapTitle(tr store.TryRecord, lapTitles map[string]string) string {

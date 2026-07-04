@@ -96,7 +96,7 @@ func writeSuccessFile(t *testing.T, workspaceDir, name string) {
 }
 
 // TestEventOrderSimpleSuccess pins the event order for a run that completes on
-// its first attempt: the relay-started bookend, one run header / status /
+// its first attempt: the relay-started bookend, one outing header / status /
 // shortcut-hint block, the passing attempt footer, then the relay summary and
 // relay-completed bookend.
 func TestEventOrderSimpleSuccess(t *testing.T) {
@@ -121,7 +121,7 @@ func TestEventOrderSimpleSuccess(t *testing.T) {
 	assertKinds(t, rec,
 		runtimeevent.KindRouteWarning,
 		runtimeevent.KindRelayStarted,
-		runtimeevent.KindRunHeaderReady,
+		runtimeevent.KindOutingHeaderReady,
 		runtimeevent.KindTryStatusSnapshot,
 		runtimeevent.KindShortcutHintReady,
 		runtimeevent.KindAttemptFinished,
@@ -157,7 +157,7 @@ func TestEventOrderRetryThenFail(t *testing.T) {
 		runtimeevent.KindRouteWarning,
 		runtimeevent.KindRelayStarted,
 		// Attempt 1 (within budget): header, status, shortcut, interim retry footer.
-		runtimeevent.KindRunHeaderReady,
+		runtimeevent.KindOutingHeaderReady,
 		runtimeevent.KindTryStatusSnapshot,
 		runtimeevent.KindShortcutHintReady,
 		runtimeevent.KindRetryFooterUpdated,
@@ -212,7 +212,7 @@ func TestEventOrderRateLimitWait(t *testing.T) {
 		runtimeevent.KindRouteWarning,
 		runtimeevent.KindRelayStarted,
 		// Attempt 1 fails with a rate-limit cooldown.
-		runtimeevent.KindRunHeaderReady,
+		runtimeevent.KindOutingHeaderReady,
 		runtimeevent.KindTryStatusSnapshot,
 		runtimeevent.KindShortcutHintReady,
 		runtimeevent.KindRateLimitWaitStarted,
@@ -296,7 +296,7 @@ func TestEventOrderStallRecovery(t *testing.T) {
 	}
 
 	assertKinds(t, rec,
-		runtimeevent.KindRunHeaderReady,
+		runtimeevent.KindOutingHeaderReady,
 		runtimeevent.KindTryStatusSnapshot,
 		runtimeevent.KindShortcutHintReady,
 		runtimeevent.KindAttemptFinished,

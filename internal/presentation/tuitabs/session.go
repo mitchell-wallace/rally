@@ -69,8 +69,8 @@ func (s *Session) TranscriptWriter() io.Writer {
 	return &lineWriter{send: s.sendAsync}
 }
 
-func (s *Session) Enrich(runIndex int, summary, classification string, followups []string) {
-	s.sendAsync(enrichMsg{runIndex: runIndex, summary: summary, classification: classification, followups: append([]string(nil), followups...)})
+func (s *Session) Enrich(outingIndex int, summary, classification string, followups []string) {
+	s.sendAsync(enrichMsg{outingIndex: outingIndex, summary: summary, classification: classification, followups: append([]string(nil), followups...)})
 }
 
 func (s *Session) Run(ctx context.Context, work func(context.Context) error) error {
@@ -144,19 +144,19 @@ func (s *Session) RunDemo(ctx context.Context) error {
 		}()
 
 		enrichments := demoEnrichments()
-		currentRun := -1
+		currentOuting := -1
 		for _, step := range tuicore.DemoScript() {
 			if err := sleepContext(ctx, step.Delay); err != nil {
 				return err
 			}
-			if header, ok := step.Event.(runtimeevent.RunHeaderReady); ok {
-				currentRun = header.RunIndex
+			if header, ok := step.Event.(runtimeevent.OutingHeaderReady); ok {
+				currentOuting = header.OutingIndex
 			}
 			s.Sink().Emit(ctx, step.Event)
 			switch step.Event.(type) {
 			case runtimeevent.AttemptFinished, runtimeevent.AttemptCancelled, runtimeevent.HandoffAttemptFinished:
-				if enrichment, ok := enrichments[currentRun]; ok {
-					s.Enrich(currentRun, enrichment.summary, enrichment.classification, enrichment.followups)
+				if enrichment, ok := enrichments[currentOuting]; ok {
+					s.Enrich(currentOuting, enrichment.summary, enrichment.classification, enrichment.followups)
 				}
 			}
 		}
@@ -166,7 +166,7 @@ func (s *Session) RunDemo(ctx context.Context) error {
 	})
 }
 
-func (s *Session) RunView(ctx context.Context, events []runtimeevent.Event) error {
+func (s *Session) OutingView(ctx context.Context, events []runtimeevent.Event) error {
 	if ctx == nil {
 		ctx = context.Background()
 	}

@@ -93,7 +93,7 @@ func (m dashboardModel) detailPanel(totalWidth, totalHeight int, focused bool) s
 func (m dashboardModel) feedRows(width, height int) []string {
 	items := m.feed.Items()
 	if len(items) == 0 {
-		return []string{dashboardMutedStyle.Render(dashboardFitLine("no runs yet", width))}
+		return []string{dashboardMutedStyle.Render(dashboardFitLine("no outings yet", width))}
 	}
 	start := 0
 	if len(items) > height {
@@ -132,7 +132,7 @@ func (m dashboardModel) feedRow(item tuicore.FeedItem, index, width int) string 
 	}
 	title := item.Title
 	if title == "" {
-		title = "run"
+		title = "outing"
 	}
 	right := strings.TrimSpace(fmt.Sprintf("%s  %s", shortDuration(item.Duration), fileCountLabel(item.Files)))
 	available := width - dashboardCellWidth(left) - dashboardCellWidth(right) - 3
@@ -197,7 +197,7 @@ func (m dashboardModel) middleStatus() string {
 
 func detailLines(item *tuicore.FeedItem, width int) []string {
 	if item == nil {
-		return []string{"no run selected"}
+		return []string{"no outing selected"}
 	}
 	if width < 1 {
 		width = 1
@@ -205,7 +205,7 @@ func detailLines(item *tuicore.FeedItem, width int) []string {
 	var lines []string
 	title := item.Title
 	if title == "" {
-		title = "Run"
+		title = "Outing"
 	}
 	lines = append(lines, dashboardWrapLine(title, width)...)
 	lines = append(lines, "")

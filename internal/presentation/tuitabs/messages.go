@@ -22,7 +22,7 @@ type doneMsg struct {
 }
 
 type enrichMsg struct {
-	runIndex       int
+	outingIndex    int
 	summary        string
 	classification string
 	followups      []string

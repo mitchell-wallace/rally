@@ -77,7 +77,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.refreshTranscript()
 		return m, nil
 	case enrichMsg:
-		m.dashboard = m.dashboard.Enrich(msg.runIndex, msg.summary, msg.classification, msg.followups)
+		m.dashboard = m.dashboard.Enrich(msg.outingIndex, msg.summary, msg.classification, msg.followups)
 		return m, nil
 	case statusFrameMsg:
 		m.statusLine = msg.line

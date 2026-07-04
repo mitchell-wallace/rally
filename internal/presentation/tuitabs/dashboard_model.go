@@ -24,7 +24,7 @@ type dashboardModel struct {
 	controls *controls
 	now      func() time.Time
 
-	feed           tuicore.RunFeed
+	feed           tuicore.OutingFeed
 	focus          panelFocus
 	selected       int
 	following      bool
@@ -77,7 +77,7 @@ func (m dashboardModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.refreshDetail()
 		return m, nil
 	case enrichMsg:
-		m.feed.Enrich(msg.runIndex, msg.summary, msg.classification, msg.followups)
+		m.feed.Enrich(msg.outingIndex, msg.summary, msg.classification, msg.followups)
 		m.refreshDetail()
 		return m, nil
 	case eventMsg:

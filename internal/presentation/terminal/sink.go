@@ -44,7 +44,7 @@ func (s *Sink) Emit(_ context.Context, event runtimeevent.Event) {
 		fmt.Fprintln(s.err, e.Message)
 	case runtimeevent.TaskFileWarning:
 		fmt.Fprintln(s.err, e.Message)
-	case runtimeevent.RunHeaderReady:
+	case runtimeevent.OutingHeaderReady:
 		fmt.Fprintln(s.out, style.RenderHeader(headerOptions(e)))
 	case runtimeevent.TryStatusSnapshot:
 		fmt.Fprintf(s.out, "\r\x1b[2K%s\n", e.Status)
@@ -73,7 +73,7 @@ func (s *Sink) Emit(_ context.Context, event runtimeevent.Event) {
 	case runtimeevent.PausePromptShown:
 		fmt.Fprintln(s.out, e.Message)
 	case runtimeevent.RelaySummaryReady:
-		fmt.Fprintln(s.out, style.RenderSummary(e.TotalRuns, e.Passed, e.Failed, e.TotalDuration, e.Cancelled))
+		fmt.Fprintln(s.out, style.RenderSummary(e.TotalOutings, e.Passed, e.Failed, e.TotalDuration, e.Cancelled))
 	}
 }
 
@@ -95,10 +95,10 @@ func renderWaitFrame(out io.Writer, message, hintText string) {
 	fmt.Fprintf(out, "\r\x1b[J%s\r\n%s\x1b[1A\r", line, hint)
 }
 
-func headerOptions(e runtimeevent.RunHeaderReady) style.HeaderOptions {
+func headerOptions(e runtimeevent.OutingHeaderReady) style.HeaderOptions {
 	return style.HeaderOptions{
-		RunIndex:     e.RunIndex,
-		TotalRuns:    e.TotalRuns,
+		OutingIndex:  e.OutingIndex,
+		TotalOutings: e.TotalOutings,
 		AgentName:    e.AgentName,
 		Attempt:      e.Attempt,
 		StartTime:    e.StartTime,

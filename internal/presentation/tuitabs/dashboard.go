@@ -7,7 +7,7 @@ import (
 	"github.com/mitchell-wallace/rally/internal/relay/runner/runtimeevent"
 )
 
-// dashboard exposes prototype 2's run feed and detail panels as an embeddable
+// dashboard exposes prototype 2's outing feed and detail panels as an embeddable
 // component for richer TUI layouts.
 type dashboard dashboardModel
 
@@ -28,7 +28,7 @@ func (d dashboard) Update(msg tea.Msg) (dashboard, tea.Cmd) {
 		m.syncSelection()
 		m.refreshDetail()
 	case enrichMsg:
-		m.feed.Enrich(msg.runIndex, msg.summary, msg.classification, msg.followups)
+		m.feed.Enrich(msg.outingIndex, msg.summary, msg.classification, msg.followups)
 		m.refreshDetail()
 	case eventMsg:
 		m.feed.Apply(msg.event)
@@ -116,8 +116,8 @@ func (d dashboard) Seed(items []tuicore.FeedItem) dashboard {
 	return next
 }
 
-func (d dashboard) Enrich(runIndex int, summary, classification string, followups []string) dashboard {
-	next, _ := d.Update(enrichMsg{runIndex: runIndex, summary: summary, classification: classification, followups: followups})
+func (d dashboard) Enrich(outingIndex int, summary, classification string, followups []string) dashboard {
+	next, _ := d.Update(enrichMsg{outingIndex: outingIndex, summary: summary, classification: classification, followups: followups})
 	return next
 }
 
@@ -131,6 +131,6 @@ func (d dashboard) SetStatusLine(line string) dashboard {
 	return next
 }
 
-func (d dashboard) Feed() tuicore.RunFeed {
+func (d dashboard) Feed() tuicore.OutingFeed {
 	return dashboardModel(d).feed
 }

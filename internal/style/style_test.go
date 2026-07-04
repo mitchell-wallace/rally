@@ -17,17 +17,17 @@ func init() {
 func TestRenderHeader(t *testing.T) {
 	start := time.Date(2024, 6, 15, 15, 4, 0, 0, time.Local)
 	got := RenderHeader(HeaderOptions{
-		RunIndex:  2,
-		TotalRuns: 10,
-		AgentName: "claude",
-		Attempt:   1,
-		StartTime: start,
-		Model:     "sonnet-4",
-		RoleLabel: "junior",
+		OutingIndex:  2,
+		TotalOutings: 10,
+		AgentName:    "claude",
+		Attempt:      1,
+		StartTime:    start,
+		Model:        "sonnet-4",
+		RoleLabel:    "junior",
 	})
 
-	if !strings.Contains(got, "run: 3/10") {
-		t.Errorf("expected 'run: 3/10' in header, got: %s", got)
+	if !strings.Contains(got, "outing: 3/10") {
+		t.Errorf("expected 'outing: 3/10' in header, got: %s", got)
 	}
 	if !strings.Contains(got, "claude") {
 		t.Errorf("expected agent name 'claude' in header, got: %s", got)
@@ -81,15 +81,15 @@ func TestRenderHeaderLapsBacked(t *testing.T) {
 func TestRenderHeaderAttemptTwo(t *testing.T) {
 	start := time.Date(2024, 6, 15, 10, 30, 0, 0, time.Local)
 	got := RenderHeader(HeaderOptions{
-		RunIndex:  0,
-		TotalRuns: 5,
-		AgentName: "antigravity",
-		Attempt:   2,
-		StartTime: start,
+		OutingIndex:  0,
+		TotalOutings: 5,
+		AgentName:    "antigravity",
+		Attempt:      2,
+		StartTime:    start,
 	})
 
-	if !strings.Contains(got, "run: 1/5") {
-		t.Errorf("expected 'run: 1/5' in header, got: %s", got)
+	if !strings.Contains(got, "outing: 1/5") {
+		t.Errorf("expected 'outing: 1/5' in header, got: %s", got)
 	}
 	if !strings.Contains(got, "(attempt 2)") {
 		t.Errorf("expected '(attempt 2)' in header for attempt > 1, got: %s", got)
@@ -102,18 +102,18 @@ func TestRenderHeaderAttemptTwo(t *testing.T) {
 func TestRenderHeaderNoLapsRoleAndModelInline(t *testing.T) {
 	start := time.Date(2024, 6, 15, 16, 40, 0, 0, time.Local)
 	got := RenderHeader(HeaderOptions{
-		RunIndex:  1,
-		TotalRuns: 18,
-		AgentName: "codex",
-		Attempt:   1,
-		StartTime: start,
-		Model:     "g55-xh",
-		RoleLabel: "verify",
+		OutingIndex:  1,
+		TotalOutings: 18,
+		AgentName:    "codex",
+		Attempt:      1,
+		StartTime:    start,
+		Model:        "g55-xh",
+		RoleLabel:    "verify",
 	})
 
 	plain := stripAnsi(got)
 	// The label line carries role + harness + model + start time on one line.
-	const wantLabel = "  run: 2/18 VERIFY: codex - g55-xh - started 16:40"
+	const wantLabel = "  outing: 2/18 VERIFY: codex - g55-xh - started 16:40"
 	if !strings.Contains(plain, wantLabel) {
 		t.Errorf("expected label line\n  %q\nin header, got:\n%s", wantLabel, plain)
 	}
@@ -356,8 +356,8 @@ func TestRenderSummary(t *testing.T) {
 	if !strings.Contains(plain, "Relay complete:") {
 		t.Errorf("expected 'Relay complete:' in summary, got: %s", got)
 	}
-	if !strings.Contains(plain, "10 runs") {
-		t.Errorf("expected '10 runs' in summary, got: %s", got)
+	if !strings.Contains(plain, "10 outings") {
+		t.Errorf("expected '10 outings' in summary, got: %s", got)
 	}
 	if !strings.Contains(plain, "8 passed") {
 		t.Errorf("expected '8 passed' in summary, got: %s", got)
@@ -379,8 +379,8 @@ func TestRenderSummary(t *testing.T) {
 func TestRenderSummaryEdgeCases(t *testing.T) {
 	got := RenderSummary(1, 1, 0, 5*time.Second)
 	plain := stripAnsi(got)
-	if !strings.Contains(plain, "1 run") {
-		t.Errorf("expected '1 run' (singular) in summary, got: %s", got)
+	if !strings.Contains(plain, "1 outing") {
+		t.Errorf("expected '1 outing' (singular) in summary, got: %s", got)
 	}
 
 	got = RenderSummary(5, 0, 5, 1*time.Hour+30*time.Minute)

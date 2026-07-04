@@ -5,8 +5,8 @@ import (
 	"time"
 )
 
-func TestRunFeedLifecycleOverDemoScript(t *testing.T) {
-	var feed RunFeed
+func TestOutingFeedLifecycleOverDemoScript(t *testing.T) {
+	var feed OutingFeed
 	for _, step := range DemoScript() {
 		feed.Apply(step.Event)
 	}
@@ -29,13 +29,13 @@ func TestRunFeedLifecycleOverDemoScript(t *testing.T) {
 		t.Fatalf("TotalDuration = %v, want 1h0m35s", meta.TotalDuration)
 	}
 	if items[2].Outcome != OutcomeFailed || items[2].FailReason != "usage limit" {
-		t.Fatalf("third item = %+v, want failed usage-limit run", items[2])
+		t.Fatalf("third item = %+v, want failed usage-limit outing", items[2])
 	}
 }
 
-func TestRunFeedSeedPrependsHistory(t *testing.T) {
-	var feed RunFeed
-	feed.Seed([]FeedItem{{RunIndex: 1, Title: "seeded", Outcome: OutcomePassed}})
+func TestOutingFeedSeedPrependsHistory(t *testing.T) {
+	var feed OutingFeed
+	feed.Seed([]FeedItem{{OutingIndex: 1, Title: "seeded", Outcome: OutcomePassed}})
 	feed.Apply(DemoScript()[1].Event)
 
 	items := feed.Items()
@@ -50,9 +50,9 @@ func TestRunFeedSeedPrependsHistory(t *testing.T) {
 	}
 }
 
-func TestRunFeedEnrich(t *testing.T) {
-	var feed RunFeed
-	feed.Seed([]FeedItem{{RunIndex: 7, Title: "seeded", Outcome: OutcomePassed}})
+func TestOutingFeedEnrich(t *testing.T) {
+	var feed OutingFeed
+	feed.Seed([]FeedItem{{OutingIndex: 7, Title: "seeded", Outcome: OutcomePassed}})
 	feed.Enrich(7, "summary", "verification", []string{"follow up"})
 
 	items := feed.Items()

@@ -311,22 +311,22 @@ func TestRunHeaderDoesNotExceedTargetAfterFailedRun(t *testing.T) {
 		t.Fatalf("run failed: %v", err)
 	}
 
-	var got []runtimeevent.RunHeaderReady
+	var got []runtimeevent.OutingHeaderReady
 	for _, event := range rec.Events() {
-		if header, ok := event.(runtimeevent.RunHeaderReady); ok {
+		if header, ok := event.(runtimeevent.OutingHeaderReady); ok {
 			got = append(got, header)
 		}
 	}
 	if len(got) != 3 {
-		t.Fatalf("expected 3 run header events, got %d: %#v", len(got), got)
+		t.Fatalf("expected 3 outing header events, got %d: %#v", len(got), got)
 	}
 	want := []int{0, 0, 1}
 	for i, header := range got {
-		if header.TotalRuns != 2 {
-			t.Errorf("header %d TotalRuns = %d, want 2", i, header.TotalRuns)
+		if header.TotalOutings != 2 {
+			t.Errorf("header %d TotalOutings = %d, want 2", i, header.TotalOutings)
 		}
-		if header.RunIndex != want[i] {
-			t.Errorf("header %d RunIndex = %d, want %d", i, header.RunIndex, want[i])
+		if header.OutingIndex != want[i] {
+			t.Errorf("header %d OutingIndex = %d, want %d", i, header.OutingIndex, want[i])
 		}
 	}
 }

@@ -20,7 +20,7 @@ const (
 	// Operator-facing output the runner prints today.
 	KindRouteWarning
 	KindTaskFileWarning
-	KindRunHeaderReady
+	KindOutingHeaderReady
 	KindTryStatusSnapshot
 	KindShortcutHintReady
 	KindRetryFooterUpdated
@@ -49,8 +49,8 @@ func (k Kind) String() string {
 		return "RouteWarning"
 	case KindTaskFileWarning:
 		return "TaskFileWarning"
-	case KindRunHeaderReady:
-		return "RunHeaderReady"
+	case KindOutingHeaderReady:
+		return "OutingHeaderReady"
 	case KindTryStatusSnapshot:
 		return "TryStatusSnapshot"
 	case KindShortcutHintReady:

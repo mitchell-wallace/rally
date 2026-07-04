@@ -111,9 +111,9 @@ func TestSynthesizeRelayEvents(t *testing.T) {
 
 	wantKinds := []runtimeevent.Kind{
 		runtimeevent.KindRelayStarted,
-		runtimeevent.KindRunHeaderReady,
+		runtimeevent.KindOutingHeaderReady,
 		runtimeevent.KindAttemptFinished,
-		runtimeevent.KindRunHeaderReady,
+		runtimeevent.KindOutingHeaderReady,
 		runtimeevent.KindRetryFooterUpdated,
 		runtimeevent.KindAttemptFinished,
 		runtimeevent.KindRelaySummaryReady,
@@ -128,7 +128,7 @@ func TestSynthesizeRelayEvents(t *testing.T) {
 		}
 	}
 
-	header := events[1].(runtimeevent.RunHeaderReady)
+	header := events[1].(runtimeevent.OutingHeaderReady)
 	if header.LapTitle != "Passing lap" || header.RoleLabel != "senior" || header.LapsStarted != 1 {
 		t.Fatalf("first header = %#v", header)
 	}
@@ -145,7 +145,7 @@ func TestSynthesizeRelayEvents(t *testing.T) {
 		t.Fatalf("failed footer = %#v", failFooter)
 	}
 	summary := events[6].(runtimeevent.RelaySummaryReady)
-	if summary.TotalRuns != 2 || summary.Passed != 1 || summary.Failed != 1 || summary.Cancelled != 0 || summary.TotalDuration != 9*time.Second {
+	if summary.TotalOutings != 2 || summary.Passed != 1 || summary.Failed != 1 || summary.Cancelled != 0 || summary.TotalDuration != 9*time.Second {
 		t.Fatalf("summary = %#v", summary)
 	}
 }

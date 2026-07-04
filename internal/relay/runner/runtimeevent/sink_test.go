@@ -24,7 +24,7 @@ func sampleEvents() []runtimeevent.Event {
 	return []runtimeevent.Event{
 		runtimeevent.RelayStarted{RelayID: 1, TargetIterations: 3, AgentMix: "junior"},
 		runtimeevent.RouteWarning{Message: "route fell back"},
-		runtimeevent.RunHeaderReady{RunIndex: 1, TotalRuns: 3, AgentName: "opencode"},
+		runtimeevent.OutingHeaderReady{OutingIndex: 1, TotalOutings: 3, AgentName: "opencode"},
 		runtimeevent.OperatorActionArmed{Action: runtimeevent.OperatorActionSkip, Message: "press Ctrl+S again to skip"},
 		runtimeevent.AttemptFinished{FooterData: runtimeevent.FooterData{Passed: true, Attempt: 1, MaxAttempts: 3}},
 		runtimeevent.OperatorActionApplied{Action: runtimeevent.OperatorActionSkip, Message: "skipping…"},
@@ -37,7 +37,7 @@ func wantKinds() []runtimeevent.Kind {
 	return []runtimeevent.Kind{
 		runtimeevent.KindRelayStarted,
 		runtimeevent.KindRouteWarning,
-		runtimeevent.KindRunHeaderReady,
+		runtimeevent.KindOutingHeaderReady,
 		runtimeevent.KindOperatorActionArmed,
 		runtimeevent.KindAttemptFinished,
 		runtimeevent.KindOperatorActionApplied,

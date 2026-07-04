@@ -104,10 +104,10 @@ func truncateToVisible(s string, maxRunes int) string {
 	return string(runes[:maxRunes-1]) + "…"
 }
 
-// HeaderOptions carries parameters for rendering a run header.
+// HeaderOptions carries parameters for rendering an outing header.
 type HeaderOptions struct {
-	RunIndex     int
-	TotalRuns    int
+	OutingIndex  int
+	TotalOutings int
 	AgentName    string
 	Attempt      int
 	StartTime    time.Time
@@ -116,7 +116,7 @@ type HeaderOptions struct {
 	LapsStarted  int
 	LapsTotal    int
 	Model        string
-	// RoleLabel is the routing role for the run (e.g. "verify", "JUNIOR").
+	// RoleLabel is the routing role for the outing (e.g. "verify", "JUNIOR").
 	// When set, the non-laps header renders a role-first label —
 	// "ROLE: harness - model - started HH:MM" — instead of a bare harness
 	// name. It is ignored for laps-backed headers, which keep their
@@ -124,7 +124,7 @@ type HeaderOptions struct {
 	RoleLabel string
 }
 
-// RenderHeader renders a try header with separator lines, agent name, run index,
+// RenderHeader renders a try header with separator lines, agent name, outing index,
 // attempt number, and start time. When LapsTotal > 0 a `laps: X/Y` line is
 // appended; when Model is set a `model: <model>` line is appended.
 func RenderHeader(opts HeaderOptions) string {
@@ -144,7 +144,7 @@ func RenderHeader(opts HeaderOptions) string {
 		}
 		label = fmt.Sprintf("%s%s — %s — started %s", opts.AgentName, attemptStr, title, timeStr)
 	} else {
-		counter := fmt.Sprintf("run: %d/%d", opts.RunIndex+1, opts.TotalRuns)
+		counter := fmt.Sprintf("outing: %d/%d", opts.OutingIndex+1, opts.TotalOutings)
 		attemptStr := ""
 		if opts.Attempt > 1 {
 			attemptStr = fmt.Sprintf(" (attempt %d)", opts.Attempt)
@@ -196,7 +196,7 @@ func RenderHeader(opts HeaderOptions) string {
 	return sb.String()
 }
 
-// FooterOptions carries parameters for rendering a run footer.
+// FooterOptions carries parameters for rendering an outing footer.
 type FooterOptions struct {
 	Passed       bool
 	Cancelled    bool
@@ -300,7 +300,7 @@ func RenderFooter(opts FooterOptions) string {
 	return sb.String()
 }
 
-// renderRetryLine renders the single neutral line shown while a run is retrying
+// renderRetryLine renders the single neutral line shown while an outing is retrying
 // within budget. It is entirely dim — no green/red — because the attempt is not
 // a terminal outcome; only the final footer is coloured.
 func renderRetryLine(opts FooterOptions) string {
@@ -322,13 +322,13 @@ func tries(n int) string {
 	return "tries"
 }
 
-// RenderSummary renders a relay summary with total runs, outcome counts, and
+// RenderSummary renders a relay summary with total outings, outcome counts, and
 // total runtime. cancelledCount is optional for compatibility with older call
 // sites; when present and non-zero it is shown as a muted outcome bucket.
-func RenderSummary(totalRuns, passedCount, failedCount int, totalDuration time.Duration, cancelledCount ...int) string {
+func RenderSummary(totalOutings, passedCount, failedCount int, totalDuration time.Duration, cancelledCount ...int) string {
 	w := sepWidth()
 
-	runsStr := fmt.Sprintf("%d run%s", totalRuns, plural(totalRuns))
+	outingsStr := fmt.Sprintf("%d outing%s", totalOutings, plural(totalOutings))
 	passedStr := SuccessStyle.Render(fmt.Sprintf("%d passed", passedCount))
 	failedStr := FailureStyle.Render(fmt.Sprintf("%d failed", failedCount))
 	durStr := DimStyle.Render(fmt.Sprintf("total %s", formatDuration(totalDuration)))
@@ -337,7 +337,7 @@ func RenderSummary(totalRuns, passedCount, failedCount int, totalDuration time.D
 		cancelled = cancelledCount[0]
 	}
 
-	parts := []string{runsStr, passedStr, failedStr}
+	parts := []string{outingsStr, passedStr, failedStr}
 	if cancelled > 0 {
 		parts = append(parts, MutedStyle.Render(fmt.Sprintf("%d cancelled", cancelled)))
 	}

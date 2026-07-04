@@ -15,7 +15,7 @@ const (
 )
 
 type FeedItem struct {
-	RunIndex       int
+	OutingIndex    int
 	Agent          string
 	Model          string
 	RoleLabel      string
@@ -47,15 +47,15 @@ type FeedMeta struct {
 	Completed     bool
 }
 
-// RunFeed reduces runtime events into a structured run feed for panel UIs.
-type RunFeed struct {
+// OutingFeed reduces runtime events into a structured outing feed for panel UIs.
+type OutingFeed struct {
 	items     []FeedItem
 	liveIndex int
 	meta      FeedMeta
 }
 
 // Apply folds one runtime event into the feed.
-func (f *RunFeed) Apply(e runtimeevent.Event) {
+func (f *OutingFeed) Apply(e runtimeevent.Event) {
 	if e == nil {
 		return
 	}
@@ -68,7 +68,7 @@ func (f *RunFeed) Apply(e runtimeevent.Event) {
 		f.meta.RelayID = e.RelayID
 		f.meta.Target = e.TargetIterations
 		f.meta.Mix = e.AgentMix
-	case runtimeevent.RunHeaderReady:
+	case runtimeevent.OutingHeaderReady:
 		f.applyHeader(e)
 	case runtimeevent.RetryFooterUpdated:
 		f.updateFooter(e.FooterData, OutcomeRunning)
@@ -100,7 +100,7 @@ func (f *RunFeed) Apply(e runtimeevent.Event) {
 
 // Seed prepends already-finished historical items. Seeded rows are copied and
 // marked non-running so they do not become the live row.
-func (f *RunFeed) Seed(items []FeedItem) {
+func (f *OutingFeed) Seed(items []FeedItem) {
 	if len(items) == 0 {
 		return
 	}
@@ -119,9 +119,9 @@ func (f *RunFeed) Seed(items []FeedItem) {
 }
 
 // Enrich adds optional summary data that is not carried by runtime events.
-func (f *RunFeed) Enrich(runIndex int, summary, classification string, followups []string) {
+func (f *OutingFeed) Enrich(outingIndex int, summary, classification string, followups []string) {
 	for i := range f.items {
-		if f.items[i].RunIndex != runIndex {
+		if f.items[i].OutingIndex != outingIndex {
 			continue
 		}
 		f.items[i].Summary = summary
@@ -133,7 +133,7 @@ func (f *RunFeed) Enrich(runIndex int, summary, classification string, followups
 
 // SetLiveStats updates the running row from monitor frames when structured
 // status-tick events are not available.
-func (f *RunFeed) SetLiveStats(duration time.Duration, files int) {
+func (f *OutingFeed) SetLiveStats(duration time.Duration, files int) {
 	idx := f.LiveIndex()
 	if idx < 0 {
 		return
@@ -147,7 +147,7 @@ func (f *RunFeed) SetLiveStats(duration time.Duration, files int) {
 }
 
 // Items returns a copy of the current feed items.
-func (f *RunFeed) Items() []FeedItem {
+func (f *OutingFeed) Items() []FeedItem {
 	out := make([]FeedItem, len(f.items))
 	for i, item := range f.items {
 		item.Followups = append([]string(nil), item.Followups...)
@@ -157,7 +157,7 @@ func (f *RunFeed) Items() []FeedItem {
 }
 
 // LiveIndex returns the index of the current running item, or -1 when none.
-func (f *RunFeed) LiveIndex() int {
+func (f *OutingFeed) LiveIndex() int {
 	if f.liveIndex < 0 || f.liveIndex >= len(f.items) {
 		return -1
 	}
@@ -165,17 +165,17 @@ func (f *RunFeed) LiveIndex() int {
 }
 
 // Meta returns relay-level feed metadata.
-func (f *RunFeed) Meta() FeedMeta {
+func (f *OutingFeed) Meta() FeedMeta {
 	return f.meta
 }
 
-func (f *RunFeed) applyHeader(e runtimeevent.RunHeaderReady) {
-	f.meta.Target = firstPositive(f.meta.Target, e.TotalRuns)
+func (f *OutingFeed) applyHeader(e runtimeevent.OutingHeaderReady) {
+	f.meta.Target = firstPositive(f.meta.Target, e.TotalOutings)
 	f.meta.LapsStarted = e.LapsStarted
 	f.meta.LapsTotal = e.LapsTotal
 
 	item := FeedItem{
-		RunIndex:    e.RunIndex,
+		OutingIndex: e.OutingIndex,
 		Agent:       e.AgentName,
 		Model:       e.Model,
 		RoleLabel:   e.RoleLabel,
@@ -186,10 +186,10 @@ func (f *RunFeed) applyHeader(e runtimeevent.RunHeaderReady) {
 		MaxAttempts: e.Attempt,
 	}
 	if item.Title == "" {
-		item.Title = "Run"
+		item.Title = "Outing"
 	}
 	for i := range f.items {
-		if f.items[i].RunIndex == e.RunIndex && f.items[i].Outcome == OutcomeRunning {
+		if f.items[i].OutingIndex == e.OutingIndex && f.items[i].Outcome == OutcomeRunning {
 			item.Duration = f.items[i].Duration
 			item.Files = f.items[i].Files
 			item.CommitHash = f.items[i].CommitHash
@@ -207,7 +207,7 @@ func (f *RunFeed) applyHeader(e runtimeevent.RunHeaderReady) {
 	f.liveIndex = len(f.items) - 1
 }
 
-func (f *RunFeed) updateFooter(data runtimeevent.FooterData, outcome string) {
+func (f *OutingFeed) updateFooter(data runtimeevent.FooterData, outcome string) {
 	idx := f.liveIndex
 	if idx < 0 || idx >= len(f.items) {
 		return

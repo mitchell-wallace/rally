@@ -9,7 +9,7 @@ func DemoFeedSeed() []FeedItem {
 	base := time.Date(2026, 7, 4, 12, 45, 0, 0, time.Local)
 	return []FeedItem{
 		{
-			RunIndex:       -3,
+			OutingIndex:    -3,
 			Agent:          "opencode",
 			Model:          "glm-5.2",
 			RoleLabel:      "junior",
@@ -24,7 +24,7 @@ func DemoFeedSeed() []FeedItem {
 			Classification: "implementation",
 		},
 		{
-			RunIndex:       -2,
+			OutingIndex:    -2,
 			Agent:          "codex",
 			Model:          "gpt-5.5",
 			RoleLabel:      "senior",
@@ -43,7 +43,7 @@ func DemoFeedSeed() []FeedItem {
 			},
 		},
 		{
-			RunIndex:       -1,
+			OutingIndex:    -1,
 			Agent:          "codex",
 			Model:          "gpt-5.5",
 			RoleLabel:      "verify",

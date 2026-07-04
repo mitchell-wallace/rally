@@ -8,10 +8,10 @@
 ## 2. Tier 2 - Go Identifiers and Operator Prose
 
 - [x] 2.1 Store+persistence chunk: rename entity-bearing store/progress identifiers (`RunID`, `RunEntry`, active run metadata, message consumption run fields) to outing forms, keeping behavior unchanged.
-- [ ] 2.2 Runtimeevent+presentation chunk: rename `RunHeaderReady` family and payload fields (`RunIndex`, `TotalRuns`) to outing forms; update terminal and surviving TUI adapters.
+- [x] 2.2 Runtimeevent+presentation chunk: rename `RunHeaderReady` family and payload fields (`RunIndex`, `TotalRuns`) to outing forms; update terminal and surviving TUI adapters.
 - [ ] 2.3 Runner internals+telemetry-label chunk: rename harness+model internal variables/helpers from runner to driver where they are not the orchestrator package/type or external telemetry keys.
-- [ ] 2.4 CLI prose chunk: update headers (`run: X/Y`), summaries (`N runs`), TUI fallback titles (`run %d`), and exact string tests to outing wording.
-- [ ] 2.5 Re-inventory dirty TUI packages before editing and apply durable renames only to surviving presentation packages (`tuitabs`/`tuicore` per lap context).
+- [x] 2.4 CLI prose chunk: update headers (`run: X/Y`), summaries (`N runs`), TUI fallback titles (`run %d`), and exact string tests to outing wording.
+- [x] 2.5 Re-inventory dirty TUI packages before editing and apply durable renames only to surviving presentation packages (`tuitabs`/`tuicore` per lap context).
 
 ## 3. Tier 3 - Tolerant Persisted-State Readers
 

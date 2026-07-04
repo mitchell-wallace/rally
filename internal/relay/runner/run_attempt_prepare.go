@@ -131,9 +131,9 @@ func (r *Runner) prepareRunAttempt(ctx context.Context, relay *store.RelayRecord
 		if !task.IsLapsBacked && relay.CompletedIterations < relay.TargetIterations {
 			displayRunIndex = relay.CompletedIterations
 		}
-		header := runtimeevent.RunHeaderReady{
-			RunIndex:     displayRunIndex,
-			TotalRuns:    relay.TargetIterations,
+		header := runtimeevent.OutingHeaderReady{
+			OutingIndex:  displayRunIndex,
+			TotalOutings: relay.TargetIterations,
 			AgentName:    picked.Harness,
 			Attempt:      attempt,
 			StartTime:    startedAt,
