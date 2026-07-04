@@ -159,20 +159,84 @@ is frozen).
   DemoFeedSeed), header strip, reverse-video status bar; --demo first, live
   mode seeded from summary.jsonl + store recent tries.
 
-## Next steps (in priority order)
+- 2026-07-04: Lap 4 landed (`ee67231`): `rally tui-1 --view [N]` verified
+  end-to-end under the PTY harness against a fabricated `.rally` store — the
+  historical transcript replays byte-identically (free-run header form when no
+  lap_id, retry-collapsed footers, summary block). Prototype 1 is now
+  feature-complete: live, --demo, --view.
 
-1. Land StatusWriter seam (in flight).
-2. Prototype 1: tuicore skeleton + tuisafe (sink → transcript reducer,
-   viewport + status bar model, ControlSource bridge, `rally tui-1` with
-   --demo first, then live start, then --view).
-3. Prototype 1 polish: historical view via event synthesis from store;
-   resume pre-flight sharing with `start`.
-4. Prototype 2: tuipanels (summary.jsonl feed panel + live status panel +
-   progress header; selection + detail pane).
-5. Prototype 3: tuitabs (tabs over tuipanels components + runs/messages/config
-   tabs).
-6. Live smoke tests via temp-folder rallies (test-driving-rally skill; zai/
-   antigravity models within 5h usage limits).
+- 2026-07-04: Lap 5 landed (`21d7688`): prototype 2 tuipanels + `rally tui-2`
+  (tuicore.RunFeed structured reducer, feed+detail panels, header strip,
+  small-terminal stacked layout; live mode seeds last 20 finished runs from
+  summary.jsonl + store). Claude added tui-2 to the pinned root command test.
+  PTY-verified at 110x30.
+- 2026-07-04: Lap 6 landed (`acb65a2`): prototype 3 tuitabs + `rally tui-3`
+  (tabs: Dashboard via new exported tuipanels.Dashboard component, Transcript,
+  read-only Messages, Agents status; events fan out to feed + transcript).
+  PTY-verified: tab switching and all four tabs. Remaining: live relay smoke
+  test (task 7), then prototype comparison/selection notes.
+
+## Next steps (all original scope DONE — this is the polish/selection backlog)
+
+All three prototypes are built, tested (unit + race + PTY), and live-verified
+(tui-1 and tui-2 ran real op:zai relays; tui-3 shares their session/controls
+code paths and was PTY-verified in --demo). Remaining, in suggested order:
+
+1. Polish pass from live-test nits: "1 files" pluralization in tuipanels
+   feed/detail; free-run title "relay run" → derive from task prompt/summary;
+   optionally clear the seeded-vs-live title inconsistency (seeded rows use
+   summary first line).
+2. `--view` fidelity (only if selected TUI keeps it): persist model and commit
+   title on TryRecord so replay matches live output exactly.
+3. tui-2/tui-3 could gain `--view` (synthesis already exists in
+   internal/cli/tui_view.go; feed it to a RunFeed instead of a Transcript).
+4. Selection: pick the TUI for bare `rally` (see comparison table), then per
+   the proposal replace the monitor status line wholesale (per-tick data event
+   instead of the StatusWriter frame-capture bridge), delete the losing
+   prototypes, and prune their archguard rows.
+5. tui-3 Messages tab: compose/reorder/mark-addressed needs a store-write
+   channel back through the CLI (presentation cannot import store) — design an
+   operator-intent callback akin to ControlSource if pursued.
+
+## Prototype comparison (for selection — fill in as evaluated)
+
+| Criterion | tui-1 safe | tui-2 panels | tui-3 tabs |
+|---|---|---|---|
+| Output-format regression risk | none (byte-identical transcript) | medium (new layout) | medium (new layout) |
+| Information density | low (linear) | high (feed+detail) | highest (4 surfaces) |
+| Code footprint | ~1.1k lines | ~1.9k lines | ~1.6k (+reuses panels) |
+| Historical view | ✅ --view replay | seeds last 20 runs | seeds runs+msgs+agents |
+| Candidate for bare `rally` | safest first step | strong middle path | needs most polish |
+
+Evaluation notes so far: all three PTY-verified in --demo; tui-1 verified with
+--view; live relay smoke test in progress. The operator-control bridge
+(^C/^S/^P/^X double-press) is identical across all three by construction.
+
+### Live test results (2026-07-04, temp workspace, op:zai glm-5.2)
+
+- `rally tui-1 -i 1 -a op:zai "<create hello.txt task>"`: PASSED. Pre-flight
+  warnings landed in the transcript, run header showed harness+model, initial
+  status snapshot rendered, footer showed `✓ passed │ 29s │ 1 file │ a2bd537
+  (add hello.txt)`, relay summary + app-layer "Relay complete." arrived via
+  TranscriptWriter, `q` exited cleanly; the real commit exists in the temp
+  repo. On exit the final transcript remains on the primary screen (bubbletea
+  prints the last frame after leaving the alt screen) — same scrollback
+  artifact the plain CLI leaves, which is desirable.
+- `rally tui-1 --view` on that real store: reproduces the relay. Known replay
+  gaps confirmed: header renders role label `OVERRIDE: opencode` (from
+  ResolvedRoute) instead of the live `opencode - zai-coding-plan/glm-5.2`
+  (model not persisted), footer lacks the commit title. If --view fidelity
+  matters beyond prototyping, persist model + commit title on TryRecord.
+- PTY-harness note for future agents: bubbletea exits immediately on a 0×0
+  pty; always set TIOCSWINSZ before spawning.
+- `rally tui-2 -i 1 -a op:zai "<extend hello.txt task>"` (relay #2, same
+  workspace): PASSED in 24s. Header strip live counts updated, feed showed the
+  seeded relay-#1 row (title from summary.jsonl) plus the live row closing
+  with `commit 0807f23 extend hello.txt` (commit title IS available live,
+  unlike --view replay), detail panel showed harness/model/attempt. Cosmetic
+  nits for the polish pass: "1 files" pluralization in feed/detail rows, and
+  free-run (non-laps) runs get the generic title "relay run" — derive from the
+  task prompt or summary instead.
 
 ## Decisions & open questions
 
