@@ -159,9 +159,13 @@ func TestImportBoundaryAllowListMatchesProductionGraph(t *testing.T) {
 		"release":     {"buildinfo": true},
 		"relay":       {"harnessapi": true, "store": true},
 		// Presentation boundary (Decision 7): runner drops style/keyboard
-		// (keeps monitor — Decision 8 residual); presentation/terminal renders.
+		// (keeps monitor — Decision 8 residual); presentation adapters render.
 		"relay/runner":           {"harnessapi": true, "agent_prompt": true, "gitx": true, "laps": true, "monitor": true, "progress": true, "relay": true, "relay/runner/runtimeevent": true, "reliability": true, "routing": true, "store": true, "telemetry": true, "textutil": true, "user_prompt/roleloader": true},
 		"presentation/terminal":  {"keyboard": true, "relay/runner/runtimeevent": true, "style": true},
+		"presentation/tuicore":   {"relay/runner/runtimeevent": true, "style": true},
+		"presentation/tuisafe":   {"presentation/tuicore": true, "relay/runner/runtimeevent": true, "style": true, "keyboard": true},
+		"presentation/tuipanels": {"presentation/tuicore": true, "relay/runner/runtimeevent": true, "style": true, "keyboard": true},
+		"presentation/tuitabs":   {"presentation/tuicore": true, "presentation/tuipanels": true, "relay/runner/runtimeevent": true, "style": true, "keyboard": true},
 		"app":                    {"harnessapi": true, "harness": true, "config": true, "relay": true, "relay/runner": true, "relay/runner/runtimeevent": true, "routing": true, "store": true, "telemetry": true},
 		"user_prompt/roleloader": {"store": true},
 	}
@@ -293,6 +297,26 @@ func TestImportBoundaryPresentationDenyDirection(t *testing.T) {
 	}
 	if got := r.Check([]FileInfo{cliFile}); len(got) != 0 {
 		t.Errorf("internal/cli importing presentation/terminal must be allowed, got %+v", got)
+	}
+}
+
+// TestImportBoundaryPresentationToPresentationUsesAllowList confirms
+// presentation packages can import allow-listed shared presentation packages,
+// while non-allow-listed presentation imports still fail confinement.
+func TestImportBoundaryPresentationToPresentationUsesAllowList(t *testing.T) {
+	r := NewImportBoundary()
+	if got := r.Check([]FileInfo{importFileInfo("presentation/tuisafe", "presentation/tuicore")}); len(got) != 0 {
+		t.Fatalf("presentation/tuisafe importing presentation/tuicore must be allowed, got %+v", got)
+	}
+
+	got := r.Check([]FileInfo{importFileInfo("presentation/tuisafe", "presentation/terminal")})
+	if len(got) != 1 || got[0].Severity != Hard {
+		t.Fatalf("want one hard violation, got %+v", got)
+	}
+	wantReason := "imports " + importPath("presentation/terminal") +
+		" — imports internal/presentation/terminal but internal/presentation/tuisafe is confined to its tight presentation allow-list; presentation adapters must not import runner internals, harness, config, or store — the runner emits events and controls through relay/runner/runtimeevent and adapters render them"
+	if got[0].Reason != wantReason {
+		t.Errorf("Reason:\n got %q\nwant %q", got[0].Reason, wantReason)
 	}
 }
 

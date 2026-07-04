@@ -145,7 +145,17 @@ func TestDepConfinementEachDepDiagnosticText(t *testing.T) {
 		{
 			name: "lipgloss",
 			imp:  "github.com/charmbracelet/lipgloss",
-			want: "imports github.com/charmbracelet/lipgloss — lipgloss is owned by internal/cli, internal/style; keep presentation logic in the presentation layer",
+			want: "imports github.com/charmbracelet/lipgloss — lipgloss is owned by internal/cli, internal/presentation/tuicore, internal/presentation/tuipanels, internal/presentation/tuisafe, internal/presentation/tuitabs, internal/style; keep presentation logic in the presentation layer",
+		},
+		{
+			name: "bubbletea",
+			imp:  "github.com/charmbracelet/bubbletea",
+			want: "imports github.com/charmbracelet/bubbletea — bubbletea is owned by internal/presentation/tuicore, internal/presentation/tuipanels, internal/presentation/tuisafe, internal/presentation/tuitabs; only TUI presentation adapters may own the terminal event loop",
+		},
+		{
+			name: "bubbles",
+			imp:  "github.com/charmbracelet/bubbles",
+			want: "imports github.com/charmbracelet/bubbles — bubbles is owned by internal/presentation/tuicore, internal/presentation/tuipanels, internal/presentation/tuisafe, internal/presentation/tuitabs; only TUI presentation adapters may own the terminal component library",
 		},
 	}
 	r := NewDependencyConfinement()
@@ -177,6 +187,8 @@ func TestDepConfinementMajorVersionSubpathsMatched(t *testing.T) {
 		{"cobra bare", "github.com/spf13/cobra"},
 		{"huh bare", "github.com/charmbracelet/huh"},
 		{"lipgloss bare", "github.com/charmbracelet/lipgloss"},
+		{"bubbletea bare", "github.com/charmbracelet/bubbletea"},
+		{"bubbles bare", "github.com/charmbracelet/bubbles"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -225,8 +237,8 @@ func TestDepConfinementMultipleLeaksEachReported(t *testing.T) {
 	}
 }
 
-// TestDepConfinementTableMatchesDecision5 pins the shipped table to exactly the
-// five Decision 5 deps with their owning packages, so a row is never silently
+// TestDepConfinementTableMatchesDecision5 pins the shipped table with its
+// owning packages, so a row is never silently
 // dropped or an owner quietly changed.
 func TestDepConfinementTableMatchesDecision5(t *testing.T) {
 	want := []struct {
@@ -239,7 +251,9 @@ func TestDepConfinementTableMatchesDecision5(t *testing.T) {
 		{"github.com/pelletier/go-toml", "go-toml", []string{"internal/config"}, "keep TOML decoding in the config layer"},
 		{"github.com/spf13/cobra", "cobra", []string{"cmd/rally", "internal/cli", "internal/progress"}, "it is the CLI framework; only command-shaped packages may depend on it"},
 		{"github.com/charmbracelet/huh", "huh", []string{"internal/cli", "internal/user_prompt"}, "it is the interactive-prompt library; only prompt packages may depend on it"},
-		{"github.com/charmbracelet/lipgloss", "lipgloss", []string{"internal/style", "internal/cli"}, "keep presentation logic in the presentation layer"},
+		{"github.com/charmbracelet/lipgloss", "lipgloss", []string{"internal/style", "internal/cli", "internal/presentation/tuicore", "internal/presentation/tuisafe", "internal/presentation/tuipanels", "internal/presentation/tuitabs"}, "keep presentation logic in the presentation layer"},
+		{"github.com/charmbracelet/bubbletea", "bubbletea", []string{"internal/presentation/tuicore", "internal/presentation/tuisafe", "internal/presentation/tuipanels", "internal/presentation/tuitabs"}, "only TUI presentation adapters may own the terminal event loop"},
+		{"github.com/charmbracelet/bubbles", "bubbles", []string{"internal/presentation/tuicore", "internal/presentation/tuisafe", "internal/presentation/tuipanels", "internal/presentation/tuitabs"}, "only TUI presentation adapters may own the terminal component library"},
 	}
 	got := confinedDepsForTest()
 	if len(got) != len(want) {

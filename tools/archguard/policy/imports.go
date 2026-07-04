@@ -41,9 +41,11 @@ import (
 // presentation/terminal allow-list row; and (3) two diagnostics that make the
 // one-way intent explicit — a presentation deny-direction (nothing under
 // internal/ may import a concrete presentation package except cli, which wires
-// the adapter) and a presentation-confinement reason (a presentation package
-// may not import runner internals, harness, config, or store). runtimeevent is
-// a stdlib-only leaf, so it gets no allow-list row (absence = leaf, enforced).
+// the adapter; shared presentation code such as tuicore is imported by concrete
+// presentation adapters) and a presentation-confinement reason (a presentation
+// package may not import runner internals, harness, config, or store).
+// runtimeevent is a stdlib-only leaf, so it gets no allow-list row (absence =
+// leaf, enforced).
 
 // moduleInternalPrefix is the import-path prefix of every internal package.
 // archguard is stdlib-only and dependency-free, so the module path is a compile
@@ -154,7 +156,13 @@ var allowList = map[string]map[string]bool{
 	// Concrete presentation adapter (Decision 7): renders runtimeevent events
 	// and translates keyboard presses to runtimeevent controls — nothing else
 	// internal (notably not relay/runner, harness*, config, store, telemetry).
-	"presentation/terminal":  {"keyboard": true, "relay/runner/runtimeevent": true, "style": true},
+	"presentation/terminal": {"keyboard": true, "relay/runner/runtimeevent": true, "style": true},
+	// TUI-prototype rows (build-new-tui prototypes); may be pruned when one
+	// prototype is accepted.
+	"presentation/tuicore":   {"relay/runner/runtimeevent": true, "style": true},
+	"presentation/tuisafe":   {"presentation/tuicore": true, "relay/runner/runtimeevent": true, "style": true, "keyboard": true},
+	"presentation/tuipanels": {"presentation/tuicore": true, "relay/runner/runtimeevent": true, "style": true, "keyboard": true},
+	"presentation/tuitabs":   {"presentation/tuicore": true, "presentation/tuipanels": true, "relay/runner/runtimeevent": true, "style": true, "keyboard": true},
 	"app":                    {"harnessapi": true, "harness": true, "config": true, "relay": true, "relay/runner": true, "relay/runner/runtimeevent": true, "routing": true, "store": true, "telemetry": true},
 	"user_prompt/roleloader": {"store": true},
 }
@@ -240,18 +248,20 @@ func cliDenyReason(from, to string) (string, bool) {
 	return "", false
 }
 
-// presentationDenyReason returns the reason if an internal package imports a
-// concrete presentation package (presentation/*). internal/cli is exempt: it is
-// the layer that wires the terminal adapter into the composition root. The
-// runner emits events and controls through runtimeevent and adapters render
-// them, so nothing else under internal/ may reach a concrete presentation
-// package — that would re-couple the runner (or any peer) to a renderer and
-// undo the boundary Decision 7 draws.
+// presentationDenyReason returns the reason if an internal package outside the
+// presentation layer imports a concrete presentation package (presentation/*).
+// internal/cli is exempt: it wires adapters into the composition root.
+// Presentation packages are exempt from the deny-direction so concrete
+// adapters may import shared presentation code such as tuicore; their
+// per-package allow-lists still govern those imports. The runner emits events
+// and controls through runtimeevent and adapters render them, so other internal
+// packages may not reach a concrete presentation package — that would re-couple
+// the runner (or any peer) to a renderer and undo the boundary Decision 7 draws.
 func presentationDenyReason(from, to string) (string, bool) {
 	if !isPresentationLayer(to) {
 		return "", false
 	}
-	if from == cmdRallyPackage || from == "cli" {
+	if from == cmdRallyPackage || from == "cli" || isPresentationLayer(from) {
 		return "", false
 	}
 	return "concrete presentation packages (presentation/*) may only be imported by internal/cli; the runner emits events and controls through relay/runner/runtimeevent and adapters render them", true
