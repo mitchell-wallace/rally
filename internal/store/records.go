@@ -1,11 +1,16 @@
 package store
 
-import "github.com/mitchell-wallace/rally/internal/reliability"
+import (
+	"encoding/json"
+	"fmt"
+
+	"github.com/mitchell-wallace/rally/internal/reliability"
+)
 
 // TryRecord represents a single agent execution attempt.
 type TryRecord struct {
 	ID                     int                    `json:"id"`
-	RunID                  int                    `json:"run_id"`
+	OutingID               int                    `json:"outing_id"`
 	RelayID                int                    `json:"relay_id"`
 	AgentType              string                 `json:"agent_type"`
 	Completed              bool                   `json:"completed"`
@@ -41,18 +46,84 @@ type LapAttempt struct {
 	Timestamp string `json:"timestamp"`
 }
 
-// MessageRecord represents an inbox message that can be consumed by a run.
+// MessageRecord represents an inbox message that can be consumed by an outing.
 type MessageRecord struct {
-	ID                int    `json:"id"`
-	Body              string `json:"body"`
-	Status            string `json:"status"` // pending, addressed, cancelled
-	Position          int    `json:"position"`
-	Scope             string `json:"scope"` // "run" (default) or "relay"
-	CreatedAt         string `json:"created_at"`
-	UpdatedAt         string `json:"updated_at"`
-	ConsumedByRunID   *int   `json:"consumed_by_run_id,omitempty"`
-	ConsumedByRelayID *int   `json:"consumed_by_relay_id,omitempty"`
-	RelayID           *int   `json:"relay_id,omitempty"`
+	ID                 int    `json:"id"`
+	Body               string `json:"body"`
+	Status             string `json:"status"` // pending, addressed, cancelled
+	Position           int    `json:"position"`
+	Scope              string `json:"scope"` // "run" (default) or "relay"
+	CreatedAt          string `json:"created_at"`
+	UpdatedAt          string `json:"updated_at"`
+	ConsumedByOutingID *int   `json:"consumed_by_outing_id,omitempty"`
+	ConsumedByRelayID  *int   `json:"consumed_by_relay_id,omitempty"`
+	RelayID            *int   `json:"relay_id,omitempty"`
+}
+
+// UnmarshalJSON accepts legacy run_id while new writes use outing_id.
+func (r *TryRecord) UnmarshalJSON(data []byte) error {
+	type tryRecordAlias TryRecord
+	var aux struct {
+		tryRecordAlias
+		OutingID *int `json:"outing_id"`
+		RunID    *int `json:"run_id"`
+	}
+	if err := json.Unmarshal(data, &aux); err != nil {
+		return err
+	}
+	*r = TryRecord(aux.tryRecordAlias)
+	if err := assignCompatInt(&r.OutingID, aux.OutingID, "outing_id", aux.RunID, "run_id"); err != nil {
+		return err
+	}
+	return nil
+}
+
+// UnmarshalJSON accepts legacy consumed_by_run_id while new writes use
+// consumed_by_outing_id. The persisted Scope value "run" is intentionally kept
+// for backwards compatibility with existing Rally state.
+func (m *MessageRecord) UnmarshalJSON(data []byte) error {
+	type messageRecordAlias MessageRecord
+	var aux struct {
+		messageRecordAlias
+		ConsumedByOutingID *int `json:"consumed_by_outing_id"`
+		ConsumedByRunID    *int `json:"consumed_by_run_id"`
+	}
+	if err := json.Unmarshal(data, &aux); err != nil {
+		return err
+	}
+	*m = MessageRecord(aux.messageRecordAlias)
+	if err := assignCompatIntPtr(&m.ConsumedByOutingID, aux.ConsumedByOutingID, "consumed_by_outing_id", aux.ConsumedByRunID, "consumed_by_run_id"); err != nil {
+		return err
+	}
+	return nil
+}
+
+func assignCompatInt(dst *int, newValue *int, newKey string, oldValue *int, oldKey string) error {
+	if newValue != nil && oldValue != nil && *newValue != *oldValue {
+		return fmt.Errorf("conflicting %s and %s", newKey, oldKey)
+	}
+	switch {
+	case newValue != nil:
+		*dst = *newValue
+	case oldValue != nil:
+		*dst = *oldValue
+	}
+	return nil
+}
+
+func assignCompatIntPtr(dst **int, newValue *int, newKey string, oldValue *int, oldKey string) error {
+	if newValue != nil && oldValue != nil && *newValue != *oldValue {
+		return fmt.Errorf("conflicting %s and %s", newKey, oldKey)
+	}
+	switch {
+	case newValue != nil:
+		v := *newValue
+		*dst = &v
+	case oldValue != nil:
+		v := *oldValue
+		*dst = &v
+	}
+	return nil
 }
 
 // RelayRecord tracks the lifecycle of a relay session.

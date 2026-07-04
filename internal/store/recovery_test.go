@@ -9,15 +9,15 @@ import (
 func TestRecoveryPendingForLapUsesResolvingTryOfMostRecentRun(t *testing.T) {
 	_, s := setupTempStore(t)
 
-	mustAppendTry(t, s, TryRecord{ID: 1, RunID: 1, LapID: "lap-1", AttemptNumber: 1, Outcome: reliability.OutcomeRunTimeout})
-	mustAppendTry(t, s, TryRecord{ID: 2, RunID: 1, LapID: "lap-1", AttemptNumber: 2, HandoffOnly: true, Outcome: reliability.OutcomeHandoffTimeout})
+	mustAppendTry(t, s, TryRecord{ID: 1, OutingID: 1, LapID: "lap-1", AttemptNumber: 1, Outcome: reliability.OutcomeRunTimeout})
+	mustAppendTry(t, s, TryRecord{ID: 2, OutingID: 1, LapID: "lap-1", AttemptNumber: 2, HandoffOnly: true, Outcome: reliability.OutcomeHandoffTimeout})
 
 	status := s.RecoveryPendingForLap("lap-1")
 	if !status.Pending {
 		t.Fatalf("Pending = false, want true: %+v", status)
 	}
-	if status.ResolvingTryID != 2 || status.ResolvingRunID != 1 {
-		t.Fatalf("resolver = run %d try %d, want run 1 try 2", status.ResolvingRunID, status.ResolvingTryID)
+	if status.ResolvingTryID != 2 || status.ResolvingOutingID != 1 {
+		t.Fatalf("resolver = run %d try %d, want run 1 try 2", status.ResolvingOutingID, status.ResolvingTryID)
 	}
 	if status.ResolvingOutcome != reliability.OutcomeHandoffTimeout {
 		t.Fatalf("ResolvingOutcome = %q, want handoff_timeout", status.ResolvingOutcome)
@@ -32,17 +32,17 @@ func TestRecoveryPendingForLapTriggers(t *testing.T) {
 	}{
 		{
 			name: "dirty handoff",
-			rec:  TryRecord{ID: 1, RunID: 1, LapID: "lap-1", AttemptNumber: 1, Outcome: reliability.OutcomeHandoffRequested, DirtyHandoff: true},
+			rec:  TryRecord{ID: 1, OutingID: 1, LapID: "lap-1", AttemptNumber: 1, Outcome: reliability.OutcomeHandoffRequested, DirtyHandoff: true},
 			want: true,
 		},
 		{
 			name: "handoff timeout",
-			rec:  TryRecord{ID: 1, RunID: 1, LapID: "lap-1", AttemptNumber: 1, Outcome: reliability.OutcomeHandoffTimeout},
+			rec:  TryRecord{ID: 1, OutingID: 1, LapID: "lap-1", AttemptNumber: 1, Outcome: reliability.OutcomeHandoffTimeout},
 			want: true,
 		},
 		{
 			name: "ordinary failed",
-			rec:  TryRecord{ID: 1, RunID: 1, LapID: "lap-1", AttemptNumber: 1, Outcome: reliability.OutcomeFailed},
+			rec:  TryRecord{ID: 1, OutingID: 1, LapID: "lap-1", AttemptNumber: 1, Outcome: reliability.OutcomeFailed},
 			want: false,
 		},
 	}
@@ -62,7 +62,7 @@ func TestRecoveryPendingForLapMatchesDirtyHandoffFollowupAfterReload(t *testing.
 	rallyDir, s := setupTempStore(t)
 	mustAppendTry(t, s, TryRecord{
 		ID:                   1,
-		RunID:                1,
+		OutingID:             1,
 		LapID:                "original",
 		AttemptNumber:        1,
 		Outcome:              reliability.OutcomeHandoffRequested,
@@ -91,7 +91,7 @@ func TestRecoveryPendingForLapFollowupClearsAfterNewerCleanRun(t *testing.T) {
 	_, s := setupTempStore(t)
 	mustAppendTry(t, s, TryRecord{
 		ID:                   1,
-		RunID:                1,
+		OutingID:             1,
 		LapID:                "original",
 		AttemptNumber:        1,
 		Outcome:              reliability.OutcomeHandoffRequested,
@@ -100,7 +100,7 @@ func TestRecoveryPendingForLapFollowupClearsAfterNewerCleanRun(t *testing.T) {
 	})
 	mustAppendTry(t, s, TryRecord{
 		ID:            2,
-		RunID:         2,
+		OutingID:      2,
 		LapID:         "followup",
 		AttemptNumber: 1,
 		Outcome:       reliability.OutcomeCompleted,
@@ -117,7 +117,7 @@ func TestRecoveryPendingForLapFollowupClearsAfterNewerOriginalRun(t *testing.T) 
 	_, s := setupTempStore(t)
 	mustAppendTry(t, s, TryRecord{
 		ID:                   1,
-		RunID:                1,
+		OutingID:             1,
 		LapID:                "original",
 		AttemptNumber:        1,
 		Outcome:              reliability.OutcomeHandoffRequested,
@@ -126,7 +126,7 @@ func TestRecoveryPendingForLapFollowupClearsAfterNewerOriginalRun(t *testing.T) 
 	})
 	mustAppendTry(t, s, TryRecord{
 		ID:            2,
-		RunID:         2,
+		OutingID:      2,
 		LapID:         "original",
 		AttemptNumber: 1,
 		Outcome:       reliability.OutcomeCompleted,
@@ -143,7 +143,7 @@ func TestRecoveryPendingForLapCapCountsOriginalAndFollowupGroup(t *testing.T) {
 	_, s := setupTempStore(t)
 	mustAppendTry(t, s, TryRecord{
 		ID:                   1,
-		RunID:                1,
+		OutingID:             1,
 		LapID:                "original",
 		AttemptNumber:        1,
 		Outcome:              reliability.OutcomeHandoffRequested,
@@ -152,7 +152,7 @@ func TestRecoveryPendingForLapCapCountsOriginalAndFollowupGroup(t *testing.T) {
 	})
 	mustAppendTry(t, s, TryRecord{
 		ID:            2,
-		RunID:         2,
+		OutingID:      2,
 		LapID:         "original",
 		AttemptNumber: 1,
 		Outcome:       reliability.OutcomeHandoffTimeout,
@@ -160,7 +160,7 @@ func TestRecoveryPendingForLapCapCountsOriginalAndFollowupGroup(t *testing.T) {
 	})
 	mustAppendTry(t, s, TryRecord{
 		ID:            3,
-		RunID:         3,
+		OutingID:      3,
 		LapID:         "followup",
 		AttemptNumber: 1,
 		Outcome:       reliability.OutcomeHandoffTimeout,
@@ -178,8 +178,8 @@ func TestRecoveryPendingForLapCapCountsOriginalAndFollowupGroup(t *testing.T) {
 
 func TestRecoveryPendingForLapConsecutiveRecoveryCap(t *testing.T) {
 	_, s := setupTempStore(t)
-	mustAppendTry(t, s, TryRecord{ID: 1, RunID: 1, LapID: "lap-1", AttemptNumber: 1, Outcome: reliability.OutcomeHandoffTimeout, ResolvedRoute: "recovery"})
-	mustAppendTry(t, s, TryRecord{ID: 2, RunID: 2, LapID: "lap-1", AttemptNumber: 1, Outcome: reliability.OutcomeHandoffTimeout, ResolvedRoute: "RECOVERY"})
+	mustAppendTry(t, s, TryRecord{ID: 1, OutingID: 1, LapID: "lap-1", AttemptNumber: 1, Outcome: reliability.OutcomeHandoffTimeout, ResolvedRoute: "recovery"})
+	mustAppendTry(t, s, TryRecord{ID: 2, OutingID: 2, LapID: "lap-1", AttemptNumber: 1, Outcome: reliability.OutcomeHandoffTimeout, ResolvedRoute: "RECOVERY"})
 
 	status := s.RecoveryPendingForLap("lap-1")
 	if !status.CapHit {
@@ -196,28 +196,28 @@ func TestRecoveryPendingForLapConsecutiveRecoveryCap(t *testing.T) {
 func TestRecoveryPendingForLapSelectsMostRecentRunAcrossRelays(t *testing.T) {
 	_, s := setupTempStore(t)
 	// Relay 1 reached run 2 and completed the lap cleanly before exiting.
-	mustAppendTry(t, s, TryRecord{ID: 1, RelayID: 1, RunID: 1, LapID: "lap-1", AttemptNumber: 1, Outcome: reliability.OutcomeRunTimeout})
-	mustAppendTry(t, s, TryRecord{ID: 2, RelayID: 1, RunID: 2, LapID: "lap-1", AttemptNumber: 1, Outcome: reliability.OutcomeCompleted})
-	// A later relay restarts run numbering at 1 (RunID collides with relay 1's
+	mustAppendTry(t, s, TryRecord{ID: 1, RelayID: 1, OutingID: 1, LapID: "lap-1", AttemptNumber: 1, Outcome: reliability.OutcomeRunTimeout})
+	mustAppendTry(t, s, TryRecord{ID: 2, RelayID: 1, OutingID: 2, LapID: "lap-1", AttemptNumber: 1, Outcome: reliability.OutcomeCompleted})
+	// A later relay restarts run numbering at 1 (OutingID collides with relay 1's
 	// first run) and hands off. The newest run owns the routing decision.
-	mustAppendTry(t, s, TryRecord{ID: 3, RelayID: 2, RunID: 1, LapID: "lap-1", AttemptNumber: 1, Outcome: reliability.OutcomeHandoffTimeout})
+	mustAppendTry(t, s, TryRecord{ID: 3, RelayID: 2, OutingID: 1, LapID: "lap-1", AttemptNumber: 1, Outcome: reliability.OutcomeHandoffTimeout})
 
 	status := s.RecoveryPendingForLap("lap-1")
 	if !status.Pending {
 		t.Fatalf("Pending = false, want true: newest run (relay 2 run 1) handed off: %+v", status)
 	}
-	if status.ResolvingTryID != 3 || status.ResolvingRunID != 1 {
-		t.Fatalf("resolver = run %d try %d, want run 1 try 3 (relay 2)", status.ResolvingRunID, status.ResolvingTryID)
+	if status.ResolvingTryID != 3 || status.ResolvingOutingID != 1 {
+		t.Fatalf("resolver = run %d try %d, want run 1 try 3 (relay 2)", status.ResolvingOutingID, status.ResolvingTryID)
 	}
 }
 
 func TestRecoveryPendingForLapCapCountsRunsAcrossRelayRestart(t *testing.T) {
 	rallyDir, s := setupTempStore(t)
 	// Relay 1, run 1: recovery-routed handoff.
-	mustAppendTry(t, s, TryRecord{ID: 1, RelayID: 1, RunID: 1, LapID: "lap-1", AttemptNumber: 1, Outcome: reliability.OutcomeHandoffTimeout, ResolvedRoute: "recovery"})
-	// Relay restarts; run numbering resets so this run shares RunID 1 with the
+	mustAppendTry(t, s, TryRecord{ID: 1, RelayID: 1, OutingID: 1, LapID: "lap-1", AttemptNumber: 1, Outcome: reliability.OutcomeHandoffTimeout, ResolvedRoute: "recovery"})
+	// Relay restarts; run numbering resets so this run shares OutingID 1 with the
 	// relay-1 run above. It must count as a distinct consecutive recovery run.
-	mustAppendTry(t, s, TryRecord{ID: 2, RelayID: 2, RunID: 1, LapID: "lap-1", AttemptNumber: 1, Outcome: reliability.OutcomeHandoffTimeout, ResolvedRoute: "recovery"})
+	mustAppendTry(t, s, TryRecord{ID: 2, RelayID: 2, OutingID: 1, LapID: "lap-1", AttemptNumber: 1, Outcome: reliability.OutcomeHandoffTimeout, ResolvedRoute: "recovery"})
 
 	reloaded, err := NewStore(rallyDir)
 	if err != nil {
@@ -232,6 +232,6 @@ func TestRecoveryPendingForLapCapCountsRunsAcrossRelayRestart(t *testing.T) {
 		t.Fatal("Pending = true, want false on cap hit")
 	}
 	if status.ConsecutiveRecoveryRuns != RecoveryRouteConsecutiveCap {
-		t.Fatalf("ConsecutiveRecoveryRuns = %d, want %d (runs sharing RunID across relays must count separately)", status.ConsecutiveRecoveryRuns, RecoveryRouteConsecutiveCap)
+		t.Fatalf("ConsecutiveRecoveryRuns = %d, want %d (runs sharing OutingID across relays must count separately)", status.ConsecutiveRecoveryRuns, RecoveryRouteConsecutiveCap)
 	}
 }

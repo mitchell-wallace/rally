@@ -10,16 +10,16 @@ import (
 	"github.com/mitchell-wallace/rally/internal/store"
 )
 
-// RunState tracks the current run's mutable state in .rally/state/run-state.json.
-type RunState struct {
-	RunID           string       `json:"run_id"`
+// OutingState tracks the current outing's mutable state in .rally/state/run-state.json.
+type OutingState struct {
+	OutingID        string       `json:"outing_id"`
 	HandoffState    int          `json:"handoff_state"`
 	RecordedLaps    []string     `json:"recorded_laps"`
 	PinnedLapID     string       `json:"pinned_lap_id,omitempty"`
 	LapsAttempted   []LapAttempt `json:"laps_attempted,omitempty"`
 	SessionID       string       `json:"session_id,omitempty"`
 	ActiveRelayID   int          `json:"active_relay_id,omitempty"`
-	ActiveRunID     int          `json:"active_run_id,omitempty"`
+	ActiveOutingID  int          `json:"active_outing_id,omitempty"`
 	ActiveTryID     int          `json:"active_try_id,omitempty"`
 	ActiveLogPath   string       `json:"active_log_path,omitempty"`
 	ActiveStartedAt string       `json:"active_started_at,omitempty"`
@@ -35,10 +35,34 @@ type LapAttempt struct {
 // appended to history.
 type ActiveTryMetadata struct {
 	RelayID   int
-	RunID     int
+	OutingID  int
 	TryID     int
 	LogPath   string
 	StartedAt time.Time
+}
+
+// UnmarshalJSON accepts legacy run_id and active_run_id while new writes use
+// outing_id and active_outing_id.
+func (rs *OutingState) UnmarshalJSON(data []byte) error {
+	type outingStateAlias OutingState
+	var aux struct {
+		outingStateAlias
+		OutingID       *string `json:"outing_id"`
+		RunID          *string `json:"run_id"`
+		ActiveOutingID *int    `json:"active_outing_id"`
+		ActiveRunID    *int    `json:"active_run_id"`
+	}
+	if err := json.Unmarshal(data, &aux); err != nil {
+		return err
+	}
+	*rs = OutingState(aux.outingStateAlias)
+	if err := assignCompatString(&rs.OutingID, aux.OutingID, "outing_id", aux.RunID, "run_id"); err != nil {
+		return err
+	}
+	if err := assignCompatInt(&rs.ActiveOutingID, aux.ActiveOutingID, "active_outing_id", aux.ActiveRunID, "active_run_id"); err != nil {
+		return err
+	}
+	return nil
 }
 
 // RunStatePath returns the path to run-state.json for a workspace.
@@ -47,17 +71,17 @@ func RunStatePath(workspaceDir string) string {
 }
 
 // LoadRunState reads the run-state file. If it does not exist, a fresh
-// RunState with HandoffState=0 and an empty RecordedLaps slice is returned.
-func LoadRunState(workspaceDir string) (*RunState, error) {
+// OutingState with HandoffState=0 and an empty RecordedLaps slice is returned.
+func LoadRunState(workspaceDir string) (*OutingState, error) {
 	path := RunStatePath(workspaceDir)
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return &RunState{HandoffState: 0, RecordedLaps: []string{}}, nil
+			return &OutingState{HandoffState: 0, RecordedLaps: []string{}}, nil
 		}
 		return nil, err
 	}
-	var rs RunState
+	var rs OutingState
 	if err := json.Unmarshal(data, &rs); err != nil {
 		return nil, fmt.Errorf("parse run-state.json: %w", err)
 	}
@@ -65,7 +89,7 @@ func LoadRunState(workspaceDir string) (*RunState, error) {
 }
 
 // SaveRunState writes the run-state file as indented JSON.
-func SaveRunState(workspaceDir string, rs *RunState) error {
+func SaveRunState(workspaceDir string, rs *OutingState) error {
 	path := RunStatePath(workspaceDir)
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err
@@ -94,7 +118,7 @@ func SetActiveTry(workspaceDir string, active ActiveTryMetadata) error {
 		return err
 	}
 	rs.ActiveRelayID = active.RelayID
-	rs.ActiveRunID = active.RunID
+	rs.ActiveOutingID = active.OutingID
 	rs.ActiveTryID = active.TryID
 	rs.ActiveLogPath = active.LogPath
 	rs.ActiveStartedAt = active.StartedAt.UTC().Format(time.RFC3339)
@@ -118,10 +142,10 @@ func ClearActiveTry(workspaceDir string) error {
 	return SaveRunState(workspaceDir, rs)
 }
 
-// ClearActiveTry clears only active-tail fields on an in-memory run-state.
-func (rs *RunState) ClearActiveTry() {
+// ClearActiveTry clears only active-tail fields on an in-memory outing state.
+func (rs *OutingState) ClearActiveTry() {
 	rs.ActiveRelayID = 0
-	rs.ActiveRunID = 0
+	rs.ActiveOutingID = 0
 	rs.ActiveTryID = 0
 	rs.ActiveLogPath = ""
 	rs.ActiveStartedAt = ""

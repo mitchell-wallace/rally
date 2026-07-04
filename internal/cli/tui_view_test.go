@@ -44,7 +44,7 @@ func TestSynthesizeRelayEvents(t *testing.T) {
 	tries := []store.TryRecord{
 		{
 			ID:            1,
-			RunID:         1,
+			OutingID:      1,
 			RelayID:       1,
 			AgentType:     "codex",
 			Completed:     true,
@@ -61,7 +61,7 @@ func TestSynthesizeRelayEvents(t *testing.T) {
 		},
 		{
 			ID:            2,
-			RunID:         2,
+			OutingID:      2,
 			RelayID:       1,
 			AgentType:     "claude",
 			Completed:     false,
@@ -78,7 +78,7 @@ func TestSynthesizeRelayEvents(t *testing.T) {
 		},
 		{
 			ID:            3,
-			RunID:         2,
+			OutingID:      2,
 			RelayID:       1,
 			AgentType:     "claude",
 			Completed:     false,

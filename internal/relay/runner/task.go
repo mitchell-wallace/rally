@@ -99,7 +99,7 @@ func buildRecentContext(tries []store.TryRecord, perSummaryLimit, overallLimit i
 			tailSize := perSummaryLimit - headSize
 			summary = summary[:headSize] + textutil.HeadTailTruncationMarker + summary[len(summary)-tailSize:]
 		}
-		fmt.Fprintf(&buf, "Run %d (%s): %s summary=%s\n", t.RunID, t.AgentType, recentContextStatus(t), summary)
+		fmt.Fprintf(&buf, "Run %d (%s): %s summary=%s\n", t.OutingID, t.AgentType, recentContextStatus(t), summary)
 	}
 	if overallLimit > 0 && buf.Len() > overallLimit {
 		result := buf.String()

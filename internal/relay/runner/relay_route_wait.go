@@ -174,7 +174,7 @@ func (r *Runner) resolveFallbackCause(runID int, selection routeSelection, res r
 		}
 		return &routeFallbackCause{
 			fromRunner:           telemetry.RunnerLabel(selection.Agent.Harness, selection.Agent.Model),
-			triggerRunID:         runID,
+			triggerOutingID:      runID,
 			triggerTryID:         r.store.NextTryID() - 1,
 			triggerOutcome:       string(res.Outcome),
 			triggerFailReason:    res.FailReason,

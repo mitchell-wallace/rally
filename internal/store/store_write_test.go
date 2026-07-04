@@ -13,7 +13,7 @@ func TestTryRecordPersistsOutcomeAndHandoffOnly(t *testing.T) {
 
 	if err := s.AppendTry(TryRecord{
 		ID:                     1,
-		RunID:                  1,
+		OutingID:               1,
 		AgentType:              "codex",
 		Completed:              true,
 		Outcome:                reliability.OutcomeHandoffRequested,
@@ -65,7 +65,7 @@ func TestTryRecordCancelledOutcomeAndSource(t *testing.T) {
 
 			if err := s.AppendTry(TryRecord{
 				ID:                 1,
-				RunID:              1,
+				OutingID:           1,
 				AgentType:          "claude",
 				Completed:          false,
 				Outcome:            reliability.OutcomeCancelled,

@@ -126,16 +126,16 @@ func (r *Runner) consumeRunScopedMessage(runID int) (*store.MessageRecord, error
 	// Consume run-scoped message at start of each run
 	// First check if there's an already-consumed message from a failed run
 	var consumedMsg *store.MessageRecord
-	if existingMsg := r.store.ConsumedRunScopedMessageForRun(runID); existingMsg != nil {
+	if existingMsg := r.store.ConsumedOutingScopedMessageForOuting(runID); existingMsg != nil {
 		// Reuse the message from the failed run
 		consumedMsg = existingMsg
 	} else {
 		// Consume a new message
 		pending := r.store.PendingMessages()
 		for _, p := range pending {
-			if p.Scope != "relay" && p.ConsumedByRunID == nil {
+			if p.Scope != "relay" && p.ConsumedByOutingID == nil {
 				msg := p
-				msg.ConsumedByRunID = &runID
+				msg.ConsumedByOutingID = &runID
 				if err := r.store.UpdateMessage(msg); err != nil {
 					return nil, err
 				}

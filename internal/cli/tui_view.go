@@ -145,11 +145,11 @@ func groupTriesByRun(tries []store.TryRecord) [][]store.TryRecord {
 	order := make([]int, 0)
 	seen := make(map[int]bool)
 	for _, tr := range tries {
-		if !seen[tr.RunID] {
-			seen[tr.RunID] = true
-			order = append(order, tr.RunID)
+		if !seen[tr.OutingID] {
+			seen[tr.OutingID] = true
+			order = append(order, tr.OutingID)
 		}
-		byRun[tr.RunID] = append(byRun[tr.RunID], tr)
+		byRun[tr.OutingID] = append(byRun[tr.OutingID], tr)
 	}
 	out := make([][]store.TryRecord, 0, len(order))
 	for _, runID := range order {

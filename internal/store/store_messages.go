@@ -182,13 +182,14 @@ func (s *Store) EligibleRelayScopedMessages(relayID int) []MessageRecord {
 	return out
 }
 
-// ConsumedRunScopedMessageForRun returns a run-scoped message that was already
-// consumed by the given runID but not addressed (i.e., from a failed run).
-func (s *Store) ConsumedRunScopedMessageForRun(runID int) *MessageRecord {
+// ConsumedOutingScopedMessageForOuting returns an outing-scoped message that was
+// already consumed by the given outingID but not addressed. The persisted scope
+// value is still "run" for compatibility with existing state.
+func (s *Store) ConsumedOutingScopedMessageForOuting(outingID int) *MessageRecord {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for _, m := range s.cache.Messages {
-		if m.Status == "pending" && m.Scope != "relay" && m.ConsumedByRunID != nil && *m.ConsumedByRunID == runID {
+		if m.Status == "pending" && m.Scope != "relay" && m.ConsumedByOutingID != nil && *m.ConsumedByOutingID == outingID {
 			cp := m
 			return &cp
 		}

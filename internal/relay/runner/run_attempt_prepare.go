@@ -61,7 +61,7 @@ func (r *Runner) prepareRunAttempt(ctx context.Context, relay *store.RelayRecord
 			}
 		} else {
 			state.sessionID = ""
-			_ = progress.SaveRunState(r.cfg.WorkspaceDir, newProgressRunState(state.runID, task.LapID))
+			_ = progress.SaveRunState(r.cfg.WorkspaceDir, newProgressOutingState(state.runID, task.LapID))
 		}
 	}
 
@@ -149,7 +149,7 @@ func (r *Runner) prepareRunAttempt(ctx context.Context, relay *store.RelayRecord
 
 	if err := progress.SetActiveTry(r.cfg.WorkspaceDir, progress.ActiveTryMetadata{
 		RelayID:   relay.ID,
-		RunID:     runIndex + 1,
+		OutingID:  runIndex + 1,
 		TryID:     tryID,
 		LogPath:   tryLogPath,
 		StartedAt: startedAt,

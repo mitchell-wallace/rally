@@ -16,19 +16,19 @@ import (
 	"github.com/mitchell-wallace/rally/internal/store"
 )
 
-func TestRunOneLapPinIgnoresStaleSummaryEntriesForSameRunID(t *testing.T) {
+func TestRunOneLapPinIgnoresStaleSummaryEntriesForSameOutingID(t *testing.T) {
 	workspaceDir := t.TempDir()
 	rallyDir := store.RallyDir(workspaceDir)
 	os.MkdirAll(rallyDir, 0o755)
 	initRepo(t, workspaceDir)
 	runGit(t, workspaceDir, "commit", "--allow-empty", "-m", "initial", "--no-verify")
 
-	if err := progress.AppendRunEntry(workspaceDir, progress.RunEntry{
-		RunID:         "relay-1-run-1",
+	if err := progress.AppendOutingEntry(workspaceDir, progress.OutingEntry{
+		OutingID:      "relay-1-run-1",
 		Summary:       "stale prior relay entry",
 		LapsCompleted: []string{"stale-lap"},
 	}); err != nil {
-		t.Fatalf("AppendRunEntry error = %v", err)
+		t.Fatalf("AppendOutingEntry error = %v", err)
 	}
 
 	s := newTestStore(t, rallyDir)

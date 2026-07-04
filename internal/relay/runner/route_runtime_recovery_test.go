@@ -436,11 +436,11 @@ func TestRouteRuntime_RecoveryPendingRoutesToRecovery(t *testing.T) {
 	}{
 		{
 			name: "dirty handoff",
-			rec:  store.TryRecord{ID: 1, RunID: 1, LapID: "lap-1", AttemptNumber: 1, Outcome: reliability.OutcomeHandoffRequested, DirtyHandoff: true},
+			rec:  store.TryRecord{ID: 1, OutingID: 1, LapID: "lap-1", AttemptNumber: 1, Outcome: reliability.OutcomeHandoffRequested, DirtyHandoff: true},
 		},
 		{
 			name: "handoff timeout",
-			rec:  store.TryRecord{ID: 1, RunID: 1, LapID: "lap-1", AttemptNumber: 1, Outcome: reliability.OutcomeHandoffTimeout},
+			rec:  store.TryRecord{ID: 1, OutingID: 1, LapID: "lap-1", AttemptNumber: 1, Outcome: reliability.OutcomeHandoffTimeout},
 		},
 	}
 
@@ -475,7 +475,7 @@ func TestRouteRuntime_RecoveryPendingFollowupUsesOriginalTrigger(t *testing.T) {
 	}, false)
 	rt.store = newRouteRuntimeStore(t, store.TryRecord{
 		ID:                   1,
-		RunID:                1,
+		OutingID:             1,
 		LapID:                "original",
 		AttemptNumber:        1,
 		Outcome:              reliability.OutcomeHandoffRequested,
@@ -500,7 +500,7 @@ func TestRouteRuntime_OrdinaryFailedDoesNotForceRecovery(t *testing.T) {
 	}, false)
 	rt.store = newRouteRuntimeStore(t, store.TryRecord{
 		ID:            1,
-		RunID:         1,
+		OutingID:      1,
 		LapID:         "lap-1",
 		AttemptNumber: 1,
 		Outcome:       reliability.OutcomeFailed,
@@ -517,7 +517,7 @@ func TestRouteRuntime_OrdinaryFailedDoesNotForceRecovery(t *testing.T) {
 
 func TestRouteRuntime_RecoveryStateSurvivesStoreReload(t *testing.T) {
 	rallyDir, s := setupRouteRuntimeStore(t)
-	mustAppendRouteTry(t, s, store.TryRecord{ID: 1, RunID: 1, LapID: "lap-1", AttemptNumber: 1, Outcome: reliability.OutcomeHandoffTimeout})
+	mustAppendRouteTry(t, s, store.TryRecord{ID: 1, OutingID: 1, LapID: "lap-1", AttemptNumber: 1, Outcome: reliability.OutcomeHandoffTimeout})
 	reloaded, err := store.NewStore(rallyDir)
 	if err != nil {
 		t.Fatalf("NewStore reload: %v", err)
@@ -541,7 +541,7 @@ func TestRouteRuntime_MissingRecoveryRouteWarnsAndFallsBack(t *testing.T) {
 		"default": {"claude:opus-4.7"},
 		"senior":  {"claude:sonnet-4.5"},
 	}, false)
-	rt.store = newRouteRuntimeStore(t, store.TryRecord{ID: 1, RunID: 1, LapID: "lap-1", AttemptNumber: 1, Outcome: reliability.OutcomeHandoffTimeout})
+	rt.store = newRouteRuntimeStore(t, store.TryRecord{ID: 1, OutingID: 1, LapID: "lap-1", AttemptNumber: 1, Outcome: reliability.OutcomeHandoffTimeout})
 
 	sel := mustNextRouteSelection(t, rt, resilience, "senior", "lap-1")
 	if sel.Route.Name != "senior" || sel.RecoveryForced {
@@ -558,7 +558,7 @@ func TestRouteRuntime_OverridePrecedenceOverRecoveryRoute(t *testing.T) {
 		"senior":   {"claude:sonnet-4.5"},
 		"recovery": {"codex:gpt-5.5"},
 	}, false)
-	rt.store = newRouteRuntimeStore(t, store.TryRecord{ID: 1, RunID: 1, LapID: "lap-1", AttemptNumber: 1, Outcome: reliability.OutcomeHandoffTimeout})
+	rt.store = newRouteRuntimeStore(t, store.TryRecord{ID: 1, OutingID: 1, LapID: "lap-1", AttemptNumber: 1, Outcome: reliability.OutcomeHandoffTimeout})
 
 	sel := mustNextRouteSelection(t, rt, resilience, "senior", "lap-1")
 	if sel.Route.Source != "override" || !sel.RecoveryForced {
@@ -579,8 +579,8 @@ func TestRouteRuntime_RecoveryCapFallsBackAndRaisesFlag(t *testing.T) {
 		"recovery": {"codex:gpt-5.5"},
 	}, false)
 	rt.store = newRouteRuntimeStore(t,
-		store.TryRecord{ID: 1, RunID: 1, LapID: "lap-1", AttemptNumber: 1, Outcome: reliability.OutcomeHandoffTimeout, ResolvedRoute: "recovery"},
-		store.TryRecord{ID: 2, RunID: 2, LapID: "lap-1", AttemptNumber: 1, Outcome: reliability.OutcomeHandoffTimeout, ResolvedRoute: "recovery"},
+		store.TryRecord{ID: 1, OutingID: 1, LapID: "lap-1", AttemptNumber: 1, Outcome: reliability.OutcomeHandoffTimeout, ResolvedRoute: "recovery"},
+		store.TryRecord{ID: 2, OutingID: 2, LapID: "lap-1", AttemptNumber: 1, Outcome: reliability.OutcomeHandoffTimeout, ResolvedRoute: "recovery"},
 	)
 
 	sel := mustNextRouteSelection(t, rt, resilience, "senior", "lap-1")

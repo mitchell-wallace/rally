@@ -10,7 +10,7 @@ import (
 
 type routeFallbackCause struct {
 	fromRunner           string
-	triggerRunID         int
+	triggerOutingID      int
 	triggerTryID         int
 	triggerOutcome       string
 	triggerFailReason    string
@@ -26,7 +26,7 @@ func (c *routeFallbackCause) addTo(fields map[string]interface{}, span telemetry
 		return
 	}
 	values := map[string]interface{}{
-		"trigger_run_id":               c.triggerRunID,
+		"trigger_run_id":               c.triggerOutingID,
 		"trigger_try_id":               c.triggerTryID,
 		"trigger_outcome":              c.triggerOutcome,
 		"trigger_fail_reason":          c.triggerFailReason,

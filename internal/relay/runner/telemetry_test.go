@@ -20,7 +20,7 @@ func TestRunWritesActiveTryMetadataBeforeExecutor(t *testing.T) {
 	initRepo(t, workspaceDir)
 
 	s := newTestStore(t, rallyDir)
-	var activeAtExecutor progress.RunState
+	var activeAtExecutor progress.OutingState
 	var executorErr error
 	exec := &funcExecutor{
 		fn: func(ctx context.Context, opts harnessapi.RunOptions) (*harnessapi.TryResult, error) {
@@ -58,14 +58,14 @@ func TestRunWritesActiveTryMetadataBeforeExecutor(t *testing.T) {
 		t.Fatalf("executor setup failed: %v", executorErr)
 	}
 
-	if activeAtExecutor.RunID != "relay-1-run-1" {
-		t.Fatalf("RunID visible to executor = %q, want relay-1-run-1", activeAtExecutor.RunID)
+	if activeAtExecutor.OutingID != "relay-1-run-1" {
+		t.Fatalf("OutingID visible to executor = %q, want relay-1-run-1", activeAtExecutor.OutingID)
 	}
 	if activeAtExecutor.ActiveRelayID != 1 {
 		t.Fatalf("ActiveRelayID = %d, want 1", activeAtExecutor.ActiveRelayID)
 	}
-	if activeAtExecutor.ActiveRunID != 1 {
-		t.Fatalf("ActiveRunID = %d, want 1", activeAtExecutor.ActiveRunID)
+	if activeAtExecutor.ActiveOutingID != 1 {
+		t.Fatalf("ActiveOutingID = %d, want 1", activeAtExecutor.ActiveOutingID)
 	}
 	if activeAtExecutor.ActiveTryID != 1 {
 		t.Fatalf("ActiveTryID = %d, want 1", activeAtExecutor.ActiveTryID)
@@ -91,7 +91,7 @@ func TestRunWritesActiveTryMetadataBeforeExecutor(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadRunState after run: %v", err)
 	}
-	if rs.ActiveRelayID != 0 || rs.ActiveRunID != 0 || rs.ActiveTryID != 0 || rs.ActiveLogPath != "" || rs.ActiveStartedAt != "" {
+	if rs.ActiveRelayID != 0 || rs.ActiveOutingID != 0 || rs.ActiveTryID != 0 || rs.ActiveLogPath != "" || rs.ActiveStartedAt != "" {
 		t.Fatalf("active metadata left after run: %+v", rs)
 	}
 }

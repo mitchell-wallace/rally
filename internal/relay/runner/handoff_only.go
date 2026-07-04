@@ -61,7 +61,7 @@ func buildHandoffOnlyPrompt(opts harnessapi.RunOptions) string {
 // resumes the captured session with a handoff-only prompt under a fresh context
 // bounded by HandoffTimeout — no stall detector, not counted against the run
 // budget — then persists the continuation as a separate HandoffOnly try under
-// the same RunID with attemptNumber (allowed to exceed maxAttempts). The outcome
+// the same OutingID with attemptNumber (allowed to exceed maxAttempts). The outcome
 // is handoff_requested ONLY when a durable current-run handoff entry exists
 // (proving both laps handoff and laps wrapup completed); otherwise
 // handoff_timeout (task 4.2). It returns the resolving outcome, the continuation
@@ -117,7 +117,7 @@ func (r *Runner) runBoundedHandoffOnly(
 
 	if err := progress.SetActiveTry(r.cfg.WorkspaceDir, progress.ActiveTryMetadata{
 		RelayID:   relay.ID,
-		RunID:     runIndex + 1,
+		OutingID:  runIndex + 1,
 		TryID:     tryID,
 		LogPath:   tryLogPath,
 		StartedAt: startedAt,
@@ -178,8 +178,8 @@ func (r *Runner) runBoundedHandoffOnly(
 	// both laps handoff and laps wrapup completed. Transient HandoffState alone
 	// (a laps handoff with no wrapup) is NOT sufficient — it only distinguishes a
 	// partial/no-wrapup attempt for the failure reason.
-	runEntry := recordedRunEntryForRun(r.cfg.WorkspaceDir, runID, summaryEntryCountBeforeRun)
-	handoffEntry := handoffEntryFromRunEntry(runEntry)
+	runEntry := recordedOutingEntryForRun(r.cfg.WorkspaceDir, runID, summaryEntryCountBeforeRun)
+	handoffEntry := handoffEntryFromOutingEntry(runEntry)
 	recoveryClassification := recoveryClassificationForRun(task, runEntry)
 	handoffState := 0
 	if rs, err := progress.LoadRunState(r.cfg.WorkspaceDir); err == nil && rs != nil {
@@ -225,7 +225,7 @@ func (r *Runner) runBoundedHandoffOnly(
 
 	tryRecord := store.TryRecord{
 		ID:                     tryID,
-		RunID:                  runIndex + 1,
+		OutingID:               runIndex + 1,
 		RelayID:                relay.ID,
 		AgentType:              picked.Harness,
 		Completed:              succeeded,

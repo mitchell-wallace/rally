@@ -209,9 +209,9 @@ func TestRunOneTimeoutHandoffOutcomesStaySpanLogOnly(t *testing.T) {
 				<-ctx.Done()
 				return &harnessapi.TryResult{Completed: false, SessionID: "sess-timeout"}, ctx.Err()
 			}
-			if err := progress.AppendRunEntry(workspaceDir, progress.RunEntry{
-				RunID:   "relay-1-run-1",
-				Summary: "handoff",
+			if err := progress.AppendOutingEntry(workspaceDir, progress.OutingEntry{
+				OutingID: "relay-1-run-1",
+				Summary:  "handoff",
 				Handoff: &progress.HandoffEntry{
 					Summary: "handoff",
 				},

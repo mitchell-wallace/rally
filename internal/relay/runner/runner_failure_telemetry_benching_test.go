@@ -246,8 +246,8 @@ func TestRunOneRecoveryClassificationTelemetryAndNeedsUserIssue(t *testing.T) {
 					if err := progress.RecordLap(workspaceDir, "lap-1"); err != nil {
 						return nil, err
 					}
-					if err := progress.AppendRunEntry(workspaceDir, progress.RunEntry{
-						RunID:          "relay-1-run-1",
+					if err := progress.AppendOutingEntry(workspaceDir, progress.OutingEntry{
+						OutingID:       "relay-1-run-1",
 						Summary:        "done",
 						Classification: tt.class,
 					}); err != nil {
@@ -313,10 +313,10 @@ func TestRunRecoveryCapHitCapturesNeedsUserIssue(t *testing.T) {
 	runGit(t, workspaceDir, "commit", "--allow-empty", "-m", "initial", "--no-verify")
 
 	s := newTestStore(t, rallyDir)
-	if err := s.AppendTry(store.TryRecord{ID: 1, RunID: 1, RelayID: 1, LapID: "lap-cap", AttemptNumber: 1, Outcome: reliability.OutcomeHandoffTimeout, ResolvedRoute: "recovery"}); err != nil {
+	if err := s.AppendTry(store.TryRecord{ID: 1, OutingID: 1, RelayID: 1, LapID: "lap-cap", AttemptNumber: 1, Outcome: reliability.OutcomeHandoffTimeout, ResolvedRoute: "recovery"}); err != nil {
 		t.Fatalf("append try 1: %v", err)
 	}
-	if err := s.AppendTry(store.TryRecord{ID: 2, RunID: 2, RelayID: 1, LapID: "lap-cap", AttemptNumber: 1, Outcome: reliability.OutcomeHandoffTimeout, ResolvedRoute: "recovery"}); err != nil {
+	if err := s.AppendTry(store.TryRecord{ID: 2, OutingID: 2, RelayID: 1, LapID: "lap-cap", AttemptNumber: 1, Outcome: reliability.OutcomeHandoffTimeout, ResolvedRoute: "recovery"}); err != nil {
 		t.Fatalf("append try 2: %v", err)
 	}
 
@@ -339,9 +339,9 @@ func TestRunRecoveryCapHitCapturesNeedsUserIssue(t *testing.T) {
 			if err := progress.RecordLap(workspaceDir, "lap-cap"); err != nil {
 				return nil, err
 			}
-			if err := progress.AppendRunEntry(workspaceDir, progress.RunEntry{
-				RunID:   "relay-1-run-1",
-				Summary: "done",
+			if err := progress.AppendOutingEntry(workspaceDir, progress.OutingEntry{
+				OutingID: "relay-1-run-1",
+				Summary:  "done",
 			}); err != nil {
 				return nil, err
 			}

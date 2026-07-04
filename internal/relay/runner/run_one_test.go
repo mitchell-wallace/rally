@@ -53,8 +53,8 @@ func TestRetryWithinRun(t *testing.T) {
 		t.Fatalf("got %d tries, want 3", len(tries))
 	}
 	for i, tr := range tries {
-		if tr.RunID != 1 {
-			t.Fatalf("try %d runID = %d, want 1", i, tr.RunID)
+		if tr.OutingID != 1 {
+			t.Fatalf("try %d runID = %d, want 1", i, tr.OutingID)
 		}
 		if tr.AttemptNumber != i+1 {
 			t.Fatalf("try %d attempt = %d, want %d", i, tr.AttemptNumber, i+1)

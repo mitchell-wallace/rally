@@ -11,8 +11,8 @@ import (
 	"github.com/mitchell-wallace/rally/internal/store"
 )
 
-func newProgressRunState(runID, lapID string) *progress.RunState {
-	return &progress.RunState{RunID: runID, PinnedLapID: lapID, RecordedLaps: []string{}}
+func newProgressOutingState(runID, lapID string) *progress.OutingState {
+	return &progress.OutingState{OutingID: runID, PinnedLapID: lapID, RecordedLaps: []string{}}
 }
 
 func storeLapAttempts(in []progress.LapAttempt) []store.LapAttempt {
@@ -53,7 +53,7 @@ func handoffCreatedLapIDs(handoff *progress.HandoffEntry) []string {
 	return append([]string(nil), handoff.CreatedLapIDs...)
 }
 
-func recoveryClassificationForRun(task runTask, entry *progress.RunEntry) string {
+func recoveryClassificationForRun(task runTask, entry *progress.OutingEntry) string {
 	if entry == nil || !strings.EqualFold(strings.TrimSpace(task.promptAssignee()), store.RecoveryRouteName) {
 		return ""
 	}
@@ -73,15 +73,15 @@ func progressLapsCompletedForRun(workspaceDir, runID string) []string {
 	}
 	var out []string
 	for _, entry := range entries {
-		if entry.RunID != runID {
+		if entry.OutingID != runID {
 			continue
 		}
-		out = append(out, progressRunEntryLapIDs(entry)...)
+		out = append(out, progressOutingEntryLapIDs(entry)...)
 	}
 	return out
 }
 
-func progressRunEntryLapIDs(entry progress.RunEntry) []string {
+func progressOutingEntryLapIDs(entry progress.OutingEntry) []string {
 	var out []string
 	switch lapsCompleted := entry.LapsCompleted.(type) {
 	case string:
@@ -107,10 +107,10 @@ func pinnedLapCompleteElsewhere(workspaceDir, runID, lapID string, recordedLaps 
 	entries, err := progress.LoadSummaryEntries(workspaceDir)
 	if err == nil {
 		for _, entry := range entries {
-			if entry.RunID == runID {
+			if entry.OutingID == runID {
 				continue
 			}
-			if stringSliceContains(progressRunEntryLapIDs(entry), lapID) {
+			if stringSliceContains(progressOutingEntryLapIDs(entry), lapID) {
 				return true
 			}
 		}
@@ -162,17 +162,17 @@ func stringSliceContains(values []string, target string) bool {
 }
 
 func recordedHandoffEntryForRun(workspaceDir, runID string, firstNewEntry int) *progress.HandoffEntry {
-	return handoffEntryFromRunEntry(recordedRunEntryForRun(workspaceDir, runID, firstNewEntry))
+	return handoffEntryFromOutingEntry(recordedOutingEntryForRun(workspaceDir, runID, firstNewEntry))
 }
 
-func handoffEntryFromRunEntry(entry *progress.RunEntry) *progress.HandoffEntry {
+func handoffEntryFromOutingEntry(entry *progress.OutingEntry) *progress.HandoffEntry {
 	if entry == nil {
 		return nil
 	}
 	return entry.Handoff
 }
 
-func recordedRunEntryForRun(workspaceDir, runID string, firstNewEntry int) *progress.RunEntry {
+func recordedOutingEntryForRun(workspaceDir, runID string, firstNewEntry int) *progress.OutingEntry {
 	if runID == "" {
 		return nil
 	}
@@ -185,7 +185,7 @@ func recordedRunEntryForRun(workspaceDir, runID string, firstNewEntry int) *prog
 	}
 	for i := len(entries) - 1; i >= firstNewEntry; i-- {
 		entry := entries[i]
-		if entry.RunID == runID {
+		if entry.OutingID == runID {
 			return &entry
 		}
 	}
@@ -273,12 +273,12 @@ func (r *Runner) maybeWriteStubAndClearState(lastOutput string) (bool, error) {
 		summary = "(agent exited without finalizing)"
 	}
 
-	entry := progress.RunEntry{
-		RunID:         rs.RunID,
+	entry := progress.OutingEntry{
+		OutingID:      rs.OutingID,
 		Summary:       summary,
 		LapsCompleted: lapsCompleted,
 	}
-	_ = progress.AppendRunEntry(r.cfg.WorkspaceDir, entry)
+	_ = progress.AppendOutingEntry(r.cfg.WorkspaceDir, entry)
 	_ = progress.ClearRunState(r.cfg.WorkspaceDir)
 	return true, nil
 }

@@ -22,11 +22,11 @@ func (r *Runner) reconcileAttemptProgress(relay *store.RelayRecord, runIndex int
 		lapsAttempted = append(lapsAttempted, storeLapAttempts(runStateAfter.LapsAttempted)...)
 		handoffState = runStateAfter.HandoffState
 	}
-	runEntry := recordedRunEntryForRun(r.cfg.WorkspaceDir, state.runID, state.summaryEntryCountBeforeRun)
+	runEntry := recordedOutingEntryForRun(r.cfg.WorkspaceDir, state.runID, state.summaryEntryCountBeforeRun)
 	if task.IsLapsBacked && runEntry != nil {
-		recordedLaps = mergeStrings(recordedLaps, progressRunEntryLapIDs(*runEntry))
+		recordedLaps = mergeStrings(recordedLaps, progressOutingEntryLapIDs(*runEntry))
 	}
-	handoffEntry := handoffEntryFromRunEntry(runEntry)
+	handoffEntry := handoffEntryFromOutingEntry(runEntry)
 	recoveryClassification := recoveryClassificationForRun(task, runEntry)
 
 	runtime := attempt.endedAt.Sub(attempt.startedAt)

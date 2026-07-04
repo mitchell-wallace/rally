@@ -10,8 +10,8 @@ func TestJSONLRoundTrip(t *testing.T) {
 	path := filepath.Join(dir, "tries.jsonl")
 
 	recs := []TryRecord{
-		{ID: 1, RunID: 1, AgentType: "claude", Summary: "first"},
-		{ID: 2, RunID: 1, AgentType: "codex", Summary: "second"},
+		{ID: 1, OutingID: 1, AgentType: "claude", Summary: "first"},
+		{ID: 2, OutingID: 1, AgentType: "codex", Summary: "second"},
 	}
 
 	for _, r := range recs {

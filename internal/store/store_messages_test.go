@@ -15,7 +15,7 @@ func TestMessageInPlaceUpdate(t *testing.T) {
 	// Update message 1
 	m1 := store.GetMessages()[0]
 	m1.Status = "addressed"
-	m1.ConsumedByRunID = intPtr(5)
+	m1.ConsumedByOutingID = intPtr(5)
 	if err := store.UpdateMessage(m1); err != nil {
 		t.Fatal(err)
 	}
@@ -36,8 +36,8 @@ func TestMessageInPlaceUpdate(t *testing.T) {
 			if m.Status != "addressed" {
 				t.Fatalf("expected status addressed, got %s", m.Status)
 			}
-			if m.ConsumedByRunID == nil || *m.ConsumedByRunID != 5 {
-				t.Fatalf("unexpected ConsumedByRunID: %v", m.ConsumedByRunID)
+			if m.ConsumedByOutingID == nil || *m.ConsumedByOutingID != 5 {
+				t.Fatalf("unexpected ConsumedByOutingID: %v", m.ConsumedByOutingID)
 			}
 		}
 	}

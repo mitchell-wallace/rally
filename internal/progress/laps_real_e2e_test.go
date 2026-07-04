@@ -41,7 +41,7 @@ func TestRealLapsDoneWrapupFlow(t *testing.T) {
 		t.Fatal("expected hook install to report changes on first install")
 	}
 
-	if err := SaveRunState(workspaceDir, &RunState{RunID: "run-real-1"}); err != nil {
+	if err := SaveRunState(workspaceDir, &OutingState{OutingID: "run-real-1"}); err != nil {
 		t.Fatalf("SaveRunState error: %v", err)
 	}
 
@@ -87,8 +87,8 @@ func TestRealLapsDoneWrapupFlow(t *testing.T) {
 		t.Fatalf("len(entries) = %d, want 1", len(entries))
 	}
 	entry := entries[0]
-	if entry.RunID != "run-real-1" {
-		t.Errorf("RunID = %q, want run-real-1", entry.RunID)
+	if entry.OutingID != "run-real-1" {
+		t.Errorf("OutingID = %q, want run-real-1", entry.OutingID)
 	}
 	if entry.Summary != "Implemented auth" {
 		t.Errorf("Summary = %q, want Implemented auth", entry.Summary)
@@ -119,7 +119,7 @@ func TestRealLapsHandoffWrapupCreatesHeadFollowup(t *testing.T) {
 		t.Fatalf("InstallHooks error: %v", err)
 	}
 
-	if err := SaveRunState(workspaceDir, &RunState{RunID: "run-real-2"}); err != nil {
+	if err := SaveRunState(workspaceDir, &OutingState{OutingID: "run-real-2"}); err != nil {
 		t.Fatalf("SaveRunState error: %v", err)
 	}
 

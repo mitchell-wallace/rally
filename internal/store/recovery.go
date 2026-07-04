@@ -19,7 +19,7 @@ type RecoveryPendingStatus struct {
 	CapHit                   bool
 	ConsecutiveRecoveryRuns  int
 	TriggerLapID             string
-	ResolvingRunID           int
+	ResolvingOutingID        int
 	ResolvingTryID           int
 	ResolvingOutcome         reliability.TryOutcome
 	ResolvingDirtyHandoff    bool
@@ -107,9 +107,9 @@ func (s *Store) lapHasDirtyHandoffParent(lapID string, group map[string]bool) bo
 	return false
 }
 
-// runIdentity uniquely identifies a run across relay restarts. RunID is
+// runIdentity uniquely identifies a run across relay restarts. OutingID is
 // relay-local (each relay numbers its runs from 1), so two distinct runs in
-// different relays can share a RunID; pairing it with RelayID keeps them apart.
+// different relays can share a OutingID; pairing it with RelayID keeps them apart.
 type runIdentity struct {
 	relayID int
 	runID   int
@@ -118,10 +118,10 @@ type runIdentity struct {
 func resolvingTriesByRun(tries []TryRecord) []TryRecord {
 	latestByRun := make(map[runIdentity]TryRecord)
 	for _, tr := range tries {
-		if tr.RunID <= 0 {
+		if tr.OutingID <= 0 {
 			continue
 		}
-		key := runIdentity{relayID: tr.RelayID, runID: tr.RunID}
+		key := runIdentity{relayID: tr.RelayID, runID: tr.OutingID}
 		existing, ok := latestByRun[key]
 		if !ok || tr.AttemptNumber > existing.AttemptNumber || (tr.AttemptNumber == existing.AttemptNumber && tr.ID > existing.ID) {
 			latestByRun[key] = tr
@@ -133,7 +133,7 @@ func resolvingTriesByRun(tries []TryRecord) []TryRecord {
 		out = append(out, tr)
 	}
 	// Order by global try ID so runs are chronological across relay restarts.
-	// Relay-local RunID ordering would interleave or collapse runs from
+	// Relay-local OutingID ordering would interleave or collapse runs from
 	// different relays, breaking most-recent selection and consecutive
 	// recovery-cap counting.
 	sort.Slice(out, func(i, j int) bool {
@@ -167,7 +167,7 @@ func recoveryStatusFromRunResolvers(requestedLapID string, resolvers []TryRecord
 	}
 	status := RecoveryPendingStatus{
 		TriggerLapID:             triggerLapID,
-		ResolvingRunID:           latest.RunID,
+		ResolvingOutingID:        latest.OutingID,
 		ResolvingTryID:           latest.ID,
 		ResolvingOutcome:         latest.Outcome,
 		ResolvingDirtyHandoff:    latest.DirtyHandoff,

@@ -305,10 +305,10 @@ func TestRunOne_CancelledLapsAttemptDoesNotCaptureIncompleteFinalization(t *test
 	if err != nil {
 		t.Fatalf("LoadRunState error: %v", err)
 	}
-	if rs.RunID != "relay-1-run-1" || rs.PinnedLapID != "lap-1" {
-		t.Fatalf("run-state after cancellation = run_id %q pinned %q, want relay-1-run-1/lap-1", rs.RunID, rs.PinnedLapID)
+	if rs.OutingID != "relay-1-run-1" || rs.PinnedLapID != "lap-1" {
+		t.Fatalf("run-state after cancellation = run_id %q pinned %q, want relay-1-run-1/lap-1", rs.OutingID, rs.PinnedLapID)
 	}
-	if rs.ActiveRelayID != 0 || rs.ActiveRunID != 0 || rs.ActiveTryID != 0 || rs.ActiveLogPath != "" || rs.ActiveStartedAt != "" {
+	if rs.ActiveRelayID != 0 || rs.ActiveOutingID != 0 || rs.ActiveTryID != 0 || rs.ActiveLogPath != "" || rs.ActiveStartedAt != "" {
 		t.Fatalf("active try metadata not cleared after cancellation: %+v", rs)
 	}
 	if got := findFailureCount(sink, "without finalizing"); got != 0 {

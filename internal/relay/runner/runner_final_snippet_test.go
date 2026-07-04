@@ -34,8 +34,8 @@ func TestRunOneFinalSnippetUsesRecordedWrapupSummary(t *testing.T) {
 		fn: func(_ context.Context, opts harnessapi.RunOptions) (*harnessapi.TryResult, error) {
 			attempt++
 			if attempt == 1 {
-				if err := progress.AppendRunEntry(workspaceDir, progress.RunEntry{
-					RunID:         runID,
+				if err := progress.AppendOutingEntry(workspaceDir, progress.OutingEntry{
+					OutingID:      runID,
 					Summary:       wrapupSummary,
 					LapsCompleted: []string{"lap-1"},
 				}); err != nil {
@@ -390,9 +390,9 @@ func TestNormalizeFinalSnippetUsesExplicitIndicatorsWithoutUsableText(t *testing
 
 func TestNormalizeFinalSnippetIgnoresOlderRunSummaryEntry(t *testing.T) {
 	workspaceDir := t.TempDir()
-	if err := progress.AppendRunEntry(workspaceDir, progress.RunEntry{
-		RunID:   "relay-1-run-1",
-		Summary: "(agent exited without finalizing)",
+	if err := progress.AppendOutingEntry(workspaceDir, progress.OutingEntry{
+		OutingID: "relay-1-run-1",
+		Summary:  "(agent exited without finalizing)",
 	}); err != nil {
 		t.Fatal(err)
 	}

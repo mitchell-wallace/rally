@@ -120,7 +120,7 @@ func runFinalize(workspaceDir string, mode string, summary string, classificatio
 		return fmt.Errorf("load run state: %w", err)
 	}
 
-	runID := rs.RunID
+	runID := rs.OutingID
 	if runID == "" {
 		runID = time.Now().UTC().Format("20060102-150405")
 	}
@@ -135,8 +135,8 @@ func runFinalize(workspaceDir string, mode string, summary string, classificatio
 		}
 	}
 
-	entry := RunEntry{
-		RunID:          runID,
+	entry := OutingEntry{
+		OutingID:       runID,
 		Summary:        summary,
 		Classification: strings.TrimSpace(classification),
 		LapsCompleted:  lapsCompleted,
@@ -170,7 +170,7 @@ func runFinalize(workspaceDir string, mode string, summary string, classificatio
 		entry.Handoff = he
 	}
 
-	if err := AppendRunEntry(workspaceDir, entry); err != nil {
+	if err := AppendOutingEntry(workspaceDir, entry); err != nil {
 		return fmt.Errorf("append run entry: %w", err)
 	}
 

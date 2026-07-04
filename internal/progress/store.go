@@ -13,9 +13,9 @@ import (
 	"github.com/mitchell-wallace/rally/internal/store"
 )
 
-// RunEntry represents a single finalized run in the append-only summary log.
-type RunEntry struct {
-	RunID          string        `json:"run_id"`
+// OutingEntry represents a single finalized outing in the append-only summary log.
+type OutingEntry struct {
+	OutingID       string        `json:"outing_id"`
 	Summary        string        `json:"summary"`
 	Classification string        `json:"classification,omitempty"`
 	UpdatedAt      string        `json:"updated_at"`
@@ -41,29 +41,47 @@ func ProgressPath(workspaceDir string) string {
 	return SummaryPath(workspaceDir)
 }
 
-// LoadSummaryEntries reads the append-only summary log. Missing files return an
-// empty slice. Blank lines are ignored so a manually edited trailing newline is
-// harmless.
-func LoadSummaryEntries(workspaceDir string) ([]RunEntry, error) {
+// UnmarshalJSON accepts legacy run_id while new writes use outing_id.
+func (e *OutingEntry) UnmarshalJSON(data []byte) error {
+	type outingEntryAlias OutingEntry
+	var aux struct {
+		outingEntryAlias
+		OutingID *string `json:"outing_id"`
+		RunID    *string `json:"run_id"`
+	}
+	if err := json.Unmarshal(data, &aux); err != nil {
+		return err
+	}
+	*e = OutingEntry(aux.outingEntryAlias)
+	if err := assignCompatString(&e.OutingID, aux.OutingID, "outing_id", aux.RunID, "run_id"); err != nil {
+		return err
+	}
+	return nil
+}
+
+// LoadSummaryEntries reads the append-only outing summary log. Missing files
+// return an empty slice. Blank lines are ignored so a manually edited trailing
+// newline is harmless.
+func LoadSummaryEntries(workspaceDir string) ([]OutingEntry, error) {
 	path := SummaryPath(workspaceDir)
 	file, err := os.Open(path)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return []RunEntry{}, nil
+			return []OutingEntry{}, nil
 		}
 		return nil, err
 	}
 	defer file.Close()
 
 	reader := bufio.NewReader(file)
-	var entries []RunEntry
+	var entries []OutingEntry
 	lineNumber := 0
 	for {
 		line, err := reader.ReadBytes('\n')
 		if len(line) > 0 {
 			lineNumber++
 			if len(bytes.TrimSpace(line)) > 0 {
-				var entry RunEntry
+				var entry OutingEntry
 				if unmarshalErr := json.Unmarshal(line, &entry); unmarshalErr != nil {
 					return nil, fmt.Errorf("parse summary.jsonl line %d: %w", lineNumber, unmarshalErr)
 				}
@@ -81,8 +99,8 @@ func LoadSummaryEntries(workspaceDir string) ([]RunEntry, error) {
 	return entries, nil
 }
 
-// AppendRunEntry appends a finalized run or handoff summary as one JSON line.
-func AppendRunEntry(workspaceDir string, entry RunEntry) error {
+// AppendOutingEntry appends a finalized outing or handoff summary as one JSON line.
+func AppendOutingEntry(workspaceDir string, entry OutingEntry) error {
 	path := SummaryPath(workspaceDir)
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err
@@ -118,4 +136,30 @@ func AppendRunEntry(workspaceDir string, entry RunEntry) error {
 		return err
 	}
 	return file.Close()
+}
+
+func assignCompatString(dst *string, newValue *string, newKey string, oldValue *string, oldKey string) error {
+	if newValue != nil && oldValue != nil && *newValue != *oldValue {
+		return fmt.Errorf("conflicting %s and %s", newKey, oldKey)
+	}
+	switch {
+	case newValue != nil:
+		*dst = *newValue
+	case oldValue != nil:
+		*dst = *oldValue
+	}
+	return nil
+}
+
+func assignCompatInt(dst *int, newValue *int, newKey string, oldValue *int, oldKey string) error {
+	if newValue != nil && oldValue != nil && *newValue != *oldValue {
+		return fmt.Errorf("conflicting %s and %s", newKey, oldKey)
+	}
+	switch {
+	case newValue != nil:
+		*dst = *newValue
+	case oldValue != nil:
+		*dst = *oldValue
+	}
+	return nil
 }

@@ -115,8 +115,8 @@ func TestProgressComplete(t *testing.T) {
 	overrideWorkspaceDir(t, tmp)
 
 	// Seed run state with a run ID and some laps.
-	if err := SaveRunState(tmp, &RunState{
-		RunID:        "run-99",
+	if err := SaveRunState(tmp, &OutingState{
+		OutingID:     "run-99",
 		RecordedLaps: []string{"lap-1"},
 	}); err != nil {
 		t.Fatalf("SaveRunState error: %v", err)
@@ -150,8 +150,8 @@ func TestProgressComplete(t *testing.T) {
 		t.Fatalf("len(entries) = %d, want 1", len(entries))
 	}
 	entry := entries[0]
-	if entry.RunID != "run-99" {
-		t.Errorf("RunID = %q, want run-99", entry.RunID)
+	if entry.OutingID != "run-99" {
+		t.Errorf("OutingID = %q, want run-99", entry.OutingID)
 	}
 	if entry.Summary != "Did something" {
 		t.Errorf("Summary = %q, want Did something", entry.Summary)
@@ -173,8 +173,8 @@ func TestProgressHandoff(t *testing.T) {
 	tmp := setupTempWorkspace(t)
 	overrideWorkspaceDir(t, tmp)
 
-	if err := SaveRunState(tmp, &RunState{
-		RunID:        "run-88",
+	if err := SaveRunState(tmp, &OutingState{
+		OutingID:     "run-88",
 		RecordedLaps: []string{"lap-a"},
 	}); err != nil {
 		t.Fatalf("SaveRunState error: %v", err)
@@ -204,8 +204,8 @@ func TestProgressHandoff(t *testing.T) {
 		t.Fatalf("len(entries) = %d, want 1", len(entries))
 	}
 	entry := entries[0]
-	if entry.RunID != "run-88" {
-		t.Errorf("RunID = %q, want run-88", entry.RunID)
+	if entry.OutingID != "run-88" {
+		t.Errorf("OutingID = %q, want run-88", entry.OutingID)
 	}
 	if entry.Handoff == nil {
 		t.Fatal("expected Handoff to be present")
@@ -227,8 +227,8 @@ func TestProgressWrapupNoHandoff(t *testing.T) {
 	enableLapsInWorkspace(t, tmp)
 	overrideWorkspaceDir(t, tmp)
 
-	if err := SaveRunState(tmp, &RunState{
-		RunID:        "run-77",
+	if err := SaveRunState(tmp, &OutingState{
+		OutingID:     "run-77",
 		HandoffState: 0,
 		RecordedLaps: []string{},
 	}); err != nil {
@@ -265,8 +265,8 @@ func TestProgressWrapupWithHandoff(t *testing.T) {
 	tmp := setupTempWorkspace(t)
 	overrideWorkspaceDir(t, tmp)
 
-	if err := SaveRunState(tmp, &RunState{
-		RunID:        "run-66",
+	if err := SaveRunState(tmp, &OutingState{
+		OutingID:     "run-66",
 		HandoffState: 1,
 		RecordedLaps: []string{},
 	}); err != nil {
@@ -359,11 +359,11 @@ func TestProgressPublicCompleteShorthand(t *testing.T) {
 	}
 }
 
-func TestProgressCompleteGeneratesRunID(t *testing.T) {
+func TestProgressCompleteGeneratesOutingID(t *testing.T) {
 	tmp := setupTempWorkspace(t)
 	overrideWorkspaceDir(t, tmp)
 
-	// No run state file => LoadRunState returns empty RunID.
+	// No run state file => LoadRunState returns empty OutingID.
 	cmd := NewProgressCmd()
 	cmd.SetArgs([]string{
 		"--complete",
@@ -380,8 +380,8 @@ func TestProgressCompleteGeneratesRunID(t *testing.T) {
 	if len(entries) != 1 {
 		t.Fatalf("len(entries) = %d, want 1", len(entries))
 	}
-	if entries[0].RunID == "" {
-		t.Errorf("expected generated RunID, got empty")
+	if entries[0].OutingID == "" {
+		t.Errorf("expected generated OutingID, got empty")
 	}
 }
 
@@ -390,7 +390,7 @@ func TestProgressHandoffTruncatesTitle(t *testing.T) {
 	tmp := setupTempWorkspace(t)
 	overrideWorkspaceDir(t, tmp)
 
-	if err := SaveRunState(tmp, &RunState{RunID: "run-55"}); err != nil {
+	if err := SaveRunState(tmp, &OutingState{OutingID: "run-55"}); err != nil {
 		t.Fatalf("SaveRunState error: %v", err)
 	}
 
@@ -424,7 +424,7 @@ func TestProgressHandoffLapFailureStillWritesEntry(t *testing.T) {
 	tmp := setupTempWorkspace(t)
 	overrideWorkspaceDir(t, tmp)
 
-	if err := SaveRunState(tmp, &RunState{RunID: "run-44"}); err != nil {
+	if err := SaveRunState(tmp, &OutingState{OutingID: "run-44"}); err != nil {
 		t.Fatalf("SaveRunState error: %v", err)
 	}
 

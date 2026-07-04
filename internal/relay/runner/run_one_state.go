@@ -15,7 +15,7 @@ func (r *Runner) newRunOneState(relay *store.RelayRecord, runIndex int, task run
 	runID := fmt.Sprintf("relay-%d-run-%d", relay.ID, runIndex+1)
 	rc := r.rallyContext(relay)
 	summaryEntryCountBeforeRun := progressSummaryEntryCount(r.cfg.WorkspaceDir)
-	_ = progress.SaveRunState(r.cfg.WorkspaceDir, newProgressRunState(runID, task.LapID))
+	_ = progress.SaveRunState(r.cfg.WorkspaceDir, newProgressOutingState(runID, task.LapID))
 
 	inbox := ""
 	if consumedMsg != nil {

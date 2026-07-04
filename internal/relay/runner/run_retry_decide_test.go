@@ -67,7 +67,7 @@ func TestResumeRetryPassesSessionID(t *testing.T) {
 	}
 }
 
-func TestResumeRetryPreservesRunState(t *testing.T) {
+func TestResumeRetryPreservesOutingState(t *testing.T) {
 	oldHeadPull := headPullLap
 	headPullLap = func(context.Context, string) (laps.Lap, error) { return laps.Lap{Title: "test"}, nil }
 	defer func() { headPullLap = oldHeadPull }()
@@ -123,7 +123,7 @@ func TestResumeRetryPreservesRunState(t *testing.T) {
 	}
 }
 
-func TestFreshStartRetryClearsRunState(t *testing.T) {
+func TestFreshStartRetryClearsOutingState(t *testing.T) {
 	oldHeadPull := headPullLap
 	headPullLap = func(context.Context, string) (laps.Lap, error) { return laps.Lap{Title: "test"}, nil }
 	defer func() { headPullLap = oldHeadPull }()
@@ -193,7 +193,7 @@ func TestResumeRetryMidHandoffPreservesFlag(t *testing.T) {
 
 	s := newTestStore(t, rallyDir)
 	attempt := 0
-	var runStateAtAttempt2 *progress.RunState
+	var runStateAtAttempt2 *progress.OutingState
 	exec := &funcExecutor{
 		resumeSupported: true,
 		fn: func(ctx context.Context, opts harnessapi.RunOptions) (*harnessapi.TryResult, error) {
@@ -254,7 +254,7 @@ func TestFreshStartRetryMidHandoffClearsFlag(t *testing.T) {
 
 	s := newTestStore(t, rallyDir)
 	attempt := 0
-	var runStateAtAttempt2 *progress.RunState
+	var runStateAtAttempt2 *progress.OutingState
 	exec := &funcExecutor{
 		resumeSupported: false,
 		fn: func(ctx context.Context, opts harnessapi.RunOptions) (*harnessapi.TryResult, error) {

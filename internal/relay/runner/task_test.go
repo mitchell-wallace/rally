@@ -639,14 +639,14 @@ func TestBuildRecentContext_PerSummaryTruncation(t *testing.T) {
 	longSummary := strings.Repeat("abcdefghij", 20)
 
 	tries := []store.TryRecord{
-		{RunID: 1, AgentType: "claude", Completed: true, Summary: longSummary},
-		{RunID: 2, AgentType: "codex", Completed: false, Summary: longSummary},
+		{OutingID: 1, AgentType: "claude", Completed: true, Summary: longSummary},
+		{OutingID: 2, AgentType: "codex", Completed: false, Summary: longSummary},
 	}
 
 	result := buildRecentContext(tries, 50, 0)
 	for _, tr := range tries {
-		if !strings.Contains(result, fmt.Sprintf("Run %d (%s)", tr.RunID, tr.AgentType)) {
-			t.Errorf("expected mention of run %d", tr.RunID)
+		if !strings.Contains(result, fmt.Sprintf("Run %d (%s)", tr.OutingID, tr.AgentType)) {
+			t.Errorf("expected mention of run %d", tr.OutingID)
 		}
 	}
 	if !strings.Contains(result, "... [truncated] ...") {
@@ -659,7 +659,7 @@ func TestBuildRecentContext_OverallTruncation(t *testing.T) {
 	tries := []store.TryRecord{}
 	for i := 1; i <= 20; i++ {
 		tries = append(tries, store.TryRecord{
-			RunID: i, AgentType: "claude", Completed: true, Summary: mediumSummary,
+			OutingID: i, AgentType: "claude", Completed: true, Summary: mediumSummary,
 		})
 	}
 
@@ -672,7 +672,7 @@ func TestBuildRecentContext_OverallTruncation(t *testing.T) {
 func TestPromptBudget_PerSummaryTruncation(t *testing.T) {
 	longSummary := strings.Repeat("x", 500)
 	tries := []store.TryRecord{
-		{RunID: 1, AgentType: "claude", Completed: false, Summary: longSummary},
+		{OutingID: 1, AgentType: "claude", Completed: false, Summary: longSummary},
 	}
 	result := buildRecentContext(tries, 100, 0)
 	if !strings.Contains(result, "... [truncated] ...") {
@@ -693,8 +693,8 @@ func TestPromptBudget_PerSummaryTruncation(t *testing.T) {
 
 func TestPromptBudget_ShortSummariesPassThrough(t *testing.T) {
 	tries := []store.TryRecord{
-		{RunID: 1, AgentType: "claude", Completed: true, Summary: "short"},
-		{RunID: 2, AgentType: "opencode", Completed: false, Summary: "also short"},
+		{OutingID: 1, AgentType: "claude", Completed: true, Summary: "short"},
+		{OutingID: 2, AgentType: "opencode", Completed: false, Summary: "also short"},
 	}
 	result := buildRecentContext(tries, 1000, 0)
 	if strings.Contains(result, "... [truncated] ...") {
@@ -711,7 +711,7 @@ func TestPromptBudget_ShortSummariesPassThrough(t *testing.T) {
 func TestBuildRecentContextCancelledUsesOutcome(t *testing.T) {
 	tries := []store.TryRecord{
 		{
-			RunID:              1,
+			OutingID:           1,
 			AgentType:          "codex",
 			Completed:          false,
 			Outcome:            reliability.OutcomeCancelled,
@@ -732,7 +732,7 @@ func TestBuildRecentContextCancelledUsesOutcome(t *testing.T) {
 func TestPromptBudget_CountHonored(t *testing.T) {
 	var tries []store.TryRecord
 	for i := 1; i <= 3; i++ {
-		tries = append(tries, store.TryRecord{RunID: i, AgentType: "claude", Completed: true, Summary: fmt.Sprintf("try %d", i)})
+		tries = append(tries, store.TryRecord{OutingID: i, AgentType: "claude", Completed: true, Summary: fmt.Sprintf("try %d", i)})
 	}
 	result := buildRecentContext(tries, 0, 0)
 	for i := 1; i <= 3; i++ {
@@ -744,8 +744,8 @@ func TestPromptBudget_CountHonored(t *testing.T) {
 
 func TestPromptBudget_OverallLimit(t *testing.T) {
 	tries := []store.TryRecord{
-		{RunID: 1, AgentType: "claude", Completed: false, Summary: strings.Repeat("a", 200)},
-		{RunID: 2, AgentType: "claude", Completed: false, Summary: strings.Repeat("b", 200)},
+		{OutingID: 1, AgentType: "claude", Completed: false, Summary: strings.Repeat("a", 200)},
+		{OutingID: 2, AgentType: "claude", Completed: false, Summary: strings.Repeat("b", 200)},
 	}
 	result := buildRecentContext(tries, 0, 200)
 	if !strings.Contains(result, "... [truncated] ...") {

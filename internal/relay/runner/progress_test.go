@@ -100,26 +100,26 @@ func TestStubEntryOnIncompleteRun(t *testing.T) {
 
 func TestProgressLapsCompletedForRunReadsSummaryJSONL(t *testing.T) {
 	workspaceDir := t.TempDir()
-	if err := progress.AppendRunEntry(workspaceDir, progress.RunEntry{
-		RunID:         "run-1",
+	if err := progress.AppendOutingEntry(workspaceDir, progress.OutingEntry{
+		OutingID:      "run-1",
 		Summary:       "first",
 		LapsCompleted: []string{"lap-a", "lap-b"},
 	}); err != nil {
-		t.Fatalf("AppendRunEntry error: %v", err)
+		t.Fatalf("AppendOutingEntry error: %v", err)
 	}
-	if err := progress.AppendRunEntry(workspaceDir, progress.RunEntry{
-		RunID:         "run-2",
+	if err := progress.AppendOutingEntry(workspaceDir, progress.OutingEntry{
+		OutingID:      "run-2",
 		Summary:       "other",
 		LapsCompleted: []string{"lap-c"},
 	}); err != nil {
-		t.Fatalf("AppendRunEntry error: %v", err)
+		t.Fatalf("AppendOutingEntry error: %v", err)
 	}
-	if err := progress.AppendRunEntry(workspaceDir, progress.RunEntry{
-		RunID:         "run-1",
+	if err := progress.AppendOutingEntry(workspaceDir, progress.OutingEntry{
+		OutingID:      "run-1",
 		Summary:       "second",
 		LapsCompleted: "lap-d",
 	}); err != nil {
-		t.Fatalf("AppendRunEntry error: %v", err)
+		t.Fatalf("AppendOutingEntry error: %v", err)
 	}
 
 	got := progressLapsCompletedForRun(workspaceDir, "run-1")

@@ -36,7 +36,7 @@ func (r *Runner) printRelaySummary(relay *store.RelayRecord) {
 }
 
 // tallyRuns aggregates try records into run-level pass/fail/cancelled counts
-// for the given relay. Each run (identified by RunID) is counted exactly once:
+// for the given relay. Each run (identified by OutingID) is counted exactly once:
 // it passes if any attempt ultimately completed, is cancelled if no attempt
 // completed and an operator-cancelled attempt resolved the run, and fails only
 // when every attempt exhausted without completion or cancellation.
@@ -51,9 +51,9 @@ func tallyRuns(tries []store.TryRecord, relayID int) (passCount, failCount, canc
 		if tr.RelayID != relayID {
 			continue
 		}
-		state, seen := byRun[tr.RunID]
+		state, seen := byRun[tr.OutingID]
 		if !seen {
-			order = append(order, tr.RunID)
+			order = append(order, tr.OutingID)
 		}
 		if tr.Completed || tr.Outcome.IsSuccess() {
 			state.completed = true
@@ -61,7 +61,7 @@ func tallyRuns(tries []store.TryRecord, relayID int) (passCount, failCount, canc
 		if tr.Outcome == reliability.OutcomeCancelled {
 			state.cancelled = true
 		}
-		byRun[tr.RunID] = state
+		byRun[tr.OutingID] = state
 	}
 	for _, runID := range order {
 		state := byRun[runID]

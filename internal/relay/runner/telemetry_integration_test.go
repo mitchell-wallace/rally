@@ -175,7 +175,7 @@ func TestTelemetry_PromptBreakdown(t *testing.T) {
 	// Add a dummy try record to the store to populate recent context
 	dummyTry := store.TryRecord{
 		ID:        999,
-		RunID:     1,
+		OutingID:  1,
 		RelayID:   1, // active relay ID will be 1
 		AgentType: "antigravity",
 		Completed: false,

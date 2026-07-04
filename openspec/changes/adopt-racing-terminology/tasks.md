@@ -7,7 +7,7 @@
 
 ## 2. Tier 2 - Go Identifiers and Operator Prose
 
-- [ ] 2.1 Store+persistence chunk: rename entity-bearing store/progress identifiers (`RunID`, `RunEntry`, active run metadata, message consumption run fields) to outing forms, keeping behavior unchanged.
+- [x] 2.1 Store+persistence chunk: rename entity-bearing store/progress identifiers (`RunID`, `RunEntry`, active run metadata, message consumption run fields) to outing forms, keeping behavior unchanged.
 - [ ] 2.2 Runtimeevent+presentation chunk: rename `RunHeaderReady` family and payload fields (`RunIndex`, `TotalRuns`) to outing forms; update terminal and surviving TUI adapters.
 - [ ] 2.3 Runner internals+telemetry-label chunk: rename harness+model internal variables/helpers from runner to driver where they are not the orchestrator package/type or external telemetry keys.
 - [ ] 2.4 CLI prose chunk: update headers (`run: X/Y`), summaries (`N runs`), TUI fallback titles (`run %d`), and exact string tests to outing wording.
@@ -15,11 +15,11 @@
 
 ## 3. Tier 3 - Tolerant Persisted-State Readers
 
-- [ ] 3.1 Add custom JSON handling for `.rally/tries.jsonl`: write `outing_id`; read old `run_id`, new `outing_id`, equal-both, and reject conflicting both.
-- [ ] 3.2 Add custom JSON handling for `.rally/summary.jsonl`: write `outing_id`; read old `run_id`, new `outing_id`, equal-both, and reject conflicting both.
-- [ ] 3.3 Add custom JSON handling for `.rally/state/run-state.json`: write `outing_id` and `active_outing_id`; read old `run_id` and `active_run_id`; reject conflicts.
-- [ ] 3.4 Add custom JSON handling for message records: write `consumed_by_outing_id`; read old `consumed_by_run_id`; reject conflicts.
-- [ ] 3.5 Add regression fixtures/tests proving old checked-in Rally state loads and new state writes only new keys.
+- [x] 3.1 Add custom JSON handling for `.rally/tries.jsonl`: write `outing_id`; read old `run_id`, new `outing_id`, equal-both, and reject conflicting both.
+- [x] 3.2 Add custom JSON handling for `.rally/summary.jsonl`: write `outing_id`; read old `run_id`, new `outing_id`, equal-both, and reject conflicting both.
+- [x] 3.3 Add custom JSON handling for `.rally/state/run-state.json`: write `outing_id` and `active_outing_id`; read old `run_id` and `active_run_id`; reject conflicts.
+- [x] 3.4 Add custom JSON handling for message records: write `consumed_by_outing_id`; read old `consumed_by_run_id`; reject conflicts.
+- [x] 3.5 Add regression fixtures/tests proving old checked-in Rally state loads and new state writes only new keys.
 
 ## 4. Tier 4 - Alias and External Compatibility Surface
 

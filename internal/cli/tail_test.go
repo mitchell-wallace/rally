@@ -381,7 +381,7 @@ func TestTailActiveMetadata(t *testing.T) {
 
 	err = progress.SetActiveTry(dir, progress.ActiveTryMetadata{
 		RelayID:   1,
-		RunID:     1,
+		OutingID:  1,
 		TryID:     2,
 		LogPath:   activeLog1,
 		StartedAt: time.Now(),
@@ -415,7 +415,7 @@ func TestTailActiveMetadata(t *testing.T) {
 	activeLogMissing := filepath.Join(dir, "missing.log")
 	err = progress.SetActiveTry(dir, progress.ActiveTryMetadata{
 		RelayID:   1,
-		RunID:     1,
+		OutingID:  1,
 		TryID:     2,
 		LogPath:   activeLogMissing,
 		StartedAt: time.Now(),
@@ -440,7 +440,7 @@ func TestTailActiveMetadata(t *testing.T) {
 
 	err = progress.SetActiveTry(dir, progress.ActiveTryMetadata{
 		RelayID:   2,
-		RunID:     1,
+		OutingID:  1,
 		TryID:     3,
 		LogPath:   activeLog2,
 		StartedAt: time.Now(),
@@ -464,7 +464,7 @@ func TestTailActiveMetadata(t *testing.T) {
 
 	err = progress.SetActiveTry(dir, progress.ActiveTryMetadata{
 		RelayID:   3,
-		RunID:     1,
+		OutingID:  1,
 		TryID:     4,
 		LogPath:   activeLog3,
 		StartedAt: time.Now().Add(-25 * time.Hour),
@@ -514,7 +514,7 @@ func TestTailActiveMetadataWarnsAndFallsBack(t *testing.T) {
 
 	if err := progress.SetActiveTry(dir, progress.ActiveTryMetadata{
 		RelayID:   1,
-		RunID:     1,
+		OutingID:  1,
 		TryID:     3,
 		LogPath:   filepath.Join(dir, "missing.log"),
 		StartedAt: time.Now(),
@@ -567,7 +567,7 @@ func TestTailActiveMetadataRecordedTryFallsBack(t *testing.T) {
 
 	if err := progress.SetActiveTry(dir, progress.ActiveTryMetadata{
 		RelayID:   1,
-		RunID:     1,
+		OutingID:  1,
 		TryID:     1,
 		LogPath:   staleLog,
 		StartedAt: time.Now(),

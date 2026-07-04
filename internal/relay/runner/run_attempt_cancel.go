@@ -55,7 +55,7 @@ func (r *Runner) recordCancelledAttempt(relay *store.RelayRecord, runIndex int, 
 
 	tryRecord := store.TryRecord{
 		ID:                     attempt.tryID,
-		RunID:                  runIndex + 1,
+		OutingID:               runIndex + 1,
 		RelayID:                relay.ID,
 		AgentType:              picked.Harness,
 		Completed:              false,

@@ -54,7 +54,7 @@ func recordedWrapupSummaryForRun(workspaceDir, runID string, firstNewEntry int) 
 	}
 	for i := len(entries) - 1; i >= firstNewEntry; i-- {
 		entry := entries[i]
-		if entry.RunID != runID {
+		if entry.OutingID != runID {
 			continue
 		}
 		if strings.TrimSpace(entry.Summary) != "" {

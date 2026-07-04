@@ -22,12 +22,12 @@ func loadTuiFeedSeed(workspaceDir string) ([]tuicore.FeedItem, error) {
 	if err != nil {
 		return nil, err
 	}
-	summaryByRunID := make(map[string]progress.RunEntry, len(summaries))
+	summaryByOutingID := make(map[string]progress.OutingEntry, len(summaries))
 	for _, entry := range summaries {
-		if strings.TrimSpace(entry.RunID) == "" {
+		if strings.TrimSpace(entry.OutingID) == "" {
 			continue
 		}
-		summaryByRunID[entry.RunID] = entry
+		summaryByOutingID[entry.OutingID] = entry
 	}
 
 	items := make([]tuicore.FeedItem, 0, len(tries))
@@ -36,10 +36,10 @@ func loadTuiFeedSeed(workspaceDir string) ([]tuicore.FeedItem, error) {
 			continue
 		}
 		item := tryRecordToFeedItem(tr)
-		if entry, ok := summaryByRunID[strconv.Itoa(tr.RunID)]; ok {
+		if entry, ok := summaryByOutingID[strconv.Itoa(tr.OutingID)]; ok {
 			enrichFeedItem(&item, entry)
 		} else if tr.LapID != "" {
-			if entry, ok := summaryByRunID[tr.LapID]; ok {
+			if entry, ok := summaryByOutingID[tr.LapID]; ok {
 				enrichFeedItem(&item, entry)
 			}
 		}
@@ -63,10 +63,10 @@ func tryRecordToFeedItem(tr store.TryRecord) tuicore.FeedItem {
 	}
 	title := feedTitleFromTry(tr)
 	if title == "" {
-		title = fmt.Sprintf("run %d", tr.RunID)
+		title = fmt.Sprintf("run %d", tr.OutingID)
 	}
 	return tuicore.FeedItem{
-		RunIndex:       tr.RunID,
+		RunIndex:       tr.OutingID,
 		Agent:          tr.AgentType,
 		RoleLabel:      tr.LapAssignee,
 		Title:          tui2FirstLine(title),
@@ -102,7 +102,7 @@ func outcomeFromTry(tr store.TryRecord) string {
 	}
 }
 
-func enrichFeedItem(item *tuicore.FeedItem, entry progress.RunEntry) {
+func enrichFeedItem(item *tuicore.FeedItem, entry progress.OutingEntry) {
 	item.Summary = entry.Summary
 	item.Classification = entry.Classification
 	if title := tui2FirstLine(entry.Summary); title != "" {

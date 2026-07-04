@@ -11,8 +11,8 @@ func TestTallyRunsRetryThenSuccess(t *testing.T) {
 	// One run, two attempts: the first fails, the second completes. The run
 	// should count as a single pass and zero failures.
 	tries := []store.TryRecord{
-		{ID: 1, RelayID: 1, RunID: 1, AttemptNumber: 1, Completed: false},
-		{ID: 2, RelayID: 1, RunID: 1, AttemptNumber: 2, Completed: true},
+		{ID: 1, RelayID: 1, OutingID: 1, AttemptNumber: 1, Completed: false},
+		{ID: 2, RelayID: 1, OutingID: 1, AttemptNumber: 2, Completed: true},
 	}
 
 	pass, fail, cancelled := tallyRuns(tries, 1)
@@ -24,9 +24,9 @@ func TestTallyRunsRetryThenSuccess(t *testing.T) {
 func TestTallyRunsAllExhausted(t *testing.T) {
 	// One run, all attempts exhausted without completion: one failure.
 	tries := []store.TryRecord{
-		{ID: 1, RelayID: 1, RunID: 1, AttemptNumber: 1, Completed: false},
-		{ID: 2, RelayID: 1, RunID: 1, AttemptNumber: 2, Completed: false},
-		{ID: 3, RelayID: 1, RunID: 1, AttemptNumber: 3, Completed: false},
+		{ID: 1, RelayID: 1, OutingID: 1, AttemptNumber: 1, Completed: false},
+		{ID: 2, RelayID: 1, OutingID: 1, AttemptNumber: 2, Completed: false},
+		{ID: 3, RelayID: 1, OutingID: 1, AttemptNumber: 3, Completed: false},
 	}
 
 	pass, fail, cancelled := tallyRuns(tries, 1)
@@ -39,12 +39,12 @@ func TestTallyRunsAggregatesMultipleRuns(t *testing.T) {
 	// Two runs in the relay: run 1 succeeds after a retry, run 2 exhausts its
 	// budget. Tries from a different relay must be ignored entirely.
 	tries := []store.TryRecord{
-		{ID: 1, RelayID: 1, RunID: 1, AttemptNumber: 1, Completed: false},
-		{ID: 2, RelayID: 1, RunID: 1, AttemptNumber: 2, Completed: true},
-		{ID: 3, RelayID: 1, RunID: 2, AttemptNumber: 1, Completed: false},
-		{ID: 4, RelayID: 1, RunID: 2, AttemptNumber: 2, Completed: false},
+		{ID: 1, RelayID: 1, OutingID: 1, AttemptNumber: 1, Completed: false},
+		{ID: 2, RelayID: 1, OutingID: 1, AttemptNumber: 2, Completed: true},
+		{ID: 3, RelayID: 1, OutingID: 2, AttemptNumber: 1, Completed: false},
+		{ID: 4, RelayID: 1, OutingID: 2, AttemptNumber: 2, Completed: false},
 		// Different relay — should not be counted.
-		{ID: 5, RelayID: 2, RunID: 3, AttemptNumber: 1, Completed: false},
+		{ID: 5, RelayID: 2, OutingID: 3, AttemptNumber: 1, Completed: false},
 	}
 
 	pass, fail, cancelled := tallyRuns(tries, 1)
@@ -55,9 +55,9 @@ func TestTallyRunsAggregatesMultipleRuns(t *testing.T) {
 
 func TestTallyRunsCancelledNotFailed(t *testing.T) {
 	tries := []store.TryRecord{
-		{ID: 1, RelayID: 1, RunID: 1, AttemptNumber: 1, Completed: false, Outcome: reliability.OutcomeCancelled, CancellationSource: "skip"},
-		{ID: 2, RelayID: 1, RunID: 2, AttemptNumber: 1, Completed: false, Outcome: reliability.OutcomeFailed},
-		{ID: 3, RelayID: 1, RunID: 3, AttemptNumber: 1, Completed: true, Outcome: reliability.OutcomeCompleted},
+		{ID: 1, RelayID: 1, OutingID: 1, AttemptNumber: 1, Completed: false, Outcome: reliability.OutcomeCancelled, CancellationSource: "skip"},
+		{ID: 2, RelayID: 1, OutingID: 2, AttemptNumber: 1, Completed: false, Outcome: reliability.OutcomeFailed},
+		{ID: 3, RelayID: 1, OutingID: 3, AttemptNumber: 1, Completed: true, Outcome: reliability.OutcomeCompleted},
 	}
 
 	pass, fail, cancelled := tallyRuns(tries, 1)
@@ -68,10 +68,10 @@ func TestTallyRunsCancelledNotFailed(t *testing.T) {
 
 func TestTallyRunsAllCancellationSourcesNotFailed(t *testing.T) {
 	tries := []store.TryRecord{
-		{ID: 1, RelayID: 1, RunID: 1, AttemptNumber: 1, Completed: false, Outcome: reliability.OutcomeCancelled, CancellationSource: "skip"},
-		{ID: 2, RelayID: 1, RunID: 2, AttemptNumber: 1, Completed: false, Outcome: reliability.OutcomeCancelled, CancellationSource: "graceful_stop"},
-		{ID: 3, RelayID: 1, RunID: 3, AttemptNumber: 1, Completed: false, Outcome: reliability.OutcomeCancelled, CancellationSource: "quit_now"},
-		{ID: 4, RelayID: 1, RunID: 4, AttemptNumber: 1, Completed: false, Outcome: reliability.OutcomeFailed},
+		{ID: 1, RelayID: 1, OutingID: 1, AttemptNumber: 1, Completed: false, Outcome: reliability.OutcomeCancelled, CancellationSource: "skip"},
+		{ID: 2, RelayID: 1, OutingID: 2, AttemptNumber: 1, Completed: false, Outcome: reliability.OutcomeCancelled, CancellationSource: "graceful_stop"},
+		{ID: 3, RelayID: 1, OutingID: 3, AttemptNumber: 1, Completed: false, Outcome: reliability.OutcomeCancelled, CancellationSource: "quit_now"},
+		{ID: 4, RelayID: 1, OutingID: 4, AttemptNumber: 1, Completed: false, Outcome: reliability.OutcomeFailed},
 	}
 
 	pass, fail, cancelled := tallyRuns(tries, 1)
@@ -82,8 +82,8 @@ func TestTallyRunsAllCancellationSourcesNotFailed(t *testing.T) {
 
 func TestTallyRunsCompletionWinsOverEarlierCancellation(t *testing.T) {
 	tries := []store.TryRecord{
-		{ID: 1, RelayID: 1, RunID: 1, AttemptNumber: 1, Completed: false, Outcome: reliability.OutcomeCancelled, CancellationSource: "skip"},
-		{ID: 2, RelayID: 1, RunID: 1, AttemptNumber: 2, Completed: true, Outcome: reliability.OutcomeCompleted},
+		{ID: 1, RelayID: 1, OutingID: 1, AttemptNumber: 1, Completed: false, Outcome: reliability.OutcomeCancelled, CancellationSource: "skip"},
+		{ID: 2, RelayID: 1, OutingID: 1, AttemptNumber: 2, Completed: true, Outcome: reliability.OutcomeCompleted},
 	}
 
 	pass, fail, cancelled := tallyRuns(tries, 1)

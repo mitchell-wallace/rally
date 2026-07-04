@@ -105,9 +105,9 @@ func TestRunOneRecordsHandoffRequestedOutcome(t *testing.T) {
 			if err := os.WriteFile(filepath.Join(workspaceDir, "work.txt"), []byte("done\n"), 0o644); err != nil {
 				return nil, err
 			}
-			if err := progress.AppendRunEntry(workspaceDir, progress.RunEntry{
-				RunID:   "relay-1-run-1",
-				Summary: "blocked cleanly",
+			if err := progress.AppendOutingEntry(workspaceDir, progress.OutingEntry{
+				OutingID: "relay-1-run-1",
+				Summary:  "blocked cleanly",
 				Handoff: &progress.HandoffEntry{
 					Summary:       "blocked cleanly",
 					Followups:     []string{"follow up"},
@@ -205,9 +205,9 @@ func TestRunOneCleanHandoffDoesNotSetDirtyRecoveryMetadata(t *testing.T) {
 	s := newTestStore(t, rallyDir)
 	exec := &funcExecutor{
 		fn: func(ctx context.Context, opts harnessapi.RunOptions) (*harnessapi.TryResult, error) {
-			if err := progress.AppendRunEntry(workspaceDir, progress.RunEntry{
-				RunID:   "relay-1-run-1",
-				Summary: "blocked cleanly",
+			if err := progress.AppendOutingEntry(workspaceDir, progress.OutingEntry{
+				OutingID: "relay-1-run-1",
+				Summary:  "blocked cleanly",
 				Handoff: &progress.HandoffEntry{
 					Summary:       "blocked cleanly",
 					Followups:     []string{"follow up"},
@@ -289,9 +289,9 @@ func TestRunOneRetryThenDirtyHandoffUsesRunScopedDirtyDetection(t *testing.T) {
 				}
 				return &harnessapi.TryResult{Completed: false, Summary: "partial"}, nil
 			}
-			if err := progress.AppendRunEntry(workspaceDir, progress.RunEntry{
-				RunID:   "relay-1-run-1",
-				Summary: "blocked after retry",
+			if err := progress.AppendOutingEntry(workspaceDir, progress.OutingEntry{
+				OutingID: "relay-1-run-1",
+				Summary:  "blocked after retry",
 				Handoff: &progress.HandoffEntry{
 					Summary:       "blocked after retry",
 					Followups:     []string{"follow up"},
@@ -680,8 +680,8 @@ func TestRunOneRecoveryClassificationPersistence(t *testing.T) {
 				if err := progress.RecordLap(workspaceDir, "lap-1"); err != nil {
 					return err
 				}
-				return progress.AppendRunEntry(workspaceDir, progress.RunEntry{
-					RunID:          "relay-1-run-1",
+				return progress.AppendOutingEntry(workspaceDir, progress.OutingEntry{
+					OutingID:       "relay-1-run-1",
 					Summary:        "done",
 					Classification: "course_correct",
 				})
@@ -693,8 +693,8 @@ func TestRunOneRecoveryClassificationPersistence(t *testing.T) {
 			name: "recovery handoff records valid classification",
 			task: runTask{Name: "task", Prompt: "do work", Assignee: "senior", EffectiveAssignee: "recovery", ResolvedRoute: "recovery", LapID: "lap-1", IsLapsBacked: true, LapsRemaining: 1},
 			recordWrapup: func(workspaceDir string) error {
-				return progress.AppendRunEntry(workspaceDir, progress.RunEntry{
-					RunID:          "relay-1-run-1",
+				return progress.AppendOutingEntry(workspaceDir, progress.OutingEntry{
+					OutingID:       "relay-1-run-1",
 					Summary:        "handoff",
 					Classification: "discard",
 					Handoff: &progress.HandoffEntry{
@@ -717,8 +717,8 @@ func TestRunOneRecoveryClassificationPersistence(t *testing.T) {
 				if err := progress.RecordLap(workspaceDir, "lap-1"); err != nil {
 					return err
 				}
-				return progress.AppendRunEntry(workspaceDir, progress.RunEntry{
-					RunID:          "relay-1-run-1",
+				return progress.AppendOutingEntry(workspaceDir, progress.OutingEntry{
+					OutingID:       "relay-1-run-1",
 					Summary:        "done",
 					Classification: "continue",
 				})
@@ -735,8 +735,8 @@ func TestRunOneRecoveryClassificationPersistence(t *testing.T) {
 				if err := progress.RecordLap(workspaceDir, "lap-1"); err != nil {
 					return err
 				}
-				return progress.AppendRunEntry(workspaceDir, progress.RunEntry{
-					RunID:          "relay-1-run-1",
+				return progress.AppendOutingEntry(workspaceDir, progress.OutingEntry{
+					OutingID:       "relay-1-run-1",
 					Summary:        "done",
 					Classification: "bogus",
 				})

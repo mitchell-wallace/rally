@@ -76,7 +76,7 @@ func (r *Runner) emitAttemptOutcomeFooter(state *runOneState, attempt *runAttemp
 func buildTryRecord(relay *store.RelayRecord, runIndex int, picked harnessapi.ResolvedAgent, task runTask, state *runOneState, attempt *runAttemptState) store.TryRecord {
 	tryRecord := store.TryRecord{
 		ID:                     attempt.tryID,
-		RunID:                  runIndex + 1,
+		OutingID:               runIndex + 1,
 		RelayID:                relay.ID,
 		AgentType:              picked.Harness,
 		Completed:              !attempt.failed,

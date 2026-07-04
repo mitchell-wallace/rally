@@ -10,8 +10,8 @@ func TestE2E_LapsEnabledComplete(t *testing.T) {
 	enableLapsInWorkspace(t, tmp)
 	overrideWorkspaceDir(t, tmp)
 
-	if err := SaveRunState(tmp, &RunState{
-		RunID:        "run-1",
+	if err := SaveRunState(tmp, &OutingState{
+		OutingID:     "run-1",
 		RecordedLaps: []string{"lap-a"},
 	}); err != nil {
 		t.Fatalf("SaveRunState error: %v", err)
@@ -35,8 +35,8 @@ func TestE2E_LapsEnabledComplete(t *testing.T) {
 		t.Fatalf("len(entries) = %d, want 1", len(entries))
 	}
 	entry := entries[0]
-	if entry.RunID != "run-1" {
-		t.Errorf("RunID = %q, want run-1", entry.RunID)
+	if entry.OutingID != "run-1" {
+		t.Errorf("OutingID = %q, want run-1", entry.OutingID)
 	}
 	if entry.Summary != "Did X" {
 		t.Errorf("Summary = %q, want Did X", entry.Summary)
@@ -56,8 +56,8 @@ func TestE2E_LapsEnabledHandoff(t *testing.T) {
 	enableLapsInWorkspace(t, tmp)
 	overrideWorkspaceDir(t, tmp)
 
-	if err := SaveRunState(tmp, &RunState{
-		RunID:        "run-2",
+	if err := SaveRunState(tmp, &OutingState{
+		OutingID:     "run-2",
 		HandoffState: 1,
 	}); err != nil {
 		t.Fatalf("SaveRunState error: %v", err)
@@ -81,8 +81,8 @@ func TestE2E_LapsEnabledHandoff(t *testing.T) {
 		t.Fatalf("len(entries) = %d, want 1", len(entries))
 	}
 	entry := entries[0]
-	if entry.RunID != "run-2" {
-		t.Errorf("RunID = %q, want run-2", entry.RunID)
+	if entry.OutingID != "run-2" {
+		t.Errorf("OutingID = %q, want run-2", entry.OutingID)
 	}
 	if entry.Handoff == nil {
 		t.Fatal("expected Handoff to be present")
@@ -104,21 +104,21 @@ func TestE2E_LapsEnabledStub(t *testing.T) {
 	enableLapsInWorkspace(t, tmp)
 	overrideWorkspaceDir(t, tmp)
 
-	if err := SaveRunState(tmp, &RunState{
-		RunID:        "run-3",
+	if err := SaveRunState(tmp, &OutingState{
+		OutingID:     "run-3",
 		RecordedLaps: []string{"lap-b"},
 	}); err != nil {
 		t.Fatalf("SaveRunState error: %v", err)
 	}
 
 	// Simulate runner writing stub without finalizing
-	entry := RunEntry{
-		RunID:         "run-3",
+	entry := OutingEntry{
+		OutingID:      "run-3",
 		Summary:       "agent stopped",
 		LapsCompleted: []string{"lap-b"},
 	}
-	if err := AppendRunEntry(tmp, entry); err != nil {
-		t.Fatalf("AppendRunEntry error: %v", err)
+	if err := AppendOutingEntry(tmp, entry); err != nil {
+		t.Fatalf("AppendOutingEntry error: %v", err)
 	}
 
 	entries, err := LoadSummaryEntries(tmp)

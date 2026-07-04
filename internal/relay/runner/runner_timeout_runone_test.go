@@ -675,9 +675,9 @@ func TestRunOneRunBudgetResumableContinuationRecordsSeparateHandoffTry(t *testin
 			if !strings.Contains(opts.Prompt, "Do not continue implementation") || !strings.Contains(opts.Prompt, "laps handoff") {
 				t.Errorf("handoff prompt did not contain handoff-only instructions:\n%s", opts.Prompt)
 			}
-			if err := progress.AppendRunEntry(workspaceDir, progress.RunEntry{
-				RunID:   "relay-1-run-1",
-				Summary: "blocked cleanly",
+			if err := progress.AppendOutingEntry(workspaceDir, progress.OutingEntry{
+				OutingID: "relay-1-run-1",
+				Summary:  "blocked cleanly",
 				Handoff: &progress.HandoffEntry{
 					Summary:       "blocked cleanly",
 					Followups:     []string{"follow up"},
@@ -730,8 +730,8 @@ func TestRunOneRunBudgetResumableContinuationRecordsSeparateHandoffTry(t *testin
 	if tries[1].Outcome != reliability.OutcomeHandoffRequested || !tries[1].HandoffOnly {
 		t.Fatalf("try 2 = outcome %q handoff_only=%v, want handoff_requested handoff-only try", tries[1].Outcome, tries[1].HandoffOnly)
 	}
-	if tries[1].RunID != tries[0].RunID {
-		t.Fatalf("handoff try RunID = %d, want same as implementation %d", tries[1].RunID, tries[0].RunID)
+	if tries[1].OutingID != tries[0].OutingID {
+		t.Fatalf("handoff try OutingID = %d, want same as implementation %d", tries[1].OutingID, tries[0].OutingID)
 	}
 	if tries[1].AttemptNumber != 2 {
 		t.Fatalf("handoff try attempt = %d, want maxAttempts+1 attempt 2", tries[1].AttemptNumber)

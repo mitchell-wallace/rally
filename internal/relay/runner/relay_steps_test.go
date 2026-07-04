@@ -780,13 +780,13 @@ mix = "cc"
 	}
 }
 
-func TestE2E_RunStateClearedAtRelayStart(t *testing.T) {
+func TestE2E_OutingStateClearedAtRelayStart(t *testing.T) {
 	workspaceDir := t.TempDir()
 	rallyDir := store.RallyDir(workspaceDir)
 	os.MkdirAll(rallyDir, 0o755)
 	initRepo(t, workspaceDir)
 
-	if err := progress.SaveRunState(workspaceDir, &progress.RunState{RunID: "old-run", HandoffState: 1, RecordedLaps: []string{"lap-old"}}); err != nil {
+	if err := progress.SaveRunState(workspaceDir, &progress.OutingState{OutingID: "old-run", HandoffState: 1, RecordedLaps: []string{"lap-old"}}); err != nil {
 		t.Fatalf("SaveRunState error: %v", err)
 	}
 
@@ -816,8 +816,8 @@ func TestE2E_RunStateClearedAtRelayStart(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadRunState error: %v", err)
 	}
-	if rs.RunID != "" {
-		t.Fatalf("expected run-state cleared at relay start, got RunID=%q", rs.RunID)
+	if rs.OutingID != "" {
+		t.Fatalf("expected run-state cleared at relay start, got OutingID=%q", rs.OutingID)
 	}
 	if rs.HandoffState != 0 {
 		t.Fatalf("expected HandoffState=0 after relay start, got %d", rs.HandoffState)
