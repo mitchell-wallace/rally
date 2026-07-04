@@ -89,3 +89,10 @@ func TestSinkForwardsEvents(t *testing.T) {
 		t.Fatal("timed out waiting for forwarded event")
 	}
 }
+
+func TestSessionDefaultDoneHint(t *testing.T) {
+	s := NewSession(Options{Title: "test"})
+	if s.doneHint != "relay complete — q to exit" {
+		t.Fatalf("doneHint = %q, want default complete hint", s.doneHint)
+	}
+}

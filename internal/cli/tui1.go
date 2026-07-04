@@ -2,6 +2,8 @@ package cli
 
 import (
 	"context"
+	"fmt"
+	"strings"
 
 	"github.com/mitchell-wallace/rally/internal/app"
 	"github.com/mitchell-wallace/rally/internal/presentation/tuisafe"
@@ -23,11 +25,45 @@ func newTui1Cmd(opts RootOptions) *cobra.Command {
 	cmd.Flags().Bool("resume", false, "Resume the last unfinished batch explicitly")
 	cmd.Flags().Bool("new", false, "Start a new batch explicitly, discarding unfinished batch state")
 	cmd.Flags().Bool("demo", false, "Run synthetic TUI demo playback without a .rally workspace")
+	cmd.Flags().String("view", "", "View a historical relay (latest, or a relay ID)")
+	cmd.Flags().Lookup("view").NoOptDefVal = "latest"
 	return cmd
 }
 
 func runTui1(cmd *cobra.Command, args []string, opts RootOptions) error {
 	demo, _ := cmd.Flags().GetBool("demo")
+	view, _ := cmd.Flags().GetString("view")
+	resume, _ := cmd.Flags().GetBool("resume")
+	newBatch, _ := cmd.Flags().GetBool("new")
+	if view != "" {
+		var conflicts []string
+		if demo {
+			conflicts = append(conflicts, "--demo")
+		}
+		if resume {
+			conflicts = append(conflicts, "--resume")
+		}
+		if newBatch {
+			conflicts = append(conflicts, "--new")
+		}
+		if len(conflicts) > 0 {
+			return fmt.Errorf("--view cannot be used with %s", strings.Join(conflicts, ", "))
+		}
+		workspaceDir, err := resolveWorkspaceDir()
+		if err != nil {
+			return err
+		}
+		events, relayID, err := synthesizeRelayEvents(workspaceDir, view)
+		if err != nil {
+			return err
+		}
+		session := tuisafe.NewSession(tuisafe.Options{
+			Title:    "rally tui-1",
+			DoneHint: fmt.Sprintf("viewing relay #%d — q to exit", relayID),
+		})
+		return session.RunView(context.Background(), events)
+	}
+
 	session := tuisafe.NewSession(tuisafe.Options{Title: "rally tui-1"})
 	if demo {
 		return session.RunDemo(context.Background())

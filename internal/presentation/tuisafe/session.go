@@ -16,11 +16,13 @@ import (
 )
 
 type Options struct {
-	Title string
+	Title    string
+	DoneHint string
 }
 
 type Session struct {
 	title    string
+	doneHint string
 	controls *controls
 
 	// send delivery is FIFO through a single drainer goroutine: p.Send blocks
@@ -39,8 +41,13 @@ func NewSession(opts Options) *Session {
 	if title == "" {
 		title = "rally tui-1"
 	}
+	doneHint := opts.DoneHint
+	if doneHint == "" {
+		doneHint = "relay complete — q to exit"
+	}
 	return &Session{
 		title:    title,
+		doneHint: doneHint,
 		controls: newControls(),
 	}
 }
@@ -67,49 +74,23 @@ func (s *Session) TranscriptWriter() io.Writer {
 }
 
 func (s *Session) Run(ctx context.Context, work func(context.Context) error) error {
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	if work == nil {
-		work = func(context.Context) error { return nil }
-	}
+	return s.runWithModel(ctx, modelOptions{doneHint: s.doneHint}, work)
+}
 
-	workCtx, cancelWork := context.WithCancel(ctx)
-	defer cancelWork()
-
-	doneCh := make(chan error, 1)
-	m := newModel(s.title, s.controls)
-	p := tea.NewProgram(m, tea.WithAltScreen(), tea.WithContext(ctx))
-	s.setSend(p.Send)
-	defer s.setSend(nil)
-
-	go func() {
-		err := work(workCtx)
-		doneCh <- err
-		s.sendAsync(doneMsg{err: err})
-	}()
-
-	finalModel, runErr := p.Run()
-	if runErr != nil && ctx.Err() == nil {
-		cancelWork()
-	}
-
-	var workErr error
-	select {
-	case workErr = <-doneCh:
-	default:
-		cancelWork()
-		workErr = <-doneCh
-	}
-
-	if runErr != nil && ctx.Err() == nil && !isOperatorQuit(finalModel) {
-		return runErr
-	}
-	return workErr
+func (s *Session) RunView(ctx context.Context, events []runtimeevent.Event) error {
+	return s.runWithModel(ctx, modelOptions{doneHint: s.doneHint, startAtTop: true}, func(ctx context.Context) error {
+		for _, event := range events {
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
+			s.Sink().Emit(ctx, event)
+		}
+		return nil
+	})
 }
 
 func (s *Session) RunDemo(ctx context.Context) error {
-	return s.Run(ctx, func(ctx context.Context) error {
+	return s.runWithModel(ctx, modelOptions{doneHint: s.doneHint}, func(ctx context.Context) error {
 		script := tuicore.DemoScript()
 		statuses := tuicore.DemoStatusFrames()
 
@@ -145,6 +126,48 @@ func (s *Session) RunDemo(ctx context.Context) error {
 		<-done
 		return nil
 	})
+}
+
+func (s *Session) runWithModel(ctx context.Context, modelOpts modelOptions, work func(context.Context) error) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if work == nil {
+		work = func(context.Context) error { return nil }
+	}
+
+	workCtx, cancelWork := context.WithCancel(ctx)
+	defer cancelWork()
+
+	doneCh := make(chan error, 1)
+	m := newModelWithOptions(s.title, s.controls, modelOpts)
+	p := tea.NewProgram(m, tea.WithAltScreen(), tea.WithContext(ctx))
+	s.setSend(p.Send)
+	defer s.setSend(nil)
+
+	go func() {
+		err := work(workCtx)
+		doneCh <- err
+		s.sendAsync(doneMsg{err: err})
+	}()
+
+	finalModel, runErr := p.Run()
+	if runErr != nil && ctx.Err() == nil {
+		cancelWork()
+	}
+
+	var workErr error
+	select {
+	case workErr = <-doneCh:
+	default:
+		cancelWork()
+		workErr = <-doneCh
+	}
+
+	if runErr != nil && ctx.Err() == nil && !isOperatorQuit(finalModel) {
+		return runErr
+	}
+	return workErr
 }
 
 func (s *Session) setSend(send func(tea.Msg)) {

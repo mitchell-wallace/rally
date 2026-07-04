@@ -123,6 +123,41 @@ is frozen).
   leak, archguard tables). This doc written. Lap delegated to GPT-5.5:
   `runner.Config.StatusWriter` seam (default os.Stdout, plumbed through
   `app.RelayStartOptions`, CLI untouched).
+- 2026-07-04: Lap 1 landed (`5a0825e`): StatusWriter seam, verified green.
+- 2026-07-04: Lap 2 landed (`6bb7aea`): archguard rows for the four TUI
+  packages (presentation→presentation imports now allowed, governed by
+  allow-lists; bubbletea/bubbles dep confinement; lipgloss owners widened) +
+  `internal/presentation/tuicore` (Transcript event reducer with byte-identical
+  style rendering + live-tail state; DemoScript/DemoStatusFrames fixtures).
+  Note: bubbletea/bubbles stay indirect in go.mod until tuisafe imports them.
+- 2026-07-04: Lap 3 delegated to GPT-5.5: `internal/presentation/tuisafe`
+  (Session with Sink/Controls/StatusWriter adapters, tea model with viewport +
+  status bar, arm/confirm controls bridge) + `rally tui-1` with `--demo`, and
+  `prepareRelayStart` factored out of `runRelay` for reuse. Codex invocation
+  note: this environment needs `codex exec
+  --dangerously-bypass-approvals-and-sandbox` (bwrap namespaces unavailable).
+- 2026-07-04: Known gaps for `tui-1 --view`: persisted try records do not store
+  resolved model names, live commit titles, or the lap queue total used for
+  `laps: X/Y`; historical replay leaves those fields empty rather than
+  inventing values.
+- 2026-07-04: Lap 3 landed (`efb4baa`): tuisafe + `rally tui-1` (live + --demo).
+  Claude fixed two concurrency defects in review: per-message goroutine
+  forwarding lost event ordering (now FIFO single-drainer in Session), and a
+  stale Start(ctx) watcher could Stop a later control session (now
+  session-identity-guarded). Smoke-tested under a Python PTY harness: full demo
+  playback renders the transposed CLI output with a reverse-video status bar;
+  scrollback + q-to-exit work. Note: a 0×0 PTY (no winsize) makes bubbletea
+  exit immediately — irrelevant on real terminals, relevant for headless
+  harnesses (set TIOCSWINSZ; see scratch PTY driver approach in git history of
+  this doc's session).
+- 2026-07-04: Laps 4+5 delegated to two parallel GPT-5.5 agents with strict
+  file boundaries. Lap 4: `rally tui-1 --view [N]` — CLI-side synthesis of the
+  runtimeevent stream from store records replayed through the same sink
+  (tuisafe RunView + Options.DoneHint; new internal/cli/tui_view.go). Lap 5:
+  prototype 2 `internal/presentation/tuipanels` + `rally tui-2` — run-feed +
+  detail panels over a new tuicore.RunFeed reducer (FeedItem, Seed, Enrich,
+  DemoFeedSeed), header strip, reverse-video status bar; --demo first, live
+  mode seeded from summary.jsonl + store recent tries.
 
 ## Next steps (in priority order)
 

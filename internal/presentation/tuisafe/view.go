@@ -30,7 +30,10 @@ func (m model) statusBar() string {
 	middle := m.middleStatus()
 	right := "^C quit  ^S skip  ^P pause  ^X stop · ↑/↓ PgUp/PgDn scroll"
 	if m.done {
-		right = "relay complete — q to exit"
+		right = m.doneHint
+		if right == "" {
+			right = "relay complete — q to exit"
+		}
 		if m.workErr != nil {
 			right = "relay failed — q to exit"
 		}

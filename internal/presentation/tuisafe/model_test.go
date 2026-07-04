@@ -84,6 +84,42 @@ func TestModelDoneEnablesQ(t *testing.T) {
 	}
 }
 
+func TestModelViewStartsAtTopAndShowsDoneHint(t *testing.T) {
+	m := newModelWithOptions("rally tui-1", newControls(), modelOptions{
+		doneHint:   "viewing relay #9 — q to exit",
+		startAtTop: true,
+	})
+	m.now = func() time.Time { return time.Date(2026, 7, 4, 12, 0, 0, 0, time.UTC) }
+	m = updateModel(t, m, tea.WindowSizeMsg{Width: 80, Height: 4})
+	for i := 0; i < 20; i++ {
+		m = updateModel(t, m, transcriptLineMsg{line: "line"})
+	}
+	m = updateModel(t, m, doneMsg{})
+
+	if m.following {
+		t.Fatal("expected view model to start with following disengaged")
+	}
+	if m.viewport.YOffset != 0 {
+		t.Fatalf("viewport YOffset = %d, want top", m.viewport.YOffset)
+	}
+	if !strings.Contains(m.View(), "viewing relay #9") {
+		t.Fatalf("view missing custom done hint:\n%s", m.View())
+	}
+
+	m = updateModel(t, m, tea.KeyMsg{Type: tea.KeyEnd})
+	if !m.following {
+		t.Fatal("expected End to reengage following in view mode")
+	}
+}
+
+func TestModelDoneHintDefaults(t *testing.T) {
+	m := newModelWithOptions("rally tui-1", newControls(), modelOptions{})
+	m = updateModel(t, m, doneMsg{})
+	if !strings.Contains(m.View(), "relay complete — q to exit") {
+		t.Fatalf("view missing default done hint:\n%s", m.View())
+	}
+}
+
 func TestModelDemoScriptPlaybackHeadless(t *testing.T) {
 	m := newTestModel()
 	m = updateModel(t, m, tea.WindowSizeMsg{Width: 100, Height: 20})

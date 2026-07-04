@@ -16,6 +16,7 @@ type model struct {
 	title    string
 	controls *controls
 	now      func() time.Time
+	doneHint string
 
 	transcript tuicore.Transcript
 	viewport   viewport.Model
@@ -33,16 +34,31 @@ type model struct {
 	height int
 }
 
+type modelOptions struct {
+	doneHint   string
+	startAtTop bool
+}
+
 func newModel(title string, controls *controls) model {
+	return newModelWithOptions(title, controls, modelOptions{})
+}
+
+func newModelWithOptions(title string, controls *controls, opts modelOptions) model {
 	if title == "" {
 		title = "rally tui-1"
 	}
+	doneHint := opts.doneHint
+	if doneHint == "" {
+		doneHint = "relay complete — q to exit"
+	}
+	following := !opts.startAtTop
 	return model{
 		title:     title,
 		controls:  controls,
 		now:       time.Now,
+		doneHint:  doneHint,
 		viewport:  viewport.New(80, 23),
-		following: true,
+		following: following,
 		width:     80,
 		height:    24,
 	}
