@@ -37,6 +37,21 @@ func newStartCmd(opts RootOptions) *cobra.Command {
 }
 
 func runRelay(cmd *cobra.Command, args []string, opts RootOptions) error {
+	ro, err := prepareRelayStart(cmd, args, opts)
+	if err != nil {
+		return err
+	}
+
+	terminalSink := terminal.NewSink(os.Stdout, os.Stderr)
+	terminalControls := terminal.NewControls(os.Stdin, os.Stdout)
+	ro.EventSink = terminalSink
+	ro.Controls = terminalControls
+	ro.Out = os.Stdout
+	ro.Err = os.Stderr
+	return app.StartRelay(context.Background(), ro)
+}
+
+func prepareRelayStart(cmd *cobra.Command, args []string, opts RootOptions) (app.RelayStartOptions, error) {
 	iterations, _ := cmd.Flags().GetInt("iterations")
 	agentSpecs, _ := cmd.Flags().GetStringArray("agent")
 	mixSpecs, _ := cmd.Flags().GetStringArray("mix")
@@ -44,18 +59,18 @@ func runRelay(cmd *cobra.Command, args []string, opts RootOptions) error {
 	newBatch, _ := cmd.Flags().GetBool("new")
 
 	if resume && newBatch {
-		return fmt.Errorf("cannot use --resume and --new together")
+		return app.RelayStartOptions{}, fmt.Errorf("cannot use --resume and --new together")
 	}
 
 	workspaceDir, err := resolveWorkspaceDir()
 	if err != nil {
-		return err
+		return app.RelayStartOptions{}, err
 	}
 
 	rallyDir := store.RallyDir(workspaceDir)
 	cfg, err := config.LoadV2(workspaceDir)
 	if err != nil {
-		return fmt.Errorf("load config: %w", err)
+		return app.RelayStartOptions{}, fmt.Errorf("load config: %w", err)
 	}
 	for _, note := range cfg.DeprecationNotes {
 		fmt.Fprintln(os.Stderr, "warning:", note)
@@ -80,7 +95,7 @@ func runRelay(cmd *cobra.Command, args []string, opts RootOptions) error {
 
 	selectedSpecs, usedOverride, warning, err := chooseRelayAgentSpecs(agentSpecs, mixSpecs, cfg.Defaults.Mix)
 	if err != nil {
-		return err
+		return app.RelayStartOptions{}, err
 	}
 	if warning != "" {
 		fmt.Fprintln(os.Stderr, warning)
@@ -92,7 +107,7 @@ func runRelay(cmd *cobra.Command, args []string, opts RootOptions) error {
 		LapsEnabled: lapsEnabled,
 	})
 	if err != nil {
-		return err
+		return app.RelayStartOptions{}, err
 	}
 	cfg.Routes = validRoutes
 
@@ -105,10 +120,10 @@ func runRelay(cmd *cobra.Command, args []string, opts RootOptions) error {
 	}
 
 	if _, err := os.Stat(rallyDir); os.IsNotExist(err) {
-		return fmt.Errorf("rally not initialized; run `rally init` first")
+		return app.RelayStartOptions{}, fmt.Errorf("rally not initialized; run `rally init` first")
 	}
 	if _, err := store.NewStore(rallyDir); err != nil {
-		return fmt.Errorf("load store: %w", err)
+		return app.RelayStartOptions{}, fmt.Errorf("load store: %w", err)
 	}
 
 	// Migrate/auto-update role instruction folders for repos that use roles.
@@ -124,7 +139,7 @@ func runRelay(cmd *cobra.Command, args []string, opts RootOptions) error {
 		lapsDir := filepath.Join(workspaceDir, ".laps")
 		changed, err := laps.InstallHooks(lapsDir)
 		if err != nil {
-			return fmt.Errorf("install laps hooks: %w", err)
+			return app.RelayStartOptions{}, fmt.Errorf("install laps hooks: %w", err)
 		}
 		if changed {
 			fmt.Printf("Installed rally hooks in %s\n", filepath.Join(lapsDir, "hooks", "rally"))
@@ -152,7 +167,7 @@ func runRelay(cmd *cobra.Command, args []string, opts RootOptions) error {
 	if !resume && !newBatch {
 		resumeInfo, err := app.InspectResume(workspaceDir)
 		if err != nil {
-			return err
+			return app.RelayStartOptions{}, err
 		}
 		if resumeInfo.HasUnfinished {
 			storedMix = resumeInfo.AgentMix
@@ -168,7 +183,7 @@ func runRelay(cmd *cobra.Command, args []string, opts RootOptions) error {
 				"resume",
 			)
 			if err != nil {
-				return err
+				return app.RelayStartOptions{}, err
 			}
 			if choice == "new" {
 				discardUnfinishedRelay = true
@@ -192,7 +207,7 @@ func runRelay(cmd *cobra.Command, args []string, opts RootOptions) error {
 				"keep",
 			)
 			if err != nil {
-				return err
+				return app.RelayStartOptions{}, err
 			}
 			if choice == "overwrite" {
 				overwriteMixOnResume = true
@@ -205,9 +220,7 @@ func runRelay(cmd *cobra.Command, args []string, opts RootOptions) error {
 		taskPrompt = strings.Join(args, " ")
 	}
 
-	terminalSink := terminal.NewSink(os.Stdout, os.Stderr)
-	terminalControls := terminal.NewControls(os.Stdin, os.Stdout)
-	return app.StartRelay(context.Background(), app.RelayStartOptions{
+	return app.RelayStartOptions{
 		WorkspaceDir:           workspaceDir,
 		Config:                 cfg,
 		TaskPrompt:             taskPrompt,
@@ -220,9 +233,7 @@ func runRelay(cmd *cobra.Command, args []string, opts RootOptions) error {
 		DiscardUnfinishedRelay: discardUnfinishedRelay,
 		ResetAgentStatus:       resetAgentStatus,
 		OverwriteMixOnResume:   overwriteMixOnResume,
-		EventSink:              terminalSink,
-		Controls:               terminalControls,
 		Out:                    os.Stdout,
 		Err:                    os.Stderr,
-	})
+	}, nil
 }
