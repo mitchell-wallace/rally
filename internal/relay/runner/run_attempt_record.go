@@ -140,7 +140,7 @@ func (r *Runner) emitAttemptTelemetry(relay *store.RelayRecord, runIndex int, pi
 	if attempt.dirtyHandoff {
 		attempt.trySpan.SetData("dirty_handoff", true)
 	}
-	if task.ResolvedRoute == "recovery" && attempt.recoveryClassification != "" {
+	if isRecoveryRoute(task.ResolvedRoute) && attempt.recoveryClassification != "" {
 		attempt.trySpan.SetTag("recovery_classification", attempt.recoveryClassification)
 		attempt.trySpan.SetData("recovery_classification", attempt.recoveryClassification)
 	}
@@ -175,7 +175,7 @@ func (r *Runner) emitAttemptTelemetry(relay *store.RelayRecord, runIndex int, pi
 	if attempt.dirtyHandoff {
 		tryLogFields["dirty_handoff"] = true
 	}
-	if task.ResolvedRoute == "recovery" && attempt.recoveryClassification != "" {
+	if isRecoveryRoute(task.ResolvedRoute) && attempt.recoveryClassification != "" {
 		tryLogFields["recovery_classification"] = attempt.recoveryClassification
 	}
 	evidenceState := telemetry.FailureState{
@@ -290,7 +290,7 @@ func (r *Runner) emitAttemptTelemetry(relay *store.RelayRecord, runIndex int, pi
 			r.tel().CaptureFailure(attempt.tryCtx, fmt.Sprintf("relay %d run %d try %d failed: %s", relay.ID, runIndex+1, tryRecord.ID, state.failReason), failureStateEvent(tryTags, state.rc, fs))
 		}
 	}
-	if task.ResolvedRoute == "recovery" && attempt.recoveryClassification == "needs_user" {
+	if isRecoveryRoute(task.ResolvedRoute) && attempt.recoveryClassification == "needs_user" {
 		fs := telemetry.FailureState{
 			Attempt:                attempt.attempt,
 			MaxAttempts:            state.maxAttempts,

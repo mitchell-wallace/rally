@@ -16,6 +16,7 @@ func BuildPrompt(opts RunOptions) string {
 	}
 
 	var b strings.Builder
+	rolePolicy, requiredSkills := promptRolePolicy(opts)
 
 	if opts.Persona != "" {
 		fmt.Fprintf(&b, "Persona: %s\n\n", opts.Persona)
@@ -31,7 +32,7 @@ func BuildPrompt(opts RunOptions) string {
 		if hl := agent_prompt.Headless(); hl != "" {
 			fmt.Fprintf(&b, "## Headless Operation\n%s\n\n", hl)
 		}
-		if fin := agent_prompt.Finalize(); fin != "" && !isVerifyRole(opts.Role) {
+		if fin := finalizeGuidanceForRole(rolePolicy); fin != "" {
 			fmt.Fprintf(&b, "## Finalizing Your Work\n%s\n\n", fin)
 		}
 	}
@@ -61,6 +62,10 @@ func BuildPrompt(opts RunOptions) string {
 		fmt.Fprintf(&b, "## Role Instructions\n%s\n\n", opts.RoleInstructions)
 	}
 
+	if skillBlock := requiredSkillBlock(requiredSkills); skillBlock != "" {
+		fmt.Fprintf(&b, "## Required Skills\n%s\n\n", skillBlock)
+	}
+
 	if opts.TaskPrompt != "" {
 		fmt.Fprintf(&b, "## Task\n%s\n\n", opts.TaskPrompt)
 	}
@@ -86,9 +91,12 @@ func BuildPrompt(opts RunOptions) string {
 		fmt.Fprintf(&b, "Laps is the task tracker for this run. Rally has already claimed the current lap for you, so a bare `laps done` will mark that claimed lap complete.\n\n")
 		fmt.Fprintf(&b, "These are shell commands. Invoke them via your shell/bash tool — do NOT echo the words as plain text in your response. The lap is only recorded when the command actually executes and the hook fires (you will see a follow-up instruction printed to stdout).\n\n")
 		fmt.Fprintf(&b, "When you have finished the current lap, run this shell command:\n  laps done\n\n")
-		if isVerifyRole(opts.Role) {
+		switch rolePolicy {
+		case RolePolicyReadOnlyGate:
 			fmt.Fprintf(&b, "For VERIFY work, do not use `laps handoff`. If follow-up implementation is needed, add the appropriate follow-up lap(s) and then run `laps done` for this verification lap.\n\n")
-		} else {
+		case RolePolicyPlanOnly:
+			fmt.Fprintf(&b, "For ARCHITECT work, commit planning or lap artifacts only. Source and test edits are out of scope; the revised plan is the deliverable. If implementation is needed, create or revise follow-up lap(s), then run `laps done` for this planning lap.\n\n")
+		default:
 			fmt.Fprintf(&b, "If you are blocked and cannot proceed, run this shell command:\n  laps handoff\n\n")
 		}
 		fmt.Fprintf(&b, "If laps reports that the wrong lap was claimed or completed, use the undo command it prints (`laps claim undo` or `laps done undo`) before continuing.\n\n")
@@ -108,6 +116,35 @@ Calling rally directly from the agent is the documented exception in no-backend 
 	return b.String()
 }
 
-func isVerifyRole(role string) bool {
-	return strings.EqualFold(strings.TrimSpace(role), "verify")
+// promptRolePolicy reads the role policy the caller resolved (the runner maps
+// the internal/roles catalog into this contract vocabulary). BuildPrompt does
+// no role-name interpretation of its own; an unset policy means plain
+// implementation behaviour.
+func promptRolePolicy(opts RunOptions) (RoleWritePolicy, []string) {
+	policy := opts.RoleWritePolicy
+	if policy == "" {
+		policy = RolePolicyImplementation
+	}
+	return policy, append([]string(nil), opts.RoleRequiredSkills...)
+}
+
+func finalizeGuidanceForRole(rolePolicy RoleWritePolicy) string {
+	switch rolePolicy {
+	case RolePolicyReadOnlyGate:
+		return ""
+	case RolePolicyPlanOnly:
+		return "When the plan is ready, commit only planning or lap artifacts. Do not edit source or tests for this lap; the revised plan is the deliverable."
+	default:
+		return agent_prompt.Finalize()
+	}
+}
+
+func requiredSkillBlock(requiredSkills []string) string {
+	if len(requiredSkills) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "Load and follow these required skill(s) before starting: %s.\n", strings.Join(requiredSkills, ", "))
+	fmt.Fprintf(&b, "If a required skill is unavailable, do not improvise its workflow: report the missing skill as this lap's outcome and add a follow-up lap to rerun once it is available.")
+	return b.String()
 }

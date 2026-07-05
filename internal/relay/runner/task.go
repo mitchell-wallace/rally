@@ -8,9 +8,11 @@ import (
 	"strings"
 
 	"github.com/mitchell-wallace/rally/internal/agent_prompt"
+	"github.com/mitchell-wallace/rally/internal/harnessapi"
 	"github.com/mitchell-wallace/rally/internal/laps"
 	"github.com/mitchell-wallace/rally/internal/relay/runner/runtimeevent"
 	"github.com/mitchell-wallace/rally/internal/reliability"
+	"github.com/mitchell-wallace/rally/internal/roles"
 	"github.com/mitchell-wallace/rally/internal/store"
 	"github.com/mitchell-wallace/rally/internal/textutil"
 	"github.com/mitchell-wallace/rally/internal/user_prompt/roleloader"
@@ -45,6 +47,47 @@ func (t runTask) promptAssignee() string {
 		return t.EffectiveAssignee
 	}
 	return t.Assignee
+}
+
+// roleMode, roleWritePolicy, and roleRequiredSkills translate the resolved
+// role's catalog Spec (internal/roles, the single source of truth) into the
+// harnessapi contract vocabulary at the runner boundary. harnessapi stays
+// role-catalog-agnostic; only this seam maps between the two.
+func roleMode(role string) harnessapi.RoleMode {
+	spec, _ := roles.Lookup(role)
+	switch spec.Mode {
+	case roles.ModePlan:
+		return harnessapi.RoleModePlan
+	case roles.ModeReview:
+		return harnessapi.RoleModeReview
+	case roles.ModeVerify:
+		return harnessapi.RoleModeVerify
+	case roles.ModeQA:
+		return harnessapi.RoleModeQA
+	case roles.ModeRecover:
+		return harnessapi.RoleModeRecover
+	default:
+		return harnessapi.RoleModeImplement
+	}
+}
+
+func roleWritePolicy(role string) harnessapi.RoleWritePolicy {
+	spec, _ := roles.Lookup(role)
+	switch spec.WritePolicy {
+	case roles.PolicyPlanOnly:
+		return harnessapi.RolePolicyPlanOnly
+	case roles.PolicyReadOnlyGate:
+		return harnessapi.RolePolicyReadOnlyGate
+	case roles.PolicyReconcile:
+		return harnessapi.RolePolicyReconcile
+	default:
+		return harnessapi.RolePolicyImplementation
+	}
+}
+
+func roleRequiredSkills(role string) []string {
+	spec, _ := roles.Lookup(role)
+	return spec.RequiredSkills
 }
 
 func (r *Runner) resolveInstructions() string {

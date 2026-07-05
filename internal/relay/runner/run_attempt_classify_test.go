@@ -1,6 +1,7 @@
 package runner
 
 import (
+	"bytes"
 	"context"
 	"io"
 	"os"
@@ -15,6 +16,50 @@ import (
 	"github.com/mitchell-wallace/rally/internal/reliability"
 	"github.com/mitchell-wallace/rally/internal/store"
 )
+
+func TestApplyStallRecoveryByRoleWritePolicy(t *testing.T) {
+	tests := []struct {
+		role        string
+		wantSuccess bool
+	}{
+		{role: "intern", wantSuccess: true},
+		{role: "junior", wantSuccess: true},
+		{role: "senior", wantSuccess: true},
+		{role: "custom-implementer", wantSuccess: true},
+		{role: "verify", wantSuccess: false},
+		{role: "qa", wantSuccess: false},
+		{role: "review", wantSuccess: false},
+		{role: "architect", wantSuccess: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.role, func(t *testing.T) {
+			state := &runOneState{stallMarked: true}
+			attempt := &runAttemptState{
+				failed:     true,
+				commitHash: "abc123",
+				attempt:    1,
+			}
+			var log bytes.Buffer
+
+			applyStallRecovery(
+				&store.RelayRecord{ID: 1},
+				0,
+				runTask{Assignee: tt.role},
+				state,
+				attempt,
+				&log,
+			)
+
+			if state.success != tt.wantSuccess {
+				t.Fatalf("state.success = %v, want %v; log=%s", state.success, tt.wantSuccess, log.String())
+			}
+			if attempt.failed == tt.wantSuccess {
+				t.Fatalf("attempt.failed = %v, want %v; log=%s", attempt.failed, !tt.wantSuccess, log.String())
+			}
+		})
+	}
+}
 
 func TestRunOneLapPinIgnoresStaleSummaryEntriesForSameOutingID(t *testing.T) {
 	workspaceDir := t.TempDir()

@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"strings"
 	"time"
 
 	"github.com/mitchell-wallace/rally/internal/gitx"
@@ -116,16 +115,15 @@ func (r *Runner) validatePinnedLapForAttempt(relay *store.RelayRecord, runIndex 
 }
 
 // applyStallRecovery promotes a stalled attempt to success when the agent
-// committed files before idling. VERIFY runs are excluded: a trivial commit is
-// not evidence verification happened.
+// committed files before idling. Non-implementation roles are excluded: a
+// trivial commit is not evidence that gate, planning, or recovery work happened.
 func applyStallRecovery(relay *store.RelayRecord, runIndex int, task runTask, state *runOneState, attempt *runAttemptState, log io.Writer) {
 	// Stall recovery: if the stall detector killed the process but the agent had
 	// already committed or created files (autoCommit ran), treat the try as
 	// successful. This handles agents (e.g. opencode TUI) that complete the
 	// task then idle in an interactive loop until the stall detector kills them.
-	// VERIFY runs are excluded: a trivial commit is not evidence verification happened.
 	if attempt.failed && state.stallMarked && attempt.commitHash != "" && !attempt.lapPinMismatch {
-		if strings.EqualFold(task.Assignee, "verify") {
+		if roleWritePolicy(task.promptAssignee()) != harnessapi.RolePolicyImplementation {
 			fmt.Fprintf(log, "relay %d run %d attempt %d stall recovery: files committed but assignee is %s, not treating as success\n", relay.ID, runIndex+1, attempt.attempt, task.Assignee)
 		} else {
 			attempt.failed = false

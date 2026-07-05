@@ -12,6 +12,7 @@ import (
 	"golang.org/x/term"
 
 	"github.com/mitchell-wallace/rally/internal/config"
+	"github.com/mitchell-wallace/rally/internal/roles"
 	"github.com/mitchell-wallace/rally/internal/store"
 )
 
@@ -200,7 +201,11 @@ func runConfig(cmd *cobra.Command, _ []string) error {
 }
 
 func fixedConfigRoleNames() []string {
-	return []string{"default", "junior", "senior", "ui", "verify", "recovery"}
+	names := []string{"default"}
+	for _, spec := range roles.Builtins() {
+		names = append(names, spec.Name)
+	}
+	return names
 }
 
 // promptCustomRoles loops until the user stops adding new role entries.

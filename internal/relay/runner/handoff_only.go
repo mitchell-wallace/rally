@@ -274,7 +274,7 @@ func (r *Runner) runBoundedHandoffOnly(
 	trySpan.SetData("session_captured", sessionID != "")
 	trySpan.SetData("resume_supported", true)
 	trySpan.SetData("handoff_only_attempted", true)
-	if task.ResolvedRoute == "recovery" && recoveryClassification != "" {
+	if isRecoveryRoute(task.ResolvedRoute) && recoveryClassification != "" {
 		trySpan.SetTag("recovery_classification", recoveryClassification)
 		trySpan.SetData("recovery_classification", recoveryClassification)
 	}
@@ -311,10 +311,10 @@ func (r *Runner) runBoundedHandoffOnly(
 		trySpan.SetData("handoff_resume_blocker", "handoff timeout")
 		tryLogFields["handoff_resume_blocker"] = "handoff timeout"
 	}
-	if task.ResolvedRoute == "recovery" && recoveryClassification != "" {
+	if isRecoveryRoute(task.ResolvedRoute) && recoveryClassification != "" {
 		tryLogFields["recovery_classification"] = recoveryClassification
 	}
-	if task.ResolvedRoute == "recovery" && recoveryClassification == "needs_user" {
+	if isRecoveryRoute(task.ResolvedRoute) && recoveryClassification == "needs_user" {
 		fs := telemetry.FailureState{
 			Attempt:                attemptNumber,
 			MaxAttempts:            maxAttempts,

@@ -22,27 +22,49 @@ type ResolvedAgent struct {
 	ReasoningEffort string
 }
 
+type RoleMode string
+
+const (
+	RoleModeImplement RoleMode = "implement"
+	RoleModePlan      RoleMode = "plan"
+	RoleModeReview    RoleMode = "review"
+	RoleModeVerify    RoleMode = "verify"
+	RoleModeQA        RoleMode = "qa"
+	RoleModeRecover   RoleMode = "recover"
+)
+
+type RoleWritePolicy string
+
+const (
+	RolePolicyImplementation RoleWritePolicy = "implementation"
+	RolePolicyPlanOnly       RoleWritePolicy = "plan_only"
+	RolePolicyReadOnlyGate   RoleWritePolicy = "read_only_gate"
+	RolePolicyReconcile      RoleWritePolicy = "reconcile"
+)
+
 type RunOptions struct {
-	Persona          string
-	Model            string
-	ReasoningEffort  string
-	Role             string
-	TaskName         string
-	TaskRequirements string
-	Instructions     string
-	RoleInstructions string
-	TaskPrompt       string
-	InboxMessage     string
-	RelayMessage     string
-	PreviousSummary  string
-	RecentTryContext string
-	LapsEnabled      bool
-	LeftoverWork     bool   // working tree has uncommitted non-rally changes
-	Prompt           string // explicit override
-	LogPath          string // path to write try transcript log
-	ResumeSessionID  string // session-id to resume from a previous try
-	WorkspaceDir     string // working directory for the agent process
-	OnStart          func(pid int)
+	Persona            string
+	Model              string
+	ReasoningEffort    string
+	Role               string
+	RoleWritePolicy    RoleWritePolicy
+	RoleRequiredSkills []string
+	TaskName           string
+	TaskRequirements   string
+	Instructions       string
+	RoleInstructions   string
+	TaskPrompt         string
+	InboxMessage       string
+	RelayMessage       string
+	PreviousSummary    string
+	RecentTryContext   string
+	LapsEnabled        bool
+	LeftoverWork       bool   // working tree has uncommitted non-rally changes
+	Prompt             string // explicit override
+	LogPath            string // path to write try transcript log
+	ResumeSessionID    string // session-id to resume from a previous try
+	WorkspaceDir       string // working directory for the agent process
+	OnStart            func(pid int)
 }
 
 type TryResult struct {

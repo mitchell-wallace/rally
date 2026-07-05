@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/mitchell-wallace/rally/internal/config"
+	"github.com/mitchell-wallace/rally/internal/roles"
 	"github.com/mitchell-wallace/rally/internal/store"
 )
 
@@ -60,7 +61,10 @@ func TestCustomHarnessOutputStrategyOptionsMatchLoaderSupport(t *testing.T) {
 
 func TestFixedConfigRoleNamesIncludeRecoveryBeforeCustomSort(t *testing.T) {
 	got := fixedConfigRoleNames()
-	want := []string{"default", "junior", "senior", "ui", "verify", "recovery"}
+	want := []string{"default"}
+	for _, spec := range roles.Builtins() {
+		want = append(want, spec.Name)
+	}
 	if len(got) != len(want) {
 		t.Fatalf("fixedConfigRoleNames() = %v, want %v", got, want)
 	}

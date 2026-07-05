@@ -160,7 +160,7 @@ func TestImportBoundaryAllowListMatchesProductionGraph(t *testing.T) {
 		"relay":       {"harnessapi": true, "store": true},
 		// Presentation boundary (Decision 7): runner drops style/keyboard
 		// (keeps monitor — Decision 8 residual); presentation adapters render.
-		"relay/runner":           {"harnessapi": true, "agent_prompt": true, "gitx": true, "laps": true, "monitor": true, "progress": true, "relay": true, "relay/runner/runtimeevent": true, "reliability": true, "routing": true, "store": true, "telemetry": true, "textutil": true, "user_prompt/roleloader": true},
+		"relay/runner":           {"harnessapi": true, "agent_prompt": true, "gitx": true, "laps": true, "monitor": true, "progress": true, "relay": true, "relay/runner/runtimeevent": true, "reliability": true, "roles": true, "routing": true, "store": true, "telemetry": true, "textutil": true, "user_prompt/roleloader": true},
 		"presentation/terminal":  {"keyboard": true, "relay/runner/runtimeevent": true, "style": true},
 		"presentation/tuicore":   {"relay/runner/runtimeevent": true, "style": true},
 		"presentation/tuitabs":   {"presentation/tuicore": true, "relay/runner/runtimeevent": true, "style": true, "keyboard": true},

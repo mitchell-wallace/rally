@@ -143,6 +143,7 @@ func TestBuildPrompt_SharedGuidanceIncludedWhenLapsEnabled(t *testing.T) {
 func TestBuildPrompt_VerifyExitGuidanceOmitsHandoff(t *testing.T) {
 	p := BuildPrompt(RunOptions{
 		Role:             "verify",
+		RoleWritePolicy:  RolePolicyReadOnlyGate,
 		RoleInstructions: "Do not call `laps handoff`.",
 		LapsEnabled:      true,
 	})
@@ -158,6 +159,125 @@ func TestBuildPrompt_VerifyExitGuidanceOmitsHandoff(t *testing.T) {
 	}
 	if !strings.Contains(p, "laps done") {
 		t.Fatalf("verify prompt still needs completion guidance:\n%s", p)
+	}
+}
+
+func TestBuildPrompt_VerifyPromptParity(t *testing.T) {
+	opts := RunOptions{
+		Persona:          "codex",
+		WorkspaceDir:     "/repo",
+		Role:             "verify",
+		RoleWritePolicy:  RolePolicyReadOnlyGate,
+		TaskName:         "Validate feature",
+		TaskRequirements: "Run the acceptance checks.",
+		Instructions:     "Project rules.",
+		RoleInstructions: "Verify role rules.",
+		TaskPrompt:       "Confirm behavior.",
+		LapsEnabled:      true,
+	}
+
+	want := "Persona: codex\n\n" +
+		"## Headless Operation\n" + agent_prompt.Headless() + "\n\n" +
+		"## Workspace\nWork in this repository: `/repo`. Create and edit files in that repository, not in a scratch directory.\n\n" +
+		"Task: Validate feature\n" +
+		"Requirements:\nRun the acceptance checks.\n\n" +
+		"## Project Instructions\nProject rules.\n\n" +
+		"## Role Instructions\nVerify role rules.\n\n" +
+		"## Task\nConfirm behavior.\n\n" +
+		"## Run Exit Conditions\n" +
+		"Laps is the task tracker for this run. Rally has already claimed the current lap for you, so a bare `laps done` will mark that claimed lap complete.\n\n" +
+		"These are shell commands. Invoke them via your shell/bash tool — do NOT echo the words as plain text in your response. The lap is only recorded when the command actually executes and the hook fires (you will see a follow-up instruction printed to stdout).\n\n" +
+		"When you have finished the current lap, run this shell command:\n  laps done\n\n" +
+		"For VERIFY work, do not use `laps handoff`. If follow-up implementation is needed, add the appropriate follow-up lap(s) and then run `laps done` for this verification lap.\n\n" +
+		"If laps reports that the wrong lap was claimed or completed, use the undo command it prints (`laps claim undo` or `laps done undo`) before continuing.\n\n" +
+		"Follow any further instructions that command prints before ending the turn.\n\n" +
+		"Do not exit the run without actually executing the required shell command.\n" +
+		"\nYou can access rally data and context via `.rally/README.md`.\n"
+
+	if got := BuildPrompt(opts); got != want {
+		t.Fatalf("verify prompt changed.\n--- got ---\n%s\n--- want ---\n%s", got, want)
+	}
+}
+
+func TestBuildPrompt_RolePolicyGuidance(t *testing.T) {
+	tests := []struct {
+		role            string
+		policy          RoleWritePolicy
+		requiredSkills  []string
+		wantContains    []string
+		wantNotContains []string
+	}{
+		{
+			role:   "qa",
+			policy: RolePolicyReadOnlyGate,
+			wantContains: []string{
+				"For VERIFY work, do not use `laps handoff`",
+			},
+			wantNotContains: []string{
+				agent_prompt.Finalize(),
+				"If you are blocked and cannot proceed, run this shell command:\n  laps handoff",
+			},
+		},
+		{
+			role:           "review",
+			policy:         RolePolicyReadOnlyGate,
+			requiredSkills: []string{"auto-code-review"},
+			wantContains: []string{
+				"For VERIFY work, do not use `laps handoff`",
+				"Load and follow these required skill(s) before starting: auto-code-review.",
+			},
+			wantNotContains: []string{
+				agent_prompt.Finalize(),
+				"If you are blocked and cannot proceed, run this shell command:\n  laps handoff",
+			},
+		},
+		{
+			role:   "architect",
+			policy: RolePolicyPlanOnly,
+			wantContains: []string{
+				"commit only planning or lap artifacts",
+				"Source and test edits are out of scope",
+				"the revised plan is the deliverable",
+			},
+			wantNotContains: []string{
+				agent_prompt.Finalize(),
+				"If you are blocked and cannot proceed, run this shell command:\n  laps handoff",
+			},
+		},
+		{
+			role:   "junior",
+			policy: RolePolicyImplementation,
+			wantContains: []string{
+				agent_prompt.Finalize(),
+				"If you are blocked and cannot proceed, run this shell command:\n  laps handoff",
+			},
+			wantNotContains: []string{
+				"For VERIFY work, do not use `laps handoff`",
+				"Required Skills",
+				"the revised plan is the deliverable",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.role, func(t *testing.T) {
+			p := BuildPrompt(RunOptions{
+				Role:               tt.role,
+				RoleWritePolicy:    tt.policy,
+				RoleRequiredSkills: tt.requiredSkills,
+				LapsEnabled:        true,
+			})
+			for _, want := range tt.wantContains {
+				if !strings.Contains(p, want) {
+					t.Fatalf("%s prompt missing %q:\n%s", tt.role, want, p)
+				}
+			}
+			for _, forbidden := range tt.wantNotContains {
+				if strings.Contains(p, forbidden) {
+					t.Fatalf("%s prompt unexpectedly contains %q:\n%s", tt.role, forbidden, p)
+				}
+			}
+		})
 	}
 }
 
@@ -234,7 +354,7 @@ func TestBuildPrompt_RecoveryClassificationOnlyFromRecoveryRole(t *testing.T) {
 		t.Fatalf("recovery prompt missing classification instruction:\n%s", recoveryPrompt)
 	}
 
-	for _, role := range []string{"junior", "senior", "ui", "verify"} {
+	for _, role := range []string{"junior", "senior", "verify"} {
 		roleInstructions, ok := agent_prompt.Role(role)
 		if !ok {
 			t.Fatalf("missing %s role", role)

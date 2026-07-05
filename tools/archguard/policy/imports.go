@@ -152,7 +152,9 @@ var allowList = map[string]map[string]bool{
 	// Presentation boundary (Decision 7): the runner emits events/controls
 	// through runtimeevent and no longer renders directly, so style/keyboard
 	// leave its allow-list (monitor stays — Decision 8 residual).
-	"relay/runner": {"harnessapi": true, "agent_prompt": true, "gitx": true, "laps": true, "monitor": true, "progress": true, "relay": true, "relay/runner/runtimeevent": true, "reliability": true, "routing": true, "store": true, "telemetry": true, "textutil": true, "user_prompt/roleloader": true},
+	// roles (roles-v2, design D2/D3): the leaf role-catalog vocabulary; the
+	// runner translates catalog specs into harnessapi role enums at its seam.
+	"relay/runner": {"harnessapi": true, "agent_prompt": true, "gitx": true, "laps": true, "monitor": true, "progress": true, "relay": true, "relay/runner/runtimeevent": true, "reliability": true, "roles": true, "routing": true, "store": true, "telemetry": true, "textutil": true, "user_prompt/roleloader": true},
 	// Concrete presentation adapter (Decision 7): renders runtimeevent events
 	// and translates keyboard presses to runtimeevent controls — nothing else
 	// internal (notably not relay/runner, harness*, config, store, telemetry).

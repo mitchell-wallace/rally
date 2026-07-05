@@ -690,6 +690,25 @@ func TestRunOneRecoveryClassificationPersistence(t *testing.T) {
 			wantClass:   "course_correct",
 		},
 		{
+			name: "recovery classification keys off resolved route",
+			task: runTask{Name: "task", Prompt: "do work", Assignee: "senior", ResolvedRoute: "recovery", LapID: "lap-1", IsLapsBacked: true, LapsRemaining: 1},
+			recordWrapup: func(workspaceDir string) error {
+				if err := os.WriteFile(filepath.Join(workspaceDir, "done.txt"), []byte("done\n"), 0o644); err != nil {
+					return err
+				}
+				if err := progress.RecordLap(workspaceDir, "lap-1"); err != nil {
+					return err
+				}
+				return progress.AppendOutingEntry(workspaceDir, progress.OutingEntry{
+					OutingID:       "relay-1-run-1",
+					Summary:        "done",
+					Classification: "continue",
+				})
+			},
+			wantOutcome: reliability.OutcomeCompleted,
+			wantClass:   "continue",
+		},
+		{
 			name: "recovery handoff records valid classification",
 			task: runTask{Name: "task", Prompt: "do work", Assignee: "senior", EffectiveAssignee: "recovery", ResolvedRoute: "recovery", LapID: "lap-1", IsLapsBacked: true, LapsRemaining: 1},
 			recordWrapup: func(workspaceDir string) error {

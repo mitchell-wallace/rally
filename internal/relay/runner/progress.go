@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/mitchell-wallace/rally/internal/harnessapi"
 	"github.com/mitchell-wallace/rally/internal/progress"
 	"github.com/mitchell-wallace/rally/internal/reliability"
 	"github.com/mitchell-wallace/rally/internal/store"
@@ -54,7 +55,7 @@ func handoffCreatedLapIDs(handoff *progress.HandoffEntry) []string {
 }
 
 func recoveryClassificationForRun(task runTask, entry *progress.OutingEntry) string {
-	if entry == nil || !strings.EqualFold(strings.TrimSpace(task.promptAssignee()), store.RecoveryRouteName) {
+	if entry == nil || !isRecoveryRoute(task.ResolvedRoute) {
 		return ""
 	}
 	value := strings.TrimSpace(entry.Classification)
@@ -64,6 +65,10 @@ func recoveryClassificationForRun(task runTask, entry *progress.OutingEntry) str
 	default:
 		return ""
 	}
+}
+
+func isRecoveryRoute(route string) bool {
+	return roleMode(route) == harnessapi.RoleModeRecover
 }
 
 func progressLapsCompletedForRun(workspaceDir, runID string) []string {
