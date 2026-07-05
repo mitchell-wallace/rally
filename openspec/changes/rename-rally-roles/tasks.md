@@ -54,7 +54,7 @@ review + commit). Gates for every lap: `go build ./...`,
 
 - [x] E1. Add `intern`/`qa` routes + reasoning entries to this machine's
       user config; `rally routes check`.
-- [ ] E2. End-to-end: `rally init all` in a scratch repo; run a 2-lap relay
+- [x] E2. End-to-end: `rally init all` in a scratch repo; run a 2-lap relay
       (one junior, one verify) on cheap drivers; confirm prompts and
       builtin/ regeneration.
 - [x] E3. Fold roles-v2 terminology into AGENTS.md role bullet list.

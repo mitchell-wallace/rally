@@ -17,22 +17,22 @@
       "title": "Roles v2: implement core role changes",
       "description": "Implement the reconciled roles v2 design: role set in code (builtin role registry, .rally/agents regeneration, routing labels), config validation, tolerant handling of legacy 'ui' assignees in existing queues, tests. Delegate implementation laps per crew-chief skill; review + commit per lap.",
       "assignee": "crew-chief",
-      "isDone": false,
+      "isDone": true,
       "order": 131072,
       "createdAt": "2026-07-05T00:05:52.923351119Z",
-      "updatedAt": "2026-07-05T00:05:52.923351119Z",
-      "completedAt": null
+      "updatedAt": "2026-07-05T00:43:19.608907642Z",
+      "completedAt": "2026-07-05T00:43:19.608907642Z"
     },
     {
       "id": "rall-86d9",
       "title": "Roles v2: rewrite role instructions and tighten prompting",
       "description": "Rewrite .rally/agents builtin role docs for the new role set; clarity pass. Then review prompting across the board (internal/agent_prompt general/ and roles/) to refine and tighten. Keep OpenSpec references out of generic surfaces (AGENTS.md tool-boundaries rule).",
       "assignee": "crew-chief",
-      "isDone": false,
+      "isDone": true,
       "order": 196608,
       "createdAt": "2026-07-05T00:05:52.923352823Z",
-      "updatedAt": "2026-07-05T00:05:52.923352823Z",
-      "completedAt": null
+      "updatedAt": "2026-07-05T00:45:34.048604938Z",
+      "completedAt": "2026-07-05T00:45:34.048604938Z"
     },
     {
       "id": "rall-7ea2",
