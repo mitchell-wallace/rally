@@ -72,11 +72,11 @@
       "title": "Fix: recovery fallback on repeated retries of same lap",
       "description": "When the same lap accumulates repeated failed tries/outings across drivers, fall back to the recovery route (exists in config) or halt with actionable state instead of spinning. Respect retry budgets; emit telemetry; tests.",
       "assignee": "crew-chief",
-      "isDone": false,
+      "isDone": true,
       "order": 458752,
       "createdAt": "2026-07-05T00:05:52.923357992Z",
-      "updatedAt": "2026-07-05T00:05:52.923357992Z",
-      "completedAt": null
+      "updatedAt": "2026-07-05T14:51:47.281468485Z",
+      "completedAt": "2026-07-05T14:51:47.281468485Z"
     },
     {
       "id": "rall-7fe9",

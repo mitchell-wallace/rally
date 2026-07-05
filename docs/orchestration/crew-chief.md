@@ -84,7 +84,19 @@ subsequent wake-ups only verify health and exit.
 
 ## Session log (newest first; keep ~5 entries, prune older)
 
-- **2026-07-05 (session 3, autonomous)** — queue lap 6 (rall-178b
+- **2026-07-05 (session 5, autonomous, 14:43 wake)** — queue lap 7 (rall-2730
+  recovery fallback on repeated retries) DONE (855b7d0). Session 4 (09:43
+  wake, never logged) committed phase-B evidence 0619ef7, wrote
+  /tmp/spec-rall-7fe9.md, launched the rall-2730 codex lap at 09:55, then
+  died at ~10:00 killing codex mid-gates (SECOND occurrence of this failure
+  mode — keep the session alive until codex exits). Tree recovered; impl was
+  spec-faithful (per-outing resolver counting correct, guard on the right
+  seam, event mirrors cap-hit block). Chief fixes in review: (a) final-
+  snippet wrapup test fixture completed the pinned lap and asserted the
+  exact buggy retry this lap removes — decoupled (summary propagation
+  doesn't need LapsCompleted); (b) classify_test.go blew the 1069-line
+  archguard HARD budget — new tests split to run_lap_done_recovery_test.go.
+  All gates green. Next: lap 8 (rall-7fe9), spec at /tmp/spec-rall-7fe9.md. — queue lap 6 (rall-178b
   unauthenticated harness handling) DONE. Session 2's codex lap was killed
   mid-run when that session exited (rollout ends 05:04:40, no report, gates
   never run) — tree recovered, reviewed, fixed, landed. Review catches:
