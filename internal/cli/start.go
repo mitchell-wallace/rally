@@ -29,7 +29,7 @@ func newStartCmd(opts RootOptions) *cobra.Command {
 		},
 	}
 	cmd.Flags().IntP("iterations", "i", 0, "Number of iterations (default 50 unless laps-backed)")
-	cmd.Flags().StringArrayP("agent", "a", nil, "Agent mix (repeatable; comma- or space-separated, e.g. \"cc:2,cx:1\" or \"cc:2 cx:1\")")
+	cmd.Flags().StringArrayP("agent", "a", nil, "Agent mix (repeatable; comma- or space-separated, e.g. \"cl:2,cx:1\" or \"cl:2 cx:1\")")
 	cmd.Flags().StringArrayP("mix", "m", nil, "Legacy synonym for --agent")
 	cmd.Flags().Bool("resume", false, "Resume the last unfinished batch explicitly")
 	cmd.Flags().Bool("new", false, "Start a new batch explicitly, discarding unfinished batch state")

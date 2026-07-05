@@ -41,7 +41,7 @@ From the root of any git repo:
 rally init                  # one-time: writes .rally/config.toml + scaffolding
 rally start                 # run a single iteration with the default mix
 rally start --iterations 4  # run four iterations
-rally start --iterations 4 --agent "ag:1 cc:1 cx:2 op:1"  # custom mix
+rally start --iterations 4 --agent "ag:1 cl:1 cx:2 op:1"  # custom mix
 ```
 
 While a relay is running, watch the current try's transcript live in another
@@ -73,7 +73,7 @@ Each iteration of `rally start` does this:
 1. **Pick a route.** `--agent` override wins, otherwise the lap's `assignee`
    matches a `[routes]` entry, otherwise `default`.
 2. **Pick a driver from that route.** Rally walks the route entries by
-   quota (e.g. `cc:2` gets two outings before advancing). Failures and freezes
+   quota (e.g. `cl:2` gets two outings before advancing). Failures and freezes
    skip ahead.
 3. **Build a prompt** from your project instructions, inbox messages, recent
    try context, and any matching `.rally/agents/{ASSIGNEE}.md` file.
@@ -158,7 +158,7 @@ the agent to review and commit those changes before starting new work.
 | Alias      | Full name     | Binary    |
 |------------|---------------|-----------|
 | `ag`/`agy` | `antigravity` | `agy`     |
-| `cc`       | `claude`      | `claude`  |
+| `cl`/`cc`  | `claude`      | `claude`  |
 | `cx`       | `codex`       | `codex`   |
 | `op`       | `opencode`    | `opencode`|
 
@@ -185,19 +185,19 @@ restores the prior setting.
 string:
 
 ```sh
-rally start --agent cc:1 --agent cx:2 --agent op:1
-rally start --agent "cc:1 cx:2 op:1"
+rally start --agent cl:1 --agent cx:2 --agent op:1
+rally start --agent "cl:1 cx:2 op:1"
 ```
 
-**Bare aliases in `--agent` round-robin one at a time.** `--agent "cc ag op"`
-is equivalent to `cc:1 ag:1 op:1`: claude → antigravity → opencode → claude → …
+**Bare aliases in `--agent` round-robin one at a time.** `--agent "cl ag op"`
+is equivalent to `cl:1 ag:1 op:1`: claude → antigravity → opencode → claude → …
 (This is a deliberate asymmetry with `[routes]` config — see below.)
 
 Mix bare aliases, quota-bearing aliases, named models, and even role
 references in one string:
 
 ```sh
-rally start --agent "cc:opus cx:2 op:z"
+rally start --agent "cl:opus cx:2 op:z"
 rally start --agent "SENIOR"
 rally start --agent "op:opencode-go/kimi-k2.6 DEFAULT:1"
 ```
@@ -226,7 +226,7 @@ Rally config is layered. The **user-level** file at
 main source of truth shared across every repo. The **repo-level**
 `.rally/config.toml` holds per-repo **overrides** only: Rally loads the user
 file first, then applies anything set in the repo file on top of it (per key, a
-repo value wins; a sub-table such as `[harness.cc.models]` merges per entry, and
+repo value wins; a sub-table such as `[harness.cl.models]` merges per entry, and
 a `[routes]` entry replaces just that role's list). `rally init` seeds the user
 file with sensible defaults (only if it doesn't exist) and writes a
 **comments-only** repo file that documents the knobs and points at the user
@@ -248,7 +248,7 @@ data_dir = ""
 
 [defaults]
 iterations = 1
-mix = "cc cx"
+mix = "cl cx"
 claude_model = "claude-opus-4.7"
 codex_model = "gpt-5.5"
 opencode_model = "zai-coding-plan/glm-5.1"
@@ -260,7 +260,7 @@ instructions_file = ".rally/laps_instructions.md"
 [free_run]
 prompt_file = ".rally/free_run_prompt.md"
 
-[harness.cc.models]
+[harness.cl.models]
 opus = "claude-opus-4-7"
 sonnet = "claude-sonnet-4-6"
 
@@ -272,8 +272,8 @@ gk = "opencode-go/kimi-k2.6"
 flash = "Gemini 3.5 Flash (High)"
 
 [routes]
-default = ["ag:flash:1", "cc:opus:1", "cx:1", "op:gk:2-4"]
-SENIOR  = ["cx:1", "cc:opus:1"]
+default = ["ag:flash:1", "cl:opus:1", "cx:1", "op:gk:2-4"]
+SENIOR  = ["cx:1", "cl:opus:1"]
 JUNIOR  = ["op:z:4", "op:gk:2", "ag:1"]
 recovery = ["claude"]
 
@@ -302,11 +302,11 @@ handoff_timeout_secs  = 300
 | `iterations`         | int    | Default iterations when `--iterations` is absent     |
 | `mix`                | string | Default agent mix when `--agent` is absent           |
 | `antigravity_model`  | string | Model label for the `ag`/`agy`/`antigravity` alias   |
-| `claude_model`       | string | Model for the `cc`/`claude` alias                    |
+| `claude_model`       | string | Model for the `cl`/`claude` alias                    |
 | `codex_model`        | string | Model for the `cx`/`codex` alias                    |
 | `opencode_model`     | string | Model for the `op`/`opencode` alias                  |
 
-A bare alias like `cc` in a mix resolves through `[defaults].claude_model`
+A bare alias like `cl` in a mix resolves through `[defaults].claude_model`
 first, then falls back to the harness's hard-coded internal default.
 
 ### `[laps]` and `[free_run]`
@@ -335,7 +335,7 @@ case-insensitively against the active lap's `assignee` value, with
 Each entry is one of:
 
 - a bare harness alias such as `cx` or `ag`
-- a named model such as `cc:opus` or `op:z`
+- a named model such as `cl:opus` or `op:z`
 - a raw `harness:model` string such as `op:opencode-go/kimi-k2.6`
 - any of the above with an optional trailing quota: `:N` or `:N-M`
 
@@ -350,16 +350,16 @@ Each entry is one of:
 **Important asymmetry between `[routes]` and `--agent`:**
 
 - In `--agent`, bare aliases mean "use each once, then rotate"
-  (`--agent "cc ag"` ⇒ `cc:1 ag:1`).
+  (`--agent "cl ag"` ⇒ `cl:1 ag:1`).
 - In `[routes]`, bare aliases mean "stay until failure". If you want
   one-iteration round-robin from `[routes]`, you must add `:1`:
 
 ```toml
 # Round-robin: one try per driver, then advance
-default = ["cc:1", "ag:1", "op:1"]
+default = ["cl:1", "ag:1", "op:1"]
 
 # Stick on claude until it fails, then antigravity until it fails, …
-default = ["cc", "ag", "op"]
+default = ["cl", "ag", "op"]
 ```
 
 This split is intentional: command-line mixes are usually short and
@@ -410,7 +410,7 @@ no front-matter parsing, no template.
 Each harness can declare named model shortcuts.
 
 ```toml
-[harness.cc.models]
+[harness.cl.models]
 opus   = "claude-opus-4-7"
 sonnet = "claude-sonnet-4-6"
 
@@ -422,14 +422,14 @@ gk = "opencode-go/kimi-k2.6"
 flash = "Gemini 3.5 Flash (High)"
 ```
 
-With the above, `--agent "cc:opus op:z ag:flash"` resolves to Claude with
+With the above, `--agent "cl:opus op:z ag:flash"` resolves to Claude with
 `claude-opus-4-7`, Opencode with `zai-coding-plan/glm-5.1`, and
 Antigravity with `Gemini 3.5 Flash (High)`.
 
 Model names must be non-numeric identifiers — `4` is rejected so quota
 parsing stays unambiguous.
 
-Built-in harnesses (`ag`/`cc`/`cx`/`op`) can declare named models but
+Built-in harnesses (`ag`/`cl`/`cx`/`op`) can declare named models but
 **cannot** declare `command`, `model_flag`, `output_strategy`, or
 `tail_stream`.
 
@@ -479,7 +479,7 @@ to keep a harness free while another session runs a large task:
 
 ```toml
 [providers.claude]
-models   = ["cc:opus", "cc:sonnet"]
+models   = ["cl:opus", "cl:sonnet"]
 disabled = true
 ```
 

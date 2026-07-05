@@ -23,8 +23,8 @@ const repoConfigTemplate = `# Rally repo-level config — OVERRIDES ONLY.
 #
 # [routes]
 # # Map a role to an ordered driver fallback list (first that works wins).
-# junior = ["op:zai", "cc:sonnet"]
-# senior = ["cc:opus", "cx:g55"]
+# junior = ["op:zai", "cl:sonnet"]
+# senior = ["cl:opus", "cx:g55"]
 #
 # [providers]
 # # Group drivers that share one usage-limit budget. When any member hits a
@@ -36,7 +36,7 @@ const repoConfigTemplate = `# Rally repo-level config — OVERRIDES ONLY.
 # # Use the table form to disable a whole provider (e.g. a known monthly cap,
 # # or to conserve usage while another session handles a large task):
 # # [providers.claude]
-# # models   = ["cc:opus", "cc:sonnet"]
+# # models   = ["cl:opus", "cl:sonnet"]
 # # disabled = true
 #
 # [reliability]

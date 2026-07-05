@@ -77,13 +77,13 @@ func ParseAgentMix(specs []string, resolver Resolver) (AgentMix, error) {
 		for _, spec := range specs {
 			// Reject third colon segment (reserved for v0.6.0 weight-on-named-model).
 			if strings.Count(spec, ":") > 1 {
-				return AgentMix{}, fmt.Errorf("invalid agent spec %q: weight-on-named-model (e.g. cc:opus:2) is not supported", spec)
+				return AgentMix{}, fmt.Errorf("invalid agent spec %q: weight-on-named-model (e.g. cl:opus:2) is not supported", spec)
 			}
 
 			// If a resolver is provided, delegate resolution to it.
 			if resolver != nil {
 				// Detect weight entries and bare aliases by spec pattern, not by
-				// resolver output. The resolver may return a default model for cc:2
+				// resolver output. The resolver may return a default model for cl:2
 				// which would otherwise suppress weight accounting.
 				parts := strings.SplitN(spec, ":", 2)
 				isBareOrWeight := len(parts) < 2
@@ -144,11 +144,11 @@ func ParseAgentMix(specs []string, resolver Resolver) (AgentMix, error) {
 	// Build the typed cycle and label.
 	// Label format: one space-separated token per cycle entry.
 	//   Bare/weight alias: "claude" (canonical harness name, repeated for weight > 1)
-	//   Named model:       "cc:opus" (original spec — NOT the resolved model string)
+	//   Named model:       "cl:opus" (original spec — NOT the resolved model string)
 	//   Raw model:         "opencode:provider/model"
 	// Using the original spec for named-model entries is critical for round-trip
 	// correctness: a resolved string like "claude-opus-4-7" looks like a named-model
-	// key to the resolver, so the label must carry the short alias ("cc:opus").
+	// key to the resolver, so the label must carry the short alias ("cl:opus").
 	cycle := []harnessapi.ResolvedAgent{}
 	labelParts := []string{}
 	for _, harness := range order {

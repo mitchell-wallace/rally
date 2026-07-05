@@ -27,7 +27,7 @@ func (c V2Config) defaultModelForHarness(harness string) string {
 func (c V2Config) ResolveAgent(spec string) (harnessapi.ResolvedAgent, error) {
 	parts := strings.SplitN(spec, ":", 3)
 	if len(parts) == 3 {
-		return harnessapi.ResolvedAgent{}, fmt.Errorf("invalid agent spec %q: weight-on-named-model (e.g. cc:opus:2) is not supported", spec)
+		return harnessapi.ResolvedAgent{}, fmt.Errorf("invalid agent spec %q: weight-on-named-model (e.g. cl:opus:2) is not supported", spec)
 	}
 
 	alias := parts[0]

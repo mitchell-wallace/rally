@@ -31,6 +31,7 @@ var builtInAliases = map[string]string{
 	"agy":         "antigravity",
 	"antigravity": "antigravity",
 	"cc":          "claude",
+	"cl":          "claude",
 	"claude":      "claude",
 	"cx":          "codex",
 	"codex":       "codex",
@@ -40,7 +41,7 @@ var builtInAliases = map[string]string{
 
 var builtInHarnessLookupOrder = map[string][]string{
 	"antigravity": {"antigravity", "ag", "agy"},
-	"claude":      {"claude", "cc"},
+	"claude":      {"claude", "cl", "cc"},
 	"codex":       {"codex", "cx"},
 	"opencode":    {"opencode", "op"},
 }
@@ -50,6 +51,7 @@ var builtInCanonical = map[string]bool{
 	"agy":         true,
 	"antigravity": true,
 	"cc":          true,
+	"cl":          true,
 	"cx":          true,
 	"op":          true,
 	"claude":      true,

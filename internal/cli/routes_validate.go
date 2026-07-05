@@ -12,7 +12,7 @@ import (
 )
 
 // validateReasoning checks the `[reasoning]` table. A harness-scoped model
-// alias (e.g. `cc:opus-high`) names its harness, so a missing alias is almost
+// alias (e.g. `cl:opus-high`) names its harness, so a missing alias is almost
 // certainly an operator typo and is reported as a hard error. A bare token is
 // resolved against the route-selected harness only at runtime — it may be a
 // model alias or a passthrough effort value — so it never hard-fails; it only

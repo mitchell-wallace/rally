@@ -114,7 +114,7 @@ func (c V2Config) resolveProviderMembers(providerName string, specs []string, re
 			// A member must name a concrete model. A bare harness alias with no
 			// default model resolves to an empty model and would key the provider
 			// as {harness, ""} — a key no model-specific route runner (e.g.
-			// cc:opus) ever matches, silently splitting the group. Reject it so
+			// cl:opus) ever matches, silently splitting the group. Reject it so
 			// the misconfiguration surfaces instead of mis-bucketing at runtime.
 			if requireConcrete && resolved.Model == "" {
 				return nil, fmt.Errorf("config: provider %q member %q resolves to no concrete model; name a specific model (e.g. cx:g55) rather than a bare harness alias", providerName, spec)
