@@ -96,7 +96,19 @@ subsequent wake-ups only verify health and exit.
   exact buggy retry this lap removes — decoupled (summary propagation
   doesn't need LapsCompleted); (b) classify_test.go blew the 1069-line
   archguard HARD budget — new tests split to run_lap_done_recovery_test.go.
-  All gates green. Next: lap 8 (rall-7fe9), spec at /tmp/spec-rall-7fe9.md. — queue lap 6 (rall-178b
+  Then queue lap 8 (rall-7fe9 codex sidelining + phase B to dev) DONE
+  (badd40d, pushed): codex lap ran to completion this time (kept session
+  alive via in-turn review while it ran, ~35 min). Review catches: (a) codex's
+  runner.go stamped EndedAt on cancellation — breaks relay resumability;
+  caught by internal/app suite which the spec's gate list omitted — reverted
+  (end_reason only on terminal ends); (b) discard path recorded 'completed'
+  — added EndReasonDiscarded; (c) restored verify-role lap-done-recovery
+  coverage; (d) chief fixed stall-recovery stale fail_reason (the REAL
+  mechanism behind the 5 completed+harness-error corpus records — codex's
+  report misattributed them to lap-done recovery, which postdates them).
+  E2E: matcher verified against real preserved relay-7 rollouts. Phase B
+  (laps 6-8) all on origin/dev, CI green through 2984c3e. Next head lap:
+  rall-3f79 (staging pipeline, chief-owned; notes at /tmp/rall-3f79-notes.md). — queue lap 6 (rall-178b
   unauthenticated harness handling) DONE. Session 2's codex lap was killed
   mid-run when that session exited (rollout ends 05:04:40, no report, gates
   never run) — tree recovered, reviewed, fixed, landed. Review catches:

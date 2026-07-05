@@ -83,11 +83,11 @@
       "title": "Fix: codex premature sidelining + land phase B to dev",
       "description": "Address the codex error shapes that sideline it prematurely (silent exit-1 with no stdout/stderr — corpus says codex leaves rich session logs on disk we can read; see improve-harness-consistency draft). Fix classification so codex stays in rotation when the failure is transient/not its fault. Tests. Then land all phase-B work to dev.",
       "assignee": "crew-chief",
-      "isDone": false,
+      "isDone": true,
       "order": 524288,
       "createdAt": "2026-07-05T00:05:52.923359164Z",
-      "updatedAt": "2026-07-05T00:05:52.923359164Z",
-      "completedAt": null
+      "updatedAt": "2026-07-05T15:18:10.225189939Z",
+      "completedAt": "2026-07-05T15:18:10.225189939Z"
     },
     {
       "id": "rall-3f79",
