@@ -43,19 +43,19 @@ review + commit). Gates for every lap: `go build ./...`,
 
 ## Lap D — planner + docs (intern/junior-shaped)
 
-- [ ] D1. `prepare-laps` skill: §5 catalog + §6.1 decision tree; remove
+- [x] D1. `prepare-laps` skill: §5 catalog + §6.1 decision tree; remove
       JUNIOR/SENIOR/UI/VERIFY framing; keep OpenSpec coupling rules intact.
-- [ ] D2. README + `.rally/README.md` template: roles/routes/skills split,
+- [x] D2. README + `.rally/README.md` template: roles/routes/skills split,
       eight-role table, ui→skills migration note.
-- [ ] D3. Sweep stray role-name references (`grep -ri '\bui\b' docs
+- [x] D3. Sweep stray role-name references (`grep -ri '\bui\b' docs
       README internal/cli` etc.) — prose only, no behaviour.
 
 ## Lap E — chief-owned landing
 
-- [ ] E1. Add `intern`/`qa` routes + reasoning entries to this machine's
+- [x] E1. Add `intern`/`qa` routes + reasoning entries to this machine's
       user config; `rally routes check`.
 - [ ] E2. End-to-end: `rally init all` in a scratch repo; run a 2-lap relay
       (one junior, one verify) on cheap drivers; confirm prompts and
       builtin/ regeneration.
-- [ ] E3. Fold roles-v2 terminology into AGENTS.md role bullet list.
+- [x] E3. Fold roles-v2 terminology into AGENTS.md role bullet list.
 - [ ] E4. Land to dev per pipeline; update crew-chief queue laps 2–4 states.

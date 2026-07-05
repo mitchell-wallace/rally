@@ -23,8 +23,11 @@ const repoConfigTemplate = `# Rally repo-level config — OVERRIDES ONLY.
 #
 # [routes]
 # # Map a role to an ordered driver fallback list (first that works wins).
+# # Built-in role names: intern, junior, senior, architect, review, verify, qa, recovery.
+# intern = ["op:zai", "op:kimi"]
 # junior = ["op:zai", "cl:sonnet"]
 # senior = ["cl:opus", "cx:g55"]
+# verify = ["cx:g55"]
 #
 # [providers]
 # # Group drivers that share one usage-limit budget. When any member hits a

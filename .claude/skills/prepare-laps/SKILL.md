@@ -1,6 +1,6 @@
 ---
 name: prepare-laps
-description: Convert OpenSpec changes, implementation plans, specs, task lists, or rough feature requests into an ordered Laps queue for Rally. Use when decomposing work into role-aware laps, assigning JUNIOR/SENIOR/UI/VERIFY tasks, adding phase verification, or preparing agent handoffs from OpenSpec or non-OpenSpec plans.
+description: Convert OpenSpec changes, implementation plans, specs, task lists, or rough feature requests into an ordered Laps queue for Rally. Use when decomposing work into role-aware laps, assigning intern/junior/senior/architect/review/verify/qa/recovery tasks, adding phase verification, or preparing agent handoffs from OpenSpec or non-OpenSpec plans.
 license: MIT
 metadata:
   author: rally
@@ -16,23 +16,23 @@ Requires the `laps` CLI v0.8.0 or newer for batch JSON task creation and claim-f
 ## Core Rules
 
 - Treat every lap as a handoff to a different agent.
-- Use assignees exactly: `JUNIOR`, `SENIOR`, `UI`, `VERIFY`. Set them via the `--assignee` flag; never encode the role in the title.
+- Use assignees exactly: `intern`, `junior`, `senior`, `architect`, `review`, `verify`, `qa`, `recovery`. Set them via the `--assignee` flag; never encode the role in the title.
 - Split each implementation phase into 1–3 laps.
   - 1 lap: mechanical setup, narrow config, isolated file changes, simple docs.
   - 2 laps: familiar cross-module work, implementation plus focused tests, moderate uncertainty.
   - 3 laps: high-risk boundaries, broad tests, UI flows with states, migrations/backcompat, significant refactors.
 - Split large test-writing phases aggressively — usually 2–3 laps by layer, harness, or scenario family.
-- When a key file being modified has no dedicated test file, add a baseline-tests lap before the modification laps. This gives the implementation agent a safety net and catches regressions early. Route baseline-tests laps to the same role that would write the implementation tests (usually JUNIOR for mechanical coverage, SENIOR if the behavior under test is subtle).
-- Add a `VERIFY` lap immediately after any single high-risk lap (production data path, auth/session/sync behavior, migrations, broad shared contracts, brownfield architecture changes).
-- Otherwise insert `VERIFY` every 2–4 implementation laps **or at natural slice boundaries** (e.g., "all user-visible UX before infra"), whichever comes first.
-- After the final phase, add one `VERIFY` lap covering the whole outcome.
-- For lightweight greenfield examples or Rally role-routing smoke tests, a single final `VERIFY` is enough. Spend saved laps on implementation depth.
+- When a key file being modified has no dedicated test file, add a baseline-tests lap before the modification laps. This gives the implementation agent a safety net and catches regressions early. Route baseline-tests laps to the same role that would write the implementation tests (usually `junior` for mechanical coverage, `senior` if the behavior under test is subtle).
+- Add a `verify` lap immediately after any single high-risk lap (production data path, auth/session/sync behavior, migrations, broad shared contracts, brownfield architecture changes).
+- Otherwise insert `verify` every 2–4 implementation laps **or at natural slice boundaries** (e.g., "all user-visible UX before infra"), whichever comes first.
+- After the final phase, add one `verify` lap covering the whole outcome.
+- For lightweight greenfield examples or Rally role-routing smoke tests, a single final `verify` is enough. Spend saved laps on implementation depth.
 - Verification laps may fix only tiny, safe one-liners. Anything larger becomes a new focused lap added to the head of the queue.
 - If any lap uncovers a blocker, the assigned agent should `laps add head ...` for it before marking the lap done.
 - Keep laps tight and well-defined. Do not pad lap descriptions with "report any uncertainty" boilerplate — surfacing plan problems is the planning agent's job (see Workflow), and execution-time blockers are already covered by the head-lap rule above.
-- For OpenSpec work, only `VERIFY` laps check off `tasks.md` boxes, and only after verifying the work is done correctly and with sufficient thoroughness and quality. Implementation laps (`JUNIOR`/`SENIOR`/`UI`) do the work and report it but must not tick `tasks.md`; a checked box means "verified done," not "attempted."
-- Diff and cleanup instructions must be branch-target aware. Do not assume `main`; tell VERIFY laps to identify the intended merge target from the user, PR metadata, repo docs, branch config, or recent history before using `git diff <target>...HEAD`.
-- Work that predates the first lap in the current batch is valid baseline context, even when it is not part of the current request. VERIFY may flag it as pre-existing, but must not add cleanup laps that remove it unless the user explicitly asks.
+- For OpenSpec work, only `verify` laps check off `tasks.md` boxes, and only after verifying the work is done correctly and with sufficient thoroughness and quality. Implementation laps (`intern`/`junior`/`senior`) do the work and report it but must not tick `tasks.md`; a checked box means "verified done," not "attempted."
+- Diff and cleanup instructions must be branch-target aware. Do not assume `main`; tell `verify` laps to identify the intended merge target from the user, PR metadata, repo docs, branch config, or recent history before using `git diff <target>...HEAD`.
+- Work that predates the first lap in the current batch is valid baseline context, even when it is not part of the current request. `verify` may flag it as pre-existing, but must not add cleanup laps that remove it unless the user explicitly asks.
 - Never ask a lap to rewrite git history (`reset`, `rebase`, squash, amend-away, force-push) as a cleanup strategy. Prefer additive commits, explicit revert commits, or a user-approved recovery branch so reverted work remains backtrackable.
 - Do not classify `.laps/`, `.rally/config.toml`, or `.rally/agents/` as disposable runtime noise. They are normally tracked planning/config artifacts. High-churn runtime/debug artifacts under `.rally/state/` should be pruned/exported separately.
 
@@ -47,28 +47,34 @@ Requires the `laps` CLI v0.8.0 or newer for batch JSON task creation and claim-f
    - If the input is an OpenSpec change with tasks/specs already written, run `openspec status --change "<name>" --json` and `openspec instructions apply --change "<name>" --json`, then read the returned `contextFiles`.
    - If the input is a proposal **without** tasks/specs, either (a) plan directly from the proposal — fine when the work is light or already well-explored in conversation, or (b) nudge the user to run `opsx:ff` first when scope or risk is unclear. Default to (a) for ≤10 laps of well-understood work and (b) for larger or hazier work.
    - If no change name is provided and multiple active OpenSpec changes exist, ask or use the user's latest context. Do not silently plan the wrong change.
-   - If the change declares a dependency on another change ("depends on #N", "after `<change>`", or a "post-`<change>` world"), verify during prepare-laps that the dependency has actually landed **and** that the working tree matches the end-state it promised — inspect the tree, do not trust the proposal's narrative. Resolve or report any mismatch to the user now. Do not embed dependency-detective instructions into individual laps: pre-change dependency checking belongs here, and mid-change dependency verification is the standing job of the `VERIFY` role.
+   - If the change declares a dependency on another change ("depends on #N", "after `<change>`", or a "post-`<change>` world"), verify during prepare-laps that the dependency has actually landed **and** that the working tree matches the end-state it promised — inspect the tree, do not trust the proposal's narrative. Resolve or report any mismatch to the user now. Do not embed dependency-detective instructions into individual laps: pre-change dependency checking belongs here, and mid-change dependency verification is the standing job of the `verify` role.
    - For non-OpenSpec input, inspect the provided plan/files and explore the codebase just enough to identify phases, risks, dependencies, and verification commands.
    - For small ad-hoc requests, missing plan files, or very short specs, fold relevant facts directly into each lap description instead of pointing at a file.
 
 2. **Shape phases**
-   - Prefer outcome-oriented phases: setup, core behavior, integration, UI, tests, docs/migration, cleanup.
+   - Prefer outcome-oriented phases: setup, core behavior, integration, user-facing surfaces, tests, docs/migration, cleanup.
    - Preserve real dependencies, but avoid over-rigid microplans. Give architecture guidance and acceptance criteria; let the assigned agent choose local implementation details.
-   - For under-defined work, add an early `SENIOR` or `UI` exploration/design lap before implementation. Its output should be decisions and follow-up head laps if the work expands.
+   - For under-defined implementation work, add an early `senior` exploration/design lap; when the plan, architecture, sequencing, or remaining lap assignments need repair without implementation, add an `architect` lap. The output should be decisions and follow-up head laps if the work expands.
 
 3. **Assign roles**
-   - `JUNIOR`: bounded mechanical or pattern-following work, narrow bug fixes, focused tests following existing patterns, simple UI wiring (a single button, an extra setting).
-   - `SENIOR`: design quality and risk management — architecture-sensitive changes, auth/session/sync/data correctness, migrations, significant new patterns, tricky debugging.
-   - `UI`: non-trivial visual design judgment — new modals, animations, multi-state interactions, new layouts, tone-shaping copy. Use UI when design judgment matters; use JUNIOR when the work is one-off wiring with no judgment call.
-   - `VERIFY`: verification, code review, OpenSpec verification, test audit, follow-up head-lap creation.
-   - The `assignee` field is the contract. Rally loads `.rally/agents/<assignee>.md` and prepends it to the prompt; the lap description does not need to repeat that. Sharing roles across laps is also a teamwork goal — route UI judgment to the UI model, architecture to SENIOR, mechanical work to JUNIOR.
+   - `intern`: prescribed, mechanical, reversible edits where the approach is already chosen. Use only for exact scoped changes; escalate on design ambiguity.
+   - `junior`: bounded implementation inside established architecture. This is the default implementation lane; local autonomy is allowed, but cross-subsystem or contract decisions are not.
+   - `senior`: design-sensitive implementation. Use for architecture-aware code changes, auth/session/sync/data correctness, migrations, significant new patterns, tricky debugging, and bounded plan corrections.
+   - `architect`: plan-only diagnosis, architecture, decomposition, sequencing, and reassignment. It does not write code or tests.
+   - `review`: findings-first code review of a scoped diff, branch, relay, or implementation range. It must load and follow the `auto-code-review` skill; auto-fix only when explicitly requested.
+   - `verify`: acceptance evidence, OpenSpec verification, test audit, and follow-up head-lap creation. Mostly read-only; reports pass/fail and follow-up laps.
+   - `qa`: black-box user-style testing of observable workflows. Reports defects without editing code.
+   - `recovery`: dirty, failed, timed-out, incomplete, or incoherent state reconciliation. Use only to restore a safe baseline or route to architect/implementation.
+   - Decision tree: choose `recovery` first for incoherent state; `architect` for plan/architecture/sequencing changes without implementation; `review` for scoped code review; `verify` for acceptance evidence; `qa` for external user-style testing; `intern` for exact mechanical scope; `junior` for bounded normal implementation; `senior` for design-sensitive implementation; `architect` again if implementation proves the remaining plan wrong.
+   - Escalation map: `intern` → `junior`/`senior`; `junior` → `senior`/`architect`; `senior` → `architect` or `recovery` if dirty; `architect` → implementation laps; `review` → `senior`/`junior` fixes, `architect` decisions, then `verify`; `verify` → `junior`/`senior` fixes, `architect` for ambiguous criteria, `review` for code-risk concerns; `qa` → `junior`/`senior` fixes, `architect` for product ambiguity, then `verify`; `recovery` → continue/discard/course_correct/architect/needs_user.
+   - The `assignee` field is the contract. Rally loads `.rally/agents/<assignee>.md` and prepends it to the prompt; the lap description does not need to repeat that. Sharing roles across laps is also a teamwork goal — route exact mechanical work to `intern`, normal implementation to `junior`, design-sensitive work to `senior`, plan repair to `architect`, review to `review`, evidence gates to `verify`, external workflow testing to `qa`, and dirty state repair to `recovery`.
 
 4. **Write each lap**
    Inclusion is dynamic. Most laps include 4–5 of these sections; pick what serves the work:
    - **Context** — source artifacts, prior-phase assumptions, relevant files. Skip when the title + acceptance are fully self-explanatory or when the lap is open-ended.
    - **Outcome** — the observable end state. Almost always include.
    - **Files & scope** — what to touch, what to avoid. Skip for exploratory or design laps where files aren't known yet.
-   - **Design** — architectural constraints, patterns to follow, risk notes, subtleties. Include when judgment beyond "follow the obvious path" is required (always for SENIOR; often for UI; sometimes for JUNIOR).
+   - **Design** — architectural constraints, patterns to follow, risk notes, subtleties. Include when judgment beyond "follow the obvious path" is required (always for `senior`; sometimes for `junior`; for `intern`, provide the exact pattern instead of broad design space).
    - **Acceptance** — tests, commands, smoke checks, docs updates, observable behavior. Almost always include.
 
 5. **Add tasks**
@@ -82,15 +88,15 @@ Requires the `laps` CLI v0.8.0 or newer for batch JSON task creation and claim-f
      [
        {
          "title": "<short imperative lap title, no role prefix>",
-         "assignee": "JUNIOR | SENIOR | UI | VERIFY",
+         "assignee": "intern | junior | senior | architect | review | verify | qa | recovery",
          "description": "<multi-section prose: Context, Outcome, Files & scope, Design, Acceptance>"
        }
      ]
      ```
 
-   - Run `laps list` at the end and sanity-check role order, VERIFY placement, and the final full-outcome verification lap.
+   - Run `laps list` at the end and sanity-check role order, `verify` placement, and the final full-outcome verification lap.
    - Commit the prepared `.laps/laps.json` queue to git after the sanity check unless the user explicitly says not to. If this prepare-laps session also updates this skill, include that skill edit in the same commit so the queue and planning convention land together.
-   - Report to the operator any meaningful uncertainties or plan problems you hit while planning — circular or contradictory task dependencies, work that does not map cleanly onto laps, missing prerequisites, or a plan claim that contradicts the working tree. Raise these in your summary to the operator; do not bury them inside lap descriptions or silently plan around them. This planning-time reporting is the planning agent's responsibility, distinct from the `VERIFY` role's mid-change verification.
+   - Report to the operator any meaningful uncertainties or plan problems you hit while planning — circular or contradictory task dependencies, work that does not map cleanly onto laps, missing prerequisites, or a plan claim that contradicts the working tree. Raise these in your summary to the operator; do not bury them inside lap descriptions or silently plan around them. This planning-time reporting is the planning agent's responsibility, distinct from the `verify` role's mid-change verification.
 
 ## Testing Laps
 
@@ -103,7 +109,7 @@ Requires the `laps` CLI v0.8.0 or newer for batch JSON task creation and claim-f
 
 ## Verification Laps
 
-For OpenSpec work, a phase `VERIFY` lap should tell the agent to use the `openspec-verify-change` skill against the same change, then focus the report on the phase just completed. The final full-change `VERIFY` lap should run the complete OpenSpec verification and inspect the whole diff.
+For OpenSpec work, a phase `verify` lap should tell the agent to use the `openspec-verify-change` skill against the same change, then focus the report on the phase just completed. The final full-change `verify` lap should run the complete OpenSpec verification and inspect the whole diff.
 
 For non-OpenSpec work, verification laps should read the original request, inspect the diff, run the relevant tests, perform any realistic smoke checks, and report findings first. They should create new head laps for substantive gaps rather than turning review into a hidden implementation phase.
 
@@ -119,7 +125,7 @@ Verification lap descriptions should include:
 
 At the end of a prepare-laps session, update this skill when:
 
-- The user corrects lap size, phase shape, role assignment, or VERIFY cadence.
+- The user corrects lap size, phase shape, role assignment, or `verify` cadence.
 - A recurring class of lap is too vague, too large, or too small.
 - Rally's role-loading behavior, OpenSpec output shape, or Laps CLI behavior changes.
 - A verification failure reveals a better standard check or follow-up-lap pattern.

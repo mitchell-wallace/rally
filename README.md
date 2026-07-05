@@ -233,8 +233,8 @@ file with sensible defaults (only if it doesn't exist) and writes a
 file. Edit the user base with `rally config`; edit repo overrides with
 `rally config --repo`.
 
-`rally init roles` adds role routes for `junior`, `senior`, `ui`, `verify`, and
-`recovery` to the **user** config, plus role instruction files under
+`rally init roles` adds routes for Rally's built-in roles to the **user**
+config, plus role instruction files under
 `.rally/agents/` (see [Role instruction files](#role-instruction-files)). The
 example below shows the active config shape (as written to the user file);
 generated defaults may be more compact when unset values can fall back to
@@ -273,8 +273,13 @@ flash = "Gemini 3.5 Flash (High)"
 
 [routes]
 default = ["ag:flash:1", "cl:opus:1", "cx:1", "op:gk:2-4"]
-SENIOR  = ["cx:1", "cl:opus:1"]
-JUNIOR  = ["op:z:4", "op:gk:2", "ag:1"]
+intern = ["op:z:4", "op:gk:2"]
+junior = ["op:z:4", "op:gk:2", "ag:1"]
+senior = ["cx:1", "cl:opus:1"]
+architect = ["cl:opus:1"]
+review = ["cx:1"]
+verify = ["cx:1"]
+qa = ["op:z:4", "ag:1"]
 recovery = ["claude"]
 
 [providers]
@@ -331,6 +336,30 @@ deprecation warning. `[free_run]` takes precedence when both are set.
 `[routes]` enables role-aware routing. Route keys are matched
 case-insensitively against the active lap's `assignee` value, with
 `default` reserved for the no-role / no-match case.
+
+Roles describe authority and operating mode, routes choose the concrete
+driver/model roster for that role, and skills carry domain-specific methods
+such as code review, UI/branding, accessibility, or release checklists. A role
+name is still just a route key at runtime: unknown route names are allowed for
+custom roles and fall back through the normal routing behavior when unmatched.
+
+Built-in roles:
+
+| Role | Description |
+|------|-------------|
+| `intern` | Prescribed mechanical implementation. Executes exact scoped changes; escalates on design ambiguity. |
+| `junior` | Bounded autonomous implementation. Works inside established architecture with local decision-making. |
+| `senior` | Design-sensitive implementation. Handles cross-cutting or architecture-aware code changes and bounded plan corrections. |
+| `architect` | Plan-only replanning. Diagnoses invalid assumptions, chooses architecture, and rewrites future laps without code edits. |
+| `review` | Findings-first code review. Loads and follows the auto-code-review skill for scoped diffs or completed relay work. |
+| `verify` | Acceptance evidence. Runs and inspects validation against stated criteria; reports pass/fail and follow-ups. |
+| `qa` | Black-box user-style testing. Exercises observable workflows and reports defects without editing code. |
+| `recovery` | State reconciliation. Handles dirty, failed, timed-out, or incoherent work so the relay can safely continue. |
+
+`ui` is no longer a generated built-in role. Existing `[routes].ui` entries keep
+working as custom roles, but UI, branding, accessibility, and design-system
+guidance should now live in repo or organization skills that any appropriate
+role can be asked to use.
 
 Each entry is one of:
 
@@ -662,10 +691,12 @@ session exists, no synthetic handoff is fabricated and the outing resolves
 without one. Worst-case wall clock per outing is roughly `run_timeout_secs +
 handoff_timeout_secs`.
 
-**The `recovery` role and route.** RECOVERY is a reasoning-heavy role like
-VERIFY but with the authority and coding ability to modify code and
-reconcile dirty state, like SENIOR. It defaults to a stronger driver
-(`rally init roles` seeds a `recovery` route) and does not reuse SENIOR's
+**The `recovery` role and route.** `recovery` is a reasoning-heavy
+reconciliation role for dirty, failed, timed-out, or incoherent state. It has
+more write authority than read-only gate roles such as `verify`, `review`, and
+`qa`, and it may preserve, remove, or isolate partial work so the relay can
+continue. It defaults to a stronger driver (`rally init roles` seeds a
+`recovery` route) and does not reuse `senior`'s
 prompt. Its prompt requires it to classify the leftover state into exactly
 one of `continue`, `discard`, `course_correct`, `repair_plan`, or
 `needs_user`, then *act* on that classification (never stopping at diagnosis
@@ -815,7 +846,7 @@ rally version            # print version (vX.Y.Z, vX.Y.Z-dev for source builds)
 | Command | What it does |
 |---|---|
 | `rally init` | Writes a comments-only repo `.rally/config.toml`, seeds the user-level `~/.config/rally/config.toml` if absent, scaffolds `.rally/state/`, and writes `.rally/.gitignore` entries. Idempotent — safe to re-run. |
-| `rally init roles` | Adds `[routes]` entries for `junior`, `senior`, `ui`, `verify`, and `recovery` to the **user** config and sets up role instruction files under `.rally/agents/builtin/` (managed) and `.rally/agents/user/` (overrides). Does **not** touch workspace scaffold files (README, .gitignore, etc.). Idempotent. |
+| `rally init roles` | Adds `[routes]` entries for the built-in roles (`intern`, `junior`, `senior`, `architect`, `review`, `verify`, `qa`, `recovery`) to the **user** config and sets up role instruction files under `.rally/agents/builtin/` (managed) and `.rally/agents/user/` (overrides). Does **not** touch workspace scaffold files (README, .gitignore, etc.). Idempotent. |
 | `rally init all` | Runs `rally init` followed by `rally init roles` — full workspace + role setup in one step. The hidden alias `rally init-roles` also maps here for backward compatibility. Idempotent. |
 
 For a fresh repo, `rally init all` is the quickest path to a fully configured workspace.
