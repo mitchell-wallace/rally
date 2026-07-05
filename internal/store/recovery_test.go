@@ -58,6 +58,76 @@ func TestRecoveryPendingForLapTriggers(t *testing.T) {
 	}
 }
 
+func TestRecoveryPendingForLapRepeatedFailedOutingsTrigger(t *testing.T) {
+	tests := []struct {
+		name    string
+		records []TryRecord
+		want    bool
+		capHit  bool
+	}{
+		{
+			name:    "one failed outing does not trigger",
+			records: []TryRecord{{ID: 1, OutingID: 1, LapID: "lap-1", AttemptNumber: 1, Outcome: reliability.OutcomeFailed}},
+		},
+		{
+			name: "two consecutive failed outings trigger",
+			records: []TryRecord{
+				{ID: 1, OutingID: 1, LapID: "lap-1", AttemptNumber: 1, Outcome: reliability.OutcomeFailed},
+				{ID: 2, OutingID: 2, LapID: "lap-1", AttemptNumber: 1, Outcome: reliability.OutcomeFailed},
+			},
+			want: true,
+		},
+		{
+			name: "success breaks failed outing consecutiveness",
+			records: []TryRecord{
+				{ID: 1, OutingID: 1, LapID: "lap-1", AttemptNumber: 1, Outcome: reliability.OutcomeFailed},
+				{ID: 2, OutingID: 2, LapID: "lap-1", AttemptNumber: 1, Outcome: reliability.OutcomeCompleted},
+				{ID: 3, OutingID: 3, LapID: "lap-1", AttemptNumber: 1, Outcome: reliability.OutcomeFailed},
+			},
+		},
+		{
+			name: "two failed recovery outings still hit consecutive recovery cap",
+			records: []TryRecord{
+				{ID: 1, OutingID: 1, LapID: "lap-1", AttemptNumber: 1, Outcome: reliability.OutcomeFailed, ResolvedRoute: "recovery"},
+				{ID: 2, OutingID: 2, LapID: "lap-1", AttemptNumber: 1, Outcome: reliability.OutcomeFailed, ResolvedRoute: "recovery"},
+			},
+			capHit: true,
+		},
+		{
+			name: "handoff timeout trigger still works",
+			records: []TryRecord{
+				{ID: 1, OutingID: 1, LapID: "lap-1", AttemptNumber: 1, Outcome: reliability.OutcomeHandoffTimeout},
+			},
+			want: true,
+		},
+		{
+			name: "excluded outcomes do not count",
+			records: []TryRecord{
+				{ID: 1, OutingID: 1, LapID: "lap-1", AttemptNumber: 1, Outcome: reliability.OutcomeFailed},
+				{ID: 2, OutingID: 2, LapID: "lap-1", AttemptNumber: 1, Outcome: reliability.OutcomeCancelled},
+				{ID: 3, OutingID: 3, LapID: "lap-1", AttemptNumber: 1, Outcome: reliability.OutcomeRunTimeout},
+				{ID: 4, OutingID: 4, LapID: "lap-1", AttemptNumber: 1, Outcome: reliability.OutcomeHandoffRequested},
+				{ID: 5, OutingID: 5, LapID: "lap-1", AttemptNumber: 1, Outcome: reliability.OutcomeCompleted},
+				{ID: 6, OutingID: 6, LapID: "lap-1", AttemptNumber: 1, Outcome: reliability.OutcomeIncomplete},
+				{ID: 7, OutingID: 7, LapID: "lap-1", AttemptNumber: 1, Outcome: reliability.OutcomeInterrupted},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, s := setupTempStore(t)
+			for _, rec := range tt.records {
+				mustAppendTry(t, s, rec)
+			}
+			status := s.RecoveryPendingForLap("lap-1")
+			if status.Pending != tt.want || status.CapHit != tt.capHit {
+				t.Fatalf("status = %+v, want pending=%v capHit=%v", status, tt.want, tt.capHit)
+			}
+		})
+	}
+}
+
 func TestRecoveryPendingForLapMatchesDirtyHandoffFollowupAfterReload(t *testing.T) {
 	rallyDir, s := setupTempStore(t)
 	mustAppendTry(t, s, TryRecord{

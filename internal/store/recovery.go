@@ -11,6 +11,8 @@ const RecoveryRouteName = "recovery"
 
 const RecoveryRouteConsecutiveCap = 2
 
+const RecoveryFailedOutingsTrigger = 2
+
 // RecoveryPendingStatus is derived only from persisted try records. It is used
 // by relay routing to force the next run through the recovery route without
 // mutating the laps queue.
@@ -148,7 +150,8 @@ func recoveryStatusFromRunResolvers(requestedLapID string, resolvers []TryRecord
 	}
 
 	latest := resolvers[len(resolvers)-1]
-	triggered := latest.Outcome == reliability.OutcomeHandoffTimeout || latest.DirtyHandoff
+	failedOutings := trailingPlainFailedOutings(resolvers)
+	triggered := latest.Outcome == reliability.OutcomeHandoffTimeout || latest.DirtyHandoff || failedOutings >= RecoveryFailedOutingsTrigger
 	if !triggered {
 		return RecoveryPendingStatus{}
 	}
@@ -180,6 +183,21 @@ func recoveryStatusFromRunResolvers(requestedLapID string, resolvers []TryRecord
 	}
 	status.Pending = true
 	return status
+}
+
+func trailingPlainFailedOutings(resolvers []TryRecord) int {
+	count := 0
+	for i := len(resolvers) - 1; i >= 0; i-- {
+		// Only ordinary failed outcomes count here. Successful outcomes,
+		// handoff_requested, cancelled/interrupted, incomplete, handoff_timeout,
+		// and run_timeout are owned by other completion or handoff-continuation
+		// paths and must not trigger repeated-failed-outing recovery.
+		if resolvers[i].Outcome != reliability.OutcomeFailed {
+			break
+		}
+		count++
+	}
+	return count
 }
 
 func containsString(values []string, target string) bool {

@@ -20,6 +20,7 @@ func (r *Runner) classifyAttemptOutcome(relay *store.RelayRecord, runIndex int, 
 	r.classifyInitialFailure(state, attempt)
 	detectLapsMarkerAsText(relay, runIndex, task, state, attempt, log)
 	r.validatePinnedLapForAttempt(relay, runIndex, task, state, attempt, log)
+	applyLapDoneRecovery(relay, runIndex, task, state, attempt, log)
 	applyStallRecovery(relay, runIndex, task, state, attempt, log)
 	r.resolveAttemptOutcomeAndResume(state, attempt)
 	r.classifyErrorAndApplyStrategy(picked, state, attempt)
@@ -112,6 +113,23 @@ func (r *Runner) validatePinnedLapForAttempt(relay *store.RelayRecord, runIndex 
 			}
 		}
 	}
+}
+
+// applyLapDoneRecovery promotes a failed attempt to success when the laps hook
+// recorded completion of the pinned lap during this attempt. The queue hook is
+// authoritative for every role, including non-implementation roles such as
+// verify/review/qa, so this intentionally does not use roleWritePolicy.
+func applyLapDoneRecovery(relay *store.RelayRecord, runIndex int, task runTask, state *runOneState, attempt *runAttemptState, log io.Writer) {
+	if !attempt.failed || !task.IsLapsBacked || attempt.lapPinMismatch {
+		return
+	}
+	if !stringSliceContains(attempt.recordedLaps, task.LapID) {
+		return
+	}
+	overriddenReason := state.failReason
+	attempt.failed = false
+	state.success = true
+	fmt.Fprintf(log, "relay %d run %d attempt %d lap-done recovery: laps done hook fired for pinned lap %q; treating as success (was: %s)\n", relay.ID, runIndex+1, attempt.attempt, task.LapID, overriddenReason)
 }
 
 // applyStallRecovery promotes a stalled attempt to success when the agent

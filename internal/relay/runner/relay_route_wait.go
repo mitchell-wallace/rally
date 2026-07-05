@@ -130,6 +130,33 @@ func (r *Runner) emitFallbackEvents(
 	} else if fallbackCause != nil {
 		fallbackCause = nil
 	}
+	if selection.RecoveryForced {
+		to := telemetry.RunnerLabel(selection.Agent.Harness, selection.Agent.Model)
+		from := to
+		if selection.PreviousAgent != nil {
+			from = telemetry.RunnerLabel(selection.PreviousAgent.Harness, selection.PreviousAgent.Model)
+		}
+		fmt.Fprintf(log, "relay %d run %d route fallback: recovery forced for lap %q via %s\n", relay.ID, runID, task.LapID, to)
+		runSpan.SetTag("route_fallback", "true")
+		runSpan.SetData("route_fallback", true)
+		r.tel().EmitRouteEvent(runCtx, map[string]interface{}{
+			"event":                        "route_fallback",
+			"relay_id":                     relay.ID,
+			"run_id":                       runID,
+			"from_runner":                  from,
+			"to_runner":                    to,
+			"role":                         task.promptAssignee(),
+			"repo":                         rc.Repo,
+			"repo_name":                    rc.RepoName,
+			"lap_id":                       task.LapID,
+			"trigger_run_id":               selection.RecoveryStatus.ResolvingOutingID,
+			"trigger_try_id":               selection.RecoveryStatus.ResolvingTryID,
+			"trigger_outcome":              string(selection.RecoveryStatus.ResolvingOutcome),
+			"trigger_lap_id":               selection.RecoveryStatus.TriggerLapID,
+			"route_name":                   selection.Route.Name,
+			"route_entry_exhausted_reason": "recovery_forced",
+		})
+	}
 	if selection.RecoveryCapHit {
 		to := telemetry.RunnerLabel(selection.Agent.Harness, selection.Agent.Model)
 		from := to

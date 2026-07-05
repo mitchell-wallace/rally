@@ -384,6 +384,82 @@ func TestRunRecoveryCapHitCapturesNeedsUserIssue(t *testing.T) {
 	assertTryLogsHaveOutcome(t, sink)
 }
 
+func TestRunRecoveryForcedEmitsRouteEvent(t *testing.T) {
+	workspaceDir := t.TempDir()
+	rallyDir := store.RallyDir(workspaceDir)
+	os.MkdirAll(rallyDir, 0o755)
+	initRepo(t, workspaceDir)
+	runGit(t, workspaceDir, "commit", "--allow-empty", "-m", "initial", "--no-verify")
+
+	s := newTestStore(t, rallyDir)
+	if err := s.AppendTry(store.TryRecord{ID: 1, OutingID: 1, RelayID: 1, LapID: "lap-recover", AttemptNumber: 1, Outcome: reliability.OutcomeFailed}); err != nil {
+		t.Fatalf("append try 1: %v", err)
+	}
+	if err := s.AppendTry(store.TryRecord{ID: 2, OutingID: 2, RelayID: 1, LapID: "lap-recover", AttemptNumber: 1, Outcome: reliability.OutcomeFailed}); err != nil {
+		t.Fatalf("append try 2: %v", err)
+	}
+
+	oldHeadPull := headPullLap
+	headPullLap = func(context.Context, string) (laps.Lap, error) {
+		return laps.Lap{ID: "lap-recover", Title: "recover task", Description: "repair", Assignee: "senior"}, nil
+	}
+	oldQueueSize := queueSize
+	queueSize = func(context.Context, string) (int, error) { return 1, nil }
+	defer func() {
+		headPullLap = oldHeadPull
+		queueSize = oldQueueSize
+	}()
+
+	exec := &funcExecutor{
+		fn: func(ctx context.Context, opts harnessapi.RunOptions) (*harnessapi.TryResult, error) {
+			if err := os.WriteFile(filepath.Join(workspaceDir, "recovered.txt"), []byte("done\n"), 0o644); err != nil {
+				return nil, err
+			}
+			if err := progress.RecordLap(workspaceDir, "lap-recover"); err != nil {
+				return nil, err
+			}
+			if err := progress.AppendOutingEntry(workspaceDir, progress.OutingEntry{
+				OutingID:      "relay-1-run-1",
+				Summary:       "recovered",
+				LapsCompleted: []string{"lap-recover"},
+			}); err != nil {
+				return nil, err
+			}
+			return &harnessapi.TryResult{Completed: true, Summary: "recovered"}, nil
+		},
+	}
+	sink := &capturingSink{}
+	r := NewRunner(s, Config{
+		WorkspaceDir: workspaceDir,
+		DataDir:      t.TempDir(),
+		RouteSpecs: map[string][]string{
+			"senior":   {"op:dsf"},
+			"recovery": {"op:dsf"},
+		},
+		TargetIterations: 1,
+		RetryBudget:      1,
+		LapsEnabled:      true,
+		Resolver:         cheapTestResolver,
+	}, map[string]harnessapi.Executor{"opencode": exec})
+	r.SetTelemetry(sink)
+
+	if err := r.Run(context.Background()); err != nil {
+		t.Fatalf("Run error = %v", err)
+	}
+
+	routeEvent := findRouteEventByEvent(t, sink, "route_fallback")
+	if routeEvent["route_entry_exhausted_reason"] != "recovery_forced" {
+		t.Fatalf("route_entry_exhausted_reason = %#v, want recovery_forced in %#v", routeEvent["route_entry_exhausted_reason"], routeEvent)
+	}
+	if routeEvent["trigger_try_id"] != 2 || routeEvent["trigger_outcome"] != string(reliability.OutcomeFailed) {
+		t.Fatalf("recovery forced trigger fields = %#v", routeEvent)
+	}
+	if routeEvent["route_name"] != "recovery" || routeEvent["lap_id"] != "lap-recover" {
+		t.Fatalf("recovery forced route fields = %#v", routeEvent)
+	}
+	assertTryLogsHaveOutcome(t, sink)
+}
+
 // TestRun_AllFrozen_CarriesRallyContext verifies the all-frozen relay stall
 // capture carries the rally context block with relay-level identity and has
 // no try-level or provider-limit fields.

@@ -216,7 +216,7 @@ attemptLoop:
 			return state.outcome(task, false, false, false), err
 		}
 
-		decision := r.decideRetryOrComplete(task, state, attemptState, onStallRecovered)
+		decision := r.decideRetryOrComplete(relay.ID, runIndex+1, task, state, attemptState, onStallRecovered, log)
 		switch decision.action {
 		case runOneAttemptReturn:
 			return decision.outcome, nil

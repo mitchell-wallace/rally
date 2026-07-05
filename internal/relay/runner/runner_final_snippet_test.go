@@ -34,10 +34,12 @@ func TestRunOneFinalSnippetUsesRecordedWrapupSummary(t *testing.T) {
 		fn: func(_ context.Context, opts harnessapi.RunOptions) (*harnessapi.TryResult, error) {
 			attempt++
 			if attempt == 1 {
+				// No LapsCompleted: completing the pinned lap would promote the
+				// failed attempt via lap-done recovery and there would be no retry
+				// to propagate the wrapup summary into.
 				if err := progress.AppendOutingEntry(workspaceDir, progress.OutingEntry{
-					OutingID:      runID,
-					Summary:       wrapupSummary,
-					LapsCompleted: []string{"lap-1"},
+					OutingID: runID,
+					Summary:  wrapupSummary,
 				}); err != nil {
 					return nil, err
 				}

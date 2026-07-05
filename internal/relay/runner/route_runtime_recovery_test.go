@@ -515,6 +515,26 @@ func TestRouteRuntime_OrdinaryFailedDoesNotForceRecovery(t *testing.T) {
 	}
 }
 
+func TestRouteRuntime_RepeatedFailedOutingsForceRecovery(t *testing.T) {
+	rt, resilience := newResolvedRouteRuntimeOrDie(t, map[string][]string{
+		"default":  {"claude:opus-4.7"},
+		"senior":   {"claude:sonnet-4.5"},
+		"recovery": {"codex:gpt-5.5"},
+	}, false)
+	rt.store = newRouteRuntimeStore(t,
+		store.TryRecord{ID: 1, OutingID: 1, LapID: "lap-1", AttemptNumber: 1, Outcome: reliability.OutcomeFailed},
+		store.TryRecord{ID: 2, OutingID: 2, LapID: "lap-1", AttemptNumber: 1, Outcome: reliability.OutcomeFailed},
+	)
+
+	sel := mustNextRouteSelection(t, rt, resilience, "senior", "lap-1")
+	if sel.Route.Name != "recovery" || !sel.RecoveryForced {
+		t.Fatalf("selection route=%q forced=%v, want forced recovery", sel.Route.Name, sel.RecoveryForced)
+	}
+	if sel.RecoveryStatus.ResolvingTryID != 2 || sel.RecoveryStatus.ResolvingOutcome != reliability.OutcomeFailed {
+		t.Fatalf("recovery status = %+v, want try 2 failed resolver", sel.RecoveryStatus)
+	}
+}
+
 func TestRouteRuntime_RecoveryStateSurvivesStoreReload(t *testing.T) {
 	rallyDir, s := setupRouteRuntimeStore(t)
 	mustAppendRouteTry(t, s, store.TryRecord{ID: 1, OutingID: 1, LapID: "lap-1", AttemptNumber: 1, Outcome: reliability.OutcomeHandoffTimeout})

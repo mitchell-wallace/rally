@@ -2,9 +2,12 @@ package runner
 
 import (
 	"context"
+	"fmt"
+	"io"
 
 	"github.com/mitchell-wallace/rally/internal/harnessapi"
 	"github.com/mitchell-wallace/rally/internal/relay/runner/runtimeevent"
+	"github.com/mitchell-wallace/rally/internal/reliability"
 	"github.com/mitchell-wallace/rally/internal/telemetry"
 )
 
@@ -52,7 +55,7 @@ func (c *routeFallbackCause) addTo(fields map[string]interface{}, span telemetry
 	}
 }
 
-func (r *Runner) decideRetryOrComplete(task runTask, state *runOneState, attempt *runAttemptState, onStallRecovered func()) runOneAttemptDecision {
+func (r *Runner) decideRetryOrComplete(relayID, runID int, task runTask, state *runOneState, attempt *runAttemptState, onStallRecovered func(), log io.Writer) runOneAttemptDecision {
 	if attempt.actionTaken {
 		if r.stopFlag.Load() {
 			return runOneAttemptDecision{action: runOneAttemptReturn, outcome: state.outcome(task, false, false, true)}
@@ -128,6 +131,16 @@ func (r *Runner) decideRetryOrComplete(task runTask, state *runOneState, attempt
 		return runOneAttemptDecision{action: runOneAttemptBreak}
 	}
 
+	if r.pinnedLapCompleteBeforeRetry(task) {
+		fmt.Fprintf(log, "relay %d run %d attempt %d lap %q already complete; skipping remaining attempts\n", relayID, runID, attempt.attempt, task.LapID)
+		state.success = true
+		state.failureCategory = ""
+		state.resolvingOutcome = reliability.OutcomeCompleted
+		state.resolvingDirtyHandoff = false
+		state.lastResult = attempt.result
+		return runOneAttemptDecision{action: runOneAttemptBreak}
+	}
+
 	if attempt.result != nil {
 		state.previousSummary = attempt.result.Summary
 		state.lastResult = attempt.result
@@ -139,4 +152,12 @@ func (r *Runner) decideRetryOrComplete(task runTask, state *runOneState, attempt
 		state.lastResult = &harnessapi.TryResult{Completed: false}
 	}
 	return runOneAttemptDecision{action: runOneAttemptContinue}
+}
+
+func (r *Runner) pinnedLapCompleteBeforeRetry(task runTask) bool {
+	if !task.IsLapsBacked || task.LapID == "" {
+		return false
+	}
+	done, known := lapDoneInLapsState(r.cfg.WorkspaceDir, task.LapID)
+	return known && done
 }
