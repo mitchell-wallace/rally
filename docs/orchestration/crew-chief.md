@@ -105,73 +105,27 @@ subsequent wake-ups only verify health and exit.
   but BEFORE committing the queue tick + log (THIRD session-death occurrence;
   this one cost only housekeeping — session 7 recovered it). Next head lap:
   rall-953d (laps stints readiness review, chief-owned).
-- **2026-07-05 (session 5, autonomous, 14:43 wake)** — queue lap 7 (rall-2730
-  recovery fallback on repeated retries) DONE (855b7d0). Session 4 (09:43
-  wake, never logged) committed phase-B evidence 0619ef7, wrote
-  /tmp/spec-rall-7fe9.md, launched the rall-2730 codex lap at 09:55, then
-  died at ~10:00 killing codex mid-gates (SECOND occurrence of this failure
-  mode — keep the session alive until codex exits). Tree recovered; impl was
-  spec-faithful (per-outing resolver counting correct, guard on the right
-  seam, event mirrors cap-hit block). Chief fixes in review: (a) final-
-  snippet wrapup test fixture completed the pinned lap and asserted the
-  exact buggy retry this lap removes — decoupled (summary propagation
-  doesn't need LapsCompleted); (b) classify_test.go blew the 1069-line
-  archguard HARD budget — new tests split to run_lap_done_recovery_test.go.
-  Then queue lap 8 (rall-7fe9 codex sidelining + phase B to dev) DONE
-  (badd40d, pushed): codex lap ran to completion this time (kept session
-  alive via in-turn review while it ran, ~35 min). Review catches: (a) codex's
-  runner.go stamped EndedAt on cancellation — breaks relay resumability;
-  caught by internal/app suite which the spec's gate list omitted — reverted
-  (end_reason only on terminal ends); (b) discard path recorded 'completed'
-  — added EndReasonDiscarded; (c) restored verify-role lap-done-recovery
-  coverage; (d) chief fixed stall-recovery stale fail_reason (the REAL
-  mechanism behind the 5 completed+harness-error corpus records — codex's
-  report misattributed them to lap-done recovery, which postdates them).
-  E2E: matcher verified against real preserved relay-7 rollouts. Phase B
-  (laps 6-8) all on origin/dev, CI green through 2984c3e. Next head lap:
-  rall-3f79 (staging pipeline, chief-owned; notes at /tmp/rall-3f79-notes.md). — queue lap 6 (rall-178b
-  unauthenticated harness handling) DONE. Session 2's codex lap was killed
-  mid-run when that session exited (rollout ends 05:04:40, no report, gates
-  never run) — tree recovered, reviewed, fixed, landed. Review catches:
-  (a) codex benched auth failures by *quota* scope, but antigravity quota is
-  per model family while its login is per account — added
-  `routing.AuthScope`/`ProviderIndex.AuthScope` (antigravity → harness-wide,
-  others → quota scope) and `benchAuthScope`; codex's own test asserted the
-  correct account-wide semantics and caught its implementation short;
-  (b) glog evidence `Message` was overwritten with the parser message for all
-  categories — restricted to auth (spec: preserve non-auth behavior).
-  E2E: live probe against this container's real unauthenticated agy —
-  Completed=false, auth_or_proxy, operator message. Full suite + archguard
-  green. Next: lap 7 (rall-2730), spec drafted at /tmp/spec-rall-2730.md
-  (review before launch — written pre-lap-6). — queue lap 5 (rall-3ebf telemetry
-  QA) DONE. NR unreachable from this container (no CLI/creds — AGENTS.md NR
-  setup is the user's machine); evidence gathered from local
-  `.rally/state/*`, codex rollout logs, and a live unauthenticated `agy`
-  probe instead; NR refresh to backfill from a credentialed host. Findings →
-  `openspec/changes/harden-outing-failure-handling/draft.md` (scopes laps
-  6–8): (a) unauthenticated agy exits 0 after a 30 s interactive-auth block,
-  no parser matches it; (b) rally retried already-done laps rall-3cc4/00ca
-  4× each after their `laps done` hooks fired; (c) completed codex verify
-  tries recorded as `harness launch error`/`no changes made` → freeze
-  counter paused codex; suspect the session-log matcher cwd comparison +
-  the no-changes<3min heuristic vs no-change roles.
-  improve-harness-consistency archived (deltas were pre-synced; archive
-  pruned to 5). **OPERATIONAL: agy is UNAUTHENTICATED in this container**
-  (auth expired after Jul 2; OAuth is interactive — cannot self-heal until
-  user returns Jul 8). `ag:*` route entries burn ~30 s/try until lap 6 lands
-  or re-auth; senior lists `ag:opus` first.
+- **2026-07-05 (sessions 2–5, autonomous, condensed)** — queue laps 5–8 DONE
+  (harden-outing-failure-handling phase A+B, all on origin/dev, CI green
+  through 2984c3e): rall-3ebf telemetry QA (evidence from local state — NR
+  has no creds in this container; draft.md scoped laps 6–8), rall-178b
+  unauthenticated-harness handling (chief added AuthScope: antigravity auth
+  is account-wide, not per-quota; glog Message overwrite restricted to auth),
+  rall-2730 recovery fallback on repeated retries (chief split tests to
+  respect the 1069-line archguard budget), rall-7fe9 codex sidelining +
+  relay end reasons (chief reverted EndedAt-on-cancellation — breaks relay
+  resumability; added EndReasonDiscarded; root-caused the corpus records to
+  stall-recovery stale fail_reason). Sessions 2 and 4 both DIED mid-codex-lap
+  (keep the session alive until codex exits — review in-turn while it runs,
+  which worked in session 5). **OPERATIONAL: agy is UNAUTHENTICATED here**
+  (OAuth interactive-only; can't self-heal until user returns Jul 8); `ag:*`
+  routes burn ~30 s/try; senior lists `ag:opus` first.
 - **2026-07-05 (session 1, interactive)** — bootstrap + ROLES V2 LANDED TO
-  DEV (pushed, b0a3266). Bootstrap: scheduler built+tested (15 fires, first
-  04:43 UTC Jul 5), skill trigger fixed, nitpicker+pathfinder installed,
-  queue scoped (16 laps), archive pruned, cl alias landed, user config
-  rewritten (claude disabled, [reasoning], review/architect/intern/qa
-  routes, ui dropped). Queue laps 1–4 DONE: roles-v2 reconciled (design
-  D1–D9) then implemented via codex laps A–D + chief fixes (catalog-
-  duplication removed at two sites, gate-text genericized, finalize.md
-  de-duplicated); e2e verified (fresh init → 8 roles no ui, legacy ui
-  migration both ways, live junior relay green on op:zai). Next head lap:
-  rall-3ebf telemetry QA evidence. Remaining in rename-rally-roles: none —
-  ready to archive after a settling period. Branch: dev.
+  DEV (pushed, b0a3266): scheduler built+tested, queue scoped (16 laps), cl
+  alias, user config rewritten (claude disabled, [reasoning], new routes, ui
+  dropped). Queue laps 1–4 DONE via codex laps A–D + chief fixes; e2e
+  verified (fresh init 8 roles, legacy ui migration, live junior relay).
+  rename-rally-roles fully done — archive after a settling period.
 
 ## Prune rules (anti-snowball)
 
