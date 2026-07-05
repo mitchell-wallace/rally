@@ -136,7 +136,16 @@ Consequences chain: `harness_launch` maps to `FailureInfra`
 failures" — at the same timestamp `summary.jsonl` (relay-7-run-9) records its
 successful verification summary. Codex sidelined for work it did correctly.
 
-Leads for the fix lap (root cause not yet pinned; investigate before coding):
+**Root cause pinned (2026-07-05, session 3):** the session-log matcher parses
+rollout lines with a flat schema, but the real format nests everything under
+`payload` — `session_meta.payload.cwd` etc., and the event subtype is
+`event_msg.payload.type`, not `subtype`. `meta.Cwd` therefore always decodes
+empty, no rollout ever matches any workspace, and every unexplained codex
+failure lands in `codex_no_session_log` → `harness_launch` → `FailureInfra` →
+freeze. The 0.12.0 tests passed because their fixtures were synthetic flat
+JSON encoding the same wrong assumption. Lead 2 below is confirmed as the
+mechanism (with the wrinkle that the cwd comparison never even got a candidate
+to compare); leads kept for the record:
 
 1. **"no changes made" punishes verify-role laps.**
    `run_attempt_classify.go:70`: no file changes + runtime < 3 min + no
