@@ -6,11 +6,11 @@
       "title": "Roles v2: reconcile design against current tree",
       "description": "Read openspec/changes/rename-rally-roles/roles-v2-design.md (GPT-5.5 Pro baseline, written against pre-refactor v0.12.0 — behaviours are right, code locations may be stale). Re-inventory against current source and write an updated design + tasks in that change folder. Locked decisions: drop the UI role entirely (repos get their own UI/branding skills instead); add review + architect roles (routes already exist in ~/.config/rally/config.toml: review=gpt-5.5 xhigh, architect=cl:opus xhigh then cx:g55 xhigh, no deepseek/GLM fallback); iterate role descriptions for clarity.",
       "assignee": "crew-chief",
-      "isDone": false,
+      "isDone": true,
       "order": 65536,
       "createdAt": "2026-07-05T00:05:52.923345429Z",
-      "updatedAt": "2026-07-05T00:05:52.923345429Z",
-      "completedAt": null
+      "updatedAt": "2026-07-05T00:16:58.507755047Z",
+      "completedAt": "2026-07-05T00:16:58.507755047Z"
     },
     {
       "id": "rall-923f",

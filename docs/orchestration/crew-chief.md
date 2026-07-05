@@ -86,8 +86,12 @@ subsequent wake-ups only verify health and exit.
 - **2026-07-05 (session 1, interactive)** — bootstrap: scheduler built+tested
   (15 fires, first 04:43 UTC Jul 5), skill trigger fixed, nitpicker+pathfinder
   skills installed, queue scoped (16 laps), archive pruned to 5, this doc
-  created. Config task + possible start on lap 1 follow in-session. Branch:
-  feat/tui-prototypes.
+  created. cl alias landed (source+docs, tests green); user config rewritten
+  (claude disabled, [reasoning], review/architect routes). Queue lap 1 done:
+  roles-v2 reconciliation artifacts in rename-rally-roles/ (design.md D1–D9,
+  tasks.md laps A–E). Lap 2 in flight: codex Lap A (internal/roles catalog);
+  specs for parallel laps B+C staged in scratchpad (re-derive from tasks.md
+  if lost). Branch: feat/tui-prototypes.
 
 ## Prune rules (anti-snowball)
 
