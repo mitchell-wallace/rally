@@ -374,11 +374,15 @@ func TestRunInitRoles_InstallsRoutesAndRoleInstructions(t *testing.T) {
 	}
 
 	wantRoutes := map[string]string{
-		"default": "opencode",
-		"junior":  "opencode",
-		"senior":  "claude",
-		"ui":      "ag",
-		"verify":  "codex",
+		"default":   "opencode",
+		"architect": "claude",
+		"intern":    "opencode",
+		"junior":    "opencode",
+		"qa":        "opencode",
+		"recovery":  "claude",
+		"review":    "codex",
+		"senior":    "claude",
+		"verify":    "codex",
 	}
 	for role, want := range wantRoutes {
 		got := cfg.Routes[role]
@@ -387,7 +391,7 @@ func TestRunInitRoles_InstallsRoutesAndRoleInstructions(t *testing.T) {
 		}
 	}
 
-	for _, role := range []string{"junior", "senior", "ui", "verify"} {
+	for _, role := range []string{"architect", "intern", "junior", "qa", "recovery", "review", "senior", "verify"} {
 		path := filepath.Join(store.AgentsBuiltinDir(tmp), role+".md")
 		data, err := os.ReadFile(path)
 		if err != nil {
@@ -436,15 +440,21 @@ func TestRunInitAll_RunsBothInSequence(t *testing.T) {
 	if _, ok := cfg.Routes["junior"]; !ok {
 		t.Error("missing junior route (role setup not run)")
 	}
+	if _, ok := cfg.Routes["ui"]; ok {
+		t.Error("ui route should not be installed by default")
+	}
 	if cfg.Defaults.OpenCodeModel != "opencode-go/kimi-k2.6" {
 		t.Errorf("OpenCodeModel = %q, want opencode-go/kimi-k2.6", cfg.Defaults.OpenCodeModel)
 	}
 
-	for _, role := range []string{"junior", "senior", "ui", "verify"} {
+	for _, role := range []string{"architect", "intern", "junior", "qa", "recovery", "review", "senior", "verify"} {
 		path := filepath.Join(store.AgentsBuiltinDir(tmp), role+".md")
 		if _, err := os.Stat(path); err != nil {
 			t.Errorf("role instructions for %s not created: %v", role, err)
 		}
+	}
+	if _, err := os.Stat(filepath.Join(store.AgentsBuiltinDir(tmp), "ui.md")); !os.IsNotExist(err) {
+		t.Errorf("role instructions for ui should not be created: %v", err)
 	}
 }
 
@@ -508,11 +518,14 @@ func TestRunInitRoles_OnlyTouchesRoleConfig(t *testing.T) {
 		t.Errorf("ClaudeModel = %q, want claude-opus-4-7", cfg.Defaults.ClaudeModel)
 	}
 
-	for _, role := range []string{"junior", "senior", "ui", "verify", "recovery"} {
+	for _, role := range []string{"architect", "intern", "junior", "qa", "recovery", "review", "senior", "verify"} {
 		path := filepath.Join(store.AgentsBuiltinDir(tmp), role+".md")
 		if _, err := os.Stat(path); err != nil {
 			t.Errorf("role instructions for %s not created: %v", role, err)
 		}
+	}
+	if _, err := os.Stat(filepath.Join(store.AgentsBuiltinDir(tmp), "ui.md")); !os.IsNotExist(err) {
+		t.Errorf("role instructions for ui should not be created: %v", err)
 	}
 }
 

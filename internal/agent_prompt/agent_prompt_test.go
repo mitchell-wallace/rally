@@ -6,13 +6,16 @@ import (
 )
 
 func TestRoleEmbeddedDefaults(t *testing.T) {
-	for _, role := range []string{"junior", "senior", "ui", "verify", "recovery"} {
+	for _, role := range Roles() {
 		got, ok := Role(role)
 		if !ok {
 			t.Fatalf("Role(%q): expected embedded default, got none", role)
 		}
 		if strings.TrimSpace(got) == "" {
 			t.Fatalf("Role(%q): embedded default is empty", role)
+		}
+		if !strings.HasPrefix(got, "# ") {
+			t.Fatalf("Role(%q): embedded default should start with heading, got %q", role, got)
 		}
 	}
 }
@@ -55,10 +58,10 @@ func TestRoleMissing(t *testing.T) {
 }
 
 func TestRolesStripSharedFinalizeBlock(t *testing.T) {
-	// junior/senior/ui carried an identical "When you are done, always
+	// Implementation roles carried an identical "When you are done, always
 	// remember to:" finalize block in the on-disk role docs. The embedded
 	// defaults must rely on general/finalize.md instead of repeating it.
-	for _, role := range []string{"junior", "senior", "ui"} {
+	for _, role := range []string{"intern", "junior", "senior"} {
 		got, _ := Role(role)
 		if strings.Contains(got, "When you are done, always remember to") {
 			t.Errorf("Role(%q) still contains the shared finalize block", role)
@@ -68,7 +71,7 @@ func TestRolesStripSharedFinalizeBlock(t *testing.T) {
 
 func TestRolesList(t *testing.T) {
 	got := Roles()
-	want := []string{"junior", "recovery", "senior", "ui", "verify"}
+	want := []string{"architect", "intern", "junior", "qa", "recovery", "review", "senior", "verify"}
 	if len(got) != len(want) {
 		t.Fatalf("Roles() = %v, want %v", got, want)
 	}
@@ -99,9 +102,9 @@ func TestRecoveryRoleClassificationContract(t *testing.T) {
 	}
 }
 
-func TestVoluntaryHandoffGuidanceOnlyInImplementationRoles(t *testing.T) {
-	want := []string{"five serious debugging iterations", "A debugging iteration is one loop of", "Use your honest judgment"}
-	for _, role := range []string{"junior", "senior", "ui"} {
+func TestVoluntaryHandoffGuidanceInImplementationRoles(t *testing.T) {
+	want := []string{"five serious debugging iterations", "laps handoff", "laps wrapup"}
+	for _, role := range []string{"junior", "senior"} {
 		got, _ := Role(role)
 		for _, phrase := range want {
 			if !strings.Contains(got, phrase) {
@@ -109,7 +112,7 @@ func TestVoluntaryHandoffGuidanceOnlyInImplementationRoles(t *testing.T) {
 			}
 		}
 	}
-	for _, role := range []string{"verify", "recovery"} {
+	for _, role := range []string{"architect", "review", "qa"} {
 		got, _ := Role(role)
 		for _, phrase := range want {
 			if strings.Contains(got, phrase) {

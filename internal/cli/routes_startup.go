@@ -16,6 +16,7 @@ import (
 // continueRoutesPrompt is the substring tests assert against; it must appear
 // in both the TTY (huh) and plain-text fallback renderings of the confirm.
 const continueRoutesPrompt = "Continue anyway?"
+const retiredUIRoleAdvisory = "ui is no longer a built-in role; treating it as a custom role (UI/branding guidance now belongs in repo skills)"
 
 var headPullForStartupValidation = func(ctx context.Context, workspaceDir string) (laps.Lap, error) {
 	return (&laps.Adapter{WorkspaceDir: workspaceDir}).HeadPull(ctx)
@@ -46,10 +47,14 @@ func ValidateRelayStartupRoutes(ctx context.Context, workspaceDir string, cfg co
 		return nil, issues[0].Err
 	}
 
-	warnings := make([]string, 0, len(issues)+1)
+	warnings := make([]string, 0, len(issues)+2)
 	needsPrompt := false
 	warningsWritten := false
 	removedAliasWarnings := map[string]bool{}
+
+	if routesContainUI(cfg.Routes) {
+		warnings = append(warnings, retiredUIRoleAdvisory)
+	}
 
 	for _, issue := range issues {
 		var removed *removedAliasRouteError
@@ -86,6 +91,7 @@ func ValidateRelayStartupRoutes(ctx context.Context, workspaceDir string, cfg co
 	}
 
 	if !needsPrompt {
+		writeWarnings(opts.Out, warnings)
 		return validRoutes, nil
 	}
 
@@ -97,6 +103,15 @@ func ValidateRelayStartupRoutes(ctx context.Context, workspaceDir string, cfg co
 	}
 
 	return validRoutes, nil
+}
+
+func routesContainUI(routes map[string][]string) bool {
+	for name := range routes {
+		if strings.EqualFold(name, "ui") {
+			return true
+		}
+	}
+	return false
 }
 
 func onlyRemovedAliasIssues(issues []startupRouteIssue) bool {

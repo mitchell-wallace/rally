@@ -238,3 +238,31 @@ func TestValidateRelayStartupRoutes_RemovedGeminiAliasesWarnWithoutPrompt(t *tes
 		t.Fatalf("output = %q, want removed aliases to avoid the missing-default startup block", got)
 	}
 }
+
+func TestValidateRelayStartupRoutes_UIRouteAdvisoryOnce(t *testing.T) {
+	workspaceDir := t.TempDir()
+	cfg := config.V2Config{
+		Routes: map[string][]string{
+			"default": {"cc"},
+			"UI":      {"cx"},
+		},
+	}
+
+	var output bytes.Buffer
+	validRoutes, err := ValidateRelayStartupRoutes(context.Background(), workspaceDir, cfg, RelayStartupRouteOptions{
+		Out:         &output,
+		LapsEnabled: false,
+	})
+	if err != nil {
+		t.Fatalf("ValidateRelayStartupRoutes() error = %v", err)
+	}
+	if len(validRoutes) != 2 {
+		t.Fatalf("validRoutes = %#v, want default and UI routes", validRoutes)
+	}
+	if got := strings.Count(output.String(), retiredUIRoleAdvisory); got != 1 {
+		t.Fatalf("output = %q, want one ui advisory, got %d", output.String(), got)
+	}
+	if strings.Contains(output.String(), continueRoutesPrompt) {
+		t.Fatalf("output = %q, want no prompt for advisory-only startup", output.String())
+	}
+}

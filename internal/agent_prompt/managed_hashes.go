@@ -6,16 +6,32 @@ package agent_prompt
 // shipped across releases. Regenerate with scripts/gen_managed_role_hashes.sh
 // after editing any roles/<role>.md.
 var managedRoleContentHashes = map[string][]string{
+	"architect": {
+		"5fa45e91f7d237faf8e1023bfca83da69fd1a1511349ead5a91737dd32239ed5",
+	},
+	"intern": {
+		"9d03f28b3147599065f5c2bb03ded773440e678229135f43957c4d09a0f22ada",
+	},
 	"junior": {
+		"419f2e8c8c5782da35018ff0d89f47d3d8d6a1d1f8b3539921def923a163be61",
 		"201b6962f8692bf852b31b3087be8f6149b02bd2d8793bd2e73f4c305b45d87d",
 		"7ab113ebe91800f2181884f7245fabaf0a8da05ae3a20111d6243a21054e8817",
+		"2a810714bafc12935ba5d7de59293be97ec7cfe1a0f2ca1ade05974c08e9eccc",
+	},
+	"qa": {
+		"d89354043c65d688c185a7e38bebb2510333828be95c6b6825e235c561ea8bdb",
 	},
 	"recovery": {
 		"e58368c743d147b37f1ed2033f281bd2e34cf2bcf32e9c75fe59182e13c33f96",
+		"0605f0d5331c9d21ade33e2738c6dbd724dd18613942cccb17e76ceea1a0442a",
+	},
+	"review": {
+		"f5093fd407d054ce539527050d206349e8678ac49b8bb83eee7dd56dde8bcbe5",
 	},
 	"senior": {
 		"fe6c2d2399a245d68942f02ab6b72b5cdade101685079018ebd4d08d8bddf436",
 		"b2ce959bcca640e789144d08f4ff7bbc608066a81d2a5b0f3db67d3f80d6d99d",
+		"50bbd84ec8d763a96134af756c863d643f57afb723c13a8610bf9fc5106d7c82",
 	},
 	"ui": {
 		"bed49d829d4434c78948e318f6d2813e14fd8763014e5f2a83baffeb84505044",
@@ -23,5 +39,6 @@ var managedRoleContentHashes = map[string][]string{
 	},
 	"verify": {
 		"fb5d2e807c1b85b4ded1a776e24cd22ca012f1aa8dd1b1e54c2908f73bfa8c7b",
+		"6d5e8edfd1e3e64f2d955f02957a4be21cfaf0db6e3edb68372be5745d381853",
 	},
 }

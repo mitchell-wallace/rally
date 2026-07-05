@@ -9,6 +9,7 @@ import (
 	"github.com/mitchell-wallace/rally/internal/agent_prompt"
 	"github.com/mitchell-wallace/rally/internal/config"
 	"github.com/mitchell-wallace/rally/internal/harness/antigravity"
+	"github.com/mitchell-wallace/rally/internal/roles"
 	"github.com/mitchell-wallace/rally/internal/store"
 	"github.com/spf13/cobra"
 )
@@ -30,16 +31,14 @@ func newInitAllCmd() *cobra.Command {
 }
 
 type roleBootstrap struct {
-	Name         string
-	Route        []string
-	Instructions string
+	Name  string
+	Route []string
 }
 
-var defaultRoleBootstraps = []roleBootstrap{
-	{
-		Name:  "junior",
-		Route: []string{"opencode"},
-		Instructions: `# Junior Role
+var defaultRoleBootstraps = defaultRoleBootstrapsFromCatalog()
+
+var legacyBootstrapInstructions = map[string]string{
+	"junior": `# Junior Role
 
 You are a reliable implementation runner. Your laps should already be scoped to work that can be completed without major product or architecture judgment calls, and your job is to deliver that work carefully.
 
@@ -49,11 +48,7 @@ You are a reliable implementation runner. Your laps should already be scoped to 
 - If the task fundamentally needs an unforeseen abstraction or broader design choice, use the handoff flow instead of inventing it in place.
 - If a bug fix is becoming messy, use the handoff flow with notes on what you tried, what failed, what you suspect, what you found about current state, and any test assertions you changed.
 `,
-	},
-	{
-		Name:  "senior",
-		Route: []string{"claude"},
-		Instructions: `# Senior Role
+	"senior": `# Senior Role
 
 You are responsible for higher-judgment implementation, architecture-sensitive work, and tricky debugging.
 
@@ -63,11 +58,7 @@ You are responsible for higher-judgment implementation, architecture-sensitive w
 - You may cautiously update .laps/laps.json when plan adjustments would affect downstream work.
 - Add or adjust tests at the right level for the risk, especially around regressions and integration boundaries.
 `,
-	},
-	{
-		Name:  "ui",
-		Route: []string{"ag"},
-		Instructions: `# UI Role
+	"ui": `# UI Role
 
 Your role is to make the interface look and feel good, not merely to make it functional.
 
@@ -77,27 +68,30 @@ Your role is to make the interface look and feel good, not merely to make it fun
 - Make interactions feel complete: useful states, sensible affordances, and polished responsive behavior.
 - Verify the rendered experience when a dev server or browser check is available.
 `,
-	},
-	{
-		Name:  "verify",
-		Route: []string{"codex"},
-		Instructions: "# Verify Role\n" +
-			"\n" +
-			"Your role is to build confidence in recent work and catch issues before they compound.\n" +
-			"\n" +
-			"- Read any supplied planning documents and relevant task context.\n" +
-			"- Inspect recent git commits and diffs to understand what changed and why.\n" +
-			"- Identify the intended target/base branch before diffing. Do not assume `main`; use PR metadata, repo docs, branch config, the user's instructions, or git history to choose the comparison target.\n" +
-			"- Treat work committed before the first lap/try in the current relay batch as pre-existing baseline unless the user explicitly asks to review or remove it.\n" +
-			"- Look for code quality issues, behavioral regressions, missing edge cases, and test gaps, especially integration test gaps.\n" +
-			"- Apply small fixes directly when they are clearly correct and only a few lines.\n" +
-			"- Add new laps at the head for substantial fixes, unclear follow-up, or work that deserves its own implementation pass.\n" +
-			"- Do not rewrite git history during verification or cleanup. Avoid reset/rebase/squash/amend-away/force-push strategies unless the user explicitly approves them. Prefer additive commits, revert commits, or a new recovery branch so removed work remains backtrackable.\n",
-	},
-	{
-		Name:  "recovery",
-		Route: []string{"claude"},
-	},
+	"verify": "# Verify Role\n" +
+		"\n" +
+		"Your role is to build confidence in recent work and catch issues before they compound.\n" +
+		"\n" +
+		"- Read any supplied planning documents and relevant task context.\n" +
+		"- Inspect recent git commits and diffs to understand what changed and why.\n" +
+		"- Identify the intended target/base branch before diffing. Do not assume `main`; use PR metadata, repo docs, branch config, the user's instructions, or git history to choose the comparison target.\n" +
+		"- Treat work committed before the first lap/try in the current relay batch as pre-existing baseline unless the user explicitly asks to review or remove it.\n" +
+		"- Look for code quality issues, behavioral regressions, missing edge cases, and test gaps, especially integration test gaps.\n" +
+		"- Apply small fixes directly when they are clearly correct and only a few lines.\n" +
+		"- Add new laps at the head for substantial fixes, unclear follow-up, or work that deserves its own implementation pass.\n" +
+		"- Do not rewrite git history during verification or cleanup. Avoid reset/rebase/squash/amend-away/force-push strategies unless the user explicitly approves them. Prefer additive commits, revert commits, or a new recovery branch so removed work remains backtrackable.\n",
+}
+
+func defaultRoleBootstrapsFromCatalog() []roleBootstrap {
+	specs := roles.Builtins()
+	out := make([]roleBootstrap, 0, len(specs))
+	for _, spec := range specs {
+		out = append(out, roleBootstrap{
+			Name:  spec.Name,
+			Route: append([]string(nil), spec.DefaultRoute...),
+		})
+	}
+	return out
 }
 
 func runInitRoles(cmd *cobra.Command, args []string) error {
@@ -219,6 +213,10 @@ func syncRoleFolders(workspaceDir string) error {
 		}
 	}
 
+	if err := removeManagedLegacyBuiltinUI(builtinDir); err != nil {
+		return err
+	}
+
 	if movedBuiltin > 0 || movedUser > 0 {
 		fmt.Printf("Migrated %d role file(s) to the new layout: %d managed -> .rally/agents/builtin/ (auto-updating), %d customized -> .rally/agents/user/ (preserved).\n",
 			movedBuiltin+movedUser, movedBuiltin, movedUser)
@@ -282,10 +280,20 @@ func migrateLegacyRoleFiles(workspaceDir, builtinDir, userDir string) (movedBuil
 // as additional canonical content when classifying legacy role files (the flat
 // verify.md predates the embedded default and matches this text).
 func bootstrapInstructionsFor(role string) string {
-	for _, rb := range defaultRoleBootstraps {
-		if strings.EqualFold(rb.Name, role) {
-			return rb.Instructions
+	return legacyBootstrapInstructions[strings.ToLower(strings.TrimSpace(role))]
+}
+
+func removeManagedLegacyBuiltinUI(builtinDir string) error {
+	path := filepath.Join(builtinDir, "ui.md")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
 		}
+		return err
 	}
-	return ""
+	if !agent_prompt.IsManagedRoleContent("ui", string(data), bootstrapInstructionsFor("ui")) {
+		return nil
+	}
+	return os.Remove(path)
 }
