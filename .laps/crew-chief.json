@@ -94,11 +94,11 @@
       "title": "Pipeline: staging branch + codified release flow",
       "description": "Create `staging` branch. Codify in AGENTS.md and the rally-release skill: feature -\u003e dev (merge when CI/automated gates pass) -\u003e staging (merged periodically when a test-driving-rally pass clears it) -\u003e main (release cut; auto-tag on VERSION bump stays). Review test-driving-rally skill: clean up, drop stale references, ensure it is a useful confidence pass producing actionable findings so issues can be fixed.",
       "assignee": "crew-chief",
-      "isDone": false,
+      "isDone": true,
       "order": 589824,
       "createdAt": "2026-07-05T00:05:52.923360197Z",
-      "updatedAt": "2026-07-05T00:05:52.923360197Z",
-      "completedAt": null
+      "updatedAt": "2026-07-05T15:24:51.073049612Z",
+      "completedAt": "2026-07-05T15:24:51.073049612Z"
     },
     {
       "id": "rall-953d",

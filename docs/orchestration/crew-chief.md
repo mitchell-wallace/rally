@@ -84,6 +84,13 @@ subsequent wake-ups only verify health and exit.
 
 ## Session log (newest first; keep ~5 entries, prune older)
 
+- **2026-07-05 (session 6, autonomous, ~15:20 continuation)** — queue lap 9
+  (rall-3f79 staging pipeline) DONE (1413cb2, pushed): staging branch created
+  at main tip, AGENTS.md branch-pipeline section, rally-release v0.4 with
+  test-drive gate, test.yml runs on staging. Session died AFTER `laps done`
+  but BEFORE committing the queue tick + log (THIRD session-death occurrence;
+  this one cost only housekeeping — session 7 recovered it). Next head lap:
+  rall-953d (laps stints readiness review, chief-owned).
 - **2026-07-05 (session 5, autonomous, 14:43 wake)** — queue lap 7 (rall-2730
   recovery fallback on repeated retries) DONE (855b7d0). Session 4 (09:43
   wake, never logged) committed phase-B evidence 0619ef7, wrote
