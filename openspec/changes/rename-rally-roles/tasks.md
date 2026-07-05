@@ -6,39 +6,39 @@ review + commit). Gates for every lap: `go build ./...`,
 
 ## Lap A — roles catalog package (senior-shaped)
 
-- [ ] A1. Add `internal/roles`: `Spec`, `Mode`, `WritePolicy`, the eight
+- [x] A1. Add `internal/roles`: `Spec`, `Mode`, `WritePolicy`, the eight
       built-in specs (design D2, descriptions from baseline §19), ui
       tombstone (`GeneratedByDefault: false`), `Lookup(name)` with
       case-insensitive match, `reviewer → review` alias, zero-Spec fallback
       (`Mode=implement`) for unknown names, near-miss suggestion helper.
-- [ ] A2. Unit tests: built-in list content, ui not generated, alias,
+- [x] A2. Unit tests: built-in list content, ui not generated, alias,
       unknown-role fallback, near-miss suggestions, catalog is not a
       validation gate.
 
 ## Lap B — policy wiring (senior-shaped, behaviour-parity critical)
 
-- [ ] B1. `harnessapi/prompt.go`: replace `isVerifyRole` with WritePolicy
+- [x] B1. `harnessapi/prompt.go`: replace `isVerifyRole` with WritePolicy
       awareness (design D3/D6); architect plan-only finalize variant;
       required-skill block rendering (D5).
-- [ ] B2. `run_attempt_classify.go` stall recovery: exclude all
+- [x] B2. `run_attempt_classify.go` stall recovery: exclude all
       non-implementation write policies.
-- [ ] B3. Recovery branches → `Mode == recover`
+- [x] B3. Recovery branches → `Mode == recover`
       (run_attempt_record.go, handoff_only.go).
-- [ ] B4. `cli/config.go` role list ← catalog.
-- [ ] B5. Parity tests: junior/senior/verify/recovery behave byte-identically
+- [x] B4. `cli/config.go` role list ← catalog.
+- [x] B5. Parity tests: junior/senior/verify/recovery behave byte-identically
       in prompt + lifecycle golden tests except where design says otherwise.
 
 ## Lap C — role prompts + bootstrap + migration (junior-shaped)
 
-- [ ] C1. Rewrite/add `internal/agent_prompt/roles/*.md` for all eight roles
+- [x] C1. Rewrite/add `internal/agent_prompt/roles/*.md` for all eight roles
       (baseline §20 bodies, Rally house style, ≤~25 lines, laps handoff
       references kept); delete `ui.md`.
-- [ ] C2. Regenerate managed hashes (append-only) via
+- [x] C2. Regenerate managed hashes (append-only) via
       `scripts/gen_managed_role_hashes.sh`.
-- [ ] C3. `init_roles.go`: bootstraps for the eight roles (routes per D8),
+- [x] C3. `init_roles.go`: bootstraps for the eight roles (routes per D8),
       drop ui bootstrap, managed builtin/ui.md cleanup in `syncRoleFolders`,
       `[routes].ui` custom-role advisory at relay start.
-- [ ] C4. Tests: fresh init generates eight roles (no ui), legacy managed
+- [x] C4. Tests: fresh init generates eight roles (no ui), legacy managed
       ui.md removed, user ui.md preserved, advisory fires once.
 
 ## Lap D — planner + docs (intern/junior-shaped)

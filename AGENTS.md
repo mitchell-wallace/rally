@@ -26,9 +26,14 @@ output while `try` is the record noun.
 - **Rally** orchestrates outings: it selects a driver for the current lap,
   builds the prompt, injects project and role instructions, records progress,
   and manages retries or route fallback.
-- **Laps** owns the work queue. A lap's `assignee` is a routing label such as
-  `junior`, `senior`, `ui`, or `verify`; Rally maps that role to a configured
-  driver via `.rally/config.toml`.
+- **Laps** owns the work queue. A lap's `assignee` is a routing label naming a
+  role; Rally maps that role to a configured driver via `.rally/config.toml`.
+  Built-in roles (roles v2): the implementation ladder `intern`/`junior`/
+  `senior` plus the control-and-assurance roles `architect` (plan-only),
+  `review` (auto-code-review skill wrapper), `verify` (acceptance evidence),
+  `qa` (black-box testing), and `recovery` (state reconciliation). Custom role
+  names remain valid; `ui` is retired as a built-in — UI/branding guidance
+  lives in repo skills.
 - **Role instructions** under `.rally/agents/` tell the already-assigned driver
   how to perform that kind of work. They resolve `user/<role>.md` (your
   overrides) over `builtin/<role>.md` (Rally-managed, regenerated from the binary
