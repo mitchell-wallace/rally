@@ -125,6 +125,24 @@ and cannot be queried in New Relic.
 
 ## Git and commit conventions
 
+### Branch pipeline
+
+Rally (and its companion repo laps) promote code through a fixed pipeline:
+
+- **feature → dev**: merged when local gates and dev CI pass. Day-to-day work
+  lands here; short-lived work may commit directly on `dev`.
+- **dev → staging**: fast-forwarded only when a `test-driving-rally` pass has
+  cleared the dev SHA being promoted. `staging` is the
+  last-known-good-under-real-use line.
+- **staging → main**: the release step, run via the `rally-release` skill
+  (ff-only, staging CI green). Pushing `main` fires auto-tag (on a VERSION
+  bump) and the release workflow.
+
+Never merge `dev` straight to `main`; promotions are fast-forward only, so
+fix-forward on `dev` rather than committing to `staging`/`main` directly.
+
+### Auto-commits
+
 Rally auto-commits at several points; agents should understand (but not
 reimplement) these conventions. See the "Git and commit conventions"
 section in README.md for the full table and state-folding rules.

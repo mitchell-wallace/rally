@@ -5,21 +5,32 @@ description: >-
   bumped) publish a new auto-tagged release. Use proactively whenever the user
   wants to push a release, merge to main, ship, cut a version, or do anything
   that results in a new rally binary being published. Also use when the user is
-  on dev and asks to push to main. Starts from either a feature branch (full
-  flow: branch → dev → main) or directly from dev (simplified flow: dev → main).
+  on dev or staging and asks to push to main. Walks the branch pipeline
+  feature → dev → staging → main, starting from whichever stage the user is on
+  (dev → staging additionally requires a test-driving-rally pass).
   Stops on non-trivial merge conflicts, local test/lint failures, CI failures,
-  or when main is already at the current branch tip. Do not use for OpenSpec
+  a missing test-drive pass, or when main is already at the current branch tip. Do not use for OpenSpec
   changes (use openspec-* skills), preparing laps (use prepare-laps), or
   post-relay forensics (use post-relay-review).
 license: MIT
 metadata:
   author: rally
-  version: "0.3"
+  version: "0.4"
 ---
 
 # Rally Release
 
-Ship the current feature branch to main, run CI, (if `internal/buildinfo/VERSION` was bumped) publish a new auto-tagged release, and smoke-test the published binary.
+Ship code down the branch pipeline **feature → dev → staging → main**, run CI at each stage, (if `internal/buildinfo/VERSION` was bumped) publish a new auto-tagged release, and smoke-test the published binary.
+
+Pipeline stages (see "Branch pipeline" in AGENTS.md):
+
+- **feature → dev** — local gates + dev CI green.
+- **dev → staging** — additionally requires a `test-driving-rally` pass that
+  cleared the exact dev SHA being promoted. If no pass is on record for that
+  SHA, run the test-driving-rally skill first (or stop and report if the user
+  has not scoped that in); the user may explicitly waive the test drive.
+- **staging → main** — ff-only with staging CI green on the exact SHA. The
+  main push fires auto-tag/release.
 
 This is a lightweight, ship-fast workflow. It is intentionally low-ceremony and reflects Rally's current "ship fast" stage. Tighten it as the release process matures — keep the same shape and just upgrade the steps in place.
 
@@ -34,8 +45,9 @@ Use this skill proactively whenever the user's intent is to land code on `main` 
 
 Starting points:
 
-- **Feature branch** (full flow): branch → dev → main. Requires clean working tree on a non-`main`, non-`dev` branch.
-- **`dev` branch** (simplified flow): dev → main. Skips the branch-to-dev merge and branch push. Requires clean working tree on `dev`.
+- **Feature branch** (full flow): branch → dev → staging → main. Requires clean working tree on a non-pipeline branch.
+- **`dev` branch**: dev → staging → main. Skips the branch-to-dev merge and branch push. Requires clean working tree on `dev`.
+- **`staging` branch**: staging → main only. Use when dev was already promoted and cleared; requires clean working tree on `staging`.
 
 Do **not** use this skill for:
 
@@ -45,41 +57,49 @@ Do **not** use this skill for:
 
 ## Standard flow
 
-The order matters: the test workflow runs on `dev` and `main` pushes. Before advancing `main`, verify the exact `dev` SHA has green required checks (`test`, `race`, `lint`, `tidy`). The `auto-tag` and `release` workflows fire as a result of the main push.
+The order matters: the test workflow runs on `dev`, `staging`, and `main` pushes. Before advancing a stage, verify the exact source SHA has green required checks (`test`, `race`, `lint`, `tidy`) — and, for dev → staging, a test-driving-rally pass. The `auto-tag` and `release` workflows fire as a result of the main push.
 
 ### Starting from a feature branch
 
-1. **Sanity check** — `git status --short --branch` and `git branch -vv`. Must be on a non-`main`, non-`dev` branch. Working tree must be clean.
+1. **Sanity check** — `git status --short --branch` and `git branch -vv`. Must be on a non-pipeline (not `main`/`staging`/`dev`) branch. Working tree must be clean.
 2. **Local checks** — run `just test`, `just check`, `just test-race`, `just tidy-check`, and `just audit`. All must be clean before pushing. `just test` runs the deterministic suite — the CI `test` job minus the opt-in real-backend tests; to reproduce the *full* CI `test` command (including real-agent coverage) run `just test-real` (`RALLY_TEST_REAL_AGENTS=1 go test -count=1 ./...`), but it needs agent CLIs + auth and is slow/flaky, so it is NOT part of this local gate — CI is authoritative for real-agent coverage. (Fallback: `go test -count=1 ./...`, `go vet ./...` plus `gofmt -l .`, `go test -race -shuffle=on -count=1 ./...`, `go mod tidy && git diff --exit-code go.mod go.sum`, and `govulncheck ./...` after installing `golang.org/x/vuln/cmd/govulncheck@latest`.)
 3. **Push the branch** — `git push origin <branch>`.
 4. **Merge to dev** — `git checkout dev && git merge --ff-only <branch> && git push origin dev`.
-5. **Verify dev CI** — wait for the `test.yml` workflow run on the exact `dev` SHA and confirm required jobs `test`, `race`, `lint`, and `tidy` are green. Stop and report missing, pending, or failing checks before touching `main`.
-6. **Merge to main** — `git checkout main && git merge --ff-only dev && git push origin main`. (This push triggers the main test workflow plus any auto-tag/release workflows.)
-7. Continue to **Watch CI** below.
+5. Continue from step 3 of **Starting from dev**.
 
 ### Starting from dev
 
 1. **Sanity check** — `git status --short --branch` and `git branch -vv`. Must be on `dev`. Working tree must be clean.
 2. **Local checks** — run `just test`, `just check`, `just test-race`, `just tidy-check`, and `just audit`. All must be clean before pushing. `just test` runs the deterministic suite — the CI `test` job minus the opt-in real-backend tests; to reproduce the *full* CI `test` command (including real-agent coverage) run `just test-real` (`RALLY_TEST_REAL_AGENTS=1 go test -count=1 ./...`), but it needs agent CLIs + auth and is slow/flaky, so it is NOT part of this local gate — CI is authoritative for real-agent coverage. (Fallback: `go test -count=1 ./...`, `go vet ./...` plus `gofmt -l .`, `go test -race -shuffle=on -count=1 ./...`, `go mod tidy && git diff --exit-code go.mod go.sum`, and `govulncheck ./...` after installing `golang.org/x/vuln/cmd/govulncheck@latest`.)
-3. **Verify dev CI** — wait for the `test.yml` workflow run on the exact `dev` SHA and confirm required jobs `test`, `race`, `lint`, and `tidy` are green. Stop and report missing, pending, or failing checks before touching `main`.
-4. **Merge to main** — `git checkout main && git merge --ff-only dev && git push origin main`. (This push triggers the main test workflow plus any auto-tag/release workflows.)
-5. Continue to **Watch CI** below.
+3. **Verify dev CI** — wait for the `test.yml` workflow run on the exact `dev` SHA and confirm required jobs `test`, `race`, `lint`, and `tidy` are green (use the **Verify stage CI** script with `branch=dev`). Stop and report missing, pending, or failing checks before touching `staging`.
+4. **Test-drive gate** — confirm a `test-driving-rally` pass cleared this exact dev SHA (the user saying it passed counts; so does a pass you just ran). No pass and no explicit user waiver → stop and report; do not promote untested code to `staging`.
+5. **Merge to staging** — `git checkout staging && git merge --ff-only dev && git push origin staging`.
+6. **Verify staging CI** — same required checks on the exact `staging` SHA (`branch=staging`). Stop on anything not green.
+7. **Merge to main** — `git checkout main && git merge --ff-only staging && git push origin main`. (This push triggers the main test workflow plus any auto-tag/release workflows.)
+8. Continue to **Watch CI** below.
 
-### Verify dev CI
+### Starting from staging
 
-Run this before the `dev` -> `main` fast-forward:
+1. **Sanity check** — must be on `staging` with a clean tree; `staging` must be ahead of `main` (else nothing to ship).
+2. **Verify staging CI** — required checks green on the exact `staging` SHA (`branch=staging`).
+3. **Merge to main** — `git checkout main && git merge --ff-only staging && git push origin main`, then continue to **Watch CI** below.
+
+### Verify stage CI
+
+Run this before each fast-forward, with `branch` set to the stage being promoted (`dev` before dev → staging, `staging` before staging → main):
 
 ```sh
-dev_sha="$(git rev-parse dev)"
+branch=dev  # or staging
+stage_sha="$(git rev-parse "$branch")"
 run_id="$(
-  gh run list --workflow test.yml --branch dev --limit 50 \
+  gh run list --workflow test.yml --branch "$branch" --limit 50 \
     --json databaseId,headSha,status,conclusion,url \
-    --jq ".[] | select(.headSha == \"$dev_sha\") | .databaseId" |
+    --jq ".[] | select(.headSha == \"$stage_sha\") | .databaseId" |
     head -n 1
 )"
 
 if [ -z "$run_id" ]; then
-  echo "No test.yml workflow run found for dev SHA $dev_sha" >&2
+  echo "No test.yml workflow run found for $branch SHA $stage_sha" >&2
   exit 1
 fi
 
@@ -99,7 +119,7 @@ bad_required="$(
 )"
 
 if [ -n "$bad_required" ]; then
-  echo "Required dev checks are not green for $dev_sha:" >&2
+  echo "Required $branch checks are not green for $stage_sha:" >&2
   printf '%s\n' "$bad_required" >&2
   exit 1
 fi
@@ -116,7 +136,7 @@ fi
    - Run a single-iteration relay with an ongoing free smoke-test model (prefer `op:opencode/big-pickle`; `zai-coding-plan/glm-5.1` is a fallback).
    - Verify: exit 0, file created, try record in `.rally/state/tries.jsonl` shows `"completed": true`.
    - This confirms the published binary actually works end-to-end before declaring the release done.
-9. **Report** — final SHAs for `main`/`dev`/`branch>`, CI outcomes, the new release tag (if auto-tag fired), and smoke-test result.
+9. **Report** — final SHAs for `main`/`staging`/`dev` (and the feature branch), CI outcomes, the new release tag (if auto-tag fired), and smoke-test result.
 
 ## Stop conditions
 
@@ -124,9 +144,10 @@ Halt and report (do **not** attempt to recover, rebase, or force-push) when any 
 
 - **Working tree dirty at start.** Stash, commit, or split before resuming.
 - **Any local check fails.** If `just test`, `just check`, `just test-race`, `just tidy-check`, or `just audit` fails locally, fix on the feature branch, push, and restart from the local-checks step.
-- **Required `dev` CI is not green.** If the exact `dev` SHA is missing the `test.yml` run, or any required job (`test`, `race`, `lint`, `tidy`) is missing, pending, skipped, cancelled, or failed, stop before the `main` fast-forward and report the bad checks and job URLs. Do not rely on branch protection to reject the push.
-- **Non-trivial merge conflict** during the dev or main merge. "Non-trivial" means real code/line conflicts. A failed fast-forward is also a stop — it means the branch is not strictly ahead of the target, and forcing it would rewrite history.
-- **`main` is already at the current branch tip** (or the dev/main fast-forwards would be no-ops). Nothing to ship. Report and exit.
+- **Required stage CI is not green.** If the exact `dev` (or `staging`) SHA is missing the `test.yml` run, or any required job (`test`, `race`, `lint`, `tidy`) is missing, pending, skipped, cancelled, or failed, stop before the next fast-forward and report the bad checks and job URLs. Do not rely on branch protection to reject the push.
+- **No test-driving-rally pass for the dev SHA being promoted to `staging`**, and the user has not explicitly waived it. Run the test drive or stop and report.
+- **Non-trivial merge conflict** during the dev, staging, or main merge. "Non-trivial" means real code/line conflicts. A failed fast-forward is also a stop — it means the branch is not strictly ahead of the target, and forcing it would rewrite history.
+- **`main` is already at the current branch tip** (or the pipeline fast-forwards would all be no-ops). Nothing to ship. Report and exit.
 - **CI test workflow fails.** Read the job log with `gh run view <id> --log` or `gh run view <id> --log-failed`, fix on the feature branch, push, and restart from step 2.
 - **CI auto-tag or release workflow fails.** Same: read the job log, fix on the feature branch, push, and restart from step 2. Successful test is required before auto-tag fires; successful auto-tag is required before release fires.
 - **Smoke test fails.** After `rally update`, if the local relay fails (agent unavailable is OK — report it; but a rally crash or missing file is a real regression), investigate. Do not declare the release done until the smoke test passes or the failure is understood to be an agent-side issue (rate limit, auth) rather than a rally regression.
@@ -140,7 +161,7 @@ If VERSION was bumped on the feature branch, the main push will fire `auto-tag` 
 ## Conventions
 
 - Use plain `git push` (no `--force`, no `--no-verify`) for all pushes.
-- Use `git merge --ff-only` for the dev and main merges. If a fast-forward is not possible, that is a stop condition.
+- Use `git merge --ff-only` for the dev, staging, and main merges. If a fast-forward is not possible, that is a stop condition.
 - Use `gh run watch <id> --exit-status` for CI; do not poll manually.
 - Report SHAs (`git rev-parse origin/main origin/dev <branch>`) and CI run IDs at the end so the outcome is auditable.
 - Do not delete or rewrite the feature branch or any commits during a successful run. Leave history intact.
