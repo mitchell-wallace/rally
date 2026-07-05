@@ -1,0 +1,181 @@
+{
+  "version": 2,
+  "tasks": [
+    {
+      "id": "rall-f5b5",
+      "title": "Roles v2: reconcile design against current tree",
+      "description": "Read openspec/changes/rename-rally-roles/roles-v2-design.md (GPT-5.5 Pro baseline, written against pre-refactor v0.12.0 — behaviours are right, code locations may be stale). Re-inventory against current source and write an updated design + tasks in that change folder. Locked decisions: drop the UI role entirely (repos get their own UI/branding skills instead); add review + architect roles (routes already exist in ~/.config/rally/config.toml: review=gpt-5.5 xhigh, architect=cl:opus xhigh then cx:g55 xhigh, no deepseek/GLM fallback); iterate role descriptions for clarity.",
+      "assignee": "crew-chief",
+      "isDone": false,
+      "order": 65536,
+      "createdAt": "2026-07-05T00:05:52.923345429Z",
+      "updatedAt": "2026-07-05T00:05:52.923345429Z",
+      "completedAt": null
+    },
+    {
+      "id": "rall-923f",
+      "title": "Roles v2: implement core role changes",
+      "description": "Implement the reconciled roles v2 design: role set in code (builtin role registry, .rally/agents regeneration, routing labels), config validation, tolerant handling of legacy 'ui' assignees in existing queues, tests. Delegate implementation laps per crew-chief skill; review + commit per lap.",
+      "assignee": "crew-chief",
+      "isDone": false,
+      "order": 131072,
+      "createdAt": "2026-07-05T00:05:52.923351119Z",
+      "updatedAt": "2026-07-05T00:05:52.923351119Z",
+      "completedAt": null
+    },
+    {
+      "id": "rall-86d9",
+      "title": "Roles v2: rewrite role instructions and tighten prompting",
+      "description": "Rewrite .rally/agents builtin role docs for the new role set; clarity pass. Then review prompting across the board (internal/agent_prompt general/ and roles/) to refine and tighten. Keep OpenSpec references out of generic surfaces (AGENTS.md tool-boundaries rule).",
+      "assignee": "crew-chief",
+      "isDone": false,
+      "order": 196608,
+      "createdAt": "2026-07-05T00:05:52.923352823Z",
+      "updatedAt": "2026-07-05T00:05:52.923352823Z",
+      "completedAt": null
+    },
+    {
+      "id": "rall-7ea2",
+      "title": "Roles v2: verify and land to dev",
+      "description": "Run all gates (go build ./..., go test ./..., lint/fuzz gates per justfile), quick test-driving smoke of a relay with the new roles, then merge the feature branch to dev. Also fold in any pending feat/tui-prototypes work that should land.",
+      "assignee": "crew-chief",
+      "isDone": false,
+      "order": 262144,
+      "createdAt": "2026-07-05T00:05:52.923354275Z",
+      "updatedAt": "2026-07-05T00:05:52.923354275Z",
+      "completedAt": null
+    },
+    {
+      "id": "rall-3ebf",
+      "title": "Telemetry QA: refresh evidence for phase-B fixes",
+      "description": "Evidence corpus: openspec/changes/improve-harness-consistency (COMPLETE 89/89 — shipped in 0.12.0; use its draft.md NR corpus as the failure-shape baseline, then archive the change). Pull fresh New Relic data post-0.12: RallyFailure/RallyTry/RallyDiagnostic, appName 'Rally CLI', `newrelic --profile rally --accountId 8182741`. Catalogue current shapes for: (a) unauthenticated harnesses esp. antigravity, (b) repeated retries of the same lap without progress, (c) codex errors prematurely sidelining it. Write findings as a new openspec change scoping laps 6-8.",
+      "assignee": "crew-chief",
+      "isDone": false,
+      "order": 327680,
+      "createdAt": "2026-07-05T00:05:52.923355488Z",
+      "updatedAt": "2026-07-05T00:05:52.923355488Z",
+      "completedAt": null
+    },
+    {
+      "id": "rall-178b",
+      "title": "Fix: unauthenticated harness handling (esp. antigravity)",
+      "description": "Detect auth-failure evidence per harness (antigravity first), classify distinctly (not agent_error), do not burn the outing retry budget on an unauthenticated harness — sideline the provider with a clear operator-facing message and telemetry. Tests including parser fixtures from real evidence.",
+      "assignee": "crew-chief",
+      "isDone": false,
+      "order": 393216,
+      "createdAt": "2026-07-05T00:05:52.92335685Z",
+      "updatedAt": "2026-07-05T00:05:52.92335685Z",
+      "completedAt": null
+    },
+    {
+      "id": "rall-2730",
+      "title": "Fix: recovery fallback on repeated retries of same lap",
+      "description": "When the same lap accumulates repeated failed tries/outings across drivers, fall back to the recovery route (exists in config) or halt with actionable state instead of spinning. Respect retry budgets; emit telemetry; tests.",
+      "assignee": "crew-chief",
+      "isDone": false,
+      "order": 458752,
+      "createdAt": "2026-07-05T00:05:52.923357992Z",
+      "updatedAt": "2026-07-05T00:05:52.923357992Z",
+      "completedAt": null
+    },
+    {
+      "id": "rall-7fe9",
+      "title": "Fix: codex premature sidelining + land phase B to dev",
+      "description": "Address the codex error shapes that sideline it prematurely (silent exit-1 with no stdout/stderr — corpus says codex leaves rich session logs on disk we can read; see improve-harness-consistency draft). Fix classification so codex stays in rotation when the failure is transient/not its fault. Tests. Then land all phase-B work to dev.",
+      "assignee": "crew-chief",
+      "isDone": false,
+      "order": 524288,
+      "createdAt": "2026-07-05T00:05:52.923359164Z",
+      "updatedAt": "2026-07-05T00:05:52.923359164Z",
+      "completedAt": null
+    },
+    {
+      "id": "rall-3f79",
+      "title": "Pipeline: staging branch + codified release flow",
+      "description": "Create `staging` branch. Codify in AGENTS.md and the rally-release skill: feature -\u003e dev (merge when CI/automated gates pass) -\u003e staging (merged periodically when a test-driving-rally pass clears it) -\u003e main (release cut; auto-tag on VERSION bump stays). Review test-driving-rally skill: clean up, drop stale references, ensure it is a useful confidence pass producing actionable findings so issues can be fixed.",
+      "assignee": "crew-chief",
+      "isDone": false,
+      "order": 589824,
+      "createdAt": "2026-07-05T00:05:52.923360197Z",
+      "updatedAt": "2026-07-05T00:05:52.923360197Z",
+      "completedAt": null
+    },
+    {
+      "id": "rall-953d",
+      "title": "Laps: stints readiness review on laps dev",
+      "description": "Review /workspace/laps dev branch (141+ commits ahead of main; add-stints + add-stints-gating implemented). Verify stints feature completeness, finish gaps, run its gates. Decide laps v1.0.0 scope and what rally needs from it. Laps has its own laps-release skill in /workspace/laps/.claude/skills.",
+      "assignee": "crew-chief",
+      "isDone": false,
+      "order": 655360,
+      "createdAt": "2026-07-05T00:05:52.923365126Z",
+      "updatedAt": "2026-07-05T00:05:52.923365126Z",
+      "completedAt": null
+    },
+    {
+      "id": "rall-f734",
+      "title": "Rally: adopt latest laps with stints",
+      "description": "Build laps from dev, install locally, bump rally MinLapsVersion (use updating-laps-version skill), integrate stints awareness where rally touches laps (claim flow, hooks, wrapup). Verify end-to-end with a real relay. Work on rally+laps features together per the briefing; integration lands via staging flow.",
+      "assignee": "crew-chief",
+      "isDone": false,
+      "order": 720896,
+      "createdAt": "2026-07-05T00:05:52.923366498Z",
+      "updatedAt": "2026-07-05T00:05:52.923366498Z",
+      "completedAt": null
+    },
+    {
+      "id": "rall-03b6",
+      "title": "Rally TUI: laps viewing tab",
+      "description": "Add a tab to `rally tui` (tuitabs) for viewing the laps queue incl. stints. Follow existing tuicore patterns; pty+pyte end-to-end check per crew-chief references.",
+      "assignee": "crew-chief",
+      "isDone": false,
+      "order": 786432,
+      "createdAt": "2026-07-05T00:05:52.92336763Z",
+      "updatedAt": "2026-07-05T00:05:52.92336763Z",
+      "completedAt": null
+    },
+    {
+      "id": "rall-df75",
+      "title": "Laps TUI: viewing + actions on laps and stints",
+      "description": "Add a similar-styled TUI to laps (mirror rally's tuicore/tuitabs styling patterns) for viewing laps/stints and taking actions (done, delete, reorder, stint ops). Keep visual language consistent between the two tools.",
+      "assignee": "crew-chief",
+      "isDone": false,
+      "order": 851968,
+      "createdAt": "2026-07-05T00:05:52.923368943Z",
+      "updatedAt": "2026-07-05T00:05:52.923368943Z",
+      "completedAt": null
+    },
+    {
+      "id": "rall-dbfb",
+      "title": "Dogfood in-dev rally+laps; staging test-drive",
+      "description": "Switch crew-chief workflow to the in-development rally+laps binaries for larger delegated tasks (use rally relays where role-shaped). Run a full test-driving-rally pass; when it clears, merge dev -\u003e staging.",
+      "assignee": "crew-chief",
+      "isDone": false,
+      "order": 917504,
+      "createdAt": "2026-07-05T00:05:52.923370085Z",
+      "updatedAt": "2026-07-05T00:05:52.923370085Z",
+      "completedAt": null
+    },
+    {
+      "id": "rall-94fc",
+      "title": "v1.0.0: coordinated rally + laps release",
+      "description": "When staging is cleared and scope above is done: VERSION -\u003e 1.0.0 in both repos, staging -\u003e main via rally-release flow (auto-tag publishes; the release workflow's pushes are authorized by this queue), laps release via its laps-release skill. Release notes covering roles v2, phase-B reliability, stints, TUIs.",
+      "assignee": "crew-chief",
+      "isDone": false,
+      "order": 983040,
+      "createdAt": "2026-07-05T00:05:52.923371187Z",
+      "updatedAt": "2026-07-05T00:05:52.923371187Z",
+      "completedAt": null
+    },
+    {
+      "id": "rall-c3a8",
+      "title": "Terminal pass: nitpicker once, address, done",
+      "description": "Only after v1.0.0 lands: run the nitpicker skill ONCE, implement/address its batches, commit. Do NOT run a second nitpicker pass. After the first pass results are addressed, the campaign is complete — future wake-ups just verify scheduler/relay health and exit.",
+      "assignee": "crew-chief",
+      "isDone": false,
+      "order": 1048576,
+      "createdAt": "2026-07-05T00:05:52.923381977Z",
+      "updatedAt": "2026-07-05T00:05:52.923381977Z",
+      "completedAt": null
+    }
+  ]
+}
