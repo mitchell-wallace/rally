@@ -154,7 +154,7 @@ func TestBuildPrompt_VerifyExitGuidanceOmitsHandoff(t *testing.T) {
 	if strings.Contains(p, "If you are blocked and cannot proceed, run this shell command:\n  laps handoff") {
 		t.Fatalf("verify prompt should not instruct blocked verify agents to hand off:\n%s", p)
 	}
-	if !strings.Contains(p, "For VERIFY work, do not use `laps handoff`") {
+	if !strings.Contains(p, "This is a read-only gate lap: do not use `laps handoff`") {
 		t.Fatalf("verify prompt missing role-aware no-handoff guidance:\n%s", p)
 	}
 	if !strings.Contains(p, "laps done") {
@@ -185,13 +185,13 @@ func TestBuildPrompt_VerifyPromptParity(t *testing.T) {
 		"## Role Instructions\nVerify role rules.\n\n" +
 		"## Task\nConfirm behavior.\n\n" +
 		"## Run Exit Conditions\n" +
-		"Laps is the task tracker for this run. Rally has already claimed the current lap for you, so a bare `laps done` will mark that claimed lap complete.\n\n" +
+		"Laps is the task tracker for this outing. Rally has already claimed the current lap for you, so a bare `laps done` will mark that claimed lap complete.\n\n" +
 		"These are shell commands. Invoke them via your shell/bash tool — do NOT echo the words as plain text in your response. The lap is only recorded when the command actually executes and the hook fires (you will see a follow-up instruction printed to stdout).\n\n" +
 		"When you have finished the current lap, run this shell command:\n  laps done\n\n" +
-		"For VERIFY work, do not use `laps handoff`. If follow-up implementation is needed, add the appropriate follow-up lap(s) and then run `laps done` for this verification lap.\n\n" +
+		"This is a read-only gate lap: do not use `laps handoff`. If follow-up implementation is needed, add the appropriate follow-up lap(s) and then run `laps done` for this gate lap.\n\n" +
 		"If laps reports that the wrong lap was claimed or completed, use the undo command it prints (`laps claim undo` or `laps done undo`) before continuing.\n\n" +
 		"Follow any further instructions that command prints before ending the turn.\n\n" +
-		"Do not exit the run without actually executing the required shell command.\n" +
+		"Do not exit the outing without actually executing the required shell command.\n" +
 		"\nYou can access rally data and context via `.rally/README.md`.\n"
 
 	if got := BuildPrompt(opts); got != want {
@@ -211,7 +211,7 @@ func TestBuildPrompt_RolePolicyGuidance(t *testing.T) {
 			role:   "qa",
 			policy: RolePolicyReadOnlyGate,
 			wantContains: []string{
-				"For VERIFY work, do not use `laps handoff`",
+				"This is a read-only gate lap: do not use `laps handoff`",
 			},
 			wantNotContains: []string{
 				agent_prompt.Finalize(),
@@ -223,7 +223,7 @@ func TestBuildPrompt_RolePolicyGuidance(t *testing.T) {
 			policy:         RolePolicyReadOnlyGate,
 			requiredSkills: []string{"auto-code-review"},
 			wantContains: []string{
-				"For VERIFY work, do not use `laps handoff`",
+				"This is a read-only gate lap: do not use `laps handoff`",
 				"Load and follow these required skill(s) before starting: auto-code-review.",
 			},
 			wantNotContains: []string{
@@ -252,7 +252,7 @@ func TestBuildPrompt_RolePolicyGuidance(t *testing.T) {
 				"If you are blocked and cannot proceed, run this shell command:\n  laps handoff",
 			},
 			wantNotContains: []string{
-				"For VERIFY work, do not use `laps handoff`",
+				"This is a read-only gate lap: do not use `laps handoff`",
 				"Required Skills",
 				"the revised plan is the deliverable",
 			},

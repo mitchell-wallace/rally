@@ -88,20 +88,20 @@ func BuildPrompt(opts RunOptions) string {
 
 	if opts.LapsEnabled {
 		fmt.Fprintf(&b, "## Run Exit Conditions\n")
-		fmt.Fprintf(&b, "Laps is the task tracker for this run. Rally has already claimed the current lap for you, so a bare `laps done` will mark that claimed lap complete.\n\n")
+		fmt.Fprintf(&b, "Laps is the task tracker for this outing. Rally has already claimed the current lap for you, so a bare `laps done` will mark that claimed lap complete.\n\n")
 		fmt.Fprintf(&b, "These are shell commands. Invoke them via your shell/bash tool — do NOT echo the words as plain text in your response. The lap is only recorded when the command actually executes and the hook fires (you will see a follow-up instruction printed to stdout).\n\n")
 		fmt.Fprintf(&b, "When you have finished the current lap, run this shell command:\n  laps done\n\n")
 		switch rolePolicy {
 		case RolePolicyReadOnlyGate:
-			fmt.Fprintf(&b, "For VERIFY work, do not use `laps handoff`. If follow-up implementation is needed, add the appropriate follow-up lap(s) and then run `laps done` for this verification lap.\n\n")
+			fmt.Fprintf(&b, "This is a read-only gate lap: do not use `laps handoff`. If follow-up implementation is needed, add the appropriate follow-up lap(s) and then run `laps done` for this gate lap.\n\n")
 		case RolePolicyPlanOnly:
-			fmt.Fprintf(&b, "For ARCHITECT work, commit planning or lap artifacts only. Source and test edits are out of scope; the revised plan is the deliverable. If implementation is needed, create or revise follow-up lap(s), then run `laps done` for this planning lap.\n\n")
+			fmt.Fprintf(&b, "This is a plan-only lap: commit planning or lap artifacts only. Source and test edits are out of scope; the revised plan is the deliverable. If implementation is needed, create or revise follow-up lap(s), then run `laps done` for this planning lap.\n\n")
 		default:
 			fmt.Fprintf(&b, "If you are blocked and cannot proceed, run this shell command:\n  laps handoff\n\n")
 		}
 		fmt.Fprintf(&b, "If laps reports that the wrong lap was claimed or completed, use the undo command it prints (`laps claim undo` or `laps done undo`) before continuing.\n\n")
 		fmt.Fprintf(&b, "Follow any further instructions that command prints before ending the turn.\n\n")
-		fmt.Fprintf(&b, "Do not exit the run without actually executing the required shell command.\n")
+		fmt.Fprintf(&b, "Do not exit the outing without actually executing the required shell command.\n")
 	} else {
 		fmt.Fprintf(&b, `## Run Exit Action
 Before exiting, record your progress:
