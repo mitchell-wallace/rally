@@ -39,11 +39,11 @@
       "title": "Roles v2: verify and land to dev",
       "description": "Run all gates (go build ./..., go test ./..., lint/fuzz gates per justfile), quick test-driving smoke of a relay with the new roles, then merge the feature branch to dev. Also fold in any pending feat/tui-prototypes work that should land.",
       "assignee": "crew-chief",
-      "isDone": false,
+      "isDone": true,
       "order": 262144,
       "createdAt": "2026-07-05T00:05:52.923354275Z",
-      "updatedAt": "2026-07-05T00:05:52.923354275Z",
-      "completedAt": null
+      "updatedAt": "2026-07-05T00:52:07.756368685Z",
+      "completedAt": "2026-07-05T00:52:07.756368685Z"
     },
     {
       "id": "rall-3ebf",

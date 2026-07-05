@@ -31,8 +31,9 @@ subsequent wake-ups only verify health and exit.
    anything else.
 3. Work the head lap per the crew-chief skill (delegate implementation, review,
    commit per lap). Commits are pre-authorized — by crew chief and by agents it
-   spawns. `git push` needs explicit approval EXCEPT the pushes performed by an
-   invoked release workflow (rally-release / laps-release).
+   spawns. Pushes (user-approved 2026-07-05): `dev` and `staging` in BOTH the
+   rally and laps repos may be pushed to origin as laps land; `main` and tags
+   only via the release workflows (rally-release / laps-release).
 4. Mark the lap done, append a session-log line below, commit doc + queue.
 5. Repeat while budget allows (~5h between wake-ups; a lap can span sessions —
    leave a continuation note in the session log if so).
@@ -83,15 +84,18 @@ subsequent wake-ups only verify health and exit.
 
 ## Session log (newest first; keep ~5 entries, prune older)
 
-- **2026-07-05 (session 1, interactive)** — bootstrap: scheduler built+tested
-  (15 fires, first 04:43 UTC Jul 5), skill trigger fixed, nitpicker+pathfinder
-  skills installed, queue scoped (16 laps), archive pruned to 5, this doc
-  created. cl alias landed (source+docs, tests green); user config rewritten
-  (claude disabled, [reasoning], review/architect routes). Queue lap 1 done:
-  roles-v2 reconciliation artifacts in rename-rally-roles/ (design.md D1–D9,
-  tasks.md laps A–E). Lap 2 in flight: codex Lap A (internal/roles catalog);
-  specs for parallel laps B+C staged in scratchpad (re-derive from tasks.md
-  if lost). Branch: feat/tui-prototypes.
+- **2026-07-05 (session 1, interactive)** — bootstrap + ROLES V2 LANDED TO
+  DEV (pushed, b0a3266). Bootstrap: scheduler built+tested (15 fires, first
+  04:43 UTC Jul 5), skill trigger fixed, nitpicker+pathfinder installed,
+  queue scoped (16 laps), archive pruned, cl alias landed, user config
+  rewritten (claude disabled, [reasoning], review/architect/intern/qa
+  routes, ui dropped). Queue laps 1–4 DONE: roles-v2 reconciled (design
+  D1–D9) then implemented via codex laps A–D + chief fixes (catalog-
+  duplication removed at two sites, gate-text genericized, finalize.md
+  de-duplicated); e2e verified (fresh init → 8 roles no ui, legacy ui
+  migration both ways, live junior relay green on op:zai). Next head lap:
+  rall-3ebf telemetry QA evidence. Remaining in rename-rally-roles: none —
+  ready to archive after a settling period. Branch: dev.
 
 ## Prune rules (anti-snowball)
 

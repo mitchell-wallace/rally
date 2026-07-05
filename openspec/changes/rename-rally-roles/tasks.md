@@ -58,4 +58,4 @@ review + commit). Gates for every lap: `go build ./...`,
       (one junior, one verify) on cheap drivers; confirm prompts and
       builtin/ regeneration.
 - [x] E3. Fold roles-v2 terminology into AGENTS.md role bullet list.
-- [ ] E4. Land to dev per pipeline; update crew-chief queue laps 2–4 states.
+- [x] E4. Land to dev per pipeline; update crew-chief queue laps 2–4 states.
