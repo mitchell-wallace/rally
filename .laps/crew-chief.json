@@ -50,11 +50,11 @@
       "title": "Telemetry QA: refresh evidence for phase-B fixes",
       "description": "Evidence corpus: openspec/changes/improve-harness-consistency (COMPLETE 89/89 — shipped in 0.12.0; use its draft.md NR corpus as the failure-shape baseline, then archive the change). Pull fresh New Relic data post-0.12: RallyFailure/RallyTry/RallyDiagnostic, appName 'Rally CLI', `newrelic --profile rally --accountId 8182741`. Catalogue current shapes for: (a) unauthenticated harnesses esp. antigravity, (b) repeated retries of the same lap without progress, (c) codex errors prematurely sidelining it. Write findings as a new openspec change scoping laps 6-8.",
       "assignee": "crew-chief",
-      "isDone": false,
+      "isDone": true,
       "order": 327680,
       "createdAt": "2026-07-05T00:05:52.923355488Z",
-      "updatedAt": "2026-07-05T00:05:52.923355488Z",
-      "completedAt": null
+      "updatedAt": "2026-07-05T04:57:28.225920223Z",
+      "completedAt": "2026-07-05T04:57:28.225920223Z"
     },
     {
       "id": "rall-178b",

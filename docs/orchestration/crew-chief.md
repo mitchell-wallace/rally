@@ -84,6 +84,23 @@ subsequent wake-ups only verify health and exit.
 
 ## Session log (newest first; keep ~5 entries, prune older)
 
+- **2026-07-05 (session 2, autonomous)** — queue lap 5 (rall-3ebf telemetry
+  QA) DONE. NR unreachable from this container (no CLI/creds — AGENTS.md NR
+  setup is the user's machine); evidence gathered from local
+  `.rally/state/*`, codex rollout logs, and a live unauthenticated `agy`
+  probe instead; NR refresh to backfill from a credentialed host. Findings →
+  `openspec/changes/harden-outing-failure-handling/draft.md` (scopes laps
+  6–8): (a) unauthenticated agy exits 0 after a 30 s interactive-auth block,
+  no parser matches it; (b) rally retried already-done laps rall-3cc4/00ca
+  4× each after their `laps done` hooks fired; (c) completed codex verify
+  tries recorded as `harness launch error`/`no changes made` → freeze
+  counter paused codex; suspect the session-log matcher cwd comparison +
+  the no-changes<3min heuristic vs no-change roles.
+  improve-harness-consistency archived (deltas were pre-synced; archive
+  pruned to 5). **OPERATIONAL: agy is UNAUTHENTICATED in this container**
+  (auth expired after Jul 2; OAuth is interactive — cannot self-heal until
+  user returns Jul 8). `ag:*` route entries burn ~30 s/try until lap 6 lands
+  or re-auth; senior lists `ag:opus` first.
 - **2026-07-05 (session 1, interactive)** — bootstrap + ROLES V2 LANDED TO
   DEV (pushed, b0a3266). Bootstrap: scheduler built+tested (15 fires, first
   04:43 UTC Jul 5), skill trigger fixed, nitpicker+pathfinder installed,

@@ -8,14 +8,13 @@ archived changes; older ones live in git history (`git log -- openspec/changes/a
 
 ## Done (archived)
 
-- **modularize-harness-adapters** (`2026-07-02`) — introduced the
-  `internal/harnessapi` contract package (`Executor`/`RunOptions`/`TryResult`/
-  `ResolvedAgent` + shared `BuildPrompt`/reasoning helpers), moved each built-in
-  harness into its own `internal/harness/<name>` deep module with shared
-  `internal/harness/process` support, and exposed `harness.BuildExecutors`
-  behind a thin `app.BuildExecutors` mapper; removed `internal/agent` (no shim).
-  Added the `harness-module-structure` spec; ratcheted #3's `opencode.go` cap
-  away and set up the parked `extract-prompt-builder`.
+- **improve-harness-consistency** (`2026-07-05`, shipped in 0.12.0) — cut the
+  deprecated `gemini` CLI harness (antigravity inherits the model family),
+  populated `failure_evidence` on every classified `RallyFailure` (dirty-tree,
+  text-pattern, unmatched paths), added codex session-log and opencode
+  disk-log evidence fallbacks, resolved-model `runner` tags, and moved routing
+  events out of `RallyTry`. Spec deltas were synced before archive; its
+  evidence-corpus role passes to `harden-outing-failure-handling`.
 - **separate-runtime-presentation-boundary** (`2026-07-04`) — introduced a
   presentation-neutral runtime contract in
   `internal/relay/runner/runtimeevent` (typed data-only events, synchronous
@@ -49,13 +48,21 @@ modularization arc (#4–#8) then built on that structure rather than on a
 monolithic runner — harness adapters, the presentation boundary, the run/try
 loop, remaining source files, and test files — each ratcheting #3's budgets down
 as it split its outliers (`opencode.go` 801, `run_one.go` 1,510). That arc is now
-complete. What remains queued is the role rename (#9), which the TUI (#10) needs
-as stable concepts to render.
+complete. Roles v2 (#9) landed to dev 2026-07-05, giving the TUI (#10) stable
+concepts to render.
 
-9. **rename-rally-roles** _(author input captured; artifacts not drafted)_
-   Rename routing roles from skill-hierarchy (JUNIOR/SENIOR/UI/VERIFY) to judgment
-   framing (**builder**/**architect**/**designer**/**analyst**), builder as default.
-   Needs a migration-vs-breaking decision. See `rename-rally-roles/laps-author-input-1.md`.
+9. **rename-rally-roles** _(implemented; landed to dev 2026-07-05, archive
+   after a settling period)_ — roles v2: the eight-role set
+   (intern/junior/senior ladder + architect/review/verify/qa/recovery), `ui`
+   retired as a built-in, legacy migration both ways. Baseline:
+   `rename-rally-roles/roles-v2-design.md`.
+
+9.5. **harden-outing-failure-handling** _(draft; evidence captured 2026-07-05)_
+   Phase-B reliability fixes scoped by the crew-chief campaign: unauthenticated
+   harness detection + provider sidelining (antigravity first), retry/recovery
+   fallback when the same lap burns tries without progress (including the
+   retry-of-already-done-lap bug), and codex misclassification that pauses it
+   for work it completed. Evidence and code leads in its `draft.md`.
 
 10. **build-new-tui** _(stub proposal)_
    Future TUI plus a lighter start-of-run config / inflight steering flow (e.g.
