@@ -163,7 +163,7 @@ func StartRelay(ctx context.Context, opts RelayStartOptions) error {
 	if opts.DiscardUnfinishedRelay {
 		relays := s.RecentRelays(1)
 		if len(relays) > 0 && relays[0].EndedAt == "" {
-			_ = relay.CompleteRelay(s, relays[0].ID)
+			_ = relay.EndRelay(s, relays[0].ID, relay.EndReasonDiscarded)
 		}
 	}
 	if opts.ResetAgentStatus {

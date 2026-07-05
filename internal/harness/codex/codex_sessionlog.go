@@ -31,17 +31,20 @@ func codexSessionLogDir() (string, error) {
 // codexSessionMeta captures only the structural scalars from the first
 // session_meta line of a rollout-*.jsonl. It deliberately omits the large
 // base_instructions payload — that is PII/verbosity and must never reach the
-// RawSignal. Fields are read straight off session_meta.
+// RawSignal. Codex keeps these scalars under payload; only timestamp and type
+// are top-level.
 type codexSessionMeta struct {
-	Type     string `json:"type"`
-	Cwd      string `json:"cwd"`
-	TS       string `json:"timestamp"`
-	CliVer   string `json:"cli_version"`
-	Provider string `json:"model_provider"`
-	Git      struct {
-		CommitHash string `json:"commit_hash"`
-		Branch     string `json:"branch"`
-	} `json:"git"`
+	Type    string `json:"type"`
+	TS      string `json:"timestamp"`
+	Payload struct {
+		Cwd      string `json:"cwd"`
+		CliVer   string `json:"cli_version"`
+		Provider string `json:"model_provider"`
+		Git      struct {
+			CommitHash string `json:"commit_hash"`
+			Branch     string `json:"branch"`
+		} `json:"git"`
+	} `json:"payload"`
 }
 
 // codexEventMsg captures an event_msg line. Only the subtype is used as the
@@ -49,7 +52,9 @@ type codexSessionMeta struct {
 // can be large or contain message bodies) is never copied into RawSignal.
 type codexEventMsg struct {
 	Type    string `json:"type"`
-	Subtype string `json:"subtype"`
+	Payload struct {
+		Type string `json:"type"`
+	} `json:"payload"`
 }
 
 // codexSessionLogEvidence implements the codex session-log fallback (OpenSpec
@@ -61,14 +66,15 @@ type codexEventMsg struct {
 // locates the most recent matching log and builds a FailureEvidence:
 //
 //   - Source = "codex_session_log"
-//   - Message = the subtype of the last event_msg line (task_started /
+//   - Message = the payload.type of the last event_msg line (task_started /
 //     task_complete / turn_aborted) — the terminal diagnostic
 //   - RawSignal = a 256-rune-bounded string built from the session_meta scalars
 //     plus the last event_msg line, never including base_instructions,
 //     token_count, response_item, or turn_context payloads
 //
-// A matching log requires first-line session_meta.cwd == workspaceDir and the
-// session_meta.timestamp within the try window [startedAt, endedAt].
+// A matching log requires first-line session_meta.payload.cwd == workspaceDir
+// and the top-level session_meta timestamp within the try window [startedAt,
+// endedAt].
 //
 // Return contract:
 //   - matching log found  -> (*Evidence{"codex_session_log"}, nil)
@@ -114,8 +120,8 @@ func codexSessionLogEvidence(workspaceDir string, startedAt, endedAt time.Time) 
 }
 
 // codexMatchingRolloutFiles walks the sessions dir for rollout-*.jsonl files
-// whose first-line session_meta.cwd == workspaceDir and whose
-// session_meta.timestamp falls within [startedAt, endedAt]. It returns the
+// whose first-line session_meta.payload.cwd == workspaceDir and whose
+// top-level session_meta timestamp falls within [startedAt, endedAt]. It returns the
 // matches newest-first by file mtime. scanned reports whether the sessions
 // directory existed and was enumerable (false + nil err means missing dir, a
 // non-error). An os.IsNotExist error from the root is reported as (nil, true,
@@ -153,7 +159,7 @@ func codexMatchingRolloutFiles(root, workspaceDir string, startedAt, endedAt tim
 			return nil
 		}
 		meta, ok := readCodexRolloutMeta(path)
-		if !ok || meta.Cwd != workspaceDir {
+		if !ok || meta.Payload.Cwd != workspaceDir {
 			return nil
 		}
 		if !codexSessionTimestampInWindow(meta.TS, startedAt, endedAt) {
@@ -234,7 +240,6 @@ func parseCodexRolloutEvidence(path string) *reliability.FailureEvidence {
 	var meta codexSessionMeta
 	metaOK := false
 	var lastEventSubtype string
-	var lastEventLine string
 
 	scanner := bufio.NewScanner(f)
 	scanner.Buffer(make([]byte, 0, 64*1024), 1<<20)
@@ -260,10 +265,9 @@ func parseCodexRolloutEvidence(path string) *reliability.FailureEvidence {
 		// task_complete, and turn_aborted carry a useful terminal diagnostic,
 		// and token_count / response_item / turn_context are the documented
 		// verbosity/PII hazards.
-		switch msg.Subtype {
+		switch msg.Payload.Type {
 		case "task_started", "task_complete", "turn_aborted":
-			lastEventSubtype = msg.Subtype
-			lastEventLine = line
+			lastEventSubtype = msg.Payload.Type
 		}
 	}
 	if !metaOK {
@@ -275,7 +279,13 @@ func parseCodexRolloutEvidence(path string) *reliability.FailureEvidence {
 		message = "no terminal event"
 	}
 
-	raw := buildCodexSessionRawSignal(meta, lastEventLine)
+	raw := buildCodexSessionRawSignal(meta, lastEventSubtype)
+	if lastEventSubtype == "task_complete" {
+		message = "codex session completed (task_complete) but harness exited non-zero"
+	}
+	// CategoryUnidentifiedIssue maps to FailureAgent for every terminal shape,
+	// including task_complete: a completed session with a non-zero exit must
+	// never feed the FailureInfra freeze counter.
 	return &reliability.FailureEvidence{
 		Category:  reliability.CategoryUnidentifiedIssue,
 		Harness:   "codex",
@@ -287,28 +297,28 @@ func parseCodexRolloutEvidence(path string) *reliability.FailureEvidence {
 }
 
 // buildCodexSessionRawSignal assembles a bounded (256-rune) RawSignal from the
-// session_meta scalars and the last event_msg line. Only the structural fields
-// are used; base_instructions, token_count, response_item, and turn_context
-// are structurally excluded (they are never passed in here).
-func buildCodexSessionRawSignal(meta codexSessionMeta, lastEventLine string) string {
+// session_meta scalars and the last terminal event type. Only structural fields
+// are used; base_instructions, token_count, response_item, turn_context, and
+// task message bodies are structurally excluded (they are never passed in here).
+func buildCodexSessionRawSignal(meta codexSessionMeta, lastEventSubtype string) string {
 	var parts []string
-	if meta.Cwd != "" {
-		parts = append(parts, "cwd="+meta.Cwd)
+	if meta.Payload.Cwd != "" {
+		parts = append(parts, "cwd="+meta.Payload.Cwd)
 	}
-	if meta.Git.Branch != "" {
-		parts = append(parts, "branch="+meta.Git.Branch)
+	if meta.Payload.Git.Branch != "" {
+		parts = append(parts, "branch="+meta.Payload.Git.Branch)
 	}
-	if meta.Git.CommitHash != "" {
-		parts = append(parts, "commit="+meta.Git.CommitHash)
+	if meta.Payload.Git.CommitHash != "" {
+		parts = append(parts, "commit="+meta.Payload.Git.CommitHash)
 	}
-	if meta.Provider != "" {
-		parts = append(parts, "provider="+meta.Provider)
+	if meta.Payload.Provider != "" {
+		parts = append(parts, "provider="+meta.Payload.Provider)
 	}
-	if meta.CliVer != "" {
-		parts = append(parts, "cli="+meta.CliVer)
+	if meta.Payload.CliVer != "" {
+		parts = append(parts, "cli="+meta.Payload.CliVer)
 	}
-	if lastEventLine != "" {
-		parts = append(parts, "last="+lastEventLine)
+	if lastEventSubtype != "" {
+		parts = append(parts, "last_event="+lastEventSubtype)
 	}
 	if len(parts) == 0 {
 		return "codex session log"

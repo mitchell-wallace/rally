@@ -15,7 +15,42 @@ import (
 	"github.com/mitchell-wallace/rally/internal/store"
 )
 
-func TestRunOneLapDoneRecoveryPromotesFailedVerifyAttempt(t *testing.T) {
+func TestRunOneLapDoneRecoveryPromotesFailedAttempt(t *testing.T) {
+	tests := []struct {
+		name string
+		role string
+		// result the harness reports after the laps done hook fired for the
+		// pinned lap during the attempt
+		completed   bool
+		summary     string
+		wantWasLine string
+	}{
+		{
+			// Implementation role failed as "no changes made" despite the hook.
+			name:        "implementation role completed with no changes",
+			role:        "senior",
+			completed:   true,
+			summary:     "completed with no changes",
+			wantWasLine: `treating as success (was: no changes made)`,
+		},
+		{
+			// The corpus incidents (rall-3cc4/00ca) were verify laps whose
+			// harness exited unsuccessfully after the hook fired.
+			name:        "verify role harness failure after hook",
+			role:        "verify",
+			completed:   false,
+			summary:     "harness died after wrapup",
+			wantWasLine: `treating as success (was: agent error)`,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			runLapDoneRecoveryPromotionCase(t, tt.role, tt.completed, tt.summary, tt.wantWasLine)
+		})
+	}
+}
+
+func runLapDoneRecoveryPromotionCase(t *testing.T, role string, completed bool, summary, wantWasLine string) {
 	workspaceDir := t.TempDir()
 	rallyDir := store.RallyDir(workspaceDir)
 	os.MkdirAll(rallyDir, 0o755)
@@ -33,7 +68,7 @@ func TestRunOneLapDoneRecoveryPromotesFailedVerifyAttempt(t *testing.T) {
 			if err := progress.SaveRunState(workspaceDir, rs); err != nil {
 				return nil, err
 			}
-			return &harnessapi.TryResult{Completed: true, Summary: "verified with no changes"}, nil
+			return &harnessapi.TryResult{Completed: completed, Summary: summary}, nil
 		},
 	}
 	r := NewRunner(s, Config{
@@ -52,7 +87,7 @@ func TestRunOneLapDoneRecoveryPromotesFailedVerifyAttempt(t *testing.T) {
 		&store.RelayRecord{ID: 1, TargetIterations: 1},
 		0,
 		harnessapi.ResolvedAgent{Harness: "opencode", Model: cheapTestModel},
-		runTask{Name: "verify pinned task", Prompt: "verify work", Assignee: "verify", LapID: "lap-1", IsLapsBacked: true, LapsRemaining: 1},
+		runTask{Name: "pinned task", Prompt: "do work", Assignee: role, LapID: "lap-1", IsLapsBacked: true, LapsRemaining: 1},
 		nil,
 		nil,
 		false,
@@ -67,7 +102,7 @@ func TestRunOneLapDoneRecoveryPromotesFailedVerifyAttempt(t *testing.T) {
 	if !res.Success || res.Outcome != reliability.OutcomeCompleted {
 		t.Fatalf("run outcome = success %v outcome %q, want completed success", res.Success, res.Outcome)
 	}
-	if !strings.Contains(log.String(), `lap-done recovery: laps done hook fired for pinned lap "lap-1"; treating as success (was: no changes made)`) {
+	if !strings.Contains(log.String(), `lap-done recovery: laps done hook fired for pinned lap "lap-1"; `+wantWasLine) {
 		t.Fatalf("log missing lap-done recovery line:\n%s", log.String())
 	}
 
@@ -77,6 +112,9 @@ func TestRunOneLapDoneRecoveryPromotesFailedVerifyAttempt(t *testing.T) {
 	}
 	if !tries[0].Completed || tries[0].Outcome != reliability.OutcomeCompleted {
 		t.Fatalf("try completed=%v outcome=%q, want completed outcome", tries[0].Completed, tries[0].Outcome)
+	}
+	if tries[0].FailReason != "" {
+		t.Fatalf("FailReason = %q, want empty after lap-done recovery", tries[0].FailReason)
 	}
 	if got, want := tries[0].RecordedLaps, []string{"lap-1"}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("RecordedLaps = %v, want %v", got, want)

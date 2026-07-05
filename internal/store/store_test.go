@@ -41,6 +41,46 @@ func TestCacheReload(t *testing.T) {
 	}
 }
 
+func TestRelayEndReasonRoundTripsAndLegacyRecordsLoad(t *testing.T) {
+	rallyDir, s := setupTempStore(t)
+
+	if err := s.AppendRelay(RelayRecord{ID: 1, TargetIterations: 1, EndReason: "completed"}); err != nil {
+		t.Fatal(err)
+	}
+	legacyLine := `{"id":2,"target_iterations":1,"completed_iterations":0,"agent_mix":"cx","started_at":"2026-07-05T00:00:00Z","ended_at":"2026-07-05T00:01:00Z"}`
+	path := filepath.Join(rallyDir, "state", "relays.jsonl")
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.WriteString(legacyLine + "\n"); err != nil {
+		_ = f.Close()
+		t.Fatal(err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	reloaded, err := NewStore(rallyDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	relay1 := reloaded.GetRelay(1)
+	if relay1 == nil {
+		t.Fatal("relay 1 missing after reload")
+	}
+	if relay1.EndReason != "completed" {
+		t.Fatalf("relay 1 EndReason = %q, want completed", relay1.EndReason)
+	}
+	relay2 := reloaded.GetRelay(2)
+	if relay2 == nil {
+		t.Fatal("legacy relay missing after reload")
+	}
+	if relay2.EndReason != "" {
+		t.Fatalf("legacy relay EndReason = %q, want empty", relay2.EndReason)
+	}
+}
+
 func TestStoreWindowing(t *testing.T) {
 	rallyDir, store := setupTempStore(t)
 

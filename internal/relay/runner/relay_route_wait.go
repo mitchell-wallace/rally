@@ -25,7 +25,7 @@ func (r *Runner) selectRouteOrWait(
 	if err != nil {
 		if errors.Is(err, errQueueEmpty) {
 			fmt.Fprintf(log, "relay %d completed: laps queue empty\n", relay.ID)
-			_ = relaycore.CompleteRelay(r.store, relay.ID)
+			_ = relaycore.EndRelay(r.store, relay.ID, relaycore.EndReasonQueueEmpty)
 			return runTask{}, routeSelection{}, false, true, nil
 		}
 		return runTask{}, routeSelection{}, false, false, err
@@ -49,12 +49,12 @@ func (r *Runner) selectRouteOrWait(
 						rc,
 						telemetry.FailureState{AgentState: string(relaycore.StateFrozen)},
 					))
-				_ = relaycore.CompleteRelay(r.store, relay.ID)
+				_ = relaycore.EndRelay(r.store, relay.ID, relaycore.EndReasonConfigError)
 				return runTask{}, routeSelection{}, false, false, fmt.Errorf("relay failed: all agents frozen")
 			}
 			if routeErr.Wait <= 0 {
 				fmt.Fprintf(log, "relay %d failed: %s\n", relay.ID, routeErr.Error())
-				_ = relaycore.CompleteRelay(r.store, relay.ID)
+				_ = relaycore.EndRelay(r.store, relay.ID, relaycore.EndReasonConfigError)
 				return runTask{}, routeSelection{}, false, false, fmt.Errorf("relay failed: %s", routeErr.Error())
 			}
 			fmt.Fprintf(log, "relay %d all agents paused, waiting %v\n", relay.ID, routeErr.Wait)

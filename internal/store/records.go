@@ -134,6 +134,7 @@ type RelayRecord struct {
 	AgentMix            string `json:"agent_mix"`
 	StartedAt           string `json:"started_at"`
 	EndedAt             string `json:"ended_at,omitempty"`
+	EndReason           string `json:"end_reason,omitempty"`
 	FirstTryID          int    `json:"first_try_id,omitempty"`
 	LastTryID           int    `json:"last_try_id,omitempty"`
 	ConsumedMessageIDs  []int  `json:"consumed_message_ids,omitempty"`

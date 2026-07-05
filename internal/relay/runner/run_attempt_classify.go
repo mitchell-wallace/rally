@@ -17,7 +17,7 @@ import (
 // should be recorded/routed. It is a table of named sub-steps; each helper
 // preserves the original statement order, error strings, and telemetry fields.
 func (r *Runner) classifyAttemptOutcome(relay *store.RelayRecord, runIndex int, picked harnessapi.ResolvedAgent, task runTask, state *runOneState, attempt *runAttemptState, log io.Writer) {
-	r.classifyInitialFailure(state, attempt)
+	r.classifyInitialFailure(task, state, attempt)
 	detectLapsMarkerAsText(relay, runIndex, task, state, attempt, log)
 	r.validatePinnedLapForAttempt(relay, runIndex, task, state, attempt, log)
 	applyLapDoneRecovery(relay, runIndex, task, state, attempt, log)
@@ -31,7 +31,7 @@ func (r *Runner) classifyAttemptOutcome(relay *store.RelayRecord, runIndex int, 
 
 // classifyInitialFailure computes the raw failure flag and high-level reason
 // for the attempt before any taxonomy or recovery adjustment is applied.
-func (r *Runner) classifyInitialFailure(state *runOneState, attempt *runAttemptState) {
+func (r *Runner) classifyInitialFailure(task runTask, state *runOneState, attempt *runAttemptState) {
 	// Compute failed before rendering the footer so the displayed result
 	// matches what gets recorded in the try record.
 	attempt.failed = false
@@ -66,7 +66,8 @@ func (r *Runner) classifyInitialFailure(state *runOneState, attempt *runAttemptS
 			hasChanges = dirty
 		}
 		noFileChanges := !hasChanges
-		if noFileChanges && attempt.runtime < 3*time.Minute && attempt.handoffEntry == nil {
+		exemptCompletedReadOnlyRole := roleWritePolicy(task.promptAssignee()) != harnessapi.RolePolicyImplementation && attempt.result.Completed
+		if noFileChanges && attempt.runtime < 3*time.Minute && attempt.handoffEntry == nil && !exemptCompletedReadOnlyRole {
 			attempt.failed = true
 			state.failReason = "no changes made"
 		}
@@ -129,6 +130,7 @@ func applyLapDoneRecovery(relay *store.RelayRecord, runIndex int, task runTask, 
 	overriddenReason := state.failReason
 	attempt.failed = false
 	state.success = true
+	state.failReason = ""
 	fmt.Fprintf(log, "relay %d run %d attempt %d lap-done recovery: laps done hook fired for pinned lap %q; treating as success (was: %s)\n", relay.ID, runIndex+1, attempt.attempt, task.LapID, overriddenReason)
 }
 
@@ -146,6 +148,10 @@ func applyStallRecovery(relay *store.RelayRecord, runIndex int, task runTask, st
 		} else {
 			attempt.failed = false
 			state.success = true
+			// Clear the pre-promotion failure reason so it does not persist on
+			// the successful try record (the completed-with-"harness error"
+			// corpus shape).
+			state.failReason = ""
 			fmt.Fprintf(log, "relay %d run %d attempt %d stall recovery: files committed, treating as success\n", relay.ID, runIndex+1, attempt.attempt)
 		}
 	}

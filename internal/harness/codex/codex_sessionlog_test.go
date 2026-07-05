@@ -13,20 +13,24 @@ import (
 )
 
 // writeCodexRollout writes a codex rollout-*.jsonl session log under dir with
-// the given session_meta scalars and event lines.
+// the given session_meta scalars and event lines, using the real nested rollout
+// shape captured from ~/.codex/sessions/2026/07/03 with sensitive content
+// replaced by short stubs.
 func writeCodexRollout(t *testing.T, dir, name, cwd, ts string, eventLines ...string) string {
 	t.Helper()
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
 	var b strings.Builder
-	b.WriteString(`{"type":"session_meta","cwd":` + jsonString(cwd))
+	b.WriteString(`{"timestamp":` + jsonString(ts))
+	b.WriteString(`,"type":"session_meta","payload":{"session_id":"019f26cb-5611-7202-87ca-812ea5b71a01","id":"019f26cb-5611-7202-87ca-812ea5b71a01"`)
 	b.WriteString(`,"timestamp":` + jsonString(ts))
-	b.WriteString(`,"cli_version":"0.141.0","model_provider":"openai"`)
+	b.WriteString(`,"cwd":` + jsonString(cwd))
+	b.WriteString(`,"originator":"codex_exec","cli_version":"0.142.4","source":"exec","thread_source":"user","model_provider":"openai"`)
 	b.WriteString(`,"git":{"commit_hash":"abc123","branch":"main"}`)
-	b.WriteString(`,"base_instructions":"SECRET BASE INSTRUCTIONS - must never leak"`)
+	b.WriteString(`,"base_instructions":{"text":"BASE INSTRUCTIONS STUB - must never leak"}`)
 	b.WriteString(`,"turn_context":{"payload":{"model":"gpt-5.5"}}`)
-	b.WriteString("}\n")
+	b.WriteString("}}\n")
 	for _, ln := range eventLines {
 		b.WriteString(ln)
 		b.WriteString("\n")
@@ -72,11 +76,11 @@ func TestCodexSessionLog_MatchingLogProducesSessionLogEvidence(t *testing.T) {
 	ts := rfcNow()
 	dayDir := filepath.Join(sessionsRoot, "sessions", "2026", "06", "26")
 	writeCodexRollout(t, dayDir, "rollout-20260626T120000-deadbeef.jsonl", workspaceDir, ts,
-		`{"type":"event_msg","subtype":"task_started","turn_id":1}`,
-		`{"type":"event_msg","subtype":"token_count","payload":{"input":4096}}`,
-		`{"type":"event_msg","subtype":"response_item","payload":{"message":"full assistant body"}}`,
-		`{"type":"event_msg","subtype":"turn_context","payload":{"reasoning":"high"}}`,
-		`{"type":"event_msg","subtype":"turn_aborted","turn_id":2}`,
+		`{"timestamp":"2026-07-03T07:04:50.581Z","type":"event_msg","payload":{"type":"task_started","turn_id":"turn-1","started_at":1783062290,"model_context_window":258400}}`,
+		`{"timestamp":"2026-07-03T07:05:01.555Z","type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":4096}}}}`,
+		`{"timestamp":"2026-07-03T07:05:02.000Z","type":"event_msg","payload":{"type":"response_item","item":{"content":[{"text":"full assistant body"}]}}}`,
+		`{"timestamp":"2026-07-03T07:05:03.000Z","type":"event_msg","payload":{"type":"turn_context","context":{"reasoning":"high"}}}`,
+		`{"timestamp":"2026-07-03T07:05:04.000Z","type":"event_msg","payload":{"type":"turn_aborted","turn_id":"turn-1"}}`,
 	)
 
 	start, end := time.Now().Add(-time.Minute), time.Now().Add(time.Minute)
@@ -98,6 +102,46 @@ func TestCodexSessionLog_MatchingLogProducesSessionLogEvidence(t *testing.T) {
 	}
 }
 
+func TestCodexSessionLog_TaskCompleteIsAgentClassCompletedSessionEvidence(t *testing.T) {
+	sessionsRoot := t.TempDir()
+	workspaceDir := filepath.Join(t.TempDir(), "ws")
+	os.MkdirAll(workspaceDir, 0o755)
+	t.Setenv("CODEX_HOME", sessionsRoot)
+
+	ts := rfcNow()
+	dayDir := filepath.Join(sessionsRoot, "sessions", "2026", "07", "03")
+	writeCodexRollout(t, dayDir, "rollout-2026-07-03T07-04-47-real-shape.jsonl", workspaceDir, ts,
+		`{"timestamp":"2026-07-03T07:04:50.581Z","type":"event_msg","payload":{"type":"task_started","turn_id":"019f26cb-6073-7b61-8582-81f3d8e3f0aa","started_at":1783062290,"model_context_window":258400}}`,
+		`{"timestamp":"2026-07-03T07:05:01.555Z","type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":16106,"output_tokens":247}}}}`,
+		`{"timestamp":"2026-07-03T07:08:36.186Z","type":"event_msg","payload":{"type":"task_complete","turn_id":"019f26cb-6073-7b61-8582-81f3d8e3f0aa","last_agent_message":"completed summary body","completed_at":1783062516,"duration_ms":225631}}`,
+	)
+
+	start, end := time.Now().Add(-time.Minute), time.Now().Add(time.Minute)
+	ev, err := codexSessionLogEvidence(workspaceDir, start, end)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if ev == nil {
+		t.Fatal("expected evidence")
+	}
+	if ev.Category != reliability.CategoryUnidentifiedIssue {
+		t.Fatalf("Category = %q, want %q", ev.Category, reliability.CategoryUnidentifiedIssue)
+	}
+	if got := reliability.CategoryToClass(ev.Category); got != reliability.FailureAgent {
+		t.Fatalf("CategoryToClass(%q) = %q, want %q", ev.Category, got, reliability.FailureAgent)
+	}
+	wantMessage := "codex session completed (task_complete) but harness exited non-zero"
+	if ev.Message != wantMessage {
+		t.Fatalf("Message = %q, want %q", ev.Message, wantMessage)
+	}
+	if !strings.Contains(ev.RawSignal, "last_event=task_complete") {
+		t.Fatalf("RawSignal = %q, want terminal event type", ev.RawSignal)
+	}
+	if strings.Contains(ev.RawSignal, "completed summary body") {
+		t.Fatalf("RawSignal leaked task_complete message body: %q", ev.RawSignal)
+	}
+}
+
 // §4.6 (b): a codex exit-1 with no matching session log yields executor-level
 // CategoryHarnessLaunch + "codex_no_session_log", which ClassifyError Priority
 // 1 resolves to StrategyFreshRestart / FailureInfra (NOT Rotate / FailureAgent).
@@ -112,7 +156,7 @@ func TestCodexSessionLog_NoMatchingLogProducesHarnessLaunchEvidence(t *testing.T
 	dayDir := filepath.Join(sessionsRoot, "sessions", "2026", "06", "26")
 	writeCodexRollout(t, dayDir, "rollout-20260626T120000-other.jsonl",
 		filepath.Join(t.TempDir(), "other-ws"), rfcNow(),
-		`{"type":"event_msg","subtype":"task_complete"}`,
+		`{"timestamp":"2026-07-03T07:08:36.186Z","type":"event_msg","payload":{"type":"task_complete","turn_id":"turn-1","last_agent_message":"completed summary"}}`,
 	)
 
 	start, end := time.Now().Add(-time.Minute), time.Now().Add(time.Minute)
@@ -160,11 +204,11 @@ func TestCodexSessionLog_RawSignalExcludesVerboseAndSensitivePayloads(t *testing
 	ts := rfcNow()
 	dayDir := filepath.Join(sessionsRoot, "sessions", "2026", "06", "26")
 	writeCodexRollout(t, dayDir, "rollout-20260626T120000-secret.jsonl", workspaceDir, ts,
-		`{"type":"event_msg","subtype":"task_started","turn_id":1}`,
-		`{"type":"event_msg","subtype":"token_count","payload":{"input":4096,"output":512}}`,
-		`{"type":"event_msg","subtype":"response_item","payload":{"message":"FULL USER PROMPT BODY"}}`,
-		`{"type":"event_msg","subtype":"turn_context","payload":{"model":"gpt-5.5","reasoning":"high"}}`,
-		`{"type":"event_msg","subtype":"task_complete","turn_id":2}`,
+		`{"timestamp":"2026-07-03T07:04:50.581Z","type":"event_msg","payload":{"type":"task_started","turn_id":"turn-1","started_at":1783062290,"model_context_window":258400}}`,
+		`{"timestamp":"2026-07-03T07:05:01.555Z","type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":4096,"output_tokens":512}}}}`,
+		`{"timestamp":"2026-07-03T07:05:02.000Z","type":"event_msg","payload":{"type":"response_item","item":{"content":[{"text":"FULL USER PROMPT BODY"}]}}}`,
+		`{"timestamp":"2026-07-03T07:05:03.000Z","type":"event_msg","payload":{"type":"turn_context","context":{"model":"gpt-5.5","reasoning":"high"}}}`,
+		`{"timestamp":"2026-07-03T07:08:36.186Z","type":"event_msg","payload":{"type":"task_complete","turn_id":"turn-1","last_agent_message":"FINAL SUMMARY BODY"}}`,
 	)
 
 	start, end := time.Now().Add(-time.Minute), time.Now().Add(time.Minute)
@@ -177,6 +221,8 @@ func TestCodexSessionLog_RawSignalExcludesVerboseAndSensitivePayloads(t *testing
 	}
 	for _, forbidden := range []string{
 		"SECRET BASE INSTRUCTIONS",
+		"BASE INSTRUCTIONS STUB",
+		"FINAL SUMMARY BODY",
 		"FULL USER PROMPT BODY",
 		"reasoning",
 		`"input":4096`,
@@ -223,7 +269,7 @@ func TestCodexSessionLog_StaleTimestampDoesNotMatch(t *testing.T) {
 	stale := time.Now().Add(-2 * time.Hour).UTC().Format(time.RFC3339Nano)
 	dayDir := filepath.Join(sessionsRoot, "sessions", "2026", "06", "26")
 	writeCodexRollout(t, dayDir, "rollout-stale.jsonl", workspaceDir, stale,
-		`{"type":"event_msg","subtype":"task_started"}`,
+		`{"timestamp":"2026-07-03T07:04:50.581Z","type":"event_msg","payload":{"type":"task_started"}}`,
 	)
 
 	start, end := time.Now().Add(-time.Minute), time.Now().Add(time.Minute)
@@ -246,14 +292,14 @@ func TestCodexSessionLog_NewestMatchWins(t *testing.T) {
 	ts := rfcNow()
 	dayDir := filepath.Join(sessionsRoot, "sessions", "2026", "06", "26")
 	writeCodexRollout(t, dayDir, "rollout-older.jsonl", workspaceDir, ts,
-		`{"type":"event_msg","subtype":"task_started"}`,
+		`{"timestamp":"2026-07-03T07:04:50.581Z","type":"event_msg","payload":{"type":"task_started"}}`,
 	)
 	older := filepath.Join(dayDir, "rollout-older.jsonl")
 	past := time.Now().Add(-30 * time.Minute)
 	os.Chtimes(older, past, past)
 
 	writeCodexRollout(t, dayDir, "rollout-newer.jsonl", workspaceDir, ts,
-		`{"type":"event_msg","subtype":"turn_aborted"}`,
+		`{"timestamp":"2026-07-03T07:05:04.000Z","type":"event_msg","payload":{"type":"turn_aborted","turn_id":"turn-1"}}`,
 	)
 	newer := filepath.Join(dayDir, "rollout-newer.jsonl")
 	os.Chtimes(newer, time.Now(), time.Now())
@@ -324,8 +370,8 @@ func TestCodexExecutor_SessionLogEvidenceWiredOnMatchingLog(t *testing.T) {
 	ts := rfcNow()
 	dayDir := filepath.Join(sessionsRoot, "sessions", "2026", "06", "26")
 	writeCodexRollout(t, dayDir, "rollout-20260626T120000-wired.jsonl", workspaceDir, ts,
-		`{"type":"event_msg","subtype":"task_started","turn_id":1}`,
-		`{"type":"event_msg","subtype":"turn_aborted","turn_id":2}`,
+		`{"timestamp":"2026-07-03T07:04:50.581Z","type":"event_msg","payload":{"type":"task_started","turn_id":"turn-1"}}`,
+		`{"timestamp":"2026-07-03T07:05:04.000Z","type":"event_msg","payload":{"type":"turn_aborted","turn_id":"turn-1"}}`,
 	)
 	// Ensure mtime is fresh.
 	os.Chtimes(filepath.Join(dayDir, "rollout-20260626T120000-wired.jsonl"), time.Now(), time.Now())

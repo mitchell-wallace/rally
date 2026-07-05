@@ -61,6 +61,62 @@ func TestApplyStallRecoveryByRoleWritePolicy(t *testing.T) {
 	}
 }
 
+func TestClassifyInitialFailureNoChangesRoleWritePolicy(t *testing.T) {
+	tests := []struct {
+		name           string
+		role           string
+		completed      bool
+		wantFailed     bool
+		wantFailReason string
+	}{
+		{
+			name:           "verify completed with no changes is not demoted",
+			role:           "verify",
+			completed:      true,
+			wantFailed:     false,
+			wantFailReason: "",
+		},
+		{
+			name:           "implementation completed with no changes still fails",
+			role:           "senior",
+			completed:      true,
+			wantFailed:     true,
+			wantFailReason: "no changes made",
+		},
+		{
+			name:           "verify incomplete still fails",
+			role:           "verify",
+			completed:      false,
+			wantFailed:     true,
+			wantFailReason: "agent error",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			workspaceDir := t.TempDir()
+			initRepo(t, workspaceDir)
+			runGit(t, workspaceDir, "commit", "--allow-empty", "-m", "initial", "--no-verify")
+
+			r := &Runner{cfg: Config{WorkspaceDir: workspaceDir}}
+			state := &runOneState{}
+			attempt := &runAttemptState{
+				result:  &harnessapi.TryResult{Completed: tt.completed},
+				runtime: time.Minute,
+			}
+
+			r.classifyInitialFailure(runTask{Assignee: tt.role}, state, attempt)
+
+			if attempt.failed != tt.wantFailed {
+				t.Fatalf("attempt.failed = %v, want %v", attempt.failed, tt.wantFailed)
+			}
+			if state.failReason != tt.wantFailReason {
+				t.Fatalf("failReason = %q, want %q", state.failReason, tt.wantFailReason)
+			}
+		})
+	}
+}
+
 func TestRunOneLapPinIgnoresStaleSummaryEntriesForSameOutingID(t *testing.T) {
 	workspaceDir := t.TempDir()
 	rallyDir := store.RallyDir(workspaceDir)
