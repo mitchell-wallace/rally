@@ -30,6 +30,13 @@ func (r *routeRuntime) quotaScope(harness, model string) string {
 	return r.providers.QuotaScope(harness, model)
 }
 
+// authScope resolves the provider-aware account bucket an auth failure
+// poisons. A nil provider index falls back to the harness-default
+// routing.AuthScope.
+func (r *routeRuntime) authScope(harness, model string) string {
+	return r.providers.AuthScope(harness, model)
+}
+
 // applyProviders attaches the resolved provider index and warns once per
 // disabled provider that has entries in the configured routes, so operators see
 // at relay start that a lane has been intentionally narrowed.

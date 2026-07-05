@@ -17,6 +17,18 @@ import (
 // selectionWaitError stay per-key. Mirrors the iterate-all-schedulers pattern in
 // forceUnpauseAll. Returns the number of distinct keys benched.
 func (r *routeRuntime) benchQuotaScope(resilience *relaycore.Resilience, scope string, resetAt time.Time, relayID int, routeName string, effectiveAssignee string) (int, error) {
+	return r.benchScope(r.quotaScope, resilience, scope, resetAt, relayID, routeName, effectiveAssignee, relaycore.BenchReasonUsageLimit)
+}
+
+// benchAuthScope is the auth-failure variant of benchQuotaScope: it fans out
+// over routing.AuthScope instead of the quota scope, because an expired login
+// poisons the whole account (every antigravity model family) rather than one
+// quota bucket, and records the caller's operator-facing reason.
+func (r *routeRuntime) benchAuthScope(resilience *relaycore.Resilience, scope string, resetAt time.Time, relayID int, routeName string, effectiveAssignee string, reason string) (int, error) {
+	return r.benchScope(r.authScope, resilience, scope, resetAt, relayID, routeName, effectiveAssignee, reason)
+}
+
+func (r *routeRuntime) benchScope(scopeOf func(harness, model string) string, resilience *relaycore.Resilience, scope string, resetAt time.Time, relayID int, routeName string, effectiveAssignee string, reason string) (int, error) {
 	seen := map[relaycore.ResilienceKey]struct{}{}
 	benched := 0
 	for schedulerName, scheduler := range r.schedulers {
@@ -30,10 +42,10 @@ func (r *routeRuntime) benchQuotaScope(resilience *relaycore.Resilience, scope s
 				continue
 			}
 			seen[key] = struct{}{}
-			if r.quotaScope(key.Harness, key.Model) != scope {
+			if scopeOf(key.Harness, key.Model) != scope {
 				continue
 			}
-			if err := resilience.BenchAgent(key, resetAt, scope, relayID); err != nil {
+			if err := resilience.BenchAgentWithReason(key, resetAt, scope, relayID, reason); err != nil {
 				return benched, err
 			}
 			benched++

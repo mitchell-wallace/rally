@@ -61,6 +61,29 @@ func TestQuotaScope_Antigravity_UnknownFamily(t *testing.T) {
 	}
 }
 
+func TestAuthScope_Antigravity_HarnessWideAcrossFamilies(t *testing.T) {
+	flash := AuthScope("antigravity", "Gemini 3.5 Flash (High)")
+	pro := AuthScope("antigravity", "Gemini 3.5 Pro")
+	claude := AuthScope("antigravity", "Claude 4 Sonnet (High)")
+	if flash != "antigravity" || pro != "antigravity" || claude != "antigravity" {
+		t.Errorf("auth scope should span all families: flash=%q pro=%q claude=%q, want antigravity", flash, pro, claude)
+	}
+}
+
+func TestAuthScope_NonAntigravity_MatchesQuotaScope(t *testing.T) {
+	cases := []struct{ harness, model string }{
+		{"opencode", "zai-coding-plan/glm-5.1"},
+		{"claude", "claude-4-sonnet-20250514"},
+		{"codex", "gpt-5.5"},
+		{"custom-harness", "some-model"},
+	}
+	for _, tc := range cases {
+		if got, want := AuthScope(tc.harness, tc.model), QuotaScope(tc.harness, tc.model); got != want {
+			t.Errorf("AuthScope(%q, %q) = %q, want QuotaScope value %q", tc.harness, tc.model, got, want)
+		}
+	}
+}
+
 func TestQuotaScope_OpenCode_SplitsOnFirstSlash(t *testing.T) {
 	got := QuotaScope("opencode", "zai-coding-plan/glm-5.1")
 	want := "opencode:zai-coding-plan"

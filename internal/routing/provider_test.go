@@ -27,6 +27,25 @@ func TestProviderIndex_QuotaScope_NonMemberFallsBack(t *testing.T) {
 	}
 }
 
+func TestProviderIndex_AuthScope(t *testing.T) {
+	idx := NewProviderIndex()
+	idx.Add("codex", "codex", "gpt-5.5", false)
+
+	// Members share the provider account front, mirroring QuotaScope.
+	if got, want := idx.AuthScope("codex", "gpt-5.5"), "provider:codex"; got != want {
+		t.Errorf("AuthScope(member) = %q, want %q", got, want)
+	}
+	// Non-member antigravity is harness-wide: one login spans every family.
+	if got, want := idx.AuthScope("antigravity", "Gemini 3.5 Flash (High)"), "antigravity"; got != want {
+		t.Errorf("AuthScope(antigravity non-member) = %q, want %q", got, want)
+	}
+	// A nil index behaves the same as a non-member lookup.
+	var nilIdx *ProviderIndex
+	if got, want := nilIdx.AuthScope("antigravity", "Gemini 3.5 Pro"), "antigravity"; got != want {
+		t.Errorf("AuthScope(nil index) = %q, want %q", got, want)
+	}
+}
+
 func TestProviderIndex_Disabled(t *testing.T) {
 	idx := NewProviderIndex()
 	idx.Add("claude", "claude", "claude-opus-4-8", true)

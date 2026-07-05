@@ -9,12 +9,15 @@ import (
 
 const ProviderGemini = "gemini"
 
+const antigravityAuthMessage = "antigravity is not authenticated - run 'agy' and complete the login"
+
 var (
 	geminiResourceExhaustedRe = regexp.MustCompile(`(?i)RESOURCE_EXHAUSTED`)
 	geminiQuotaRe             = regexp.MustCompile(`(?i)Individual quota reached`)
 	geminiResetsInRe          = regexp.MustCompile(`(?i)Resets\s+in\s+(\S+)`)
 	geminiHTTP429Re           = regexp.MustCompile(`(?i)\b429\b`)
 	geminiAuthOrEligibilityRe = regexp.MustCompile(`(?i)IneligibleTierError|UNSUPPORTED_CLIENT|no longer supported for Gemini Code Assist|Error authenticating`)
+	antigravityAuthRe         = regexp.MustCompile(`(?i)Authentication required\. Please visit the URL to log in|Error: authentication timed out\.|You are not logged into Antigravity\.?|error getting token source`)
 )
 
 // ParseAntigravityError examines raw error output from Antigravity for
@@ -56,6 +59,14 @@ func ParseAntigravityError(stderr string) *FailureEvidence {
 		ev.Category = CategoryAuthOrProxy
 		ev.Message = firstLineMatch(stderr, geminiAuthOrEligibilityRe)
 		ev.RawSignal = truncateSignal(stderr, 256)
+		return &ev
+	}
+
+	if antigravityAuthRe.MatchString(stderr) {
+		ev.Category = CategoryAuthOrProxy
+		ev.Harness = "antigravity"
+		ev.Message = antigravityAuthMessage
+		ev.RawSignal = truncateSignal(antigravityAuthRe.FindString(stderr), 256)
 		return &ev
 	}
 

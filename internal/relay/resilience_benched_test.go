@@ -36,12 +36,38 @@ func TestResilience_BenchAgent_WritesBenchedEvent(t *testing.T) {
 	if e.RelayID != 7 {
 		t.Fatalf("expected relay_id 7, got %d", e.RelayID)
 	}
+	if e.Reason != BenchReasonUsageLimit {
+		t.Fatalf("expected reason %q, got %q", BenchReasonUsageLimit, e.Reason)
+	}
 	gotReset, perr := time.Parse(time.RFC3339, e.ResetAt)
 	if perr != nil {
 		t.Fatalf("reset_at not RFC3339: %v", perr)
 	}
 	if !gotReset.Equal(resetAt.UTC().Truncate(time.Second)) {
 		t.Fatalf("expected reset_at %v, got %v", resetAt.UTC().Truncate(time.Second), gotReset)
+	}
+}
+
+func TestResilience_BenchAgentWithReason_WritesCustomReason(t *testing.T) {
+	s := newResilienceTestStore(t)
+	now := time.Now()
+	r := testResilience(s, now)
+	k := key("antigravity", "opus")
+	resetAt := now.Add(time.Hour)
+
+	if err := r.BenchAgentWithReason(k, resetAt, "antigravity", 9, "not authenticated - operator login required"); err != nil {
+		t.Fatal(err)
+	}
+
+	events, err := s.GetAgentStatus(k.Harness, k.Model)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(events) != 1 {
+		t.Fatalf("expected 1 event, got %d", len(events))
+	}
+	if events[0].Reason != "not authenticated - operator login required" {
+		t.Fatalf("reason = %q", events[0].Reason)
 	}
 }
 

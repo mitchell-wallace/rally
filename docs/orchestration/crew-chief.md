@@ -84,7 +84,21 @@ subsequent wake-ups only verify health and exit.
 
 ## Session log (newest first; keep ~5 entries, prune older)
 
-- **2026-07-05 (session 2, autonomous)** — queue lap 5 (rall-3ebf telemetry
+- **2026-07-05 (session 3, autonomous)** — queue lap 6 (rall-178b
+  unauthenticated harness handling) DONE. Session 2's codex lap was killed
+  mid-run when that session exited (rollout ends 05:04:40, no report, gates
+  never run) — tree recovered, reviewed, fixed, landed. Review catches:
+  (a) codex benched auth failures by *quota* scope, but antigravity quota is
+  per model family while its login is per account — added
+  `routing.AuthScope`/`ProviderIndex.AuthScope` (antigravity → harness-wide,
+  others → quota scope) and `benchAuthScope`; codex's own test asserted the
+  correct account-wide semantics and caught its implementation short;
+  (b) glog evidence `Message` was overwritten with the parser message for all
+  categories — restricted to auth (spec: preserve non-auth behavior).
+  E2E: live probe against this container's real unauthenticated agy —
+  Completed=false, auth_or_proxy, operator message. Full suite + archguard
+  green. Next: lap 7 (rall-2730), spec drafted at /tmp/spec-rall-2730.md
+  (review before launch — written pre-lap-6). — queue lap 5 (rall-3ebf telemetry
   QA) DONE. NR unreachable from this container (no CLI/creds — AGENTS.md NR
   setup is the user's machine); evidence gathered from local
   `.rally/state/*`, codex rollout logs, and a live unauthenticated `agy`

@@ -65,6 +65,16 @@ func (p *ProviderIndex) QuotaScope(harness, model string) string {
 	return QuotaScope(harness, model)
 }
 
+// AuthScope returns the account bucket an auth failure poisons. Provider
+// members share one account front, so the scope is "provider:<name>" as in
+// QuotaScope; non-members fall back to the harness-default AuthScope.
+func (p *ProviderIndex) AuthScope(harness, model string) string {
+	if name, ok := p.ProviderFor(harness, model); ok {
+		return "provider:" + name
+	}
+	return AuthScope(harness, model)
+}
+
 // Disabled reports whether the runner belongs to a provider an operator has
 // switched off. Disabled runners are sidelined for the whole relay.
 func (p *ProviderIndex) Disabled(harness, model string) bool {

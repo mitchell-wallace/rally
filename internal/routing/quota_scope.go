@@ -11,6 +11,18 @@ var antigravityFamilies = []string{"claude", "flash", "pro"}
 // opencode quotas are per provider (the segment before '/' in provider/model),
 // and direct harnesses (claude, codex) are per harness — the model is
 // ignored so a stray '/' cannot mis-split the scope.
+// AuthScope resolves the account bucket an auth failure poisons. It matches
+// QuotaScope except for antigravity: quota is per model family there, but the
+// CLI login is one account shared by every family, so an auth failure
+// sidelines the whole harness. Opencode credentials are per provider and
+// direct-harness logins are per harness, which QuotaScope already captures.
+func AuthScope(harness, model string) string {
+	if strings.ToLower(harness) == "antigravity" {
+		return harness
+	}
+	return QuotaScope(harness, model)
+}
+
 func QuotaScope(harness, model string) string {
 	switch strings.ToLower(harness) {
 	case "antigravity":

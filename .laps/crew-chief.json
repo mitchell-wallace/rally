@@ -61,11 +61,11 @@
       "title": "Fix: unauthenticated harness handling (esp. antigravity)",
       "description": "Detect auth-failure evidence per harness (antigravity first), classify distinctly (not agent_error), do not burn the outing retry budget on an unauthenticated harness — sideline the provider with a clear operator-facing message and telemetry. Tests including parser fixtures from real evidence.",
       "assignee": "crew-chief",
-      "isDone": false,
+      "isDone": true,
       "order": 393216,
       "createdAt": "2026-07-05T00:05:52.92335685Z",
-      "updatedAt": "2026-07-05T00:05:52.92335685Z",
-      "completedAt": null
+      "updatedAt": "2026-07-05T09:54:30.390976984Z",
+      "completedAt": "2026-07-05T09:54:30.390976984Z"
     },
     {
       "id": "rall-2730",

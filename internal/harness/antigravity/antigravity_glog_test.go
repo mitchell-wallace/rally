@@ -99,6 +99,9 @@ func TestAntigravityGlogEvidence_ResourceExhaustedUsesUsageLimit(t *testing.T) {
 	if ev.ResetAfter <= 0 {
 		t.Errorf("ResetAfter = %v, want parsed duration", ev.ResetAfter)
 	}
+	if want := "model unreachable: RESOURCE_EXHAUSTED (code 429): Individual quota reached. Resets in 4h"; ev.Message != want {
+		t.Errorf("Message = %q, want last error body %q (only auth swaps in the parser message)", ev.Message, want)
+	}
 }
 
 func TestAntigravityGlogFailureEvidence_MissingDirIsNotEvidence(t *testing.T) {

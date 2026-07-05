@@ -1,6 +1,7 @@
 package reliability
 
 import (
+	"strings"
 	"testing"
 	"time"
 )
@@ -154,5 +155,82 @@ func TestParseAntigravityError_PopulatesFields(t *testing.T) {
 	}
 	if ev.Message == "" {
 		t.Error("expected non-empty Message")
+	}
+}
+
+func TestParseAntigravityError_CurrentAuthShapes(t *testing.T) {
+	capturedStdout := `Authentication required. Please visit the URL to log in:
+  https://accounts.google.com/o/oauth2/auth?access_type=offline&client_id=1071006060591-...
+
+Waiting for authentication (timeout 30s)...
+Or, paste the authorization code here and press Enter:
+Error: authentication timed out.`
+
+	capturedGlog := `E0705 04:50:45.506231 93404 log.go:398] Failed to poll ListExperiments: error getting token source: You are not logged into Antigravity.
+W0705 04:50:45.507736 93404 log_context.go:117] Cache(loadCodeAssistResponse): Singleflight refresh failed: error getting token source: You are not logged into Antigravity.
+E0705 04:50:45.507827 93404 log.go:398] error getting token source: You are not logged into Antigravity.
+I0705 04:50:45.529891 93404 server.go:2404] Auth succeeded, refreshing features and managers`
+
+	tests := []struct {
+		name          string
+		text          string
+		wantRawSignal string
+	}{
+		{
+			name:          "stdout prompt",
+			text:          capturedStdout,
+			wantRawSignal: "Authentication required. Please visit the URL to log in",
+		},
+		{
+			name:          "stdout timeout",
+			text:          "prefix\nError: authentication timed out.",
+			wantRawSignal: "Error: authentication timed out.",
+		},
+		{
+			name:          "glog token source",
+			text:          capturedGlog,
+			wantRawSignal: "error getting token source",
+		},
+		{
+			name:          "glog not logged in",
+			text:          "E0705 04:50:45.507827 93404 log.go:398] You are not logged into Antigravity.",
+			wantRawSignal: "You are not logged into Antigravity.",
+		},
+		{
+			name: "auth succeeded hazard still uses error shape",
+			text: `I0705 04:50:45.529891 93404 server.go:2404] Auth succeeded, refreshing features and managers
+E0705 04:50:45.507827 93404 log.go:398] error getting token source: You are not logged into Antigravity.`,
+			wantRawSignal: "error getting token source",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ev := ParseAntigravityError(tt.text)
+			if ev == nil {
+				t.Fatal("expected auth evidence, got nil")
+			}
+			if ev.Category != CategoryAuthOrProxy {
+				t.Fatalf("Category = %q, want %q", ev.Category, CategoryAuthOrProxy)
+			}
+			if ev.Provider != ProviderGemini {
+				t.Fatalf("Provider = %q, want %q", ev.Provider, ProviderGemini)
+			}
+			if ev.Harness != "antigravity" {
+				t.Fatalf("Harness = %q, want antigravity", ev.Harness)
+			}
+			if ev.Message != antigravityAuthMessage {
+				t.Fatalf("Message = %q, want %q", ev.Message, antigravityAuthMessage)
+			}
+			if !strings.Contains(ev.RawSignal, tt.wantRawSignal) {
+				t.Fatalf("RawSignal = %q, want substring %q", ev.RawSignal, tt.wantRawSignal)
+			}
+		})
+	}
+}
+
+func TestParseAntigravityError_CurrentAuthNegative(t *testing.T) {
+	if ev := ParseAntigravityError("Implemented the requested change and all checks passed."); ev != nil {
+		t.Fatalf("ordinary completion text matched auth evidence: %+v", ev)
 	}
 }

@@ -248,6 +248,8 @@ func (r *Resilience) FreezeAgent(key ResilienceKey, relayID int, reason string) 
 	})
 }
 
+const BenchReasonUsageLimit = "usage limit reached"
+
 // BenchAgent persists a benched event sidelining the agent until resetAt, the
 // usage-limit reset deadline. scope identifies the exhausted quota bucket — the
 // harness-default routing.QuotaScope, or "provider:<name>" when a [providers]
@@ -256,6 +258,15 @@ func (r *Resilience) FreezeAgent(key ResilienceKey, relayID int, reason string) 
 // replays these events, so the bench survives across relays without a separate
 // restoration scanner.
 func (r *Resilience) BenchAgent(key ResilienceKey, resetAt time.Time, scope string, relayID int) error {
+	return r.BenchAgentWithReason(key, resetAt, scope, relayID, BenchReasonUsageLimit)
+}
+
+// BenchAgentWithReason persists a benched event with an explicit operator-facing
+// reason while preserving BenchAgent's usage-limit default for existing callers.
+func (r *Resilience) BenchAgentWithReason(key ResilienceKey, resetAt time.Time, scope string, relayID int, reason string) error {
+	if reason == "" {
+		reason = BenchReasonUsageLimit
+	}
 	return r.Store.AppendAgentStatus(store.AgentStatusEvent{
 		AgentType:  key.Harness,
 		Model:      key.Model,
@@ -264,7 +275,7 @@ func (r *Resilience) BenchAgent(key ResilienceKey, resetAt time.Time, scope stri
 		RelayID:    relayID,
 		ResetAt:    resetAt.UTC().Format(time.RFC3339),
 		QuotaScope: scope,
-		Reason:     "usage limit reached",
+		Reason:     reason,
 	})
 }
 

@@ -135,6 +135,10 @@ func (a *Executor) Execute(ctx context.Context, opts harnessapi.RunOptions) (*ha
 		return nil, execErr
 	}
 
+	if ev := reliability.ParseAntigravityError(string(out) + "\n" + string(agyLogData)); ev != nil && ev.Category == reliability.CategoryAuthOrProxy {
+		return &harnessapi.TryResult{Completed: false, Evidence: ev, ResolvedModel: model, SessionID: sessionID}, nil
+	}
+
 	tr, err := parseAntigravityOutput(out, sessionID)
 	if err != nil {
 		return nil, err
@@ -351,18 +355,20 @@ func antigravityGlogEvidence(text, message, rawSignal string) *reliability.Failu
 		RawSignal: rawSignal,
 	}
 
-	lower := strings.ToLower(text)
-	if strings.Contains(lower, "not logged into antigravity") || strings.Contains(lower, "error getting token source") {
-		ev.Category = reliability.CategoryAuthOrProxy
-		return ev
-	}
-
 	if parsed := reliability.ParseAntigravityError(text); parsed != nil {
 		ev.Category = parsed.Category
+		// Auth evidence swaps in the parser's operator-facing login instruction;
+		// every other category keeps the last error body extracted above.
+		if parsed.Category == reliability.CategoryAuthOrProxy && parsed.Message != "" {
+			ev.Message = parsed.Message
+		}
 		ev.StatusCode = parsed.StatusCode
 		ev.ResetAfter = parsed.ResetAfter
 		ev.ResetAt = parsed.ResetAt
 		ev.RetryAfter = parsed.RetryAfter
+		if parsed.Harness != "" {
+			ev.Harness = parsed.Harness
+		}
 		if parsed.Provider != "" {
 			ev.Provider = parsed.Provider
 		}

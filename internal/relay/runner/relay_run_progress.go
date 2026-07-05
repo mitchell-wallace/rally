@@ -10,6 +10,13 @@ import (
 	"github.com/mitchell-wallace/rally/internal/store"
 )
 
+const (
+	// Auth does not self-heal; this bench decay provides a re-probe cadence so
+	// an operator logging in mid-relay is picked up within the hour.
+	authBenchRetryInterval = time.Hour
+	authBenchReason        = "not authenticated - operator login required"
+)
+
 func (r *Runner) updateRunProgress(
 	relay *store.RelayRecord,
 	relayMsg *store.MessageRecord,
@@ -87,11 +94,11 @@ func (r *Runner) applyRunOutcomeToResilience(
 		selection.Scheduler.OnAgentFailed(selection.Entry, "retry-budget-exhausted", false)
 	}
 
-	// Surface the resolved failure category and any parsed reset deadline
-	// from runOne, then act on it: a usage_limit benches the whole quota
-	// scope until the reset (below); other categories (auth_or_proxy,
-	// invalid_model) are left to the scheduler's normal exhaustion/route-away
-	// path. The log line records the resolution for operator triage.
+	// Surface the resolved failure category and any parsed reset deadline from
+	// runOne, then act on it: usage_limit benches the whole quota scope until
+	// reset, and auth_or_proxy benches it for a short re-probe interval. Other
+	// categories (invalid_model, etc.) follow scheduler exhaustion/route-away.
+	// The log line records the resolution for operator triage.
 	if !res.Success && res.Category != "" {
 		resetNote := "none"
 		if res.ResetEvidence != nil {
@@ -104,12 +111,8 @@ func (r *Runner) applyRunOutcomeToResilience(
 		fmt.Fprintf(log, "relay %d run %d resolved failure category=%s reset=%s\n",
 			relay.ID, runIndex+1, res.Category, resetNote)
 
-		// On a usage_limit, bench the entire exhausted quota scope across
-		// every lane until the reset deadline so siblings sharing the same
-		// account front leave rotation together, then wait it out rather
-		// than thrashing the limit. Other terminal categories (auth_or_proxy,
-		// invalid_model) are routed away by the scheduler's normal exhaustion
-		// path and are not benched here.
+		// Bench provider/account-scoped failures across every lane so siblings
+		// sharing the same quota or auth front leave rotation together.
 		if res.Category == reliability.CategoryUsageLimit {
 			resetAt := benchResetDeadline(res.ResetEvidence, time.Now())
 			scope := routeRuntime.quotaScope(selection.Agent.Harness, selection.Agent.Model)
@@ -118,6 +121,15 @@ func (r *Runner) applyRunOutcomeToResilience(
 				return benchErr
 			}
 			fmt.Fprintf(log, "relay %d run %d benched quota scope %q until %s (%d key(s))\n",
+				relay.ID, runIndex+1, scope, resetAt.UTC().Format(time.RFC3339), benched)
+		} else if res.Category == reliability.CategoryAuthOrProxy {
+			resetAt := time.Now().Add(authBenchRetryInterval)
+			scope := routeRuntime.authScope(selection.Agent.Harness, selection.Agent.Model)
+			benched, benchErr := routeRuntime.benchAuthScope(resilience, scope, resetAt, relay.ID, selection.Route.Name, selection.EffectiveAssignee, authBenchReason)
+			if benchErr != nil {
+				return benchErr
+			}
+			fmt.Fprintf(log, "relay %d run %d benched quota scope %q until %s (%d key(s)): harness not authenticated\n",
 				relay.ID, runIndex+1, scope, resetAt.UTC().Format(time.RFC3339), benched)
 		}
 	}

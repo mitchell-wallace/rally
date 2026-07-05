@@ -1,10 +1,13 @@
 package runner
 
 import (
+	"bytes"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/mitchell-wallace/rally/internal/reliability"
+	"github.com/mitchell-wallace/rally/internal/store"
 )
 
 func TestBenchResetDeadline(t *testing.T) {
@@ -71,6 +74,91 @@ func TestBenchQuotaScope_BenchesEveryKeyInScopeAcrossLanes(t *testing.T) {
 		if st, _ := resilience.GetState(k); st != StateActive {
 			t.Errorf("state(%s) = %s, want active (out of scope)", k, st)
 		}
+	}
+}
+
+func TestApplyRunOutcomeToResilience_AuthOrProxyBenchesQuotaScope(t *testing.T) {
+	rt, resilience := newResolvedRouteRuntimeOrDie(t, map[string][]string{
+		"default": {"antigravity:opus", "antigravity:flash", "codex:gpt-5.5"},
+	}, false)
+
+	selection := mustNextRouteSelection(t, rt, resilience, "")
+	if selection.Agent.Harness != "antigravity" {
+		t.Fatalf("selected harness = %q, want antigravity", selection.Agent.Harness)
+	}
+
+	relay := &store.RelayRecord{ID: 42}
+	var log bytes.Buffer
+	before := time.Now().UTC()
+	err := (&Runner{}).applyRunOutcomeToResilience(relay, 0, selection, runOutcome{
+		Success:      false,
+		Category:     reliability.CategoryAuthOrProxy,
+		FailureClass: reliability.FailureAgent,
+	}, rt, resilience, &log)
+	if err != nil {
+		t.Fatal(err)
+	}
+	after := time.Now().UTC()
+
+	for _, key := range []ResilienceKey{
+		{Harness: "antigravity", Model: "opus"},
+		{Harness: "antigravity", Model: "flash"},
+	} {
+		events, err := resilience.Store.GetAgentStatus(key.Harness, key.Model)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(events) != 1 {
+			t.Fatalf("events(%s) = %d, want 1", key, len(events))
+		}
+		event := events[0]
+		if event.Reason != authBenchReason {
+			t.Fatalf("reason(%s) = %q, want %q", key, event.Reason, authBenchReason)
+		}
+		resetAt, err := time.Parse(time.RFC3339, event.ResetAt)
+		if err != nil {
+			t.Fatalf("reset_at(%s) parse: %v", key, err)
+		}
+		if resetAt.Before(before.Add(authBenchRetryInterval).Add(-2*time.Second)) || resetAt.After(after.Add(authBenchRetryInterval).Add(2*time.Second)) {
+			t.Fatalf("reset_at(%s) = %s, want about 1h from now", key, resetAt.Format(time.RFC3339))
+		}
+	}
+	if st, _ := resilience.GetState(ResilienceKey{Harness: "codex", Model: "gpt-5.5"}); st != StateActive {
+		t.Fatalf("codex state = %s, want active", st)
+	}
+
+	gotLog := log.String()
+	if !strings.Contains(gotLog, `benched quota scope "antigravity"`) || !strings.Contains(gotLog, "harness not authenticated") {
+		t.Fatalf("log = %q, want auth bench line", gotLog)
+	}
+}
+
+func TestApplyRunOutcomeToResilience_UsageLimitReasonUnchanged(t *testing.T) {
+	rt, resilience := newResolvedRouteRuntimeOrDie(t, map[string][]string{
+		"default": {"claude:opus"},
+	}, false)
+
+	selection := mustNextRouteSelection(t, rt, resilience, "")
+	resetAfter := 2 * time.Hour
+	err := (&Runner{}).applyRunOutcomeToResilience(&store.RelayRecord{ID: 43}, 0, selection, runOutcome{
+		Success:       false,
+		Category:      reliability.CategoryUsageLimit,
+		FailureClass:  reliability.FailureAgent,
+		ResetEvidence: &reliability.FailureEvidence{ResetAfter: resetAfter},
+	}, rt, resilience, &bytes.Buffer{})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	events, err := resilience.Store.GetAgentStatus("claude", "opus")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(events) != 1 {
+		t.Fatalf("events = %d, want 1", len(events))
+	}
+	if events[0].Reason != "usage limit reached" {
+		t.Fatalf("reason = %q, want usage limit reached", events[0].Reason)
 	}
 }
 

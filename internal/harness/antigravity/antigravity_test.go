@@ -56,6 +56,82 @@ func TestParseAntigravityOutput_PlainText(t *testing.T) {
 	}
 }
 
+func TestAntigravityExecutor_ExitZeroAuthPromptIsEvidence(t *testing.T) {
+	tmp := t.TempDir()
+	home := filepath.Join(tmp, "home")
+	t.Setenv("HOME", home)
+
+	binDir, _ := testMockBinDir(t, "antigravity")
+	scriptPath := filepath.Join(binDir, "agy")
+	script := `#!/bin/sh
+cat <<'OUT'
+Authentication required. Please visit the URL to log in:
+  https://accounts.google.com/o/oauth2/auth?access_type=offline&client_id=1071006060591-...
+
+Waiting for authentication (timeout 30s)...
+Or, paste the authorization code here and press Enter:
+Error: authentication timed out.
+OUT
+exit 0
+`
+	if err := os.WriteFile(scriptPath, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	exec := &Executor{PrintTimeout: time.Second}
+	tr, err := exec.Execute(context.Background(), harnessapi.RunOptions{Prompt: "do work", LogPath: filepath.Join(tmp, "try.log")})
+	if err != nil {
+		t.Fatalf("Execute returned error: %v", err)
+	}
+	if tr == nil {
+		t.Fatal("expected TryResult, got nil")
+	}
+	if tr.Completed {
+		t.Fatal("Completed = true, want false for auth evidence")
+	}
+	if tr.Evidence == nil {
+		t.Fatal("expected auth evidence")
+	}
+	if tr.Evidence.Category != reliability.CategoryAuthOrProxy {
+		t.Fatalf("Evidence.Category = %q, want %q", tr.Evidence.Category, reliability.CategoryAuthOrProxy)
+	}
+	if tr.Evidence.Message != "antigravity is not authenticated - run 'agy' and complete the login" {
+		t.Fatalf("Evidence.Message = %q", tr.Evidence.Message)
+	}
+}
+
+func TestAntigravityExecutor_ExitZeroPlainTextStillCompletes(t *testing.T) {
+	tmp := t.TempDir()
+	home := filepath.Join(tmp, "home")
+	t.Setenv("HOME", home)
+
+	binDir, _ := testMockBinDir(t, "antigravity")
+	scriptPath := filepath.Join(binDir, "agy")
+	if err := os.WriteFile(scriptPath, []byte("#!/bin/sh\nprintf 'plain summary\\n'\nexit 0\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	exec := &Executor{PrintTimeout: time.Second}
+	tr, err := exec.Execute(context.Background(), harnessapi.RunOptions{Prompt: "do work", LogPath: filepath.Join(tmp, "try.log")})
+	if err != nil {
+		t.Fatalf("Execute returned error: %v", err)
+	}
+	if tr == nil {
+		t.Fatal("expected TryResult, got nil")
+	}
+	if !tr.Completed {
+		t.Fatal("Completed = false, want true for ordinary plain text")
+	}
+	if tr.Summary != "plain summary" {
+		t.Fatalf("Summary = %q, want plain summary", tr.Summary)
+	}
+	if tr.Evidence != nil {
+		t.Fatalf("Evidence = %+v, want nil", tr.Evidence)
+	}
+}
+
 func TestAntigravityAdapter_SessionIDCapture(t *testing.T) {
 	logData := []byte(`I0521 printmode.go:130] Print mode: conversation=8eb5b287-eadb-4fc6-ae08-ae5f1ae773f3, sending message`)
 	got := scanAntigravityConversationID(logData)
