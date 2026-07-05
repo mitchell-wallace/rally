@@ -105,11 +105,11 @@
       "title": "Laps: stints readiness review on laps dev",
       "description": "Review /workspace/laps dev branch (141+ commits ahead of main; add-stints + add-stints-gating implemented). Verify stints feature completeness, finish gaps, run its gates. Decide laps v1.0.0 scope and what rally needs from it. Laps has its own laps-release skill in /workspace/laps/.claude/skills.",
       "assignee": "crew-chief",
-      "isDone": false,
+      "isDone": true,
       "order": 655360,
       "createdAt": "2026-07-05T00:05:52.923365126Z",
-      "updatedAt": "2026-07-05T00:05:52.923365126Z",
-      "completedAt": null
+      "updatedAt": "2026-07-05T19:52:35.806536921Z",
+      "completedAt": "2026-07-05T19:52:35.806536921Z"
     },
     {
       "id": "rall-f734",

@@ -84,6 +84,20 @@ subsequent wake-ups only verify health and exit.
 
 ## Session log (newest first; keep ~5 entries, prune older)
 
+- **2026-07-05 (session 7, autonomous, 19:43 wake)** — recovered session 6's
+  orphaned queue tick (2545aa6), then queue lap 10 (rall-953d laps stints
+  readiness review) DONE. Laps dev is READY: build+full suite+vet green, CI
+  green, Explore sweep found no spec-vs-impl gap in stints; chief smoke-tested
+  e2e (stint descent, hold/release, exit codes 0/10/11/12, claim JSON, nested
+  enqueue not supported — root-only by design). Gaps fixed on laps dev
+  (da489f9, pushed): README --oneline example was stale, added Consumer
+  contract section + version-gating rule (v3 tasks 2.1-2.3), task ticks.
+  DECISION: no 0.9.0 tag — v3 line ships as the coordinated v1.0.0
+  (rall-94fc); MinLapsVersion targets 1.0.0; dev companion must be built with
+  ldflags-injected version (git-describe reports 0.8.1-N-g<sha> → parses
+  0.8.1, fails the floor). Rally adoption surface confirmed for rall-f734:
+  ReadClaim bare-id parse + QueueSize line-count are the two breaks;
+  parseLapOutput already strips the v3 undo footer.
 - **2026-07-05 (session 6, autonomous, ~15:20 continuation)** — queue lap 9
   (rall-3f79 staging pipeline) DONE (1413cb2, pushed): staging branch created
   at main tip, AGENTS.md branch-pipeline section, rally-release v0.4 with
