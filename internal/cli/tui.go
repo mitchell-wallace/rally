@@ -5,8 +5,10 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/mitchell-wallace/rally/internal/app"
+	"github.com/mitchell-wallace/rally/internal/laps"
 	"github.com/mitchell-wallace/rally/internal/presentation/tuicore"
 	"github.com/mitchell-wallace/rally/internal/presentation/tuitabs"
 	"github.com/mitchell-wallace/rally/internal/store"
@@ -56,13 +58,15 @@ func runTui(cmd *cobra.Command, args []string, opts RootOptions) error {
 		if err != nil {
 			return err
 		}
+		fetchLaps := makeTuiLapsFetcher(workspaceDir)
 		events, relayID, err := synthesizeRelayEvents(workspaceDir, view)
 		if err != nil {
 			return err
 		}
 		session := tuitabs.NewSession(tuitabs.Options{
-			Title:    "rally tui",
-			DoneHint: fmt.Sprintf("historical view relay #%d - q to exit", relayID),
+			Title:     "rally tui",
+			DoneHint:  fmt.Sprintf("historical view relay #%d - q to exit", relayID),
+			FetchLaps: fetchLaps,
 		})
 		return session.OutingView(context.Background(), events)
 	}
@@ -84,7 +88,7 @@ func runTui(cmd *cobra.Command, args []string, opts RootOptions) error {
 	if err != nil {
 		return fmt.Errorf("load TUI state: %w", err)
 	}
-	session = tuitabs.NewSession(tuitabs.Options{Title: "rally tui", Seed: seed, Agents: agents})
+	session = tuitabs.NewSession(tuitabs.Options{Title: "rally tui", Seed: seed, Agents: agents, FetchLaps: makeTuiLapsFetcher(ro.WorkspaceDir)})
 	ro.EventSink = session.Sink()
 	ro.Controls = session.Controls()
 	ro.StatusWriter = session.StatusWriter()
@@ -93,6 +97,72 @@ func runTui(cmd *cobra.Command, args []string, opts RootOptions) error {
 	return session.Run(context.Background(), func(ctx context.Context) error {
 		return app.StartRelay(ctx, ro)
 	})
+}
+
+func makeTuiLapsFetcher(workspaceDir string) func(context.Context) (tuicore.LapsSnapshot, error) {
+	return func(ctx context.Context) (tuicore.LapsSnapshot, error) {
+		// Bound the laps subprocesses: a hung fetch would otherwise leave the
+		// tab loading forever (FetchCmd coalesces on the in-flight flag).
+		ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+		defer cancel()
+		snapshot, err := (&laps.Adapter{WorkspaceDir: workspaceDir}).QueueSnapshot(ctx)
+		if err != nil {
+			return tuicore.LapsSnapshot{}, err
+		}
+		return lapsSnapshotToTui(snapshot), nil
+	}
+}
+
+func lapsSnapshotToTui(snapshot laps.QueueSnapshot) tuicore.LapsSnapshot {
+	out := tuicore.LapsSnapshot{
+		Missing:     snapshot.Missing,
+		State:       snapshot.State,
+		Counts:      tuicore.LapsCounts{Todo: snapshot.Counts.Todo, Done: snapshot.Counts.Done, Total: snapshot.Counts.Total},
+		Claim:       tuicore.LapsClaim{Valid: snapshot.Claim.Valid, Lap: snapshot.Claim.Lap, File: snapshot.Claim.File, ClaimedAt: snapshot.Claim.ClaimedAt, AgeSeconds: snapshot.Claim.AgeSeconds},
+		ActiveStint: snapshot.ActiveStint,
+		Entries:     lapsEntriesToTui(snapshot.Entries),
+	}
+	if snapshot.Gate != nil {
+		out.Gate = &tuicore.LapsGate{
+			State:   snapshot.Gate.State,
+			Stint:   snapshot.Gate.Stint,
+			Scope:   snapshot.Gate.Scope,
+			File:    snapshot.Gate.File,
+			Message: snapshot.Gate.Message,
+		}
+	}
+	return out
+}
+
+func lapsEntriesToTui(entries []laps.QueueEntry) []tuicore.LapsEntry {
+	out := make([]tuicore.LapsEntry, len(entries))
+	for i, entry := range entries {
+		out[i] = tuicore.LapsEntry{
+			Kind:     entry.Kind,
+			ID:       entry.ID,
+			Ref:      entry.Ref,
+			Title:    entry.Title,
+			Assignee: entry.Assignee,
+			IsDone:   entry.IsDone,
+			Order:    entry.Order,
+			Laps:     lapsEntriesToTui(entry.Laps),
+		}
+		if entry.Stint != nil {
+			out[i].Stint = &tuicore.LapsStint{
+				Name:     entry.Stint.Name,
+				Scope:    entry.Stint.Scope,
+				File:     entry.Stint.File,
+				Todo:     entry.Stint.Todo,
+				Done:     entry.Stint.Done,
+				Total:    entry.Stint.Total,
+				Queued:   entry.Stint.Queued,
+				Archived: entry.Stint.Archived,
+				Active:   entry.Stint.Active,
+				Laps:     lapsEntriesToTui(entry.Stint.Laps),
+			}
+		}
+	}
+	return out
 }
 
 func loadTuiState(workspaceDir string) ([]tuicore.AgentStatusItem, error) {

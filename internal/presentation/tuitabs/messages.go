@@ -35,3 +35,8 @@ type seedFeedMsg struct {
 type seedAgentsMsg struct {
 	items []tuicore.AgentStatusItem
 }
+
+type lapsSnapshotMsg struct {
+	snapshot tuicore.LapsSnapshot
+	err      error
+}

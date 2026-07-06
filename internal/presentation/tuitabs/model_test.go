@@ -1,6 +1,8 @@
 package tuitabs
 
 import (
+	"context"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -19,14 +21,149 @@ func TestModelTabSwitching(t *testing.T) {
 	}{
 		{tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("2")}, tabTranscript},
 		{tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("3")}, tabAgents},
+		{tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("4")}, tabLaps},
 		{tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("1")}, tabDashboard},
 		{tea.KeyMsg{Type: tea.KeyTab}, tabTranscript},
-		{tea.KeyMsg{Type: tea.KeyShiftTab}, tabDashboard},
+		{tea.KeyMsg{Type: tea.KeyTab}, tabAgents},
+		{tea.KeyMsg{Type: tea.KeyTab}, tabLaps},
+		{tea.KeyMsg{Type: tea.KeyTab}, tabDashboard},
+		{tea.KeyMsg{Type: tea.KeyShiftTab}, tabLaps},
 	} {
 		m = updateModel(t, m, tc.key)
 		if m.active != tc.want {
 			t.Fatalf("after %q active = %v, want %v", tc.key.String(), m.active, tc.want)
 		}
+	}
+}
+
+func TestModelLapsRenderingFromSnapshot(t *testing.T) {
+	m := newTestModel()
+	m = updateModel(t, m, tea.WindowSizeMsg{Width: 80, Height: 12})
+	m = updateModel(t, m, lapsSnapshotMsg{snapshot: testLapsSnapshot()})
+	m = updateModel(t, m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("4")})
+
+	view := m.View()
+	for _, want := range []string{
+		"state held",
+		"todo 4",
+		"claim rall-3 age 1m",
+		"✓ rall-1 Done root (review)",
+		"· rall-3 Todo root (senior)",
+		"alpha/ (stint 1/2) ⛔ held",
+		"⛔ finish alpha first",
+		"  · rall-a Alpha lap (junior)",
+	} {
+		if !strings.Contains(view, want) {
+			t.Fatalf("laps view missing %q:\n%s", want, view)
+		}
+	}
+}
+
+func TestModelLapsEmptyAndMissingStates(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		snapshot tuicore.LapsSnapshot
+		want     string
+	}{
+		{name: "missing", snapshot: tuicore.LapsSnapshot{Missing: true}, want: "no laps workspace"},
+		{name: "empty", snapshot: tuicore.LapsSnapshot{State: "empty"}, want: "queue empty"},
+		{name: "complete", snapshot: tuicore.LapsSnapshot{State: "complete"}, want: "queue complete"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			m := newTestModel()
+			m = updateModel(t, m, tea.WindowSizeMsg{Width: 60, Height: 8})
+			m = updateModel(t, m, lapsSnapshotMsg{snapshot: tc.snapshot})
+			m = updateModel(t, m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("4")})
+			if view := m.View(); !strings.Contains(view, tc.want) {
+				t.Fatalf("view missing %q:\n%s", tc.want, view)
+			}
+		})
+	}
+}
+
+func TestModelLapsFortyColumnTruncationAndScroll(t *testing.T) {
+	snapshot := tuicore.LapsSnapshot{
+		State:  "active",
+		Counts: tuicore.LapsCounts{Todo: 20, Total: 20},
+	}
+	for i := 0; i < 20; i++ {
+		snapshot.Entries = append(snapshot.Entries, tuicore.LapsEntry{
+			Kind:     "lap",
+			ID:       fmt.Sprintf("rall-%02d", i),
+			Title:    "A very long title that should be truncated at forty columns cleanly",
+			Assignee: "senior",
+		})
+	}
+	m := newTestModel()
+	m = updateModel(t, m, tea.WindowSizeMsg{Width: 40, Height: 7})
+	m = updateModel(t, m, lapsSnapshotMsg{snapshot: snapshot})
+	m = updateModel(t, m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("4")})
+	view := m.View()
+	for i, line := range strings.Split(view, "\n") {
+		if cellWidth(line) > 40 {
+			t.Fatalf("line %d width = %d, want <= 40: %q", i, cellWidth(line), line)
+		}
+	}
+	if !strings.Contains(view, "rall-00") {
+		t.Fatalf("initial view missing first lap:\n%s", view)
+	}
+	m = updateModel(t, m, tea.KeyMsg{Type: tea.KeyPgDown})
+	if view = m.View(); strings.Contains(view, "rall-00") {
+		t.Fatalf("scroll did not move viewport:\n%s", view)
+	}
+}
+
+func TestModelLapsFetchTriggersAndCoalesces(t *testing.T) {
+	calls := 0
+	fetch := func(context.Context) (tuicore.LapsSnapshot, error) {
+		calls++
+		return tuicore.LapsSnapshot{State: "active"}, nil
+	}
+	m := newTestModel()
+	m.laps = newLapsModel(fetch)
+
+	cmd := m.Init()
+	if cmd == nil {
+		t.Fatal("Init cmd = nil, want fetch")
+	}
+	if cmd2 := m.laps.FetchCmd(); cmd2 != nil {
+		t.Fatal("second fetch while in flight should coalesce")
+	}
+	msg := cmd()
+	if _, ok := msg.(lapsSnapshotMsg); !ok {
+		t.Fatalf("fetch msg type = %T, want lapsSnapshotMsg", msg)
+	}
+	if calls != 1 {
+		t.Fatalf("fetch calls = %d, want 1", calls)
+	}
+	m = updateModel(t, m, msg)
+
+	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("4")})
+	var ok bool
+	m, ok = next.(model)
+	if !ok {
+		t.Fatalf("model type = %T", next)
+	}
+	if m.active != tabLaps || cmd == nil {
+		t.Fatalf("activate laps active/cmd = %v/%v, want tabLaps and cmd", m.active, cmd)
+	}
+	m = updateModel(t, m, cmd())
+
+	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("r")})
+	m = next.(model)
+	if cmd == nil {
+		t.Fatal("r on active laps tab did not issue fetch")
+	}
+	m = updateModel(t, m, cmd())
+
+	next, cmd = m.Update(eventMsg{event: runtimeevent.OutingHeaderReady{LapTitle: "boundary"}})
+	m = next.(model)
+	if cmd == nil {
+		t.Fatal("outing boundary did not issue fetch")
+	}
+	m = updateModel(t, m, cmd())
+	if calls != 4 {
+		t.Fatalf("fetch calls = %d, want 4", calls)
 	}
 }
 
@@ -157,6 +294,22 @@ func newTestModel() model {
 	m := newModel("rally tui", newControls())
 	m.now = func() time.Time { return time.Date(2026, 7, 4, 15, 0, 0, 0, time.UTC) }
 	return m
+}
+
+func testLapsSnapshot() tuicore.LapsSnapshot {
+	stintLaps := []tuicore.LapsEntry{{Kind: "lap", ID: "rall-a", Title: "Alpha lap", Assignee: "junior"}}
+	stint := &tuicore.LapsStint{Name: "alpha", Done: 1, Total: 2, Laps: stintLaps}
+	return tuicore.LapsSnapshot{
+		State:  "held",
+		Counts: tuicore.LapsCounts{Todo: 4, Done: 3, Total: 7},
+		Claim:  tuicore.LapsClaim{Valid: true, Lap: "rall-3", AgeSeconds: 72},
+		Gate:   &tuicore.LapsGate{Stint: "alpha", Message: "finish alpha first"},
+		Entries: []tuicore.LapsEntry{
+			{Kind: "lap", ID: "rall-1", Title: "Done root", Assignee: "review", IsDone: true},
+			{Kind: "lap", ID: "rall-3", Title: "Todo root", Assignee: "senior"},
+			{Kind: "stint", ID: "stint-alpha", Ref: "alpha", Title: "Alpha", Stint: stint, Laps: stintLaps},
+		},
+	}
 }
 
 func updateModel(t *testing.T, m model, msg tea.Msg) model {

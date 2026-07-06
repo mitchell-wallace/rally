@@ -54,8 +54,25 @@ if [ "$1" = "claim" ]; then
 fi
 
 if [ "$1" = "list" ]; then
+  if [ "$2" = "--root" ] && [ "$3" = "--all" ] && [ "$4" = "--json-output" ]; then
+    printf '%s' "$LAPS_FAKE_LIST_JSON"
+    exit ${LAPS_FAKE_LIST_EXIT:-0}
+  fi
   printf '%s' "$LAPS_FAKE_LIST_OUTPUT"
   exit ${LAPS_FAKE_LIST_EXIT:-0}
+fi
+
+if [ "$1" = "status" ] && [ "$2" = "--json-output" ]; then
+  printf '%s' "$LAPS_FAKE_STATUS_JSON"
+  exit ${LAPS_FAKE_STATUS_EXIT:-0}
+fi
+
+if [ "$1" = "-f" ]; then
+  name=$(basename "$2" .laps)
+  env_name=$(printf '%s' "$name" | tr '[:lower:]-' '[:upper:]_')
+  eval "out=\${LAPS_FAKE_STINT_${env_name}_JSON}"
+  printf '%s' "$out"
+  exit ${LAPS_FAKE_STINT_LIST_EXIT:-0}
 fi
 
 printf 'unexpected args: %s\n' "$*" >&2
@@ -76,7 +93,12 @@ exit 99
 		os.Unsetenv("LAPS_FAKE_STDERR")
 		os.Unsetenv("LAPS_FAKE_CLAIM_FILE")
 		os.Unsetenv("LAPS_FAKE_LIST_OUTPUT")
+		os.Unsetenv("LAPS_FAKE_LIST_JSON")
 		os.Unsetenv("LAPS_FAKE_LIST_EXIT")
+		os.Unsetenv("LAPS_FAKE_STATUS_JSON")
+		os.Unsetenv("LAPS_FAKE_STATUS_EXIT")
+		os.Unsetenv("LAPS_FAKE_STINT_LIST_EXIT")
+		os.Unsetenv("LAPS_FAKE_STINT_ALPHA_JSON")
 	})
 	os.Setenv("PATH", dir+string(os.PathListSeparator)+oldPath)
 	os.Setenv("LAPS_FAKE_ARGS_FILE", argsFile)

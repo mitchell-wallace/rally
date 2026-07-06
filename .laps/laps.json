@@ -1,7 +1,8 @@
 {
-  "version": 2,
+  "version": 3,
   "tasks": [
     {
+      "kind": "lap",
       "id": "rall-8fe8",
       "title": "Baseline green + regenerate presentation-wiring / emit-site inventory",
       "description": "Context: Change #5 separate-runtime-presentation-boundary, phase 1 (tasks.md 1.1-1.3). Design baselined at commit f55712c; #4 modularize-harness-adapters is landed in the tree at HEAD. This lap re-grounds the plan against the live tree and produces the emit-site checklist that phases 3-5 depend on. Do NOT start implementing the boundary here.\n\nOutcome: A confirmed-green tree and a regenerated, written-down inventory that later laps consume: (a) runner import sites for internal/style and internal/keyboard; (b) direct os.Stdout/os.Stderr/os.Stdin uses across run_one.go, relay_steps.go, task.go, terminal.go, handoff_only.go; (c) keyboard construction sites (terminal.go wait countdown, run_one.go active try); (d) monitor lifecycle calls (mon.Start/mon.Stop/renderRunFooter); (e) the print-site output inventory mapping each print to the design Decision 3 event vocabulary.\n\nFiles \u0026 scope: read-only against internal/relay/runner/*.go, internal/app/relay_start.go, internal/monitor, internal/style, internal/keyboard; capture the inventory in the lap report (or a scratch note) for downstream laps. No production changes.\n\nDesign: This is the load-bearing checklist. Getting emit-site coverage wrong cascades into phase-3 parallel-emit and phase-4 cut-over byte drift. Cross-check every row of the design Decision 3 table against the current source; flag any print site that has drifted from the design's line references since f55712c (line numbers will have moved). Also note the archive-order caveat from task 1.3: #4's OpenSpec change is landed in code but not yet archived, and this change's composition-root-structure delta MODIFIES the same 'Presentation-neutral relay-start seam' requirement as #4's un-archived delta -- surface this to the operator; do not attempt to resolve archive ordering here.\n\nAcceptance: go build ./..., go vet ./..., gofmt -l . (empty), go test -count=1 ./..., go run ./tools/archguard --ci (exit 0) all green -- if red, STOP and report. Inventory recorded and handed forward.",
@@ -13,6 +14,7 @@
       "completedAt": "2026-07-02T14:45:33.826773883Z"
     },
     {
+      "kind": "lap",
       "id": "rall-9495",
       "title": "Create runtimeevent contract package (events, Sink, control vocabulary)",
       "description": "Context: Phase 2 (tasks.md 2.1-2.2), design Decisions 1, 2, 4. The runtimeevent package is the presentation-neutral boundary both halves of the future TUI use. It does not exist yet.\n\nOutcome: New package internal/relay/runner/runtimeevent (package runtimeevent), stdlib-only, that builds. It defines: the Event interface (kind discriminator) over data-only typed payload structs for the Decision 3 vocabulary (RelayStarted/RelayCompleted, RouteWarning, TaskFileWarning, RunHeaderReady, TryStatusSnapshot, ShortcutHintReady, RetryFooterUpdated, AttemptFinished, AttemptCancelled, HandoffAttemptFinished, RateLimitWaitStarted, WaitStarted/WaitTick/WaitFinished, OperatorActionArmed/OperatorActionApplied, PausePromptShown, RelaySummaryReady); the synchronous Sink interface `Emit(context.Context, Event)`; a no-op sink; and a Recording sink for tests. Plus the operator-control vocabulary: OperatorAction (Quit/Skip/Pause/Stop; None excluded from Press), Press{Action, Confirmed}, ArmMessage(action)/ActMessage(action) helpers, ConfirmWindow = 4s, and the ControlSource interface (Start(ctx)(\u003c-chan Press,error), Stop(), WaitResume(ctx) error).\n\nFiles \u0026 scope: only internal/relay/runner/runtimeevent/*.go. Do not touch runner files, app, or cli yet -- this lap adds the contract; nothing consumes it. Payloads carry data only (names, durations, counts, message strings) -- never ANSI escapes or lipgloss values.\n\nDesign: Follow the exact type signatures in design Decision 2 and Decision 4. Critically, ArmMessage/ActMessage/ConfirmWindow must reproduce today's internal/keyboard semantics verbatim (same text, same 4s window) -- copy the literal message strings from internal/keyboard so parity holds; this is not a place to reword. runtimeevent must never import runner (no cycle) and must import only the standard library.\n\nAcceptance: go build ./... green; go list -deps ./internal/relay/runner/runtimeevent shows no internal package. (Unit tests land in the next lap.)",
@@ -24,6 +26,7 @@
       "completedAt": "2026-07-02T15:10:11.593955809Z"
     },
     {
+      "kind": "lap",
       "id": "rall-3857",
       "title": "Unit-test runtimeevent (message parity, sinks, leaf-only deps)",
       "description": "Context: Phase 2 (tasks.md 2.3), following the package created in the prior lap.\n\nOutcome: Unit tests for internal/relay/runner/runtimeevent covering: ArmMessage/ActMessage text parity against today's internal/keyboard message strings (assert byte-equal text and the 4s ConfirmWindow); the no-op sink (Emit is a safe no-op) and the Recording sink (captures events in order for later order-assertion tests).\n\nFiles \u0026 scope: internal/relay/runner/runtimeevent/*_test.go only.\n\nDesign: The parity test is the guardrail that keeps the moved arm/act vocabulary faithful to keyboard's originals -- reference the actual keyboard source strings, not a retyped copy. Assert event ordering semantics on the Recording sink since phase-3 order tests will lean on it.\n\nAcceptance: go test -count=1 ./internal/relay/runner/runtimeevent green; re-confirm go list -deps ./internal/relay/runner/runtimeevent shows no internal package.",
@@ -35,6 +38,7 @@
       "completedAt": "2026-07-02T15:20:46.558879044Z"
     },
     {
+      "kind": "lap",
       "id": "rall-0c2a",
       "title": "Plumb EventSink/Controls through cli -\u003e app -\u003e runner.Config (nil-safe)",
       "description": "Context: Phase 3 (tasks.md 3.1), design Decision 6. Wire the injection path with no behaviour change; nothing renders through it yet.\n\nOutcome: runner.Config gains `EventSink runtimeevent.Sink` and `Controls runtimeevent.ControlSource` (nil-safe: nil sink -\u003e no-op sink; nil controls -\u003e no operator input). app.RelayStartOptions gains the same two fields as opaque contract values; app.StartRelay (internal/app/relay_start.go) forwards them into runner.Config untouched, without inspecting them. internal/cli/start.go passes nil for both for now.\n\nFiles \u0026 scope: internal/relay/runner (Config type + nil-safe defaulting), internal/app/relay_start.go (RelayStartOptions + forward), internal/cli/start.go (pass nil). internal/app imports runtimeevent for types only and must never import internal/presentation/*; the seam stays presentation-neutral and never reads input.\n\nDesign: Mechanical plumbing -- do not emit or render anything here. Keep app oblivious to concrete presentation. Ensure existing runner construction/tests still compile with the new optional fields defaulting safely.\n\nAcceptance: go build ./... green; go test -count=1 ./internal/relay/... ./internal/app ./cmd/rally green (no behaviour change).",
@@ -46,6 +50,7 @@
       "completedAt": "2026-07-02T15:34:29.726747038Z"
     },
     {
+      "kind": "lap",
       "id": "rall-a264",
       "title": "Parallel-emit events at every print site (no output change)",
       "description": "Context: Phase 3 (tasks.md 3.2), design Decision 2/3 and the run-budget risk note. Uses the emit-site inventory from the baseline lap.\n\nOutcome: The runner emits the correct runtimeevent Event at every print site from the inventory, ALONGSIDE the existing prints (parallel-emit) -- synchronous, same-goroutine, at the exact points that print today. No output changes: prints stay; emissions are additive. The no-op default means headless callers see nothing new.\n\nFiles \u0026 scope: internal/relay/runner/*.go (run_one.go, relay_steps.go, terminal.go, handoff_only.go, task.go, action_loop.go emit sites). Do not create the terminal sink yet; do not delete any print.\n\nDesign: This is architecture-sensitive. Insert emissions at print sites only -- NEVER move any code across setupRunBudget / runBudgetCh construction (the same-deadline guard and once-built budget channel are timing-load-bearing; design Risk on run-budget boundary). Map each print to its Decision 3 event exactly as inventoried. Emit synchronously via Config.EventSink (no-op when nil). Respect the data-only vs no-print event distinctions in the Decision 3 table (e.g. RelayStarted/RelayCompleted and active-try OperatorAction events have no current print).\n\nAcceptance: go build ./... green; existing runner/app/cmd tests still green; output byte-for-byte unchanged in a headless run (no sink) and unchanged with a recording sink attached (recording sink writes nothing). Order tests follow in the next lap.",
@@ -57,6 +62,7 @@
       "completedAt": "2026-07-02T15:54:37.206678147Z"
     },
     {
+      "kind": "lap",
       "id": "rall-fd9f",
       "title": "Recording-sink event-order tests for the flow paths",
       "description": "Context: Phase 3 (tasks.md 3.3), building on the parallel-emit lap and the Recording sink.\n\nOutcome: Event-order tests using the recording sink for: simple success, retry-then-fail, operator cancellation (skip and quit), stall, rate-limit wait, and all-paused wait paths. Assert emitted event ORDER only -- no styling/byte assertions (rendering is not wired yet).\n\nFiles \u0026 scope: test files under internal/relay/runner (recording-sink driven). Follow existing runner test harness patterns for driving these flows.\n\nDesign: Assert the sequence and kinds of events per path against the inventory; these tests lock the emit contract before the phase-4 cut-over relies on it. Keep them order-focused so they survive the later rendering changes unchanged.\n\nAcceptance: go test -count=1 ./internal/relay/... green with the new order tests included.",
@@ -68,6 +74,7 @@
       "completedAt": "2026-07-02T16:09:35.091575875Z"
     },
     {
+      "kind": "lap",
       "id": "rall-b852",
       "title": "VERIFY phases 1-3: contract package, injection, parallel-emit",
       "description": "Context: Verification gate at the natural slice boundary where all inert scaffolding (runtimeevent contract, injection plumbing, parallel-emit + order tests) is complete, BEFORE the correctness-sensitive cut-overs in phases 4-5. Change #5 separate-runtime-presentation-boundary.\n\nOutcome: Confirmation that the boundary contract and emit scaffolding are sound and behaviour-neutral, with tasks.md boxes for phases 1-3 checked off only for work verified correct and thorough.\n\nScope \u0026 method: Use the openspec-verify-change skill against separate-runtime-presentation-boundary, then focus the report on phases 1-3. Identify the intended merge target (ask the operator / infer from PR metadata, repo docs, branch config, or recent history -- do not assume main) and use it for git diff \u003ctarget\u003e...HEAD; treat any work predating this batch's first lap as pre-existing. Do not rewrite git history. Trace the actual added symbols: runtimeevent type signatures vs design Decisions 2/4; ArmMessage/ActMessage/ConfirmWindow byte-parity vs internal/keyboard; runtimeevent has zero internal deps (go list -deps); injection is nil-safe and app never imports presentation; parallel-emit added emissions WITHOUT moving code across setupRunBudget/runBudgetCh and WITHOUT changing output (headless byte-identical); recording-sink order tests cover all six flow paths.\n\nAcceptance: go build ./..., go vet ./..., go test -count=1 ./internal/relay/... ./internal/app ./cmd/rally green; archguard --ci exit 0. Tick tasks.md 1.1-1.3, 2.1-2.3, 3.1-3.3 only where verified done to sufficient quality. For any substantive gap, add a focused head lap (laps -f 5-separate-runtime-presentation-boundary.laps.json add head ...) rather than fixing large issues inline.",
@@ -79,6 +86,7 @@
       "completedAt": "2026-07-02T16:12:55.008415296Z"
     },
     {
+      "kind": "lap",
       "id": "rall-522b",
       "title": "Build terminal.Sink adapter and wire it in cli/start.go",
       "description": "Context: Phase 4 (tasks.md 4.1-4.2), design Decision 5/6. First step of the high-risk output cut-over; still parallel with runner prints until the next lap deletes them.\n\nOutcome: New package internal/presentation/terminal with terminal.Sink implementing runtimeevent.Sink over out/err writers, relocating each print's format strings and escape sequences (\\r\\x1b[2K, \\r\\x1b[J, the \\r\\n raw-mode countdown, footer in-place redraw with cursor parking) VERBATIM from the runner. internal/cli/start.go constructs the terminal sink over os.Stdout/os.Stderr and passes it through RelayStartOptions (replacing the nil sink).\n\nFiles \u0026 scope: new internal/presentation/terminal/*.go; internal/cli/start.go wiring. terminal package internal imports limited to runtimeevent, style, keyboard -- not relay/runner, harness*, config, store, telemetry. Do NOT delete runner prints yet (that is the next lap); at end of this lap both the sink and the inline prints run, so output may double -- acceptable transient, resolved by the cut-over lap.\n\nDesign: Byte-parity depends on relocating format strings call-for-call, one render per former print site, same writer targets. Copy the exact strings/escapes from the runner source; do not re-derive them. RelayStarted/RelayCompleted and active-try OperatorAction events SHALL no-op in this sink (Decision 3); app.StartRelay remains sole owner of the literal 'Relay complete.' line.\n\nAcceptance: go build ./... green; archguard still green for the new package's imports (formal policy row lands in phase 6, but keep imports within the intended allow-list). Full parity is asserted after the cut-over + test relocation laps.",
@@ -90,6 +98,7 @@
       "completedAt": "2026-07-02T16:35:12.963438128Z"
     },
     {
+      "kind": "lap",
       "id": "rall-15c4",
       "title": "Cut over runner prints to the sink; remove internal/style from runner",
       "description": "Context: Phase 4 (tasks.md 4.3), design Decision 5 and the byte-parity + footer-parking risks. This is THE output-correctness lap.\n\nOutcome: Print-site-by-print-site, each runner inline print is deleted once the terminal sink renders its event. At the end: zero direct operator-facing fmt.Print*/Fprint* writes to os.Stdout/os.Stderr in runner production code (the single permitted direct-stream residual is the monitor's mon.Start(os.Stdout), Decision 8), and the internal/style import is removed from ALL runner files. Runner.out/outWriter() seam is subsumed by the sink.\n\nFiles \u0026 scope: internal/relay/runner/*.go (run_one.go, relay_steps.go, terminal.go, handoff_only.go, task.go). Do not touch keyboard/ControlSource here (phase 5). Do not route the monitor status line through events (Decision 8 residual stays).\n\nDesign: Preserve the EXACT call order of each render relative to mon.Stop() and monitor renders -- the footer-parking / cursor-reservation interleaving is the most fragile contract in this area; reordering breaks it. Delete one print at a time and keep the tree buildable. Byte output must stay identical to pre-change for the same flows.\n\nAcceptance: go build ./... green; go test -count=1 ./internal/relay/... ./internal/presentation/... ./internal/app ./cmd/rally green; grep confirms no runner-side os.Stdout/os.Stderr operator prints remain (except mon.Start(os.Stdout)) and no internal/style import in runner files. Byte-parity is fully asserted by the test-relocation lap next.",
@@ -101,6 +110,7 @@
       "completedAt": "2026-07-02T17:11:33.576358181Z"
     },
     {
+      "kind": "lap",
       "id": "rall-7abd",
       "title": "Relocate byte-level output tests to terminal package; smoke a relay",
       "description": "Context: Phase 4 (tasks.md 4.4-4.5), design Risk 1 (byte-parity held by relocating existing byte-level tests before/at cut-over).\n\nOutcome: The byte-level output tests move to internal/presentation/terminal with expected bytes preserved: terminal_test.go wait-loop/footer cases, plus footer-cadence tests from run_one/runner_* suites that assert on r.out bytes. Where run-flow coverage must stay in-package (runner-side), replace the byte assertions with recording-sink event assertions rather than deleting coverage. A manual smoke of one relay run confirms header/status/footer/summary render identically, including an interrupted (Ctrl+C-armed) run.\n\nFiles \u0026 scope: internal/presentation/terminal/*_test.go (relocated byte tests); internal/relay/runner/*_test.go (byte assertions swapped to recording-sink assertions where flow coverage stays). Preserve the exact expected-byte strings when relocating.\n\nDesign: These relocated tests ARE the byte-parity gate -- do not soften expected bytes to make them pass; if they fail, the fix belongs in the sink rendering, not the test. Judge case-by-case which tests move wholesale vs which convert to recording-sink assertions.\n\nAcceptance: go test -count=1 ./internal/relay/... ./internal/presentation/... ./internal/app ./cmd/rally green; test-driving-rally-style manual smoke shows byte-identical header/status/footer/summary and a clean armed-Ctrl+C interrupted run. Report the smoke observations.",
@@ -112,6 +122,7 @@
       "completedAt": "2026-07-02T17:27:09.959972098Z"
     },
     {
+      "kind": "lap",
       "id": "rall-de45",
       "title": "VERIFY phase 4: terminal output cut-over byte-parity",
       "description": "Context: Verification gate immediately after the high-risk output cut-over (phase 4). Change #5 separate-runtime-presentation-boundary.\n\nOutcome: Confirmation that CLI output is byte-identical post cut-over and the runner no longer renders, with tasks.md phase-4 boxes checked only where verified.\n\nScope \u0026 method: Use openspec-verify-change against separate-runtime-presentation-boundary, focused on phase 4. Identify the merge target from the operator/PR/repo docs/branch config/history (not assumed main) and diff \u003ctarget\u003e...HEAD; treat pre-batch work as pre-existing; no history rewriting. Trace real evidence, not just green tests: the relocated byte-level tests preserve expected bytes; the terminal.Sink relocates format strings/escapes verbatim; runner has zero operator-facing os.Stdout/os.Stderr writes except mon.Start(os.Stdout); internal/style import gone from all runner files; render order relative to mon.Stop()/monitor renders preserved (footer-parking). Re-run or review the manual smoke including the armed-Ctrl+C path.\n\nAcceptance: go test -count=1 ./internal/relay/... ./internal/presentation/... ./internal/app ./cmd/rally green; go vet green. Tick tasks.md 4.1-4.5 only where verified byte-parity holds. Substantive gaps -\u003e focused head lap on the staging file (laps -f 5-separate-runtime-presentation-boundary.laps.json add head ...), not inline rework.",
@@ -123,6 +134,7 @@
       "completedAt": "2026-07-02T17:41:10.17953672Z"
     },
     {
+      "kind": "lap",
       "id": "rall-12ff",
       "title": "Implement terminal.Controls ControlSource adapter + Start/Stop test",
       "description": "Context: Phase 5 (tasks.md 5.1), design Decision 4/5 and the raw-mode-lifecycle + WaitResume risks. First step of the control cut-over; runner still uses keyboard directly until the next lap.\n\nOutcome: terminal.Controls implementing runtimeevent.ControlSource, with an injectable-stream constructor terminal.NewControls(in io.Reader, out io.Writer) (CLI passes os.Stdin/os.Stdout). It wraps keyboard.NewKeyboard(in, out) with a raw-mode session per Start/Stop, translates keyboard.Press -\u003e runtimeevent.Press, and WaitResume performs today's leave-raw-mode-then-read-Enter sequence against `in`. An adapter test exercises repeated Start/Stop cycles using pipes with no leaked readers.\n\nFiles \u0026 scope: internal/presentation/terminal (Controls + test). Mirror internal/keyboard's keyboard_test.go pipe-driven approach -- no global os.Stdin mutation. Do not yet convert the runner's keyboard sessions (next lap).\n\nDesign: Per-phase Start/Stop must mirror today's two independent keyboard instances exactly, preserving raw-mode enter/leave points and the no-leaked-reader property. WaitResume must reproduce the exact pause sequence (leave raw mode via Stop, then read a line) so pause semantics are unchanged (design Risk on WaitResume).\n\nAcceptance: go build ./... green; go test -race -count=1 ./internal/presentation/... green including the repeated Start/Stop pipe test (no leaked readers).",
@@ -134,6 +146,7 @@
       "completedAt": "2026-07-02T18:17:12.690478478Z"
     },
     {
+      "kind": "lap",
       "id": "rall-8b34",
       "title": "Convert runner keyboard sessions + action-loop to runtimeevent.Press; drop keyboard import",
       "description": "Context: Phase 5 (tasks.md 5.2, 5.4), design Decision 4 and the cancellation-timing risk. THE control-correctness lap.\n\nOutcome: The runner's two keyboard sessions (terminal.go wait countdown; run_one.go active try) and the pause read (run_one.go, 'Paused -- press Enter to resume') use Config.Controls instead of constructing keyboard directly. runActionLoop / actionLoopDeps switch their channel element type to runtimeevent.Press; monitor armed/acting text now comes from runtimeevent.ArmMessage/ActMessage. The runner's internal/keyboard import is removed entirely and no runner production file reads os.Stdin.\n\nFiles \u0026 scope: internal/relay/runner (terminal.go, run_one.go, action_loop.go). Do not touch the terminal.Controls adapter (prior lap) or archguard tables (phase 6). Action-loop test updates are the next lap.\n\nDesign: Change ONLY the channel element type and the source of arm/act text. Make NO change to the runActionLoop select structure, flag mutations, drain-with-second-quit escalation, or late-PID force-kill targeting -- these are cancellation-timing-load-bearing (design Risk). WaitResume replaces the direct bufio stdin read. The app-level OS-signal double-Ctrl+C path (relay_start.go) is untouched.\n\nAcceptance: go build ./... green; go test -race -shuffle=on -count=1 ./internal/relay/... green (action-loop tests are updated in the next lap -- if they must compile here, adapt only their channel element type minimally, keeping substance); grep confirms no internal/keyboard import and no os.Stdin read in runner production files.",
@@ -145,6 +158,7 @@
       "completedAt": "2026-07-02T18:34:31.046529423Z"
     },
     {
+      "kind": "lap",
       "id": "rall-7f3d",
       "title": "Update action-loop and timeout tests to runtimeevent.Press fakes",
       "description": "Context: Phase 5 (tasks.md 5.3), following the control conversion lap.\n\nOutcome: runner_action_loop_test.go and any timeout tests that feed presses now drive runtimeevent.Press fakes (via a fake ControlSource / press channel) instead of keyboard.Press. All seven action-loop cases plus the stall/timeout precedence cases stay green and unchanged in substance.\n\nFiles \u0026 scope: internal/relay/runner/*_test.go (action-loop and timeout suites). Mechanical type/fixture conversion following the existing test structure; do not change what the tests assert about cancellation ordering or precedence.\n\nDesign: Keep the test intent identical -- only the press type and its source change. Preserve the exact scenarios (arm/confirm, skip, pause, stop, quit, second-quit force-kill during drain, stall/timeout precedence).\n\nAcceptance: go test -race -shuffle=on -count=1 ./internal/relay/... green with all action-loop and timeout cases intact.",
@@ -156,6 +170,7 @@
       "completedAt": "2026-07-02T18:37:13.872173459Z"
     },
     {
+      "kind": "lap",
       "id": "rall-8349",
       "title": "VERIFY phase 5: ControlSource cut-over, cancellation + raw-mode parity",
       "description": "Context: Verification gate immediately after the high-risk control cut-over (phase 5). Change #5 separate-runtime-presentation-boundary.\n\nOutcome: Confirmation that operator-control semantics, cancellation timing, and raw-mode lifecycle are unchanged and the runner no longer touches keyboard/stdin, with tasks.md phase-5 boxes checked only where verified.\n\nScope \u0026 method: Use openspec-verify-change against separate-runtime-presentation-boundary, focused on phase 5. Identify the merge target (operator/PR/repo docs/branch/history; not assumed main), diff \u003ctarget\u003e...HEAD, treat pre-batch work as pre-existing, no history rewriting. Trace real evidence: runActionLoop select structure / drain / second-quit force-kill / late-PID targeting UNCHANGED except press element type; monitor arm/act text sourced from runtimeevent helpers; terminal.Controls per-phase Start/Stop mirrors the two former keyboard instances with no leaked readers; WaitResume reproduces the leave-raw-then-read-Enter pause sequence; runner has no internal/keyboard import and no os.Stdin read; app OS-signal Ctrl+C path untouched. Verify shortcut semantics hands-on if feasible (arm/confirm 4s window, skip/pause/stop/quit, second-quit force-kill during drain, pause Enter-resume).\n\nAcceptance: go test -race -shuffle=on -count=1 ./internal/relay/... ./internal/presentation/... green. Tick tasks.md 5.1-5.4 only where verified. Substantive gaps -\u003e focused head lap on the staging file, not inline rework.",
@@ -167,6 +182,7 @@
       "completedAt": "2026-07-02T18:40:12.484915781Z"
     },
     {
+      "kind": "lap",
       "id": "rall-62e4",
       "title": "Update archguard policy tables/tests and build-new-tui stub",
       "description": "Context: Phase 6 (tasks.md 6.1-6.3), design Decision 7/8. Mechanical guardrail + guidance updates now that the boundary is in place.\n\nOutcome: tools/archguard policy tables updated per Decision 7 -- relay/runner: -style -keyboard +relay/runner/runtimeevent (keep monitor); app: +relay/runner/runtimeevent; new presentation/terminal row (may import relay/runner/runtimeevent, style, keyboard, nothing else internal); diagnostics wording explains the runner-emits / adapters-render intent (runner must not import concrete presentation packages; presentation must not import runner internals/harness/config/store). Pinned policy tests updated to match. archguard --report regenerated with NO new grandfather entries (note any runner line-count reductions for #6's re-grounding). The build-new-tui stub proposal is updated to name internal/relay/runner/runtimeevent as the boundary the TUI consumes (events in, Press controls out; monitor status line to be replaced, not adapted -- Decision 8).\n\nFiles \u0026 scope: tools/archguard/policy/imports.go + imports_test.go (and report artifacts); the build-new-tui stub proposal under openspec/changes/. runtimeevent gets no policy row (stdlib-only leaf, enforced by absence).\n\nDesign: Table edits follow Decision 7 exactly; keep consistent with the existing architecture-guardrails spec (policy-table update only, same precedent as #4). Do not add grandfather entries -- if the report wants one, the boundary is wrong; report it instead.\n\nAcceptance: go run ./tools/archguard --report regenerated cleanly; go run ./tools/archguard --ci exit 0; go test -count=1 ./tools/archguard/... green.",
@@ -178,6 +194,7 @@
       "completedAt": "2026-07-02T19:04:09.795768811Z"
     },
     {
+      "kind": "lap",
       "id": "rall-74de",
       "title": "VERIFY full change: byte/semantic parity, residuals, OpenSpec archive-order",
       "description": "Context: Final full-change verification for #5 separate-runtime-presentation-boundary (tasks.md phase 7). Behaviour-preserving change: byte-identical CLI output, identical keyboard/cancellation semantics, no config/telemetry/store/laps/commit-message change, no version bump, no release.\n\nOutcome: Whole-change verification with the phase-6/7 tasks.md boxes checked and a holistic confirmation that phases 1-5 hold together.\n\nScope \u0026 method: Run the COMPLETE openspec-verify-change against separate-runtime-presentation-boundary and inspect the whole diff. Identify the merge target (operator/PR/repo docs/branch config/history -- not assumed main), diff \u003ctarget\u003e...HEAD; identify this batch's first lap/try and treat earlier branch work as pre-existing (flag but do not remove unless the operator asks); never rewrite git history. Verify: (7.1) go test -count=1 ./..., go test -race -shuffle=on -count=1 ./internal/relay/... ./internal/presentation/..., go vet ./..., gofmt -l . empty, go mod tidy no diff, just check green. (7.2) CLI output byte-identical on the smoke flows; shortcut semantics identical (arm/confirm window, skip/pause/stop/quit, second-quit force-kill during drain, pause Enter-resume); no telemetry/store/laps/config/commit-message diff; internal/buildinfo/VERSION untouched. (7.3) residuals intact and documented: monitor status line still runner-driven (mon.Start(os.Stdout)); relay-log lines unchanged and not events; app OS-signal Ctrl+C path untouched.\n\nArchive-order caveat: this change's composition-root-structure delta MODIFIES the same 'Presentation-neutral relay-start seam' requirement as #4 modularize-harness-adapters' delta, and includes #4's harnessapi wording. #4 MUST archive/sync before this change archives; if that order is broken, whichever delta archives last must first be rebased to contain the other's full requirement text. Confirm #4's archive status and report any ordering hazard to the operator rather than archiving out of order.\n\nAcceptance: full verification suite green; behaviour-preservation and residuals confirmed by tracing actual code/output, not just passing tests. Tick tasks.md 6.1-6.3 and 7.1-7.3 (and confirm all earlier boxes) only where verified to sufficient quality. Any substantive gap -\u003e focused head lap on the staging file, not inline rework.",
@@ -189,6 +206,7 @@
       "completedAt": "2026-07-02T19:09:11.693780382Z"
     },
     {
+      "kind": "lap",
       "id": "rall-a2a2",
       "title": "Code review: separate-runtime-presentation-boundary (queue 5)",
       "description": "Run the auto-code-review skill (see .opencode/skills/auto-code-review/SKILL.md, also available under .claude/skills and .codex/skills) over the full separate-runtime-presentation-boundary lap batch that just completed above.\n\nScope: the accumulated diff for this batch only. Identify the first lap/try commit of this queue-5 batch and use git merge-base / branch tracking / recent log to pick the correct diff base; treat earlier branch work as pre-existing unless instructed otherwise. Do not pull in unrelated commits.\n\nFocus: behaviour preservation (rendering/style/keyboard/route-warning stderr moves actually are moves with no incidental edits), package boundaries, and test/regression coverage for the presentation/runtime split. Findings first; auto-fix only low-risk local issues; surface any product/architecture calls with a default recommendation instead of silently deciding them. Commit each coherent fix cluster only if asked.",
@@ -200,6 +218,7 @@
       "completedAt": "2026-07-02T19:29:40.656360214Z"
     },
     {
+      "kind": "lap",
       "id": "rall-5e83",
       "title": "Baseline the tree and re-ground the inventories",
       "description": "Context: OpenSpec change decompose-run-one (#6) is a behaviour-preserving, same-package file split of internal/relay/runner. It is sequenced AFTER #5 separate-runtime-presentation-boundary, which runs first and moves rendering (style/keyboard, printRelaySummary, route-warning stderr writes) out of the exact files this change splits. The design was baselined at commit f55712c, BEFORE #5 landed, so its line counts and per-file membership tables WILL have drifted. Read openspec/changes/decompose-run-one/{proposal.md,design.md,tasks.md} phase 1.\n\nOutcome: the tree is confirmed green, the inventories are re-grounded against the actual post-#5 tree, and the pre-change function inventory is recorded so the later split can be verified one-for-one.\n\nFiles \u0026 scope: read-only investigation plus notes on internal/relay/runner/{run_one.go,route_runtime.go,relay_steps.go}. Do NOT begin any split in this lap. Do not fold unrelated fixes into this refactor.\n\nDesign (this is the change's re-grounding gate — do it carefully): (1) Confirm green: go build ./..., go vet ./..., gofmt -l . (must be empty), go test -count=1 ./internal/relay/..., go run ./tools/archguard --ci (exit 0). If red, STOP and report — do not absorb unrelated failures into this refactor. (2) Regenerate current line counts for the three files and the func inventory via grep -n \"^func\" internal/relay/runner/{run_one,route_runtime,relay_steps}.go. (3) Because #5 ran first, expect drift: note any functions #5 rehomed, renamed, or removed (watch captureRunStartWorkspaceState, setupRunBudget, printRelaySummary and the route-warning writers) and adjust the design.md per-file membership tables to match the real tree — the per-phase-file DECISIONS (Decisions 2/4/5) hold regardless of exact membership. (4) Record a name-\u003efile map of every pre-change function across the three files (append to design.md or wrapup notes) so the move can be checked one-for-one afterward.\n\nAcceptance: all baseline commands green (or a clear STOP report); design.md membership tables reconciled to the post-#5 tree; pre-change function inventory recorded. Report the drift found versus the artifacts. Do NOT tick any tasks.md boxes.",
@@ -211,6 +230,7 @@
       "completedAt": "2026-07-02T19:34:08.453473579Z"
     },
     {
+      "kind": "lap",
       "id": "rall-e2c2",
       "title": "Split run_one.go into per-phase files (verbatim moves)",
       "description": "Context: builds on the re-grounded inventory from the baseline lap. Follow design Decision 2 (openspec/changes/decompose-run-one/design.md) for the target layout.\n\nOutcome: run_one.go is reduced to Runner.runOne, newRunOneState, and runOneState.outcome (index + state only); every run/try phase body is moved verbatim into its own responsibility-named sibling file.\n\nFiles \u0026 scope: create run_attempt_prepare.go, run_attempt_monitor.go, run_attempt_reconcile.go, run_attempt_classify.go, run_attempt_record.go, run_attempt_cancel.go, run_retry_decide.go, run_handoff.go, run_finalize.go (use the baseline lap's re-grounded membership where it differs from the design table). Move captureRunStartWorkspaceState and setupRunBudget into run_attempt_prepare.go UNLESS the re-grounded inventory shows #5 removed/renamed them. Move small utilities (containsInt) with their only caller. Stay in package runner. Do NOT extract sub-steps in this lap — move classifyAttemptOutcome and recordAttemptOutcome verbatim for now; their extraction is the next lap.\n\nDesign: pure relocation. No signature, error-string, telemetry-field, or control-flow edits. No misc/helpers catch-all file. Every symbol keeps exactly one home.\n\nAcceptance: go build ./... and go test -count=1 ./internal/relay/... green; review the split with git diff --color-moved to confirm the moves are moves (no incidental edits). Do NOT tick tasks.md boxes.",
@@ -222,6 +242,7 @@
       "completedAt": "2026-07-02T19:46:12.821964719Z"
     },
     {
+      "kind": "lap",
       "id": "rall-6ed3",
       "title": "Extract named sub-steps in classify and record phase bodies",
       "description": "Context: the two deep phase bodies are the ONLY internal-structure change in this refactor. Follow design Decision 3 and the Risks section (openspec/changes/decompose-run-one/design.md).\n\nOutcome: classifyAttemptOutcome (~229 lines at baseline) and recordAttemptOutcome (~261) each delegate to named unexported, package-local helpers inside their own phase file; no single function in the package approaches the pre-change ~260-line scale.\n\nFiles \u0026 scope: run_attempt_classify.go and run_attempt_record.go only. recordCancelledAttempt (~131) may get the same treatment ONLY if a clean seam presents itself — do not force it.\n\nDesign (SENIOR judgment — this is the change's highest-risk work): extract only straight-line regions with explicit inputs/outputs. Where a region reads/writes many locals, pass the existing runOneState/attempt structs rather than inventing new ones. Preserve statement order, control flow, and early returns exactly. Error strings and telemetry fields must be BYTE-IDENTICAL. These extracted helpers are the only new functions the entire change is allowed to introduce.\n\nAcceptance: go build ./..., go test -count=1 ./internal/relay/..., and go test -race -shuffle=on -count=1 ./internal/relay/... all green; the diff shows byte-identical error and telemetry strings. Do NOT tick tasks.md boxes.",
@@ -233,6 +254,7 @@
       "completedAt": "2026-07-02T20:09:42.209429733Z"
     },
     {
+      "kind": "lap",
       "id": "rall-5639",
       "title": "Verify run_one.go decomposition (phases 1-2)",
       "description": "Use the openspec-verify-change skill against decompose-run-one, focused on phases 1 and 2 (baseline/re-grounding and the run_one.go split).\n\nBefore diffing: identify the intended merge target from the user, PR metadata, repo docs, branch config, or recent history, and use that target in git diff \u003ctarget\u003e...HEAD. Identify the first lap/try of this batch and treat earlier branch work as pre-existing unless the user asks otherwise.\n\nTrace, do not just run tests: run_one.go is now index-only (Runner.runOne + newRunOneState + runOneState.outcome); each phase lives in its named sibling file; verify the moves are verbatim via git diff --color-moved on the split commits; confirm the sub-step helpers in classify/record are the ONLY new functions and that error strings and telemetry fields are byte-identical. Confirm go build ./..., go test -count=1 ./internal/relay/..., and the race suite are green.\n\nCheck off tasks.md boxes 1.1-1.3 and 2.1-2.4, but ONLY for work verified correct and sufficiently thorough. Substantive gaps become new head laps (laps add head); fix only tiny safe one-liners inline. Do not rewrite git history.",
@@ -244,6 +266,7 @@
       "completedAt": "2026-07-02T20:15:07.915746525Z"
     },
     {
+      "kind": "lap",
       "id": "rall-4a96",
       "title": "Split route_runtime.go (verbatim moves)",
       "description": "Context: follow design Decision 4 (openspec/changes/decompose-run-one/design.md).\n\nOutcome: route_runtime.go keeps only the routeRuntime type, its accessors (quotaScope, Warnings, applyProviders), and routeSelectionError; construction/entry-resolution, selection/wait, recovery-signal sync, and bench/probation helpers move into their own named files.\n\nFiles \u0026 scope: create route_runtime_construct.go, route_runtime_select.go, route_runtime_recovery.go, route_runtime_bench.go per Decision 4 (reconcile membership against the baseline lap's re-grounded inventory if it drifted). All moves verbatim; next (~100) and selectionWaitError (~93) stay whole — no sub-step extraction here.\n\nDesign: pure relocation, same package runner, no misc/helpers catch-all, resilience vocabulary (stall / frozen / benched) untouched.\n\nAcceptance: go test -count=1 ./internal/relay/... green; git diff --color-moved confirms the moves are moves. Do NOT tick tasks.md boxes.",
@@ -255,6 +278,7 @@
       "completedAt": "2026-07-02T20:25:29.190821897Z"
     },
     {
+      "kind": "lap",
       "id": "rall-d5d4",
       "title": "Split relay_steps.go (verbatim moves)",
       "description": "Context: follow design Decision 5 (openspec/changes/decompose-run-one/design.md). Membership was re-grounded in the baseline lap because #5 relocates printRelaySummary rendering and the route-warning stderr writes out of this file — printRelaySummary may already be an event-emitting successor.\n\nOutcome: relay_steps.go keeps only the relay-level index (startOrResumeRelay, startRelaySpan/startRunSpan, consume*ScopedMessage); route-wait/fallback, run-progress/resilience application, and summary/tally move into their own files.\n\nFiles \u0026 scope: create relay_route_wait.go, relay_run_progress.go, relay_summary.go per Decision 5, using the baseline lap's re-grounded membership. All moves verbatim.\n\nDesign: pure relocation, same package, no misc/helpers catch-all.\n\nAcceptance: go test -count=1 ./internal/relay/... green; git diff --color-moved confirms the moves. Do NOT tick tasks.md boxes.",
@@ -266,6 +290,7 @@
       "completedAt": "2026-07-02T20:31:30.66112794Z"
     },
     {
+      "kind": "lap",
       "id": "rall-92c2",
       "title": "Verify route_runtime and relay_steps splits (phases 3-4)",
       "description": "Use the openspec-verify-change skill against decompose-run-one, focused on phases 3 and 4.\n\nBefore diffing: identify the intended merge target (user/PR/repo docs/branch config/recent history) and diff against it; treat pre-batch branch work as pre-existing.\n\nTrace: route_runtime.go is reduced to the routeRuntime type, its accessors, and routeSelectionError; relay_steps.go is reduced to the relay-level start/resume, spans, and scoped-message index; all moves are verbatim (git diff --color-moved); no new functions were introduced in these two splits; the resilience vocabulary (stall/frozen/benched) is intact. Confirm go test -count=1 ./internal/relay/... green.\n\nCheck off tasks.md boxes 3.1-3.2 and 4.1-4.2 for verified-correct work only. Substantive gaps become new head laps; only tiny safe one-liners fixed inline. Do not rewrite git history.",
@@ -277,6 +302,7 @@
       "completedAt": "2026-07-02T20:33:58.526245258Z"
     },
     {
+      "kind": "lap",
       "id": "rall-e548",
       "title": "Regenerate the archguard grandfather baseline",
       "description": "Context: task 5.1 and design Decision 6. Runs after all three files are split.\n\nOutcome: the grandfather map is regenerated so the internal/relay/runner/run_one.go production entry is gone and no internal/relay/runner production file needs an entry.\n\nFiles \u0026 scope: run go run ./tools/archguard --report to regenerate the grandfather baseline file (and whatever --report writes). Do NOT touch the runner _test.go grandfather entries — those are owned by #8 decompose-large-test-files.\n\nDesign: target every new production file under the 500-line warning band; hard-require under the 800-line budget. If any new internal/relay/runner production file still needs a grandfather entry, STOP and add a head lap — the split is supposed to leave all files small.\n\nAcceptance: go run ./tools/archguard --ci exits 0; runner _test.go grandfather entries unchanged; git diff of the baseline shows the run_one.go entry removed with no unexpected additions. Do NOT tick tasks.md boxes.",
@@ -288,6 +314,7 @@
       "completedAt": "2026-07-02T20:35:33.411624883Z"
     },
     {
+      "kind": "lap",
       "id": "rall-a5ee",
       "title": "Full-change verification and record final file list for #8",
       "description": "Final full-change verification. Use the openspec-verify-change skill against decompose-run-one and inspect the whole diff. Identify the intended merge target (user/PR/repo docs/branch config/recent history) and diff against it; identify the first lap of this batch and treat earlier branch work as pre-existing unless the user asks otherwise.\n\nRun every check and trace the load-bearing lines:\n- Function inventory (task 5.2): every pre-change function recorded in the baseline lap's inventory appears EXACTLY ONCE across the new files; the ONLY new functions are the sub-step helpers extracted from classifyAttemptOutcome/recordAttemptOutcome.\n- Archguard ratchet (task 5.1): confirm the internal/relay/runner/run_one.go production entry is gone, no runner production file needs a grandfather entry, runner _test.go entries are unchanged, and go run ./tools/archguard --ci exits 0.\n- Full verification (task 5.3): go test -count=1 ./..., go test -race -shuffle=on -count=1 ./internal/relay/..., go vet ./..., gofmt -l . (empty), go run ./tools/archguard --ci (exit 0), just check green.\n- Behaviour preservation (task 5.4): no CLI-output, telemetry-field, store-shape, laps-semantic, or error-string diff; exported runner/relay API unchanged; internal/buildinfo/VERSION untouched.\n- Record final file list (task 5.5): record the final production file list of internal/relay/runner in this change (append to design.md or wrapup notes) so #8 decompose-large-test-files can mirror the test split one-for-one.\n\nCheck off all remaining tasks.md boxes (5.1-5.5 and anything not yet ticked) for verified-correct work only. Substantive gaps become new head laps; fix only tiny safe one-liners inline. Do not rewrite git history.",
@@ -299,6 +326,7 @@
       "completedAt": "2026-07-02T20:39:53.399672037Z"
     },
     {
+      "kind": "lap",
       "id": "rall-19c3",
       "title": "Code review: decompose-run-one (queue 6)",
       "description": "Run the auto-code-review skill (see .opencode/skills/auto-code-review/SKILL.md, also available under .claude/skills and .codex/skills) over the full decompose-run-one lap batch that just completed above.\n\nScope: the accumulated diff for this batch only (the internal/relay/runner run_one.go / route_runtime.go / relay_steps.go verbatim-split refactor). Identify the first lap/try commit of this queue-6 batch and use git merge-base / branch tracking / recent log to pick the correct diff base; treat earlier branch work as pre-existing unless instructed otherwise. Do not pull in unrelated commits.\n\nFocus: behaviour preservation — confirm the splits are pure relocations via git diff --color-moved, that error strings and telemetry fields are byte-identical, no misc/helpers catch-all was introduced, and the only new functions are the intended extracted sub-step helpers. Verify go build ./... and go test -count=1 ./internal/relay/... are green. Findings first; auto-fix only low-risk local issues; surface architecture/product calls with a default recommendation instead of silently deciding them. Commit each coherent fix cluster only if asked.",
@@ -310,6 +338,7 @@
       "completedAt": "2026-07-02T20:47:33.86206565Z"
     },
     {
+      "kind": "lap",
       "id": "rall-6ae0",
       "title": "Baseline the tree and re-ground the four inventories",
       "description": "Context: OpenSpec change decompose-remaining-source-files (change #7), tasks.md task 1. This is a behaviour-preserving refactor that splits four warning-band files into responsibility-named same-package files (verbatim moves only). It is planned for a post-#5 world; #5 is not yet landed, so this lap re-grounds at execution time to absorb any drift. Per the design, only monitor.go consumption may have drifted; #5 leaves internal/monitor internals untouched.\n\nOutcome: a confirmed-green baseline and recorded name-\u003efile function inventories for the four target files, captured in the commit/lap notes so the split laps and final verification can do a one-for-one check.\n\nFiles \u0026 scope: read the four files only; do not move anything yet. Targets: internal/monitor/monitor.go, internal/config/providers.go, internal/cli/routes_check.go, internal/store/store.go.\n\nDesign: run task 1.1's green checks first; if the tree is red, STOP and add a head lap. Then regenerate line counts and `grep -n \"^func\"` inventories for the four files and record each pre-change inventory (name -\u003e current file). Design Decision 2 carries the authoritative name-to-file target mapping and function counts (monitor 34, providers 26, routes_check 23, store 26 incl. the new store_read.go); the responsibility axes there are authoritative even if a specific function has drifted. If the live inventory materially diverges from Decision 2 (most likely monitor.go after #5), place each function by its responsibility axis and add a head lap flagging the divergence before the split laps proceed.\n\nAcceptance: `go build ./...`, `go vet ./...`, `gofmt -l .` (empty), `go test -count=1 ./internal/monitor ./internal/config ./internal/cli ./internal/store`, and `go run ./tools/archguard --ci` (exit 0) all pass; the four pre-change function inventories are recorded. Do not tick tasks.md (VERIFY owns that).",
@@ -321,6 +350,7 @@
       "completedAt": "2026-07-02T20:51:23.254023282Z"
     },
     {
+      "kind": "lap",
       "id": "rall-f888",
       "title": "Split internal/monitor into responsibility-named files",
       "description": "Context: tasks.md task 2, using the recorded inventory from the baseline lap and design Decision 2's full 34-function monitor inventory. Do not re-list functions here; follow Decision 2's exact name-to-file mapping.\n\nOutcome: internal/monitor/monitor.go split into monitor.go (lifecycle + state, keeps the headline file an agent opens first), monitor_render.go (rendering/formatting), proc_stats.go (process/network inspection), and network_monitor.go (NetworkMonitor). Verbatim moves; no behaviour, exported-surface, or error-string change.\n\nFiles \u0026 scope: internal/monitor only. No test edits. No helpers.go/misc catch-all — every symbol keeps exactly one home per its primary responsibility.\n\nDesign: move functions whole; keep error strings byte-identical; self-review with `git diff --color-moved` to confirm pure moves. If an unexported helper is shared across new files, place it in the file matching its primary responsibility, not a shared file.\n\nAcceptance: `go test -count=1 ./internal/monitor ./internal/relay/...` green (the runner consumes monitor). One commit: `decompose-remaining-source-files: split internal/monitor`. Do not tick tasks.md.",
@@ -332,6 +362,7 @@
       "completedAt": "2026-07-02T20:55:13.630264972Z"
     },
     {
+      "kind": "lap",
       "id": "rall-b4f8",
       "title": "Split internal/config providers into parse/resolve/wildcard files",
       "description": "Context: tasks.md task 3, using design Decision 2's full 26-function providers inventory; mirrors #2's config_v2.go split convention. Do not re-list functions here; follow Decision 2's exact name-to-file mapping.\n\nOutcome: internal/config/providers.go split into providers_parse.go (raw-TOML \u003c-\u003e ProviderConfig), providers_resolve.go (resolution + index/count surface + ordering/label helpers), and providers_wildcard.go (wildcard matching/expansion + modelFilter type). Delete providers.go if nothing remains (preferred); never leave it as a catch-all.\n\nFiles \u0026 scope: internal/config only. No test edits. Every symbol keeps exactly one home; go-toml stays confined to internal/config.\n\nDesign: verbatim moves; deprecation/validation message strings byte-identical; self-review with `git diff --color-moved`.\n\nAcceptance: `go test -count=1 ./internal/config ./cmd/rally` green; deprecation/validation messages unchanged. One commit for the split. Do not tick tasks.md.",
@@ -343,6 +374,7 @@
       "completedAt": "2026-07-02T21:00:09.673836272Z"
     },
     {
+      "kind": "lap",
       "id": "rall-dcc3",
       "title": "Verify monitor and config-providers splits (tasks 1-3)",
       "description": "Context: mid-queue verification of the first two of four independent package splits (a natural slice boundary) plus the baseline lap. Change: decompose-remaining-source-files.\n\nOutcome: a findings-first report confirming tasks 1-3 (baseline/re-grounding, internal/monitor split, internal/config providers split) are correct and thorough; tasks.md boxes 1.x/2.x/3.x ticked only for verified work.\n\nProcess: use the openspec-verify-change skill against decompose-remaining-source-files, focused on the phase just completed. Before diffing, identify the intended merge target from the user, PR metadata, repo docs, branch config, or recent history (do not assume main), then diff with `git diff \u003ctarget\u003e...HEAD`. Identify the first lap/try of this batch; treat earlier branch work as pre-existing (flag but do not remove unless the user asks). Do not rewrite git history; substantive gaps become new head laps rather than in-lap fixes (VERIFY may fix only tiny safe one-liners).\n\nChecks: function-inventory one-for-one against the baseline lap's recorded inventory (no functions added/dropped) for internal/monitor and internal/config; exported surfaces identical (e.g. `go doc` diffed pre/post); `git diff --color-moved` shows verbatim moves; error/deprecation/validation strings byte-identical; two of the four 500-line advisory warnings gone with NO archguard grandfather-map or policy-table diff; `go test -count=1 ./internal/monitor ./internal/relay/... ./internal/config ./cmd/rally` green. Trace the actual moved symbols and the two commits, not just green tests. Tick tasks.md 1.x/2.x/3.x for verified-correct work.",
@@ -354,6 +386,7 @@
       "completedAt": "2026-07-02T21:04:12.467612693Z"
     },
     {
+      "kind": "lap",
       "id": "rall-01ec",
       "title": "Split internal/cli routes-check into wiring/core/render/validate files",
       "description": "Context: tasks.md task 4, using design Decision 2's full 23-function routes-check inventory. Do not re-list functions here; follow Decision 2's exact name-to-file mapping.\n\nOutcome: internal/cli/routes_check.go split into routes_cmd.go (Cobra wiring), routes_check.go (check core, keeps the headline name so links/history stay anchored on the core logic), routes_render.go (rendering), and routes_validate.go (reasoning/alias validation). Verbatim moves.\n\nFiles \u0026 scope: internal/cli only. No test edits. Cobra imports stay confined to internal/cli. Every symbol keeps one home; no catch-all file.\n\nDesign: move functions whole; keep error strings byte-identical; self-review with `git diff --color-moved`.\n\nAcceptance: `go test -count=1 ./internal/cli ./cmd/rally` green; `rally routes check` output byte-identical on a representative config. One commit for the split. Do not tick tasks.md.",
@@ -365,6 +398,7 @@
       "completedAt": "2026-07-02T21:12:02.135735851Z"
     },
     {
+      "kind": "lap",
       "id": "rall-77a3",
       "title": "Split internal/store into write/read/messages/agent-status files",
       "description": "Context: tasks.md task 5, using design Decision 2's full 26-function store inventory. Note store_read.go is a new file the draft's four-way axis missed (relay/try read paths get their own home). Do not re-list functions here; follow Decision 2's exact name-to-file mapping.\n\nOutcome: internal/store/store.go split into store.go (Store type + NewStore, open/init/layout migration), store_write.go (relay/try writes + ID allocation), store_read.go (relay/try queries), store_messages.go (message subsystem writes+queries), and store_agent_status.go (agent-status). Verbatim moves; persisted store shape untouched.\n\nFiles \u0026 scope: internal/store only. No test edits. Every symbol keeps one home; no catch-all file.\n\nDesign: move functions whole; keep error strings byte-identical; self-review with `git diff --color-moved`.\n\nAcceptance: `go test -count=1 ./internal/store ./internal/relay/...` green. One commit for the split. Do not tick tasks.md.",
@@ -376,6 +410,7 @@
       "completedAt": "2026-07-02T21:18:23.234302088Z"
     },
     {
+      "kind": "lap",
       "id": "rall-529c",
       "title": "Full-change verification and record final file lists for #8",
       "description": "Context: final verification of the whole decompose-remaining-source-files change (all four splits + baseline). Covers tasks.md task 6 and closes out tasks 4 and 5.\n\nOutcome: a findings-first report confirming the whole refactor is behaviour-preserving and complete; remaining tasks.md boxes (4.x, 5.x, 6.x, and any 1.x not already ticked) checked for verified work.\n\nProcess: use openspec-verify-change against the whole change and inspect the entire diff. Identify the merge target from the user, PR metadata, repo docs, branch config, or history (do not assume main); diff with `git diff \u003ctarget\u003e...HEAD`. Identify the first lap/try of this batch; earlier work is pre-existing. Do not rewrite git history; substantive gaps become new head laps.\n\nChecks (task 6): (6.1) function-inventory one-for-one across every package's new files vs the baseline lap's recorded inventory — no functions added or dropped; (6.2) exported-surface per package identical (`go doc` diffed pre/post); (6.3) `go test -count=1 ./...`, `go vet ./...`, `gofmt -l .` empty, `go run ./tools/archguard --ci` exit 0 with the four 500-line advisory warnings gone and NO grandfather-map or policy-table diff, `just check` green; (6.4) behaviour preservation — no CLI-output, config-schema/semantic, telemetry, store-shape, or error-string diff, `internal/buildinfo/VERSION` untouched, and the three harness warning-band files internal/harness/claude/claude.go, internal/harness/opencode/opencode_evidence.go, internal/harness/antigravity/antigravity.go untouched per design Decision 3 (out of scope); (6.5) record the final per-package production file lists so #8 decompose-large-test-files can mirror config_v2_test.go/store_test.go splits against them. Trace the actual moved symbols and the per-package commits, not just green tests. Tick tasks.md 4.x/5.x/6.x (and any remaining 1.x).",
@@ -387,6 +422,7 @@
       "completedAt": "2026-07-02T21:22:17.587931485Z"
     },
     {
+      "kind": "lap",
       "id": "rall-95da",
       "title": "Code review: decompose-remaining-source-files (queue 7)",
       "description": "Run the auto-code-review skill (see .opencode/skills/auto-code-review/SKILL.md, also available under .claude/skills and .codex/skills) over the full decompose-remaining-source-files lap batch that just completed above.\n\nScope: the accumulated diff for this batch only. Identify the first lap/try commit of this queue-7 batch and use git merge-base / branch tracking / recent log to pick the correct diff base; treat earlier branch work as pre-existing unless instructed otherwise. Do not pull in unrelated commits.\n\nFocus: behaviour preservation — confirm the remaining source-file splits are pure relocations (git diff --color-moved), no incidental edits crept in, package boundaries hold, and error/telemetry strings are unchanged. Verify go build ./... and go test -count=1 ./internal/relay/... are green. Findings first; auto-fix only low-risk local issues; surface architecture/product calls with a default recommendation instead of silently deciding them. Commit each coherent fix cluster only if asked.",
@@ -398,6 +434,7 @@
       "completedAt": "2026-07-02T21:32:56.954848564Z"
     },
     {
+      "kind": "lap",
       "id": "rall-8042",
       "title": "Baseline, re-ground scope, and record name-level inventory",
       "description": "Context: OpenSpec change decompose-large-test-files (#8), tasks 1.1-1.3. This is the deliberately-last decomposition, planned for a post-#5/#6/#7 world; those production layouts land before this queue runs. design.md Decisions 4 and 5 govern: the acceptance criterion is an EMPTY test grandfather map, not a fixed file list, and the move-and-verify inventory is the gate. Re-ground against the tree as it actually is now — do not trust the proposal's baseline line numbers.\n\nOutcome: A confirmed-green tree, a recorded current target list (every _test.go entry in the archguard grandfather map), a per-package pre-change name-level function inventory, and the mirror-target file lists (#6's recorded runner files, #7's per-package files) captured for the downstream split laps and the final comparison.\n\nFiles \u0026 scope: No source edits in this lap — it runs commands and records artifacts only. Save the inventory/scope/mirror-target snapshots to a scratch file under openspec/changes/decompose-large-test-files/ (input for task 4.2's comparison), not a freeform report.\n\nDesign: Run go build ./..., go test -count=1 ./..., go test -race -shuffle=on -count=1 ./internal/relay/... ./internal/config ./internal/store, and go run ./tools/archguard --ci (exit 0). If any test fails under -shuffle=on BEFORE a single move, STOP and report — a pre-existing ordering defect is not this change's to fix silently. Regenerate the map with go run ./tools/archguard --report; the authoritative scope is exactly the _test.go entries it lists (eight at the f55712c baseline, minus any suite #5/#6/#7 already split when they ran). Record per-package inventory with grep -hoE '^func (Test|Benchmark|Fuzz)[A-Za-z0-9_]*' \u003cfiles\u003e | sort. Read #6's recorded runner file list and #7's per-package lists as the mirror axes each split lap will follow.\n\nAcceptance: Green baseline confirmed; scope list, per-package inventories, and #6/#7 mirror-target file lists recorded and available to the split laps. Do NOT tick tasks.md — verification is the gate for that.",
@@ -409,6 +446,7 @@
       "completedAt": "2026-07-02T21:40:44.976213935Z"
     },
     {
+      "kind": "lap",
       "id": "rall-ce7d",
       "title": "Split resilience_test.go by resilience concern",
       "description": "Context: task 2.1. internal/relay/resilience_test.go has NO upstream dependency and can land first. design.md Decision 2 gives the split axis.\n\nOutcome: resilience_test.go split into responsibility-named _test.go files in internal/relay, each under the 1,000-line cap, grouped by resilience concern: state machine/persistence vs stall/frozen transitions vs benched/probation/decay. Shared fixtures/builders extracted into a single per-package helper test file (extend an existing one; create at most one new helper_test.go if none exists).\n\nFiles \u0026 scope: internal/relay/*_test.go only. Zero production-file edits — not even renames. A test spanning multiple concerns goes with the behaviour it primarily pins; never split a single test function.\n\nDesign: Arrangement only — no assertion, fixture-meaning, or coverage change; extract only verbatim-shared setup, leave case-local variants inline (Decision 3). Move-and-verify inventory per commit (Decision 4): grep the Test*/Benchmark*/Fuzz* names for the package before and after; the multiset must be identical, each declared exactly once. Helper files are subject to the 1,000-line cap too.\n\nAcceptance: go test -race -shuffle=on -count=1 ./internal/relay green; before/after name inventory identical; one commit for this suite. Report the resulting file list. Do not tick tasks.md.",
@@ -420,6 +458,7 @@
       "completedAt": "2026-07-03T06:13:48.407533084Z"
     },
     {
+      "kind": "lap",
       "id": "rall-dcab",
       "title": "Split config_v2_test.go mirroring the config production layout",
       "description": "Context: task 2.2 — after #7's config layout is final (it runs before this queue). internal/config/config_v2_test.go mirrors the production split. Use #7's recorded per-package file list captured in the baseline lap as the mirror target; if names drifted from the proposal, follow the recorded list.\n\nOutcome: config_v2_test.go split into responsibility-named _test.go files in internal/config mirroring the production files (load/decode/validate/resolve/save from #2, plus #7's providers files where those cases belong), each under 1,000 lines. Shared fixtures into one per-package helper test file.\n\nFiles \u0026 scope: internal/config/*_test.go only. Zero production-file edits. Never split a single test function; a cross-file test goes with the behaviour it primarily pins.\n\nDesign: Arrangement only (Decision 2/3) — verbatim helper relocation, no fixture-semantics change. Move-and-verify inventory per commit: before/after grep of Test*/Benchmark*/Fuzz* names identical, each declared once. Helper file under the cap.\n\nAcceptance: go test -race -shuffle=on -count=1 ./internal/config green; inventory identical; one commit. Report resulting file list. Do not tick tasks.md.",
@@ -431,6 +470,7 @@
       "completedAt": "2026-07-03T06:48:57.117345776Z"
     },
     {
+      "kind": "lap",
       "id": "rall-d600",
       "title": "Split store_test.go mirroring the store production layout",
       "description": "Context: task 2.3 — after #7's store layout is final. internal/store/store_test.go mirrors #7's store_write.go / store_read.go / store_messages.go / store_agent_status.go. Use #7's recorded store file list from the baseline lap as the mirror target; follow the recorded names if they drifted.\n\nOutcome: store_test.go split into responsibility-named _test.go files in internal/store mirroring #7's store source files, each under 1,000 lines. Shared fixtures into one per-package helper test file.\n\nFiles \u0026 scope: internal/store/*_test.go only. Zero production-file edits. Never split a single test function.\n\nDesign: Arrangement only — verbatim helper relocation, no fixture-semantics or coverage change. Move-and-verify inventory per commit: before/after name grep identical, each declared once. Helper file under the cap.\n\nAcceptance: go test -race -shuffle=on -count=1 ./internal/store green; inventory identical; one commit. Report resulting file list. Do not tick tasks.md.",
@@ -442,6 +482,7 @@
       "completedAt": "2026-07-03T07:03:17.136952937Z"
     },
     {
+      "kind": "lap",
       "id": "rall-3cc4",
       "title": "Verify the stable-package suite splits (tasks 2.1-2.3)",
       "description": "Context: verification gate at the stable-package slice boundary, covering tasks 2.1 (resilience), 2.2 (config), 2.3 (store). Use the openspec-verify-change skill against decompose-large-test-files, then focus the report on these three suites.\n\nOutcome: Confirmation that the three stable-package suites are correctly and thoroughly split, arrangement-only, with preserved inventories — or head laps for any gap.\n\nScope \u0026 method: Identify the intended merge target (ask the user / PR metadata / branch config / recent history — do not assume main) and the first lap/try in this batch; treat earlier branch work as pre-existing. Trace real evidence, not just green tests: compare the per-package before/after Test*/Benchmark*/Fuzz* inventories from the baseline snapshot (identical multiset, each declared once); confirm every new internal/relay, internal/config, internal/store _test.go file is under 1,000 lines; confirm the diff for these suites touches only _test.go files (zero production edits, no assertion changes). Run go test -race -shuffle=on -count=1 ./internal/relay ./internal/config ./internal/store.\n\nAcceptance: If solid, check the tasks.md boxes for 2.1-2.3. For any substantive gap, add a focused head lap (additive/revert commits only — never rewrite git history) rather than fixing large work inline; only tiny safe one-liners may be fixed here. Report findings first.",
@@ -453,6 +494,7 @@
       "completedAt": "2026-07-03T07:08:03.028814772Z"
     },
     {
+      "kind": "lap",
       "id": "rall-a734",
       "title": "Split run_one_test.go per-phase against the run_attempt_* layout",
       "description": "Context: task 3.1 — after #6's runner layout is final (it runs before this queue). internal/relay/runner/run_one_test.go (largest suite) mirrors #6's per-phase run_attempt_*.go files. Use #6's recorded runner file list from the baseline lap as the mirror target.\n\nOutcome: run_one_test.go split into per-phase _test.go files mirroring run_attempt_*.go (e.g. run_attempt_prepare_test.go, run_attempt_classify_test.go, run_retry_decide_test.go, ...), with run_one_test.go retaining only the top-level runOne flow cases. Each file under 1,000 lines. Shared fixtures move into the EXISTING internal/relay/runner/helpers_test.go, not a new parallel helper.\n\nFiles \u0026 scope: internal/relay/runner/*_test.go only. Zero production-file edits. Never split a single test function; a cross-phase test goes with the behaviour it primarily pins.\n\nDesign: Arrangement only (Decision 2/3) — verbatim helper relocation into helpers_test.go, no fixture-semantics change. Move-and-verify inventory per commit: before/after grep of Test*/Benchmark*/Fuzz* names for the package identical, each declared once. helpers_test.go stays under the cap.\n\nAcceptance: go test -race -shuffle=on -count=1 ./internal/relay/runner green; inventory identical; one commit. Report resulting file list. Do not tick tasks.md.",
@@ -464,6 +506,7 @@
       "completedAt": "2026-07-03T07:41:15.346341297Z"
     },
     {
+      "kind": "lap",
       "id": "rall-dfae",
       "title": "Split runner_outcome_test.go by outcome family",
       "description": "Context: task 3.2 — after #6's layout. internal/relay/runner/runner_outcome_test.go splits by outcome family mirroring run_attempt_classify.go / run_attempt_record.go. Use #6's recorded runner file list as the mirror target.\n\nOutcome: runner_outcome_test.go split into outcome-family _test.go files (classify vs record) mirroring the production files, each under 1,000 lines. Shared fixtures extend the existing helpers_test.go.\n\nFiles \u0026 scope: internal/relay/runner/*_test.go only. Zero production-file edits. Never split a single test function.\n\nDesign: Arrangement only — verbatim helper relocation, no fixture-semantics change. Move-and-verify inventory per commit: before/after name grep identical, each declared once.\n\nAcceptance: go test -race -shuffle=on -count=1 ./internal/relay/runner green; inventory identical; one commit. Report resulting file list. Do not tick tasks.md.",
@@ -475,6 +518,7 @@
       "completedAt": "2026-07-03T08:07:27.571183505Z"
     },
     {
+      "kind": "lap",
       "id": "rall-2318",
       "title": "Split route_runtime_test.go mirroring the route_runtime_* layout",
       "description": "Context: task 3.3 — after #6's layout. internal/relay/runner/route_runtime_test.go mirrors route_runtime_construct.go / route_runtime_select.go / route_runtime_recovery.go / route_runtime_bench.go. Use #6's recorded runner file list as the mirror target.\n\nOutcome: route_runtime_test.go split into _test.go files mirroring those four production files, each under 1,000 lines. Shared fixtures extend the existing helpers_test.go.\n\nFiles \u0026 scope: internal/relay/runner/*_test.go only. Zero production-file edits. Never split a single test function.\n\nDesign: Arrangement only — verbatim helper relocation, no fixture-semantics change. Move-and-verify inventory per commit: before/after name grep identical, each declared once.\n\nAcceptance: go test -race -shuffle=on -count=1 ./internal/relay/runner green; inventory identical; one commit. Report resulting file list. Do not tick tasks.md.",
@@ -486,6 +530,7 @@
       "completedAt": "2026-07-03T08:10:34.522859281Z"
     },
     {
+      "kind": "lap",
       "id": "rall-00ca",
       "title": "Verify the first runner suite splits (tasks 3.1-3.3)",
       "description": "Context: mid-runner verification gate covering tasks 3.1 (run_one), 3.2 (runner_outcome), 3.3 (route_runtime). Use the openspec-verify-change skill against decompose-large-test-files, then focus the report on these three suites.\n\nOutcome: Confirmation the three runner suites are correctly split, arrangement-only, inventories preserved, mirroring #6's recorded layout — or head laps for gaps.\n\nScope \u0026 method: Identify the intended merge target (do not assume main) and this batch's first lap/try; treat earlier work as pre-existing. Trace real evidence, not just green tests: compare before/after Test*/Benchmark*/Fuzz* inventory for internal/relay/runner (identical multiset, each declared once); confirm each new _test.go file (helpers_test.go included) is under 1,000 lines and that shared setup lives in the single helpers_test.go, not parallel helpers; confirm the diff touches only _test.go files. Run go test -race -shuffle=on -count=1 ./internal/relay/runner.\n\nAcceptance: If solid, check the tasks.md boxes for 3.1-3.3. Add focused head laps for substantive gaps (additive/revert commits only, never rewrite history); only tiny safe one-liners inline. Report findings first.",
@@ -497,6 +542,7 @@
       "completedAt": "2026-07-03T08:25:02.692997976Z"
     },
     {
+      "kind": "lap",
       "id": "rall-c557",
       "title": "Split relay_steps_test.go mirroring the relay step layout",
       "description": "Context: task 3.4 — after #6's layout (post-#5 membership). internal/relay/runner/relay_steps_test.go mirrors relay_route_wait.go / relay_run_progress.go / relay_summary.go. Use #6's recorded runner file list as the mirror target and follow the recorded names if membership shifted.\n\nOutcome: relay_steps_test.go split into _test.go files mirroring those production files, each under 1,000 lines. Shared fixtures extend the existing helpers_test.go.\n\nFiles \u0026 scope: internal/relay/runner/*_test.go only. Zero production-file edits. Never split a single test function.\n\nDesign: Arrangement only — verbatim helper relocation, no fixture-semantics change. Move-and-verify inventory per commit: before/after name grep identical, each declared once.\n\nAcceptance: go test -race -shuffle=on -count=1 ./internal/relay/runner green; inventory identical; one commit. Report resulting file list. Do not tick tasks.md.",
@@ -508,6 +554,7 @@
       "completedAt": "2026-07-03T08:53:54.96350762Z"
     },
     {
+      "kind": "lap",
       "id": "rall-1ce8",
       "title": "Split runner_failure_telemetry_test.go by failure family",
       "description": "Context: task 3.5 — after #6's layout. internal/relay/runner/runner_failure_telemetry_test.go splits by failure family: harness failure evidence vs benching/reset vs diagnostics/events (names like runner_failure_telemetry_*_test.go).\n\nOutcome: runner_failure_telemetry_test.go split into failure-family _test.go files, each under 1,000 lines. Shared fixtures extend the existing helpers_test.go.\n\nFiles \u0026 scope: internal/relay/runner/*_test.go only. Zero production-file edits. Never split a single test function; a case that spans families goes with the failure it primarily pins.\n\nDesign: Arrangement only — verbatim helper relocation, no fixture-semantics change. Move-and-verify inventory per commit: before/after name grep identical, each declared once.\n\nAcceptance: go test -race -shuffle=on -count=1 ./internal/relay/runner green; inventory identical; one commit. Report resulting file list. Do not tick tasks.md.",
@@ -519,6 +566,7 @@
       "completedAt": "2026-07-03T08:58:26.551445406Z"
     },
     {
+      "kind": "lap",
       "id": "rall-6fea",
       "title": "Ratchet the archguard baseline and verify the full change",
       "description": "Context: tasks 3.4, 3.5, and phase 4 (4.1-4.4) plus the whole-change gate. Covers the last two runner splits and the ratchet+verification. Use the openspec-verify-change skill for the full change decompose-large-test-files and inspect the entire diff. design.md Decision 5: the acceptance criterion is the EMPTY test grandfather map, not a fixed file list.\n\nOutcome: The #3 test grandfather map is empty, the whole change is confirmed arrangement-only with preserved inventories, and every suite is under the cap — or head laps for any gap.\n\nScope \u0026 method: First verify 3.4 (relay_steps) and 3.5 (runner_failure_telemetry) like the earlier runner gate — inventory preserved, files under cap, _test.go-only diff, package tests green under -race -shuffle=on. Then the ratchet: regenerate the baseline with go run ./tools/archguard --report and confirm ZERO _test.go grandfather entries remain, every new _test.go file (helpers included) is under 1,000 lines, and go run ./tools/archguard --ci exits 0 with NO policy-table edit (baseline regeneration only, per the #4/#6 precedent). Final inventory comparison per package against the baseline lap's snapshot: identical multisets, each Test/Benchmark/Fuzz declared exactly once. Full verification: go test -count=1 ./..., go test -race -shuffle=on -count=1 ./..., go vet ./..., gofmt -l . empty, just check green. Confirm the whole diff touches only _test.go files plus the regenerated baseline — zero production-file edits, no assertion changes, internal/buildinfo/VERSION untouched, no version bump/release. Identify the intended merge target (do not assume main) and this batch's first lap/try; treat earlier work as pre-existing.\n\nAcceptance: If everything holds, check the remaining tasks.md boxes (1.1-1.3, 3.4, 3.5, 4.1-4.4). Add focused head laps for substantive gaps (additive/revert commits only, never rewrite history); only tiny safe one-liners inline. Report findings first.",
@@ -530,6 +578,7 @@
       "completedAt": "2026-07-03T09:05:15.50229226Z"
     },
     {
+      "kind": "lap",
       "id": "rall-f116",
       "title": "Code review: decompose-large-test-files (queue 8)",
       "description": "Run the auto-code-review skill (see .opencode/skills/auto-code-review/SKILL.md, also available under .claude/skills and .codex/skills) over the full decompose-large-test-files lap batch that just completed above.\n\nScope: the accumulated diff for this batch only (the large test-file decomposition). Identify the first lap/try commit of this queue-8 batch and use git merge-base / branch tracking / recent log to pick the correct diff base; treat earlier branch work as pre-existing unless instructed otherwise. Do not pull in unrelated commits.\n\nFocus: test integrity — confirm no tests were dropped, duplicated, or silently weakened, fixtures and table-driven cases are intact, helpers moved cleanly, and the test suite still exercises the same behaviour. Verify go test -count=1 ./internal/relay/... (and the race suite where relevant) are green. Findings first; auto-fix only low-risk local issues; surface architecture/product calls with a default recommendation instead of silently deciding them. Commit each coherent fix cluster only if asked.",

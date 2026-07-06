@@ -242,6 +242,20 @@ safe"). Direction locked for this stage:
   gap: live free-run rows still title "relay run" — deriving from the task
   prompt needs a runner-side event change (STOP-ruled here; fold into a
   later lap).
+- 2026-07-06: Laps tab lap implemented. `rally tui` now has a fourth
+  read-only Laps tab fed by a CLI-owned laps snapshot loader; presentation
+  remains filesystem/store/exec-free, and queue refreshes happen via async
+  Bubble Tea commands on init, tab activation, outing boundaries, and `r`.
+  Snapshot loading uses structured `laps --json-output` only, including
+  queued non-archived stint expansion.
+  Review fixes against the real laps binary (fixtures had drifted from the
+  wire shapes): `status.activeStint` is a stint object (was decoded as a
+  string), `assignees` rows are `{assignee,todo}` objects, and the root
+  list must pass `--root` or `laps list` transparently descends into an
+  active stint and drops the root queue + gate from the tab. Fetcher
+  bounded with a 10s timeout so a hung laps subprocess can't wedge the tab
+  in loading. PTY-verified against live queues: held stint with gate
+  message + expanded stint laps, ready, and complete states all render.
 
 ## Prototype comparison (for selection — fill in as evaluated)
 

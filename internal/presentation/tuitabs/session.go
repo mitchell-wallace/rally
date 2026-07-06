@@ -16,18 +16,22 @@ import (
 )
 
 type Options struct {
-	Title    string
-	DoneHint string
-	Seed     []tuicore.FeedItem
-	Agents   []tuicore.AgentStatusItem
+	Title     string
+	DoneHint  string
+	Seed      []tuicore.FeedItem
+	Agents    []tuicore.AgentStatusItem
+	Laps      tuicore.LapsSnapshot
+	FetchLaps func(context.Context) (tuicore.LapsSnapshot, error)
 }
 
 type Session struct {
-	title    string
-	doneHint string
-	seed     []tuicore.FeedItem
-	agents   []tuicore.AgentStatusItem
-	controls *controls
+	title     string
+	doneHint  string
+	seed      []tuicore.FeedItem
+	agents    []tuicore.AgentStatusItem
+	laps      tuicore.LapsSnapshot
+	fetchLaps func(context.Context) (tuicore.LapsSnapshot, error)
+	controls  *controls
 
 	mu       sync.Mutex
 	send     func(tea.Msg)
@@ -41,11 +45,13 @@ func NewSession(opts Options) *Session {
 		title = "rally tui"
 	}
 	return &Session{
-		title:    title,
-		doneHint: opts.DoneHint,
-		seed:     cloneFeedItems(opts.Seed),
-		agents:   cloneAgents(opts.Agents),
-		controls: newControls(),
+		title:     title,
+		doneHint:  opts.DoneHint,
+		seed:      cloneFeedItems(opts.Seed),
+		agents:    cloneAgents(opts.Agents),
+		laps:      tuicore.CloneLapsSnapshot(opts.Laps),
+		fetchLaps: opts.FetchLaps,
+		controls:  newControls(),
 	}
 }
 
@@ -88,6 +94,7 @@ func (s *Session) Run(ctx context.Context, work func(context.Context) error) err
 	m.doneHint = s.doneHint
 	m.dashboard = m.dashboard.Seed(s.seed)
 	m.agents.Seed(s.agents)
+	m.laps = newLapsModel(s.fetchLaps).WithSnapshot(s.laps)
 	p := tea.NewProgram(m, tea.WithAltScreen(), tea.WithContext(ctx))
 	s.setSend(p.Send)
 	defer s.setSend(nil)
@@ -119,6 +126,7 @@ func (s *Session) Run(ctx context.Context, work func(context.Context) error) err
 func (s *Session) RunDemo(ctx context.Context) error {
 	s.seed = tuicore.DemoFeedSeed()
 	s.agents = tuicore.DemoAgentStatuses()
+	s.laps = tuicore.DemoLapsSnapshot()
 	return s.Run(ctx, func(ctx context.Context) error {
 		statuses := tuicore.DemoStatusFrames()
 		statusCtx, cancelStatus := context.WithCancel(ctx)
@@ -174,6 +182,7 @@ func (s *Session) OutingView(ctx context.Context, events []runtimeevent.Event) e
 	m.doneHint = s.doneHint
 	m.dashboard = m.dashboard.Seed(s.seed)
 	m.agents.Seed(s.agents)
+	m.laps = newLapsModel(s.fetchLaps).WithSnapshot(s.laps)
 	p := tea.NewProgram(m, tea.WithAltScreen(), tea.WithContext(ctx))
 	s.setSend(p.Send)
 	defer s.setSend(nil)

@@ -25,7 +25,7 @@ func (m model) View() string {
 }
 
 func (m model) tabBar() string {
-	labels := []string{"[1] Dashboard", "[2] Transcript", "[3] Agents"}
+	labels := []string{"[1] Dashboard", "[2] Transcript", "[3] Agents", "[4] Laps"}
 	parts := make([]string, len(labels))
 	for i, label := range labels {
 		style := tabStyle
@@ -48,6 +48,8 @@ func (m model) bodyView(height int) string {
 		return fitBlock(vp.View(), m.width, height)
 	case tabAgents:
 		return fitBlock(m.agentsView(height), m.width, height)
+	case tabLaps:
+		return fitBlock(m.laps.View(m.width, height), m.width, height)
 	default:
 		return strings.Repeat("\n", height-1)
 	}
@@ -80,7 +82,7 @@ func (m model) statusBar() string {
 	width := maxInt(1, m.width)
 	left := m.title
 	middle := m.middleStatus()
-	right := m.tabLegend() + " · 1-3/Tab tabs · ^C quit  ^S skip  ^P pause  ^X stop"
+	right := m.tabLegend() + " · 1-4/Tab tabs · ^C quit  ^S skip  ^P pause  ^X stop"
 	if m.done {
 		right = "relay complete - q to exit"
 		if m.workErr != nil {
@@ -116,6 +118,8 @@ func (m model) tabLegend() string {
 		return "j/k scroll"
 	case tabAgents:
 		return "read-only status"
+	case tabLaps:
+		return "j/k scroll · r refresh"
 	default:
 		return "q quit"
 	}

@@ -17,6 +17,7 @@ const (
 	tabDashboard tab = iota
 	tabTranscript
 	tabAgents
+	tabLaps
 )
 
 type model struct {
@@ -30,6 +31,7 @@ type model struct {
 	viewport   viewport.Model
 	following  bool
 	agents     tuicore.AgentStatusList
+	laps       lapsModel
 
 	statusLine string
 	armedHint  string
@@ -54,6 +56,7 @@ func newModel(title string, controls *controls) model {
 		now:       time.Now,
 		dashboard: newDashboard(title),
 		viewport:  viewport.New(80, 22),
+		laps:      newLapsModel(nil),
 		following: true,
 		width:     100,
 		height:    30,
@@ -61,7 +64,7 @@ func newModel(title string, controls *controls) model {
 }
 
 func (m model) Init() tea.Cmd {
-	return nil
+	return m.laps.FetchCmd()
 }
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -75,7 +78,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.dashboard = m.dashboard.Apply(msg.event)
 		m.transcript.Apply(msg.event)
 		m.refreshTranscript()
-		return m, nil
+		return m, m.fetchLapsOnBoundary(msg.event)
 	case enrichMsg:
 		m.dashboard = m.dashboard.Enrich(msg.outingIndex, msg.summary, msg.classification, msg.followups)
 		return m, nil
@@ -88,6 +91,13 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case seedAgentsMsg:
 		m.agents.Seed(msg.items)
+		return m, nil
+	case lapsSnapshotMsg:
+		if msg.err != nil {
+			m.laps.SetError(msg.err)
+		} else {
+			m.laps.SetSnapshot(msg.snapshot)
+		}
 		return m, nil
 	case doneMsg:
 		m.done = true
@@ -122,12 +132,15 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "3":
 		m.active = tabAgents
 		return m, nil
+	case "4":
+		m.active = tabLaps
+		return m, m.laps.FetchCmd()
 	case "tab":
-		m.active = (m.active + 1) % 3
-		return m, nil
+		m.active = (m.active + 1) % 4
+		return m, m.fetchLapsIfActive()
 	case "shift+tab":
-		m.active = (m.active + 2) % 3
-		return m, nil
+		m.active = (m.active + 3) % 4
+		return m, m.fetchLapsIfActive()
 	case "enter":
 		m.controls.resume()
 		return m, nil
@@ -144,6 +157,11 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.dashboard = next
 	case tabTranscript:
 		m.handleTranscriptKey(key)
+	case tabLaps:
+		if key == "r" {
+			return m, m.laps.FetchCmd()
+		}
+		m.laps.HandleKey(key)
 	}
 	return m, nil
 }
@@ -152,6 +170,7 @@ func (m *model) refit() {
 	bodyHeight := maxInt(1, m.height-2)
 	m.viewport.Width = m.width
 	m.viewport.Height = bodyHeight
+	m.laps.SetSize(m.width, bodyHeight)
 	m.refreshTranscript()
 }
 
@@ -201,4 +220,20 @@ func maxInt(a, b int) int {
 		return a
 	}
 	return b
+}
+
+func (m *model) fetchLapsIfActive() tea.Cmd {
+	if m.active != tabLaps {
+		return nil
+	}
+	return m.laps.FetchCmd()
+}
+
+func (m *model) fetchLapsOnBoundary(event runtimeevent.Event) tea.Cmd {
+	switch event.(type) {
+	case runtimeevent.OutingHeaderReady, runtimeevent.AttemptFinished, runtimeevent.AttemptCancelled, runtimeevent.HandoffAttemptFinished:
+		return m.laps.FetchCmd()
+	default:
+		return nil
+	}
 }
