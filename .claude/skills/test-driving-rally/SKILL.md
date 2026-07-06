@@ -60,7 +60,7 @@ These tests skip automatically when `RALLY_TEST_REAL_AGENTS` is unset. They cove
 
 If they all pass, proceed to the manual smoke tests below for broader coverage. If any fail, investigate before continuing — the pre-built tests are cheaper to run and faster to interpret than manual ones.
 
-Add new tests to `internal/relay/runner_real_backend_test.go` whenever you find a new category of failure during manual testing.
+Add new tests to `internal/relay/runner/runner_real_backend_test.go` (path moved in the relay/runner package split) whenever you find a new category of failure during manual testing. The multi-harness round-robin test was retired in that split — cover round-robin with a manual two-harness relay (e.g. `--agent "op:dsff cx:mini"`) and check `agent_type` alternates in `tries.jsonl`.
 
 ---
 
@@ -94,18 +94,15 @@ Always use these slugs in tests. They are the only slugs known to be available i
 
 | Harness | Slug | Notes |
 |---|---|---|
-| `ag`/`agy` (antigravity) | `Gemini 3.5 Flash (High)` | Re-verified 2026-07-02 via `agy --print` and Rally real-backend; `agy` 1.0.15 has no CLI model flag, so Rally sets `~/.gemini/antigravity-cli/settings.json` for the run and restores it. |
-| `cc` (claude) | `claude-haiku-4-5` | Cheapest/fastest; default for smoke tests. |
-| `cx` (codex) | `gpt-5.4-mini` | Verified working (see `TestRealBackend_CodexRelay`). |
-| `ge` (gemini) | `gemini-3.1-pro-preview` | Previously verified, but unavailable on 2026-06-19: gemini-cli 0.40.1 returns `IneligibleTierError` / `UNSUPPORTED_CLIENT` for Gemini Code Assist individuals. Prefer Antigravity or other harnesses until account/client eligibility changes. |
-| `ge` (gemini) | `gemini-3-flash-preview` | Previously verified, but unavailable on 2026-06-19 for the same Gemini Code Assist `IneligibleTierError`; Rally should classify this as `auth_or_proxy`. |
-| `op` (opencode) | `opencode-go/kimi-k2.6` | Monthly usage-limited on 2026-06-19. Live Rally probe classified `usage_limit`, parsed a ~96h reset, and benched quota scope `opencode:opencode-go` after the connected-idle path fired at ~5m. |
-| `op` (opencode) | `opencode/big-pickle` | Ongoing free smoke-test model. NOT `opencode-zen/...` — the zen prefix is wrong. |
-| `op` (opencode) | `zai-coding-plan/glm-5.1` | Verified 2026-05-11: ~10s. The `zai-coding-plan` provider with `glm-5.1` suffix. |
+| `ag`/`agy` (antigravity) | `Gemini 3.5 Flash (High)` | **agy is UNAUTHENTICATED in this container** (2026-07-05 onward; OAuth is interactive-only, can't self-heal until the user returns ~Jul 8). `TestRealBackend_AntigravityRelay` fails with `all agents unavailable` after ~30s — environmental, not a rally bug. Slug itself is correct; `agy` 1.0.15 has no CLI model flag, so Rally sets `~/.gemini/antigravity-cli/settings.json` for the run and restores it. |
+| `cl` (claude) | `claude-haiku-4-5` | Cheapest/fastest; default for smoke tests. Shorthand renamed `cc`→`cl` 2026-07-05 (`cc` still accepted as legacy alias). NOTE: the `claude` provider is disabled in `~/.config/rally/config.toml` while the crew-chief campaign runs — relays sideline `cl:*` runners; real-backend tests pin haiku directly and are unaffected. |
+| `cx` (codex) | `gpt-5.4-mini` | Verified 2026-07-06 (`TestRealBackend_CodexRelay` + live round-robin relay). User config also carries `gpt-5.5`, `gpt-5.4`, `gpt-5.3-codex`, `gpt-5.3-codex-spark`. |
+| `ge` (gemini) | — | gemini CLI is NOT INSTALLED in this container (2026-07-06). Earlier accounts also hit `IneligibleTierError` / `UNSUPPORTED_CLIENT` for Gemini Code Assist individuals; Rally should classify that as `auth_or_proxy`. |
+| `op` (opencode) | `zai-coding-plan/glm-5.2` | Verified 2026-07-06: ~30s/outing, laps + round-robin relays green. (glm-5.1 slug is superseded in user config.) |
+| `op` (opencode) | `opencode/deepseek-v4-flash-free` | Free smoke-test model, verified 2026-07-06 in round-robin relay. |
+| `op` (opencode) | `opencode-go/*` (kimi-k2.7-code, deepseek-v4-pro, …) | Monthly usage-limited on 2026-06-19 (~96h reset parsed then); not re-probed since. Prefer the two rows above for success-path smoke tests. |
 
-Current note (2026-06-19): opencode-go models are at monthly usage limit in this environment. Prefer non-opencode-go providers (`opencode/big-pickle`, `zai-coding-plan/glm-5.1`) for OpenCode success-path smoke tests until the monthly limit resets.
-
-Alias note: Antigravity is `ag` or `agy`; gemini is `ge`, NOT `gm`. Rally rejects `gm` with `unknown agent alias`.
+Alias note: Antigravity is `ag` or `agy`; claude is `cl` (or legacy `cc`); gemini is `ge`, NOT `gm`. Rally rejects `gm` with `unknown agent alias`.
 
 Check `/workspace/rally.toml` for the project-default slugs in use, and `AGENTS.md` for terminology. The slugs above override anything you see in older docs or memory.
 
@@ -283,17 +280,18 @@ rally relay --new --iterations 2 --agent "cc:2" "Create mix-test.txt"
 
 **Check**: `agent_mix` in relay record shows the weight spec. Both iterations run with claude.
 
-### 2j. Multi-harness relay (cc + other)
+### 2j. Multi-harness relay (two+ harnesses)
 
 ```bash
-rally relay --new --iterations 3 --agent "cc ge op" "Create a unique file per iteration."
+rally relay --new --iterations 2 --agent "op:dsff cx:mini" "Create a unique file per iteration."
 ```
 
-Watch the header line cycle through `claude`, `gemini`, `opencode`. The
+Watch the header line cycle through the harnesses in order. The
 `agent_type` field in `state/tries.jsonl` should also alternate. **Regression
 note (fixed in 0.7.4)**: prior versions stuck on the first harness because
-the override path didn't inject a default quota for bare aliases.
-`TestRealBackend_MultiHarnessRoundRobin` guards this. If you see all
+the override path didn't inject a default quota for bare aliases. The old
+`TestRealBackend_MultiHarnessRoundRobin` was retired in the relay/runner
+package split, so this manual drive is the current guard. If you see all
 iterations using the same agent, the override quota default has likely
 regressed.
 
