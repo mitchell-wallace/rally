@@ -94,7 +94,14 @@ subsequent wake-ups only verify health and exit.
   descent silently dropped the root queue + gate from the tab — found only
   via live pty check, unit fixtures were blind to it), added 10s fetch
   timeout. Full gates + pty+pyte live verification (held/ready/complete)
-  green. Next head lap: rall-df75 (laps TUI, in /workspace/laps).
+  green. THEN queue lap 13 (rall-df75 laps TUI) DONE (laps dev 9840ddd,
+  pushed): codex built `laps tui` (view + done/delete/reorder/hold actions
+  via self-exec, consumer-contract JSON reads) in one clean lap; chief fixes:
+  "tui" missing from isKnownCommand (hook-only intercept swallowed the
+  command — pty e2e caught it, package tests could not), delete-confirm key
+  leak (cursor move between x and y retargeted the delete). Live pty e2e:
+  release + done actions mutated a real queue correctly. Next head lap:
+  rall-dbfb (dogfood in-dev rally+laps; staging test-drive).
 - **2026-07-06 (session 9, autonomous, 05:43 wake)** — queue lap 11 (rall-f734
   rally adopts laps v3) DONE (0e89c50). Session 8 (00:43) DIED mid-codex-lap
   AGAIN — it ended its assistant turn while codex ran in background; harness

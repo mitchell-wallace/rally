@@ -151,11 +151,11 @@
       "title": "Laps TUI: viewing + actions on laps and stints",
       "description": "Add a similar-styled TUI to laps (mirror rally's tuicore/tuitabs styling patterns) for viewing laps/stints and taking actions (done, delete, reorder, stint ops). Keep visual language consistent between the two tools.",
       "assignee": "crew-chief",
-      "isDone": false,
+      "isDone": true,
       "order": 851968,
       "createdAt": "2026-07-05T00:05:52.923368943Z",
-      "updatedAt": "2026-07-05T00:05:52.923368943Z",
-      "completedAt": null
+      "updatedAt": "2026-07-06T11:11:25.518490066Z",
+      "completedAt": "2026-07-06T11:11:25.518490066Z"
     },
     {
       "kind": "lap",

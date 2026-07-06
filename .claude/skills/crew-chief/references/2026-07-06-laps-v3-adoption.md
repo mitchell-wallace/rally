@@ -51,3 +51,24 @@ be notified on completion" does NOT apply across turn end in headless mode.
 - Operator surface: relay ending on a held gate printed "Relay complete." —
   misleading; added queue-state-aware end lines in app layer (relayEndLine).
   Watch for "log has the truth, stdout lies" gaps on new terminal states.
+
+## Session 10 addenda (TUI laps)
+
+- NEW death mode: session 9's continuation died to a USAGE LIMIT ("session
+  limit · resets HH:MM"), not the turn-end kill. Recovery identical: the
+  uncommitted diff was coherent and near-complete; review it, don't redo it.
+- laps gotcha for NEW subcommands: register the name in `isKnownCommand`
+  (internal/cmd/hooks.go) or Execute's hook-only intercept swallows the
+  command with exit 0 and no output. Package tests cannot catch this — only
+  running the real binary does.
+- `laps list` transparently descends into an active stint; snapshot readers
+  must pass `--root` or they silently lose the root queue + gate. Bit rally's
+  laps tab (unit fixtures were blind); pinned in both repos now.
+- pty+pyte harness (/tmp/tui-pty-check.py): a captured EMPTY frame usually
+  means the app exited before altscreen (quit key sent, or the command never
+  started) — capture BEFORE sending q; altscreen restore wipes the frame.
+- codex on greenfield TUI (907 lines + tests, ~12 min): near-flawless,
+  matched wire shapes exactly when the spec listed them; missed only the
+  out-of-boundary isKnownCommand registration and a confirm-state key leak
+  (x → move cursor → y deleted the wrong lap). Confirm-mode key handling is
+  a reliable review target.
