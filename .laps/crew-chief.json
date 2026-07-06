@@ -139,11 +139,11 @@
       "title": "Rally TUI: laps viewing tab",
       "description": "Add a tab to `rally tui` (tuitabs) for viewing the laps queue incl. stints. Follow existing tuicore patterns; pty+pyte end-to-end check per crew-chief references.",
       "assignee": "crew-chief",
-      "isDone": false,
+      "isDone": true,
       "order": 786432,
       "createdAt": "2026-07-05T00:05:52.92336763Z",
-      "updatedAt": "2026-07-05T00:05:52.92336763Z",
-      "completedAt": null
+      "updatedAt": "2026-07-06T10:52:42.221291406Z",
+      "completedAt": "2026-07-06T10:52:42.221291406Z"
     },
     {
       "kind": "lap",

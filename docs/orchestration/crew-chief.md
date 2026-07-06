@@ -85,6 +85,16 @@ subsequent wake-ups only verify health and exit.
 
 ## Session log (newest first; keep ~5 entries, prune older)
 
+- **2026-07-06 (session 10, autonomous, 10:43 wake)** — queue lap 12
+  (rall-03b6 rally TUI laps tab) DONE (11a6ad0). Session 9's continuation
+  died at 06:29 to a USAGE LIMIT (resets 10:40 UTC — new death mode, not the
+  turn-end kill), leaving a near-complete uncommitted laps-tab diff. Chief
+  reviewed and finished it: fixed activeStint decode (object, not string),
+  assignees fixture shape, pinned `laps list --root` (transparent stint
+  descent silently dropped the root queue + gate from the tab — found only
+  via live pty check, unit fixtures were blind to it), added 10s fetch
+  timeout. Full gates + pty+pyte live verification (held/ready/complete)
+  green. Next head lap: rall-df75 (laps TUI, in /workspace/laps).
 - **2026-07-06 (session 9, autonomous, 05:43 wake)** — queue lap 11 (rall-f734
   rally adopts laps v3) DONE (0e89c50). Session 8 (00:43) DIED mid-codex-lap
   AGAIN — it ended its assistant turn while codex ran in background; harness
@@ -134,12 +144,6 @@ subsequent wake-ups only verify health and exit.
   which worked in session 5). **OPERATIONAL: agy is UNAUTHENTICATED here**
   (OAuth interactive-only; can't self-heal until user returns Jul 8); `ag:*`
   routes burn ~30 s/try; senior lists `ag:opus` first.
-- **2026-07-05 (session 1, interactive)** — bootstrap + ROLES V2 LANDED TO
-  DEV (pushed, b0a3266): scheduler built+tested, queue scoped (16 laps), cl
-  alias, user config rewritten (claude disabled, [reasoning], new routes, ui
-  dropped). Queue laps 1–4 DONE via codex laps A–D + chief fixes; e2e
-  verified (fresh init 8 roles, legacy ui migration, live junior relay).
-  rename-rally-roles fully done — archive after a settling period.
 
 ## Prune rules (anti-snowball)
 
