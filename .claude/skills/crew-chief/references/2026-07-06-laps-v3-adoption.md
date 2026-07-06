@@ -72,3 +72,9 @@ be notified on completion" does NOT apply across turn end in headless mode.
   out-of-boundary isKnownCommand registration and a confirm-state key leak
   (x → move cursor → y deleted the wrong lap). Confirm-mode key handling is
   a reliable review target.
+- laps CI has a STRICT gocritic lint gate (hugeParam/rangeValCopy/evalOrder);
+  rally does not. golangci-lint was missing locally — install with
+  `go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.1.6`
+  (binary lands in the mise GOPATH bin: `$(go env GOPATH)/bin` is NOT it;
+  check `~/.local/share/mise/installs/go/*/bin`). Run it before pushing laps.
+  Bubbletea models in laps must use POINTER receivers to pass hugeParam.

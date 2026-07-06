@@ -100,8 +100,11 @@ subsequent wake-ups only verify health and exit.
   "tui" missing from isKnownCommand (hook-only intercept swallowed the
   command — pty e2e caught it, package tests could not), delete-confirm key
   leak (cursor move between x and y retargeted the delete). Live pty e2e:
-  release + done actions mutated a real queue correctly. Next head lap:
-  rall-dbfb (dogfood in-dev rally+laps; staging test-drive).
+  release + done actions mutated a real queue correctly. Laps CI then failed
+  on its strict gocritic gate (lint not installed locally) — fixed forward
+  (8ad0098, pointer-receiver model; golangci-lint now installed, see skill
+  references), CI green both repos. Next head lap: rall-dbfb (dogfood in-dev
+  rally+laps; staging test-drive).
 - **2026-07-06 (session 9, autonomous, 05:43 wake)** — queue lap 11 (rall-f734
   rally adopts laps v3) DONE (0e89c50). Session 8 (00:43) DIED mid-codex-lap
   AGAIN — it ended its assistant turn while codex ran in background; harness
