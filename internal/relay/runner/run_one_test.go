@@ -139,12 +139,12 @@ func TestRunBenchesOpencodeUsageLimitQuotaScopeNotAgentError(t *testing.T) {
 			oldHeadPull := headPullLap
 			oldQueueSize := queueSize
 			claimed := false
-			headPullLap = func(context.Context, string) (laps.Lap, error) {
+			headPullLap = func(context.Context, string) (laps.Lap, laps.QueueState, error) {
 				if claimed {
-					return laps.NoLap, nil
+					return laps.NoLap, laps.StateEmpty, nil
 				}
 				claimed = true
-				return laps.Lap{ID: "lap-opencode-limit", Title: "opencode limit", Assignee: "senior"}, nil
+				return laps.Lap{ID: "lap-opencode-limit", Title: "opencode limit", Assignee: "senior"}, laps.StateLap, nil
 			}
 			queueSize = func(context.Context, string) (int, error) { return 1, nil }
 			defer func() {

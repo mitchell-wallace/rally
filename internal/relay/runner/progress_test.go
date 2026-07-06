@@ -43,7 +43,9 @@ func stripFooterAnsi(s string) string { return footerAnsiRe.ReplaceAllString(s, 
 
 func TestStubEntryOnIncompleteRun(t *testing.T) {
 	oldHeadPull := headPullLap
-	headPullLap = func(context.Context, string) (laps.Lap, error) { return laps.Lap{Title: "test"}, nil }
+	headPullLap = func(context.Context, string) (laps.Lap, laps.QueueState, error) {
+		return laps.Lap{Title: "test"}, laps.StateLap, nil
+	}
 	defer func() { headPullLap = oldHeadPull }()
 
 	workspaceDir := t.TempDir()

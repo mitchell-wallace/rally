@@ -101,9 +101,12 @@ func TestRealLapsDoneWrapupFlow(t *testing.T) {
 		t.Errorf("expected no handoff entry, got %+v", entry.Handoff)
 	}
 
-	headLap, err := (&laps.Adapter{WorkspaceDir: workspaceDir}).HeadPull(context.Background())
+	headLap, state, err := (&laps.Adapter{WorkspaceDir: workspaceDir}).HeadPull(context.Background())
 	if err != nil {
 		t.Fatalf("HeadPull error: %v", err)
+	}
+	if state != laps.StateEmpty && state != laps.StateComplete {
+		t.Fatalf("remaining queue state = %s, want empty or complete", state)
 	}
 	if headLap != laps.NoLap {
 		t.Errorf("remaining head lap = %+v, want NoLap", headLap)
@@ -160,9 +163,12 @@ func TestRealLapsHandoffWrapupCreatesHeadFollowup(t *testing.T) {
 		t.Fatalf("CreatedLapIDs = %v, want 1 entry", entry.Handoff.CreatedLapIDs)
 	}
 
-	headLap, err := (&laps.Adapter{WorkspaceDir: workspaceDir}).HeadPull(context.Background())
+	headLap, state, err := (&laps.Adapter{WorkspaceDir: workspaceDir}).HeadPull(context.Background())
 	if err != nil {
 		t.Fatalf("HeadPull error: %v", err)
+	}
+	if state != laps.StateLap {
+		t.Fatalf("head queue state = %s, want %s", state, laps.StateLap)
 	}
 	if headLap.Description != followup {
 		t.Errorf("head description = %q, want %q", headLap.Description, followup)

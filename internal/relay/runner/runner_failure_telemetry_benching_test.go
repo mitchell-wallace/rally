@@ -321,8 +321,8 @@ func TestRunRecoveryCapHitCapturesNeedsUserIssue(t *testing.T) {
 	}
 
 	oldHeadPull := headPullLap
-	headPullLap = func(context.Context, string) (laps.Lap, error) {
-		return laps.Lap{ID: "lap-cap", Title: "cap task", Description: "finish", Assignee: "senior"}, nil
+	headPullLap = func(context.Context, string) (laps.Lap, laps.QueueState, error) {
+		return laps.Lap{ID: "lap-cap", Title: "cap task", Description: "finish", Assignee: "senior"}, laps.StateLap, nil
 	}
 	oldQueueSize := queueSize
 	queueSize = func(context.Context, string) (int, error) { return 1, nil }
@@ -400,8 +400,8 @@ func TestRunRecoveryForcedEmitsRouteEvent(t *testing.T) {
 	}
 
 	oldHeadPull := headPullLap
-	headPullLap = func(context.Context, string) (laps.Lap, error) {
-		return laps.Lap{ID: "lap-recover", Title: "recover task", Description: "repair", Assignee: "senior"}, nil
+	headPullLap = func(context.Context, string) (laps.Lap, laps.QueueState, error) {
+		return laps.Lap{ID: "lap-recover", Title: "recover task", Description: "repair", Assignee: "senior"}, laps.StateLap, nil
 	}
 	oldQueueSize := queueSize
 	queueSize = func(context.Context, string) (int, error) { return 1, nil }

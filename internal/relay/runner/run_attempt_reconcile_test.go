@@ -15,8 +15,8 @@ import (
 
 func TestIncompleteRunLeavesChangesUncommitted(t *testing.T) {
 	oldHeadPull := headPullLap
-	headPullLap = func(context.Context, string) (laps.Lap, error) {
-		return laps.Lap{ID: "lap-1", Title: "test", Assignee: "senior"}, nil
+	headPullLap = func(context.Context, string) (laps.Lap, laps.QueueState, error) {
+		return laps.Lap{ID: "lap-1", Title: "test", Assignee: "senior"}, laps.StateLap, nil
 	}
 	defer func() { headPullLap = oldHeadPull }()
 
@@ -68,8 +68,8 @@ func TestIncompleteRunLeavesChangesUncommitted(t *testing.T) {
 
 func TestIncompleteDoesNotCountTowardFailureCascade(t *testing.T) {
 	oldHeadPull := headPullLap
-	headPullLap = func(context.Context, string) (laps.Lap, error) {
-		return laps.Lap{ID: "lap-1", Title: "test", Assignee: "senior"}, nil
+	headPullLap = func(context.Context, string) (laps.Lap, laps.QueueState, error) {
+		return laps.Lap{ID: "lap-1", Title: "test", Assignee: "senior"}, laps.StateLap, nil
 	}
 	defer func() { headPullLap = oldHeadPull }()
 
@@ -108,8 +108,8 @@ func TestIncompleteDoesNotCountTowardFailureCascade(t *testing.T) {
 // should not apply.
 func TestIncompleteLeftoverAware_NoOpInheritingLeftovers(t *testing.T) {
 	oldHeadPull := headPullLap
-	headPullLap = func(context.Context, string) (laps.Lap, error) {
-		return laps.Lap{ID: "lap-1", Title: "test", Assignee: "senior"}, nil
+	headPullLap = func(context.Context, string) (laps.Lap, laps.QueueState, error) {
+		return laps.Lap{ID: "lap-1", Title: "test", Assignee: "senior"}, laps.StateLap, nil
 	}
 	defer func() { headPullLap = oldHeadPull }()
 
@@ -156,8 +156,8 @@ func TestIncompleteLeftoverAware_NoOpInheritingLeftovers(t *testing.T) {
 // adds its own unfinalized changes IS classified as incomplete.
 func TestIncompleteLeftoverAware_OwnUnfinalizedChanges(t *testing.T) {
 	oldHeadPull := headPullLap
-	headPullLap = func(context.Context, string) (laps.Lap, error) {
-		return laps.Lap{ID: "lap-1", Title: "test", Assignee: "senior"}, nil
+	headPullLap = func(context.Context, string) (laps.Lap, laps.QueueState, error) {
+		return laps.Lap{ID: "lap-1", Title: "test", Assignee: "senior"}, laps.StateLap, nil
 	}
 	defer func() { headPullLap = oldHeadPull }()
 
@@ -204,8 +204,8 @@ func TestIncompleteLeftoverAware_OwnUnfinalizedChanges(t *testing.T) {
 // making the try incomplete if not finalized.
 func TestIncompleteLeftoverAware_TouchingInheritedLeftover(t *testing.T) {
 	oldHeadPull := headPullLap
-	headPullLap = func(context.Context, string) (laps.Lap, error) {
-		return laps.Lap{ID: "lap-1", Title: "test", Assignee: "senior"}, nil
+	headPullLap = func(context.Context, string) (laps.Lap, laps.QueueState, error) {
+		return laps.Lap{ID: "lap-1", Title: "test", Assignee: "senior"}, laps.StateLap, nil
 	}
 	defer func() { headPullLap = oldHeadPull }()
 
@@ -256,8 +256,8 @@ func TestIncompleteLeftoverAware_TouchingInheritedLeftover(t *testing.T) {
 // changes and no finalization is a normal agent-class failure, not incomplete.
 func TestIncompleteLeftoverAware_NoChangeNoFinalize(t *testing.T) {
 	oldHeadPull := headPullLap
-	headPullLap = func(context.Context, string) (laps.Lap, error) {
-		return laps.Lap{ID: "lap-1", Title: "test", Assignee: "senior"}, nil
+	headPullLap = func(context.Context, string) (laps.Lap, laps.QueueState, error) {
+		return laps.Lap{ID: "lap-1", Title: "test", Assignee: "senior"}, laps.StateLap, nil
 	}
 	defer func() { headPullLap = oldHeadPull }()
 

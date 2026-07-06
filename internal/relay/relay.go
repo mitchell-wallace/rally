@@ -12,10 +12,12 @@ import (
 // EndedAt empty so it stays resumable, and is only closed later by target
 // completion or an explicit discard.
 const (
-	EndReasonCompleted   = "completed"
-	EndReasonQueueEmpty  = "queue_empty"
-	EndReasonConfigError = "config_error"
-	EndReasonDiscarded   = "discarded"
+	EndReasonCompleted     = "completed"
+	EndReasonQueueEmpty    = "queue_empty"
+	EndReasonQueueComplete = "queue_complete"
+	EndReasonQueueHeld     = "queue_held"
+	EndReasonConfigError   = "config_error"
+	EndReasonDiscarded     = "discarded"
 )
 
 func CreateRelay(s *store.Store, targetIterations int, agentMix string) (*store.RelayRecord, error) {

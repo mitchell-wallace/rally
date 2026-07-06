@@ -985,11 +985,12 @@ rally update
 
 If the companion `laps` binary is installed next to `rally` (the default for new installations), `rally update` will automatically upgrade `laps` to its corresponding compatible release as well.
 
-Current Rally source and its checked-in agent workflows support `laps v0.8.1`
-or newer. Rally relies on the claim file introduced in the `v0.8.x` line so a
+Current Rally source and its checked-in agent workflows support `laps v1.0.0`
+or newer. Rally relies on the laps consumer contract: the JSON claim file (so a
 bare `laps done` completes the lap Rally assigned, even when follow-up laps are
-added to the head of the queue. Run `rally update` to install or upgrade the
-bundled companion.
+added to the head of the queue), the `10`/`11`/`12` queue-state exit codes on
+`get`/`claim` (held/empty/complete), and `laps list --oneline`. Run
+`rally update` to install or upgrade the bundled companion.
 
 ## Architecture
 

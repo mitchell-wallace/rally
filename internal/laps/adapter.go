@@ -2,6 +2,7 @@ package laps
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -20,6 +21,16 @@ type Lap struct {
 // NoLap is the sentinel value returned when no head task is available.
 var NoLap = Lap{}
 
+// QueueState describes the laps queue state returned by head get/claim.
+type QueueState string
+
+const (
+	StateLap      QueueState = "lap"
+	StateHeld     QueueState = "held"
+	StateEmpty    QueueState = "empty"
+	StateComplete QueueState = "complete"
+)
+
 // Adapter interfaces with the laps binary in a workspace.
 type Adapter struct {
 	WorkspaceDir string
@@ -29,50 +40,56 @@ type Adapter struct {
 // current head Lap without claiming it. Current upstream laps output provides
 // title, optional assignee, and description; ID remains empty unless upstream
 // exposes it later.
-// If the command exits non-zero (e.g. no head task), NoLap is returned with a
-// nil error.
-func (a *Adapter) HeadPull(ctx context.Context) (Lap, error) {
+func (a *Adapter) HeadPull(ctx context.Context) (Lap, QueueState, error) {
 	cmd := exec.CommandContext(ctx, "laps", "get", "head")
 	cmd.Dir = a.WorkspaceDir
 
-	out, err := cmd.Output()
-	if err != nil {
-		// Any non-zero exit means no lap is currently available.
-		return NoLap, nil
-	}
-
-	lap, err := parseLapOutput(string(out))
-	if err != nil {
-		return Lap{}, err
-	}
-	return lap, nil
+	return parseHeadCommandOutput(cmd, "laps get head")
 }
 
 // ClaimHead runs "laps claim" in the workspace directory and returns the
 // claimed head Lap. The claimed lap ID is read from .laps/claim, which is the
 // state file laps uses to make a later bare "laps done" complete the intended
 // task.
-// If the command exits non-zero because no head task exists, NoLap is returned
-// with a nil error, matching HeadPull's queue-empty contract.
-func (a *Adapter) ClaimHead(ctx context.Context) (Lap, error) {
+func (a *Adapter) ClaimHead(ctx context.Context) (Lap, QueueState, error) {
 	cmd := exec.CommandContext(ctx, "laps", "claim")
 	cmd.Dir = a.WorkspaceDir
 
+	lap, state, err := parseHeadCommandOutput(cmd, "laps claim")
+	if err != nil || state != StateLap {
+		return lap, state, err
+	}
+	id, err := a.ReadClaim()
+	if err != nil {
+		return Lap{}, StateLap, err
+	}
+	lap.ID = id
+	return lap, StateLap, nil
+}
+
+func parseHeadCommandOutput(cmd *exec.Cmd, label string) (Lap, QueueState, error) {
 	out, err := cmd.Output()
 	if err != nil {
-		return NoLap, nil
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			switch exitErr.ExitCode() {
+			case 10:
+				return NoLap, StateHeld, nil
+			case 11:
+				return NoLap, StateEmpty, nil
+			case 12:
+				return NoLap, StateComplete, nil
+			default:
+				return NoLap, "", fmt.Errorf("%s failed with exit code %d: %s", label, exitErr.ExitCode(), strings.TrimSpace(string(exitErr.Stderr)))
+			}
+		}
+		return NoLap, "", fmt.Errorf("%s failed: %w", label, err)
 	}
 
 	lap, err := parseLapOutput(string(out))
 	if err != nil {
-		return Lap{}, err
+		return Lap{}, StateLap, err
 	}
-	id, err := a.ReadClaim()
-	if err != nil {
-		return Lap{}, err
-	}
-	lap.ID = id
-	return lap, nil
+	return lap, StateLap, nil
 }
 
 // ReadClaim returns the lap ID currently claimed by laps in this workspace.
@@ -84,12 +101,18 @@ func (a *Adapter) ReadClaim() (string, error) {
 		}
 		return "", err
 	}
+	var claim struct {
+		Lap string `json:"lap"`
+	}
+	if err := json.Unmarshal(data, &claim); err == nil {
+		return claim.Lap, nil
+	}
 	return strings.TrimSpace(string(data)), nil
 }
 
-// QueueSize runs "laps list" and returns the number of active tasks in the queue.
+// QueueSize runs "laps list --oneline" and returns the number of active tasks in the queue.
 func (a *Adapter) QueueSize(ctx context.Context) (int, error) {
-	cmd := exec.CommandContext(ctx, "laps", "list")
+	cmd := exec.CommandContext(ctx, "laps", "list", "--oneline")
 	cmd.Dir = a.WorkspaceDir
 	out, err := cmd.Output()
 	if err != nil {

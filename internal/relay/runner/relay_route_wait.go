@@ -28,6 +28,16 @@ func (r *Runner) selectRouteOrWait(
 			_ = relaycore.EndRelay(r.store, relay.ID, relaycore.EndReasonQueueEmpty)
 			return runTask{}, routeSelection{}, false, true, nil
 		}
+		if errors.Is(err, errQueueComplete) {
+			fmt.Fprintf(log, "relay %d completed: laps queue complete\n", relay.ID)
+			_ = relaycore.EndRelay(r.store, relay.ID, relaycore.EndReasonQueueComplete)
+			return runTask{}, routeSelection{}, false, true, nil
+		}
+		if errors.Is(err, errQueueHeld) {
+			fmt.Fprintf(log, "relay %d stopped: head lap is held (gated stint); release the gate and start a new relay\n", relay.ID)
+			_ = relaycore.EndRelay(r.store, relay.ID, relaycore.EndReasonQueueHeld)
+			return runTask{}, routeSelection{}, false, true, nil
+		}
 		return runTask{}, routeSelection{}, false, false, err
 	}
 

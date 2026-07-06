@@ -18,7 +18,7 @@ import (
 	"github.com/mitchell-wallace/rally/internal/user_prompt/roleloader"
 )
 
-var headPullLap = func(ctx context.Context, workspaceDir string) (laps.Lap, error) {
+var headPullLap = func(ctx context.Context, workspaceDir string) (laps.Lap, laps.QueueState, error) {
 	return (&laps.Adapter{WorkspaceDir: workspaceDir}).ClaimHead(ctx)
 }
 
@@ -164,7 +164,11 @@ func recentContextStatus(t store.TryRecord) string {
 	return status
 }
 
-var errQueueEmpty = errors.New("laps queue empty")
+var (
+	errQueueEmpty    = errors.New("laps queue empty")
+	errQueueComplete = errors.New("laps queue complete")
+	errQueueHeld     = errors.New("laps queue held")
+)
 
 func (r *Runner) resolveRunTask(ctx context.Context) (runTask, error) {
 	task := runTask{
@@ -179,12 +183,17 @@ func (r *Runner) resolveRunTask(ctx context.Context) (runTask, error) {
 		return task, nil
 	}
 
-	lap, err := headPullLap(ctx, r.cfg.WorkspaceDir)
+	lap, state, err := headPullLap(ctx, r.cfg.WorkspaceDir)
 	if err != nil {
 		return runTask{}, fmt.Errorf("claim head lap: %w", err)
 	}
-	if lap == laps.NoLap {
+	switch state {
+	case laps.StateEmpty:
 		return runTask{}, errQueueEmpty
+	case laps.StateComplete:
+		return runTask{}, errQueueComplete
+	case laps.StateHeld:
+		return runTask{}, errQueueHeld
 	}
 
 	task.Name = lap.Title

@@ -10,7 +10,7 @@ import (
 	"github.com/mitchell-wallace/rally/internal/laps"
 )
 
-func withStartupHeadPull(t *testing.T, fn func(context.Context, string) (laps.Lap, error)) {
+func withStartupHeadPull(t *testing.T, fn func(context.Context, string) (laps.Lap, laps.QueueState, error)) {
 	t.Helper()
 	prev := headPullForStartupValidation
 	headPullForStartupValidation = fn
@@ -79,8 +79,8 @@ func TestValidateRelayStartupRoutes_PartialFailurePromptConfirmSucceeds(t *testi
 		},
 	}
 
-	withStartupHeadPull(t, func(context.Context, string) (laps.Lap, error) {
-		return laps.Lap{Title: "assigned"}, nil
+	withStartupHeadPull(t, func(context.Context, string) (laps.Lap, laps.QueueState, error) {
+		return laps.Lap{Title: "assigned"}, laps.StateLap, nil
 	})
 
 	var output bytes.Buffer
@@ -112,8 +112,8 @@ func TestValidateRelayStartupRoutes_PartialFailurePromptEOFExits(t *testing.T) {
 		},
 	}
 
-	withStartupHeadPull(t, func(context.Context, string) (laps.Lap, error) {
-		return laps.Lap{Title: "assigned"}, nil
+	withStartupHeadPull(t, func(context.Context, string) (laps.Lap, laps.QueueState, error) {
+		return laps.Lap{Title: "assigned"}, laps.StateLap, nil
 	})
 
 	var output bytes.Buffer
@@ -141,8 +141,8 @@ func TestValidateRelayStartupRoutes_MissingDefaultWithQueuePrompts(t *testing.T)
 		},
 	}
 
-	withStartupHeadPull(t, func(context.Context, string) (laps.Lap, error) {
-		return laps.Lap{Title: "assigned"}, nil
+	withStartupHeadPull(t, func(context.Context, string) (laps.Lap, laps.QueueState, error) {
+		return laps.Lap{Title: "assigned"}, laps.StateLap, nil
 	})
 
 	var output bytes.Buffer
@@ -189,6 +189,35 @@ func TestValidateRelayStartupRoutes_MissingDefaultWithEmptyQueueWarnsAndExits(t 
 	}
 	if strings.Contains(output.String(), continueRoutesPrompt) {
 		t.Fatalf("output = %q, want no prompt on empty queue", output.String())
+	}
+}
+
+func TestRelayQueueEmpty_QueueStates(t *testing.T) {
+	tests := []struct {
+		name  string
+		lap   laps.Lap
+		state laps.QueueState
+		want  bool
+	}{
+		{name: "empty", state: laps.StateEmpty, want: true},
+		{name: "complete", state: laps.StateComplete, want: true},
+		{name: "held", state: laps.StateHeld, want: false},
+		{name: "lap", lap: laps.Lap{Title: "work"}, state: laps.StateLap, want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			withStartupHeadPull(t, func(context.Context, string) (laps.Lap, laps.QueueState, error) {
+				return tt.lap, tt.state, nil
+			})
+			got, err := relayQueueEmpty(context.Background(), t.TempDir(), true)
+			if err != nil {
+				t.Fatalf("relayQueueEmpty() error = %v", err)
+			}
+			if got != tt.want {
+				t.Fatalf("relayQueueEmpty() = %v, want %v", got, tt.want)
+			}
+		})
 	}
 }
 

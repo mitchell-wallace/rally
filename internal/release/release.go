@@ -31,7 +31,7 @@ const (
 // contract, including installed hooks and checked-in agent workflows. Bump this
 // when Rally starts relying on a newer laps CLI feature. It is advisory: rally
 // warns but never hard-fails when the installed laps is older.
-const MinLapsVersion = "0.8.1"
+const MinLapsVersion = "1.0.0"
 
 // Tool describes a GitHub-released binary that rally knows how to install and
 // upgrade. Rally ships laps as a first-class companion, so the install/upgrade

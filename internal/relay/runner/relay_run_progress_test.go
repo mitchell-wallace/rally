@@ -748,12 +748,12 @@ func TestE2E_WindowsFreezeDisabledRetryBudgetExhaustion(t *testing.T) {
 func TestProbationIncompletePromotesToActive(t *testing.T) {
 	oldHeadPull := headPullLap
 	pullCount := 0
-	headPullLap = func(context.Context, string) (laps.Lap, error) {
+	headPullLap = func(context.Context, string) (laps.Lap, laps.QueueState, error) {
 		pullCount++
 		if pullCount == 1 {
-			return laps.Lap{ID: "lap-1", Title: "probation test", Assignee: "senior"}, nil
+			return laps.Lap{ID: "lap-1", Title: "probation test", Assignee: "senior"}, laps.StateLap, nil
 		}
-		return laps.NoLap, nil
+		return laps.NoLap, laps.StateEmpty, nil
 	}
 	defer func() { headPullLap = oldHeadPull }()
 

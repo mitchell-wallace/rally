@@ -22,10 +22,15 @@ jobs:
         with:
           node-version: "24"
 
+      # Temporary until laps v1.0.0 is tagged (coordinated release): build from
+      # laps dev with an injected version so it passes rally's MinLapsVersion
+      # floor. Re-pin to `go install ...@v1.0.0` at release time.
       - name: Install laps
         run: |
           mkdir -p "$HOME/.local/bin"
-          GOBIN="$HOME/.local/bin" go install github.com/mitchell-wallace/laps/cmd/laps@v0.8.1
+          git clone --depth 1 --branch dev https://github.com/mitchell-wallace/laps "$RUNNER_TEMP/laps"
+          cd "$RUNNER_TEMP/laps"
+          go build -ldflags "-X main.version=1.0.0-dev.$(git rev-parse --short HEAD)" -o "$HOME/.local/bin/laps" ./cmd/laps
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
       - name: Install opencode
@@ -59,10 +64,15 @@ jobs:
         with:
           node-version: "24"
 
+      # Temporary until laps v1.0.0 is tagged (coordinated release): build from
+      # laps dev with an injected version so it passes rally's MinLapsVersion
+      # floor. Re-pin to `go install ...@v1.0.0` at release time.
       - name: Install laps
         run: |
           mkdir -p "$HOME/.local/bin"
-          GOBIN="$HOME/.local/bin" go install github.com/mitchell-wallace/laps/cmd/laps@v0.8.1
+          git clone --depth 1 --branch dev https://github.com/mitchell-wallace/laps "$RUNNER_TEMP/laps"
+          cd "$RUNNER_TEMP/laps"
+          go build -ldflags "-X main.version=1.0.0-dev.$(git rev-parse --short HEAD)" -o "$HOME/.local/bin/laps" ./cmd/laps
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
       - name: Install opencode

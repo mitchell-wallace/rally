@@ -88,13 +88,13 @@ func TestLapsHeadTaskPassedToExecutor(t *testing.T) {
 	executors := map[string]harnessapi.Executor{"claude": exec}
 
 	oldHeadPull := headPullLap
-	headPullLap = func(context.Context, string) (laps.Lap, error) {
+	headPullLap = func(context.Context, string) (laps.Lap, laps.QueueState, error) {
 		return laps.Lap{
 			ID:          "lap-42",
 			Title:       "Implement auth",
 			Description: "Add login and session handling.",
 			Assignee:    "alice",
-		}, nil
+		}, laps.StateLap, nil
 	}
 	defer func() { headPullLap = oldHeadPull }()
 
@@ -145,8 +145,8 @@ func TestLapsInstructionsFileUsed(t *testing.T) {
 	executors := map[string]harnessapi.Executor{"claude": exec}
 
 	oldHeadPull := headPullLap
-	headPullLap = func(context.Context, string) (laps.Lap, error) {
-		return laps.Lap{Title: "task", Description: "do work"}, nil
+	headPullLap = func(context.Context, string) (laps.Lap, laps.QueueState, error) {
+		return laps.Lap{Title: "task", Description: "do work"}, laps.StateLap, nil
 	}
 	defer func() { headPullLap = oldHeadPull }()
 
@@ -189,8 +189,8 @@ func TestLapsInstructionsFileFallsBackToDefault(t *testing.T) {
 	executors := map[string]harnessapi.Executor{"claude": exec}
 
 	oldHeadPull := headPullLap
-	headPullLap = func(context.Context, string) (laps.Lap, error) {
-		return laps.Lap{Title: "task", Description: "do work"}, nil
+	headPullLap = func(context.Context, string) (laps.Lap, laps.QueueState, error) {
+		return laps.Lap{Title: "task", Description: "do work"}, laps.StateLap, nil
 	}
 	defer func() { headPullLap = oldHeadPull }()
 
@@ -275,8 +275,8 @@ func TestLapsInstructionsUnconfiguredUsesDefault(t *testing.T) {
 	executors := map[string]harnessapi.Executor{"claude": exec}
 
 	oldHeadPull := headPullLap
-	headPullLap = func(context.Context, string) (laps.Lap, error) {
-		return laps.Lap{Title: "task", Description: "do work"}, nil
+	headPullLap = func(context.Context, string) (laps.Lap, laps.QueueState, error) {
+		return laps.Lap{Title: "task", Description: "do work"}, laps.StateLap, nil
 	}
 	defer func() { headPullLap = oldHeadPull }()
 
@@ -324,8 +324,8 @@ func TestRoleInstructionsLoadedForAssignee(t *testing.T) {
 	executors := map[string]harnessapi.Executor{"claude": exec}
 
 	oldHeadPull := headPullLap
-	headPullLap = func(context.Context, string) (laps.Lap, error) {
-		return laps.Lap{Title: "task", Description: "do work", Assignee: "ALICE"}, nil
+	headPullLap = func(context.Context, string) (laps.Lap, laps.QueueState, error) {
+		return laps.Lap{Title: "task", Description: "do work", Assignee: "ALICE"}, laps.StateLap, nil
 	}
 	defer func() { headPullLap = oldHeadPull }()
 
@@ -369,8 +369,8 @@ func TestRoleInstructionsMissingFileIsSilent(t *testing.T) {
 	executors := map[string]harnessapi.Executor{"claude": exec}
 
 	oldHeadPull := headPullLap
-	headPullLap = func(context.Context, string) (laps.Lap, error) {
-		return laps.Lap{Title: "task", Description: "do work", Assignee: "missing"}, nil
+	headPullLap = func(context.Context, string) (laps.Lap, laps.QueueState, error) {
+		return laps.Lap{Title: "task", Description: "do work", Assignee: "missing"}, laps.StateLap, nil
 	}
 	defer func() { headPullLap = oldHeadPull }()
 
@@ -519,7 +519,9 @@ func TestFallbackInstructionsIgnoredWhenCLIPromptProvided(t *testing.T) {
 
 func TestFallbackInstructionsIgnoredInLapsMode(t *testing.T) {
 	oldHeadPull := headPullLap
-	headPullLap = func(context.Context, string) (laps.Lap, error) { return laps.Lap{Title: "configured prompt"}, nil }
+	headPullLap = func(context.Context, string) (laps.Lap, laps.QueueState, error) {
+		return laps.Lap{Title: "configured prompt"}, laps.StateLap, nil
+	}
 	defer func() { headPullLap = oldHeadPull }()
 
 	workspaceDir := t.TempDir()

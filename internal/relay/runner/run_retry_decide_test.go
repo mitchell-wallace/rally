@@ -69,7 +69,9 @@ func TestResumeRetryPassesSessionID(t *testing.T) {
 
 func TestResumeRetryPreservesOutingState(t *testing.T) {
 	oldHeadPull := headPullLap
-	headPullLap = func(context.Context, string) (laps.Lap, error) { return laps.Lap{Title: "test"}, nil }
+	headPullLap = func(context.Context, string) (laps.Lap, laps.QueueState, error) {
+		return laps.Lap{Title: "test"}, laps.StateLap, nil
+	}
 	defer func() { headPullLap = oldHeadPull }()
 
 	workspaceDir := t.TempDir()
@@ -125,7 +127,9 @@ func TestResumeRetryPreservesOutingState(t *testing.T) {
 
 func TestFreshStartRetryClearsOutingState(t *testing.T) {
 	oldHeadPull := headPullLap
-	headPullLap = func(context.Context, string) (laps.Lap, error) { return laps.Lap{Title: "test"}, nil }
+	headPullLap = func(context.Context, string) (laps.Lap, laps.QueueState, error) {
+		return laps.Lap{Title: "test"}, laps.StateLap, nil
+	}
 	defer func() { headPullLap = oldHeadPull }()
 
 	workspaceDir := t.TempDir()
@@ -183,7 +187,9 @@ func TestFreshStartRetryClearsOutingState(t *testing.T) {
 
 func TestResumeRetryMidHandoffPreservesFlag(t *testing.T) {
 	oldHeadPull := headPullLap
-	headPullLap = func(context.Context, string) (laps.Lap, error) { return laps.Lap{Title: "test"}, nil }
+	headPullLap = func(context.Context, string) (laps.Lap, laps.QueueState, error) {
+		return laps.Lap{Title: "test"}, laps.StateLap, nil
+	}
 	defer func() { headPullLap = oldHeadPull }()
 
 	workspaceDir := t.TempDir()
@@ -244,7 +250,9 @@ func TestResumeRetryMidHandoffPreservesFlag(t *testing.T) {
 
 func TestFreshStartRetryMidHandoffClearsFlag(t *testing.T) {
 	oldHeadPull := headPullLap
-	headPullLap = func(context.Context, string) (laps.Lap, error) { return laps.Lap{Title: "test"}, nil }
+	headPullLap = func(context.Context, string) (laps.Lap, laps.QueueState, error) {
+		return laps.Lap{Title: "test"}, laps.StateLap, nil
+	}
 	defer func() { headPullLap = oldHeadPull }()
 
 	workspaceDir := t.TempDir()

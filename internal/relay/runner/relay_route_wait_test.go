@@ -11,6 +11,7 @@ import (
 
 	"github.com/mitchell-wallace/rally/internal/harnessapi"
 	"github.com/mitchell-wallace/rally/internal/laps"
+	relaycore "github.com/mitchell-wallace/rally/internal/relay"
 	"github.com/mitchell-wallace/rally/internal/store"
 )
 
@@ -285,15 +286,15 @@ func TestRunnerRouteIntegration_AssigneesQuotasFreezeAndRoleFiles(t *testing.T) 
 
 	oldHeadPull := headPullLap
 	headPullCalls := 0
-	headPullLap = func(context.Context, string) (laps.Lap, error) {
+	headPullLap = func(context.Context, string) (laps.Lap, laps.QueueState, error) {
 		headPullCalls++
 		switch headPullCalls {
 		case 1, 2:
-			return laps.Lap{Title: "senior task", Description: "work senior item", Assignee: "SENIOR"}, nil
+			return laps.Lap{Title: "senior task", Description: "work senior item", Assignee: "SENIOR"}, laps.StateLap, nil
 		case 3, 4:
-			return laps.Lap{Title: "junior task", Description: "work junior item", Assignee: "JUNIOR"}, nil
+			return laps.Lap{Title: "junior task", Description: "work junior item", Assignee: "JUNIOR"}, laps.StateLap, nil
 		default:
-			return laps.Lap{Title: "default task", Description: "work default item"}, nil
+			return laps.Lap{Title: "default task", Description: "work default item"}, laps.StateLap, nil
 		}
 	}
 	defer func() { headPullLap = oldHeadPull }()
@@ -355,6 +356,89 @@ func TestRunnerRouteIntegration_AssigneesQuotasFreezeAndRoleFiles(t *testing.T) 
 	st, _ := r.resilience.GetState(ResilienceKey{Harness: "opencode", Model: cheapTestModel})
 	if st != StatePaused {
 		t.Fatalf("cheap model state = %s, want %s after simulated freeze", st, StatePaused)
+	}
+}
+
+func TestRunnerTerminalQueueStatesEndRelay(t *testing.T) {
+	tests := []struct {
+		name       string
+		state      laps.QueueState
+		endReason  string
+		logSnippet string
+	}{
+		{
+			name:       "empty",
+			state:      laps.StateEmpty,
+			endReason:  relaycore.EndReasonQueueEmpty,
+			logSnippet: "completed: laps queue empty",
+		},
+		{
+			name:       "complete",
+			state:      laps.StateComplete,
+			endReason:  relaycore.EndReasonQueueComplete,
+			logSnippet: "completed: laps queue complete",
+		},
+		{
+			name:       "held",
+			state:      laps.StateHeld,
+			endReason:  relaycore.EndReasonQueueHeld,
+			logSnippet: "stopped: head lap is held",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			workspaceDir := t.TempDir()
+			rallyDir := store.RallyDir(workspaceDir)
+			os.MkdirAll(rallyDir, 0o755)
+			initRepo(t, workspaceDir)
+
+			s := newTestStore(t, rallyDir)
+			dataDir := t.TempDir()
+			oldHeadPull := headPullLap
+			headPullLap = func(context.Context, string) (laps.Lap, laps.QueueState, error) {
+				return laps.NoLap, tt.state, nil
+			}
+			defer func() { headPullLap = oldHeadPull }()
+
+			exec := &funcExecutor{
+				fn: func(context.Context, harnessapi.RunOptions) (*harnessapi.TryResult, error) {
+					t.Fatal("executor should not run for terminal queue state")
+					return nil, nil
+				},
+			}
+			r := NewRunner(s, Config{
+				WorkspaceDir:     workspaceDir,
+				DataDir:          dataDir,
+				RouteSpecs:       map[string][]string{"default": {"cx:1"}},
+				TargetIterations: 1,
+				LapsEnabled:      true,
+				Resolver:         testResolver,
+			}, map[string]harnessapi.Executor{"codex": exec})
+
+			if err := r.Run(context.Background()); err != nil {
+				t.Fatalf("Run() error = %v", err)
+			}
+
+			relays := s.AllRelays()
+			if len(relays) != 1 {
+				t.Fatalf("relays = %d, want 1", len(relays))
+			}
+			if relays[0].EndReason != tt.endReason {
+				t.Fatalf("EndReason = %q, want %q", relays[0].EndReason, tt.endReason)
+			}
+			if relays[0].EndedAt == "" {
+				t.Fatal("EndedAt is empty, want terminal relay")
+			}
+
+			logData, err := os.ReadFile(relayLogPath(dataDir, workspaceDir, relays[0].ID))
+			if err != nil {
+				t.Fatalf("read relay log: %v", err)
+			}
+			if !strings.Contains(string(logData), tt.logSnippet) {
+				t.Fatalf("relay log = %q, want %q", string(logData), tt.logSnippet)
+			}
+		})
 	}
 }
 

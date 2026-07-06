@@ -16,8 +16,8 @@ import (
 
 func TestIncompleteRetryPromptGuidance(t *testing.T) {
 	oldHeadPull := headPullLap
-	headPullLap = func(context.Context, string) (laps.Lap, error) {
-		return laps.Lap{ID: "lap-1", Title: "test", Description: "finish lap", Assignee: "senior"}, nil
+	headPullLap = func(context.Context, string) (laps.Lap, laps.QueueState, error) {
+		return laps.Lap{ID: "lap-1", Title: "test", Description: "finish lap", Assignee: "senior"}, laps.StateLap, nil
 	}
 	defer func() { headPullLap = oldHeadPull }()
 
@@ -66,8 +66,8 @@ func TestIncompleteRetryPromptGuidance(t *testing.T) {
 
 func TestIncompleteRetryCarriesFinalizationGuidance(t *testing.T) {
 	oldHeadPull := headPullLap
-	headPullLap = func(context.Context, string) (laps.Lap, error) {
-		return laps.Lap{ID: "lap-1", Title: "test", Description: "finish lap", Assignee: "senior"}, nil
+	headPullLap = func(context.Context, string) (laps.Lap, laps.QueueState, error) {
+		return laps.Lap{ID: "lap-1", Title: "test", Description: "finish lap", Assignee: "senior"}, laps.StateLap, nil
 	}
 	defer func() { headPullLap = oldHeadPull }()
 
@@ -134,8 +134,8 @@ func TestIncompleteRetryCarriesFinalizationGuidance(t *testing.T) {
 
 func TestLeftoverWorkGuidance_DirtyTree(t *testing.T) {
 	oldHeadPull := headPullLap
-	headPullLap = func(context.Context, string) (laps.Lap, error) {
-		return laps.Lap{ID: "lap-1", Title: "test", Description: "test task", Assignee: "senior"}, nil
+	headPullLap = func(context.Context, string) (laps.Lap, laps.QueueState, error) {
+		return laps.Lap{ID: "lap-1", Title: "test", Description: "test task", Assignee: "senior"}, laps.StateLap, nil
 	}
 	defer func() { headPullLap = oldHeadPull }()
 
@@ -185,8 +185,8 @@ func TestLeftoverWorkGuidance_DirtyTree(t *testing.T) {
 
 func TestLeftoverWorkGuidance_CleanTree(t *testing.T) {
 	oldHeadPull := headPullLap
-	headPullLap = func(context.Context, string) (laps.Lap, error) {
-		return laps.Lap{ID: "lap-1", Title: "test", Description: "test task", Assignee: "senior"}, nil
+	headPullLap = func(context.Context, string) (laps.Lap, laps.QueueState, error) {
+		return laps.Lap{ID: "lap-1", Title: "test", Description: "test task", Assignee: "senior"}, laps.StateLap, nil
 	}
 	defer func() { headPullLap = oldHeadPull }()
 
@@ -236,8 +236,8 @@ func TestLeftoverWorkGuidance_CleanTree(t *testing.T) {
 
 func TestLeftoverWorkGuidance_OnlyRallyDirty(t *testing.T) {
 	oldHeadPull := headPullLap
-	headPullLap = func(context.Context, string) (laps.Lap, error) {
-		return laps.Lap{ID: "lap-1", Title: "test", Description: "test task", Assignee: "senior"}, nil
+	headPullLap = func(context.Context, string) (laps.Lap, laps.QueueState, error) {
+		return laps.Lap{ID: "lap-1", Title: "test", Description: "test task", Assignee: "senior"}, laps.StateLap, nil
 	}
 	defer func() { headPullLap = oldHeadPull }()
 

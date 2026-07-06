@@ -62,10 +62,11 @@ The intended flow is:
 - **Laps is Rally's permanent backend**, not one work-queue option among many.
   Rally always drives laps; the two ship and version together. Code may assume
   laps is present.
-- **Current Rally source supports laps v0.8.1 or newer.** Rally relies on the
-  claim file introduced in the v0.8.x line so bare `laps done` completes the
-  lap Rally assigned. Run `rally update` to install or upgrade the bundled
-  companion.
+- **Current Rally source supports laps v1.0.0 or newer.** Rally relies on the
+  laps consumer contract (laps README): the JSON claim file so bare `laps done`
+  completes the lap Rally assigned, the `10`/`11`/`12` queue-state exit codes
+  on `get`/`claim` (held/empty/complete), and `laps list --oneline`. Run
+  `rally update` to install or upgrade the bundled companion.
 - **Commit `.laps/laps.json`**: The work queue state file `.laps/laps.json` tracks
   the campaign's progress and must be committed and pushed to Git. Do not
   gitignore, delete, or omit it from commits.

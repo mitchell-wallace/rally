@@ -18,7 +18,7 @@ import (
 const continueRoutesPrompt = "Continue anyway?"
 const retiredUIRoleAdvisory = "ui is no longer a built-in role; treating it as a custom role (UI/branding guidance now belongs in repo skills)"
 
-var headPullForStartupValidation = func(ctx context.Context, workspaceDir string) (laps.Lap, error) {
+var headPullForStartupValidation = func(ctx context.Context, workspaceDir string) (laps.Lap, laps.QueueState, error) {
 	return (&laps.Adapter{WorkspaceDir: workspaceDir}).HeadPull(ctx)
 }
 
@@ -172,11 +172,16 @@ func relayQueueEmpty(ctx context.Context, workspaceDir string, lapsEnabled bool)
 		return true, nil
 	}
 
-	lap, err := headPullForStartupValidation(ctx, workspaceDir)
+	_, state, err := headPullForStartupValidation(ctx, workspaceDir)
 	if err != nil {
 		return false, err
 	}
-	return lap == laps.NoLap, nil
+	switch state {
+	case laps.StateEmpty, laps.StateComplete:
+		return true, nil
+	default:
+		return false, nil
+	}
 }
 
 func promptContinueRoutes(in io.Reader, out io.Writer) bool {

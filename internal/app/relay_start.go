@@ -215,8 +215,28 @@ func StartRelay(ctx context.Context, opts RelayStartOptions) error {
 	if err := r.Run(runCtx); err != nil {
 		return err
 	}
-	fmt.Fprintln(out, "Relay complete.")
+	fmt.Fprintln(out, relayEndLine(s))
 	return nil
+}
+
+// relayEndLine tailors the final operator-facing line to the queue state that
+// ended the relay: a held stint means work remains behind a gate the operator
+// must release, which "Relay complete." would hide.
+func relayEndLine(s *store.Store) string {
+	relays := s.RecentRelays(1)
+	if len(relays) == 0 {
+		return "Relay complete."
+	}
+	switch relays[0].EndReason {
+	case relay.EndReasonQueueHeld:
+		return "Relay stopped: the laps queue head is a held stint. Release it (laps stints release <name>) and start a new relay."
+	case relay.EndReasonQueueComplete:
+		return "Relay complete: laps queue complete."
+	case relay.EndReasonQueueEmpty:
+		return "Relay complete: laps queue empty."
+	default:
+		return "Relay complete."
+	}
 }
 
 func telemetryConfigForRelay(cfg config.V2Config, dataDir string, build TelemetryBuild) telemetry.Config {

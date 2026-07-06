@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/mitchell-wallace/rally/internal/config"
+	"github.com/mitchell-wallace/rally/internal/relay"
 	"github.com/mitchell-wallace/rally/internal/store"
 )
 
@@ -400,5 +401,36 @@ func writeLegacyJSONL[T any](t *testing.T, path string, records ...T) {
 		if _, err := f.Write(append(data, '\n')); err != nil {
 			t.Fatalf("write %s: %v", path, err)
 		}
+	}
+}
+
+func TestRelayEndLineByEndReason(t *testing.T) {
+	tests := []struct {
+		reason string
+		want   string
+	}{
+		{relay.EndReasonQueueHeld, "Relay stopped: the laps queue head is a held stint. Release it (laps stints release <name>) and start a new relay."},
+		{relay.EndReasonQueueComplete, "Relay complete: laps queue complete."},
+		{relay.EndReasonQueueEmpty, "Relay complete: laps queue empty."},
+		{relay.EndReasonCompleted, "Relay complete."},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.reason, func(t *testing.T) {
+			s, err := store.NewStore(t.TempDir())
+			if err != nil {
+				t.Fatalf("new store: %v", err)
+			}
+			rec, err := relay.CreateRelay(s, 1, "cx:1")
+			if err != nil {
+				t.Fatalf("create relay: %v", err)
+			}
+			if err := relay.EndRelay(s, rec.ID, tt.reason); err != nil {
+				t.Fatalf("end relay: %v", err)
+			}
+			if got := relayEndLine(s); got != tt.want {
+				t.Fatalf("relayEndLine = %q, want %q", got, tt.want)
+			}
+		})
 	}
 }
