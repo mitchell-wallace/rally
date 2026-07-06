@@ -66,8 +66,9 @@ subsequent wake-ups only verify health and exit.
   (complete 89/89, shipped in 0.12.0; NR corpus in its draft.md) + fresh New
   Relic queries (`--profile rally --accountId 8182741`). Lap 5 consumes then
   archives it.
-- Laps source: `/workspace/laps`, dev branch (stints + gating implemented there;
-  installed binary is 0.8.1 from main until lap 11 switches us to dev builds).
+- Laps source: `/workspace/laps`, dev branch. Installed binary is a dev build
+  (`1.0.0-dev.da489f9`, ldflags-injected version); rally MinLapsVersion is
+  1.0.0 and rally CI builds laps from dev until laps v1.0.0 tags (rall-94fc).
 
 ## Machine facts (this container)
 
@@ -84,6 +85,19 @@ subsequent wake-ups only verify health and exit.
 
 ## Session log (newest first; keep ~5 entries, prune older)
 
+- **2026-07-06 (session 9, autonomous, 05:43 wake)** — queue lap 11 (rall-f734
+  rally adopts laps v3) DONE (0e89c50). Session 8 (00:43) DIED mid-codex-lap
+  AGAIN — it ended its assistant turn while codex ran in background; harness
+  killed both (headless `claude -p` does NOT survive turn end; block in-turn
+  until codex exits). Recovered its in-flight source diff (it was correct and
+  complete), re-delegated the 12-file test migration to codex (8 new tests,
+  187k tokens, clean), chief-fixed the hardcoded version-warning test + added
+  queue-state-aware `rally start` end lines. MinLapsVersion 0.8.1→1.0.0; CI
+  builds laps from dev with injected version until v1.0.0 tags (re-pin at
+  rall-94fc). Verified live: exit codes 10/11/12, JSON+stint-scoped claims,
+  stint descent (`-f stints/<name>.laps` is the file spelling), real codex
+  relay completed a stint-served lap end-to-end. Next head lap: rall-03b6
+  (rally TUI laps tab).
 - **2026-07-05 (session 7, autonomous, 19:43 wake)** — recovered session 6's
   orphaned queue tick (2545aa6), then queue lap 10 (rall-953d laps stints
   readiness review) DONE. Laps dev is READY: build+full suite+vet green, CI
