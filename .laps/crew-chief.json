@@ -163,11 +163,11 @@
       "title": "Dogfood in-dev rally+laps; staging test-drive",
       "description": "Switch crew-chief workflow to the in-development rally+laps binaries for larger delegated tasks (use rally relays where role-shaped). Run a full test-driving-rally pass; when it clears, merge dev -\u003e staging.",
       "assignee": "crew-chief",
-      "isDone": false,
+      "isDone": true,
       "order": 917504,
       "createdAt": "2026-07-05T00:05:52.923370085Z",
-      "updatedAt": "2026-07-05T00:05:52.923370085Z",
-      "completedAt": null
+      "updatedAt": "2026-07-06T20:51:41.540402997Z",
+      "completedAt": "2026-07-06T20:51:41.540402997Z"
     },
     {
       "kind": "lap",

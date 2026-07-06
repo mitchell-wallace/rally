@@ -85,6 +85,22 @@ subsequent wake-ups only verify health and exit.
 
 ## Session log (newest first; keep ~5 entries, prune older)
 
+- **2026-07-06 (session 12, autonomous, 20:43 wake)** — queue lap 14 (rall-dbfb
+  dogfood + staging test-drive) DONE. Session 11 (15:43) died at 15:53 to an
+  API connection error mid-test-drive, leaving good uncommitted artifacts:
+  fresh dev binaries installed (rally v0.13.0-dev, laps 1.0.0-dev.8ad0098),
+  manual drives for laps/multi-harness/resume/config, SKILL.md slug refresh.
+  Chief verified all of it from relay records + logs rather than redoing:
+  round-robin op→cx alternated, laps queue drained with recorded_laps,
+  resume relay resumed. Filled gaps: real-backend suite 7/8 (agy fail is the
+  documented env auth issue), config-validation outputs, weighted mix op:2,
+  tail/progress/instructions, full build+vet+test green. PASS recorded in
+  tmp/session-handoff.md (gitignored, intentional). Promoted BOTH repos:
+  rally staging 8d30bce→2c2df59, laps staging da519c2→8ad0098 (ff, pushed).
+  FINDING (recorded, not fixed): single-runner retry exhaustion ends relay
+  with end_reason "config_error" (relay_route_wait.go:67) — misleading label,
+  consumer-facing contract, deferred to nitpicker lap rall-c3a8. Next head
+  lap: rall-94fc (coordinated v1.0.0 release).
 - **2026-07-06 (session 10, autonomous, 10:43 wake)** — queue lap 12
   (rall-03b6 rally TUI laps tab) DONE (11a6ad0). Session 9's continuation
   died at 06:29 to a USAGE LIMIT (resets 10:40 UTC — new death mode, not the
