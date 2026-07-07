@@ -22,15 +22,14 @@ jobs:
         with:
           node-version: "24"
 
-      # Temporary until laps v1.0.0 is tagged (coordinated release): build from
-      # laps dev with an injected version so it passes rally's MinLapsVersion
-      # floor. Re-pin to `go install ...@v1.0.0` at release time.
+      # Install the released laps companion (pinned; bump alongside
+      # MinLapsVersion). Release binaries carry the ldflags-injected version;
+      # `go install` builds report "dev" and would trip the version floor.
       - name: Install laps
         run: |
           mkdir -p "$HOME/.local/bin"
-          git clone --depth 1 --branch dev https://github.com/mitchell-wallace/laps "$RUNNER_TEMP/laps"
-          cd "$RUNNER_TEMP/laps"
-          go build -ldflags "-X main.version=1.0.0-dev.$(git rev-parse --short HEAD)" -o "$HOME/.local/bin/laps" ./cmd/laps
+          curl -fsSL https://github.com/mitchell-wallace/laps/releases/download/v1.0.0/laps_1.0.0_linux_amd64.tar.gz | tar -xz -C "$RUNNER_TEMP" laps
+          install -m 0755 "$RUNNER_TEMP/laps" "$HOME/.local/bin/laps"
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
       - name: Install opencode
@@ -64,15 +63,14 @@ jobs:
         with:
           node-version: "24"
 
-      # Temporary until laps v1.0.0 is tagged (coordinated release): build from
-      # laps dev with an injected version so it passes rally's MinLapsVersion
-      # floor. Re-pin to `go install ...@v1.0.0` at release time.
+      # Install the released laps companion (pinned; bump alongside
+      # MinLapsVersion). Release binaries carry the ldflags-injected version;
+      # `go install` builds report "dev" and would trip the version floor.
       - name: Install laps
         run: |
           mkdir -p "$HOME/.local/bin"
-          git clone --depth 1 --branch dev https://github.com/mitchell-wallace/laps "$RUNNER_TEMP/laps"
-          cd "$RUNNER_TEMP/laps"
-          go build -ldflags "-X main.version=1.0.0-dev.$(git rev-parse --short HEAD)" -o "$HOME/.local/bin/laps" ./cmd/laps
+          curl -fsSL https://github.com/mitchell-wallace/laps/releases/download/v1.0.0/laps_1.0.0_linux_amd64.tar.gz | tar -xz -C "$RUNNER_TEMP" laps
+          install -m 0755 "$RUNNER_TEMP/laps" "$HOME/.local/bin/laps"
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
       - name: Install opencode
