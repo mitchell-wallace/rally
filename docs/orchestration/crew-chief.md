@@ -108,6 +108,17 @@ harness memory dir (decision-merge-gates-2026-07-10).
 
 ## Session log (newest first; keep ~5 entries, prune older)
 
+- **2026-07-10 (session 13 cont., ~13:30 UTC)** — Staging CI fix-forward
+  BOTH repos green (rally ae5d23e: chief's gofmt miss on tui.go + fresh
+  stdlib CVE GO-2026-5856 → Go 1.26.5 bump; laps 45ffe48: same bump
+  preemptively). mbtw session 2 DONE (5565470, 700k tok): remaining 3 P0s
+  (daily rollover via Page Lifecycle resume — 2-line surgical fix w/ tests;
+  sync-paused copy; expired-prayer answering) + 2 P1s; chief spot-reviewed +
+  typecheck; PROMOTED mbtw dev→staging (7bb69f9, merge commit per repo
+  convention; 2 test conflicts vs June-19 staging tweaks resolved to dev's
+  verified side, conflicted unit file re-run green 31/31). ALL SIX mbtw P0s
+  now on staging. Session 3 (P1 tweaks) dispatched. Monday: rally+laps
+  staging→main (both staging CIs green at ae5d23e/45ffe48) + nitpicker.
 - **2026-07-10 (session 13 cont., ~09:45 UTC)** — TEST-DRIVE PASS, staging
   promoted: rally 7301b00, laps 62d4ae9 (both pushed; CI watched). Suite 7/8
   (agy env-fail only). Live drives: laps queue drained incl. resume-after-
