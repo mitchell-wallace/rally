@@ -251,6 +251,7 @@ The final binary was built only at `./bin/rally`.
 - No `rally start`/laps dogfood relay was needed for this bounded UI change;
   the real built binary, tmux TTY, config writer, `routes check`, and relaunch
   path were exercised directly.
-- `.laps/tmp/` was already untracked at session start. Its nested runtime state
-  was preserved and added only to this checkout's `.git/info/exclude` so the
-  requested final worktree is clean without deleting or committing it.
+- `.laps/tmp/` was already untracked at session start. Rally's tracked ignore
+  rules explicitly re-include direct `.laps/*` children, so a checkout-local
+  exclude could not make status clean. The directory was preserved intact at
+  `/tmp/rally-preexisting-laps-tmp-2026-07-10` rather than deleted or committed.
