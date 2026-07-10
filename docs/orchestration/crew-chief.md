@@ -108,6 +108,17 @@ harness memory dir (decision-merge-gates-2026-07-10).
 
 ## Session log (newest first; keep ~5 entries, prune older)
 
+- **2026-07-10 (session 13 cont., ~17:30 UTC)** — mbtw sessions 3+4 DONE and
+  chief-reviewed: ALL P1s (streak high scores use row-locked monotonic
+  max-merge — reviewed; segmented controls; list-view delete; five tweaks
+  found already-landed, coverage added) and the notification-bell P2
+  (design-note-first: local-only versioned envelope, archive history
+  decoupled from clearable rows, taxonomy-compliant placement; 1039 unit/
+  525 component/161 integration/5 e2e green). Staging promoted per batch:
+  4b933a8 (P1s), 652ea6f (bell; June-19 staging-only test tweaks now fully
+  superseded by dev-side resolutions — future merges won't conflict).
+  Session 5 (tappable chips) dispatched. rally/laps: idle by design until
+  Monday release.
 - **2026-07-10 (session 13 cont., ~13:30 UTC)** — Staging CI fix-forward
   BOTH repos green (rally ae5d23e: chief's gofmt miss on tui.go + fresh
   stdlib CVE GO-2026-5856 → Go 1.26.5 bump; laps 45ffe48: same bump
