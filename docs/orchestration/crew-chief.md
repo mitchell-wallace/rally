@@ -103,6 +103,20 @@ harness memory dir (decision-merge-gates-2026-07-10).
 
 ## Session log (newest first; keep ~5 entries, prune older)
 
+- **2026-07-10 (session 13 cont., ~08:10 UTC)** — LANDED: rover v0.6.0
+  released (azure-cred isolation via AZURE_CONFIG_DIR + rover login/logout;
+  tmux-on-ssh default with --no-tmux; shellcheck SC2016 fix-forward — NOTE
+  rover's `just lint` does not run shellcheck, CI does). rally TUI config
+  surface landed on dev (Sol chief, 3 commits 0b8092f/9f90dec/e188db3):
+  targeted comment-preserving TOML writes, Config tab (routes/reasoning/
+  providers/custom roles), archguard `roles`->app only; chief re-ran gates +
+  real-config tmux acceptance (only intended byte changed). thenn laps 1-2
+  done (graceful no-systemd errors verified black-box; verify flagged
+  interval timers lack Persistent=true → relay working follow-up then-e79d).
+  pacenotes: design consult (Sol xhigh) adjudicated — edit-in-place, no
+  SQLite, flat ULID notes/, brief-on-demand; repo scaffolded locally,
+  implementation lap running. BLOCKER for user: gh PAT cannot create repos
+  (403) — need pacenotes + pacenotes-data private repos or a token bump.
 - **2026-07-10 (session 13, user brief, 07:10 UTC)** — Expanded mission (see
   above). Wake timer rebuilt: in-session cron (5h) + scheduler v2 (a9f06f7,
   interactive-in-tmux, watchdog-only, running pid in
