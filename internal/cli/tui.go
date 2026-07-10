@@ -98,10 +98,10 @@ func runTui(cmd *cobra.Command, args []string, opts RootOptions) error {
 		return fmt.Errorf("load TUI state: %w", err)
 	}
 	sessionOpts = tuitabs.Options{
-		Title:        "rally tui",
-		Seed:         seed,
-		Agents:       agents,
-		FetchLaps:    makeTuiLapsFetcher(ro.WorkspaceDir),
+		Title:     "rally tui",
+		Seed:      seed,
+		Agents:    agents,
+		FetchLaps: makeTuiLapsFetcher(ro.WorkspaceDir),
 		DoneHintFunc: func() string {
 			if h := app.RelayEndHint(ro.WorkspaceDir); h != "" {
 				return h + " · q to exit"
