@@ -434,3 +434,19 @@ func TestRelayEndLineByEndReason(t *testing.T) {
 		})
 	}
 }
+
+func TestRelayEndLineOpenRecordReportsStoppedNotComplete(t *testing.T) {
+	s, err := store.NewStore(t.TempDir())
+	if err != nil {
+		t.Fatalf("new store: %v", err)
+	}
+	// An operator stop leaves the record open (no EndedAt) so the relay stays
+	// resumable; the end line must not claim completion.
+	if _, err := relay.CreateRelay(s, 4, "op:1"); err != nil {
+		t.Fatalf("create relay: %v", err)
+	}
+	want := "Relay stopped with work remaining: resume with `rally start --resume` (or --new to discard)."
+	if got := relayEndLine(s); got != want {
+		t.Fatalf("relayEndLine = %q, want %q", got, want)
+	}
+}

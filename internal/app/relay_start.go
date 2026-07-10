@@ -221,11 +221,17 @@ func StartRelay(ctx context.Context, opts RelayStartOptions) error {
 
 // relayEndLine tailors the final operator-facing line to the queue state that
 // ended the relay: a held stint means work remains behind a gate the operator
-// must release, which "Relay complete." would hide.
+// must release, and an operator stop leaves a resumable open record — both of
+// which "Relay complete." would hide.
 func relayEndLine(s *store.Store) string {
 	relays := s.RecentRelays(1)
 	if len(relays) == 0 {
 		return "Relay complete."
+	}
+	// An open record (no EndedAt) is an operator stop or interruption: the
+	// relay is intentionally left resumable, so do not call it complete.
+	if relays[0].EndedAt == "" {
+		return "Relay stopped with work remaining: resume with `rally start --resume` (or --new to discard)."
 	}
 	switch relays[0].EndReason {
 	case relay.EndReasonQueueHeld:
@@ -237,6 +243,17 @@ func relayEndLine(s *store.Store) string {
 	default:
 		return "Relay complete."
 	}
+}
+
+// RelayEndHint reports the same queue-state-aware end line for presentation
+// surfaces (the TUI done banner) that relayEndLine prints on the CLI path.
+// It is evaluated after StartRelay returns, against the workspace's store.
+func RelayEndHint(workspaceDir string) string {
+	s, err := store.NewStore(store.RallyDir(workspaceDir))
+	if err != nil {
+		return ""
+	}
+	return relayEndLine(s)
 }
 
 func telemetryConfigForRelay(cfg config.V2Config, dataDir string, build TelemetryBuild) telemetry.Config {

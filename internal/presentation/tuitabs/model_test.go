@@ -323,3 +323,25 @@ func updateModel(t *testing.T, m model, msg tea.Msg) model {
 	}
 	return got
 }
+
+func TestModelDoneHintFromDoneMsgOverridesStaticBanner(t *testing.T) {
+	m := newTestModel()
+	m = updateModel(t, m, doneMsg{hint: "Relay stopped with work remaining · q to exit"})
+	if !m.done {
+		t.Fatal("model should be done")
+	}
+	bar := m.statusBar()
+	if !strings.Contains(bar, "Relay stopped with work remaining") {
+		t.Fatalf("status bar should carry the end-state hint, got %q", bar)
+	}
+	if strings.Contains(bar, "relay complete") {
+		t.Fatalf("status bar should not claim completion, got %q", bar)
+	}
+
+	// Without a hint the static banner remains.
+	m2 := newTestModel()
+	m2 = updateModel(t, m2, doneMsg{})
+	if bar2 := m2.statusBar(); !strings.Contains(bar2, "relay complete - q to exit") {
+		t.Fatalf("default done banner missing, got %q", bar2)
+	}
+}

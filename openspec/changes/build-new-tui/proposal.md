@@ -17,7 +17,7 @@ The v0.1.x TUI was a simple line-based Bubble Tea app tightly coupled to the old
 - Add inbox panel: message list (pending above addressed), compose mode, reorder, mark addressed
 - Add relay start configuration overlay: editable fields for iteration count and agent mix, defaults from `.rally/config.toml`
 - Add relay resume modal: shown on startup when incomplete relay exists, displays relay state, resume/discard options
-- Add relay stop via keyboard shortcut (graceful stop — complete current try then halt)
+- Add relay stop via keyboard shortcut (graceful stop — cancel the in-flight try cleanly, drain, halt the relay; the record stays open/resumable)
 - Add view navigation: keyboard shortcuts for dashboard/inbox switching
 - Make default (no subcommand) launch the full-screen TUI
 - Add `github.com/charmbracelet/bubbles` dependency

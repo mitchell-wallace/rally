@@ -108,6 +108,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case doneMsg:
 		m.done = true
 		m.workErr = msg.err
+		if msg.hint != "" {
+			m.doneHint = msg.hint
+		}
 		m.statusLine = ""
 		m.refreshTranscript()
 		return m, nil

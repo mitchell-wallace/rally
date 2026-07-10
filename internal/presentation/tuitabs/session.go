@@ -16,8 +16,13 @@ import (
 )
 
 type Options struct {
-	Title        string
-	DoneHint     string
+	Title    string
+	DoneHint string
+	// DoneHintFunc, when set, is evaluated after the session's work function
+	// returns and overrides DoneHint with an end-state-aware banner (e.g.
+	// stopped-with-work-remaining vs complete). It must be fast and safe to
+	// call from a non-UI goroutine.
+	DoneHintFunc func() string
 	Seed         []tuicore.FeedItem
 	Agents       []tuicore.AgentStatusItem
 	Laps         tuicore.LapsSnapshot
@@ -30,6 +35,7 @@ type Options struct {
 type Session struct {
 	title        string
 	doneHint     string
+	doneHintFunc func() string
 	seed         []tuicore.FeedItem
 	agents       []tuicore.AgentStatusItem
 	laps         tuicore.LapsSnapshot
@@ -57,6 +63,7 @@ func NewSession(opts Options) *Session {
 	return &Session{
 		title:        title,
 		doneHint:     opts.DoneHint,
+		doneHintFunc: opts.DoneHintFunc,
 		seed:         cloneFeedItems(opts.Seed),
 		agents:       cloneAgents(opts.Agents),
 		laps:         tuicore.CloneLapsSnapshot(opts.Laps),
@@ -116,7 +123,11 @@ func (s *Session) Run(ctx context.Context, work func(context.Context) error) err
 	go func() {
 		err := work(workCtx)
 		doneCh <- err
-		s.sendAsync(doneMsg{err: err})
+		hint := ""
+		if s.doneHintFunc != nil {
+			hint = s.doneHintFunc()
+		}
+		s.sendAsync(doneMsg{err: err, hint: hint})
 	}()
 
 	finalModel, runErr := p.Run()

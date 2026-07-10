@@ -19,6 +19,9 @@ type transcriptLineMsg struct {
 
 type doneMsg struct {
 	err error
+	// hint, when non-empty, replaces the static done banner with an
+	// end-state-aware line (e.g. stopped-with-work-remaining vs complete).
+	hint string
 }
 
 type enrichMsg struct {
