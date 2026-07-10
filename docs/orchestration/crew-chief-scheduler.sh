@@ -1,6 +1,14 @@
 #!/bin/sh
-# crew-chief-scheduler — spawn a fresh headless crew-chief session on a fixed
-# cadence until a cutoff time, then exit.
+# crew-chief-scheduler — watchdog that revives the crew-chief if no claude
+# session is alive, on a fixed cadence until a cutoff time, then exits.
+#
+# v2 (2026-07-10): sessions are now INTERACTIVE (no -p) and run inside tmux so
+# they have a TTY, keep running past turn end, and the user can attach
+# (`tmux attach -t crew-chief`) or drive them via claude.ai remote control.
+# Because interactive sessions do not exit on their own, each fire first
+# checks for a live claude process and skips if one exists — the in-session
+# cron timer owns the cadence while a session is alive; this loop is only the
+# dead-man's revival path.
 #
 # Source of truth lives in the rally repo (docs/orchestration/); the running
 # copy is installed at ~/.local/bin/crew-chief-scheduler.sh so git checkouts
@@ -10,19 +18,20 @@
 #   setsid nohup ~/.local/bin/crew-chief-scheduler.sh >/dev/null 2>&1 &
 #
 # Env overrides (used by the self-test; defaults are the production values):
-#   CC_INTERVAL  seconds between fire starts        (default 18000 = 5h)
-#   CC_CUTOFF    epoch after which no fire happens  (default 2026-07-08 07:00 UTC,
-#                i.e. 5pm July 8 AEST)
-#   CC_PROMPT    prompt for the session             (default "Crew chief, get to work")
-#   CC_STATE     state/log directory                (default ~/.local/state/crew-chief)
-#   CC_FIRST_DELAY  seconds before the first fire   (default CC_INTERVAL)
+#   CC_INTERVAL  seconds between fire checks       (default 18000 = 5h)
+#   CC_CUTOFF    epoch after which no fire happens (default 2026-07-12 23:00 UTC,
+#                i.e. Monday 2026-07-13 9:00am AEST)
+#   CC_PROMPT    prompt for the session            (default "Crew chief, get to work")
+#   CC_STATE     state/log directory               (default ~/.local/state/crew-chief)
+#   CC_FIRST_DELAY  seconds before the first check (default CC_INTERVAL)
 
 INTERVAL="${CC_INTERVAL:-18000}"
-CUTOFF="${CC_CUTOFF:-1783494000}"
+CUTOFF="${CC_CUTOFF:-1783897200}"
 PROMPT="${CC_PROMPT:-Crew chief, get to work}"
 STATE_DIR="${CC_STATE:-$HOME/.local/state/crew-chief}"
 FIRST_DELAY="${CC_FIRST_DELAY:-$INTERVAL}"
 REPO="/workspace/rally"
+TMUX_SESSION="crew-chief"
 
 mkdir -p "$STATE_DIR"
 LOG="$STATE_DIR/scheduler.log"
@@ -39,7 +48,7 @@ if [ -f "$PIDFILE" ]; then
     fi
 fi
 echo $$ > "$PIDFILE"
-log "scheduler started pid=$$ interval=${INTERVAL}s cutoff=$CUTOFF first_delay=${FIRST_DELAY}s"
+log "scheduler v2 started pid=$$ interval=${INTERVAL}s cutoff=$CUTOFF first_delay=${FIRST_DELAY}s"
 
 next_fire=$(( $(date +%s) + FIRST_DELAY ))
 
@@ -53,12 +62,17 @@ while :; do
         log "cutoff reached, exiting"
         break
     fi
-    stamp=$(date -u '+%Y%m%dT%H%M%SZ')
-    log "firing session ($stamp)"
-    ( cd "$REPO" && claude --dangerously-skip-permissions --model "claude-fable-5" \
-        -p "$PROMPT" ) >> "$STATE_DIR/session-$stamp.log" 2>&1
-    log "session $stamp exited code=$?"
-    # Next fire keeps the original cadence; skip any fires the session overran.
+    if pgrep -x claude >/dev/null 2>&1; then
+        log "skip: claude session already alive"
+    else
+        stamp=$(date -u '+%Y%m%dT%H%M%SZ')
+        log "reviving crew-chief in tmux ($stamp)"
+        tmux kill-session -t "$TMUX_SESSION" 2>/dev/null
+        tmux new-session -d -s "$TMUX_SESSION" -c "$REPO" \
+            "claude --dangerously-skip-permissions --model claude-fable-5 '$PROMPT'" \
+            && log "revival $stamp launched" \
+            || log "revival $stamp FAILED to launch"
+    fi
     next_fire=$(( next_fire + INTERVAL ))
     now=$(date +%s)
     while [ "$next_fire" -le "$now" ]; do
