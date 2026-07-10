@@ -108,6 +108,18 @@ harness memory dir (decision-merge-gates-2026-07-10).
 
 ## Session log (newest first; keep ~5 entries, prune older)
 
+- **2026-07-10/11 (session 13 cont., overnight)** — mbtw sessions 5-7 DONE,
+  reviewed, each promoted to staging (9e0e8a9 chips / 987eab5 double-tap +
+  memory modals / b5cfc86 hints framework). Session 5 died once to a
+  transient sol CAPACITY error mid-lap; continuation chief preserved and
+  completed the partial diff (recovery pattern holds for codex chiefs).
+  Session 7's audit: lazy-loading is implemented+green (44 tests) but NO
+  OpenSpec record exists — chief ruling: verified-done, no retroactive spec
+  reconstruction. P0s+P1s+ALL P2 tweaks complete in 7 sessions. Session 8
+  dispatched: memory-leveling-redesign arc (openspec-driven, ~2-3 bounded
+  sessions, foundation phases first, today-queue-bootstrap-sync dependency
+  flagged). Remaining after: ui-component-library arc, design-first
+  proposals (optimistic stats), Monday rally+laps release.
 - **2026-07-10 (session 13 cont., ~17:30 UTC)** — mbtw sessions 3+4 DONE and
   chief-reviewed: ALL P1s (streak high scores use row-locked monotonic
   max-merge — reviewed; segmented controls; list-view delete; five tweaks
