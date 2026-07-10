@@ -90,16 +90,21 @@ harness memory dir (decision-merge-gates-2026-07-10).
 
 ## Machine facts (this container)
 
-- Scheduler: detached loop `~/.local/bin/crew-chief-scheduler.sh` (source of
-  truth: `docs/orchestration/crew-chief-scheduler.sh`), fires
-  `claude --dangerously-skip-permissions --model claude-fable-5 -p "Crew chief, get to work"`
-  every 5h until 2026-07-08 07:00 UTC (5pm AEST). Logs + pidfile:
+- Scheduler v2 (2026-07-10): watchdog loop `~/.local/bin/crew-chief-scheduler.sh`
+  (source of truth: `docs/orchestration/crew-chief-scheduler.sh`) checks every
+  5h until 2026-07-12 23:00 UTC (Mon 9am AEST); if NO claude process is alive
+  it launches an INTERACTIVE session (no -p) in tmux session `crew-chief`
+  (attachable / remote-controllable). While a session is alive its in-session
+  cron owns the cadence and the watchdog logs "skip". Logs + pidfile:
   `~/.local/state/crew-chief/`. If `kill -0 $(cat ~/.local/state/crew-chief/scheduler.pid)`
   fails, relaunch: `setsid nohup ~/.local/bin/crew-chief-scheduler.sh >/dev/null 2>&1 &`.
-- No cron/systemd/at in this container. `codex exec` needs
-  `--dangerously-bypass-approvals-and-sandbox` (see crew-chief skill references/).
-- User is reachable until ~2026-07-05 01:30 UTC, then largely offline until
-  after July 8.
+- No cron/systemd/at in this container (systemctl absent — `thenn job` cannot
+  run here). `codex exec` needs `--dangerously-bypass-approvals-and-sandbox`
+  (see crew-chief skill references/).
+- The Claude scratchpad dir under /tmp/claude-1000/ can be WIPED mid-session;
+  keep dispatch briefs and reports in repo tmp/ dirs instead.
+- User availability (2026-07-10 brief): Sat ~6-9pm, Sun ~9-11am and ~7-9pm
+  AEST; can answer via remote control. Batch questions for those windows.
 
 ## Session log (newest first; keep ~5 entries, prune older)
 
