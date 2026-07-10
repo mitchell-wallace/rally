@@ -180,7 +180,11 @@ func (d *tomlDocument) patchTableKey(table []string, key string, value interface
 		d.lines = append(d.lines[:i], append([]string{line}, d.lines[assignmentEnd:]...)...)
 		return true
 	}
-	d.lines = append(d.lines[:end], append([]string{renderAssignment(key, value)}, d.lines[end:]...)...)
+	insertAt := end
+	for insertAt > start+1 && strings.TrimSpace(d.lines[insertAt-1]) == "" {
+		insertAt--
+	}
+	d.lines = append(d.lines[:insertAt], append([]string{renderAssignment(key, value)}, d.lines[insertAt:]...)...)
 	return true
 }
 

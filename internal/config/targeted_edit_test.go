@@ -93,6 +93,18 @@ func TestSetReasoningFileSetAndClear(t *testing.T) {
 	}
 }
 
+func TestSetReasoningFileInsertsBeforeTrailingTableWhitespace(t *testing.T) {
+	path := writeTargetedConfig(t, "schema_version = 2\n[reasoning]\njunior = \"medium\"\n\n[providers]\n")
+	if err := SetReasoningFile(path, "default", "high"); err != nil {
+		t.Fatal(err)
+	}
+	got := readTargetedConfig(t, path)
+	want := "[reasoning]\njunior = \"medium\"\ndefault = 'high'\n\n[providers]"
+	if !strings.Contains(got, want) {
+		t.Fatalf("new key did not preserve table separator:\n%s", got)
+	}
+}
+
 func TestSetProviderDisabledFileConvertsOnlyConciseProvider(t *testing.T) {
 	path := writeTargetedConfig(t, `schema_version = 2
 [harness.op.models]
