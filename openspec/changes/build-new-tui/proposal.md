@@ -38,6 +38,7 @@ These are carried forward from the original consolidate-rally-gry design and sho
 
 ### New Capabilities
 - `tui-dashboard`: Full-screen gitui-style terminal UI — bordered panels via bubbles, dashboard view (relay progress + try history), inbox view (message CRUD + FIFO ordering), live try status (runtime, git stats), relay start configuration overlay, responsive layout
+- `tui-config-management`: In-TUI machine-scope management for ordered role routes, per-role reasoning effort, and provider enable/disable state, persisted without reformatting unrelated TOML.
 
 ## Impact
 
@@ -72,3 +73,16 @@ These are carried forward from the original consolidate-rally-gry design and sho
   a TUI later) renders them. Dropped the stale "OnStatus callback" framing — no
   new runner callback interface is needed. Noted that the monitor status line is
   replaced wholesale, not adapted (Decision 8 residual).
+
+### 2026-07-10
+
+- The accepted tabbed TUI is now the implementation base. The next operator
+  surface is a lightweight Config tab rather than a full runtime takeover.
+- This increment covers ordered routes for built-in and custom roles,
+  per-role reasoning effort, and provider enable/disable switches.
+- These shared routing tables are edited in the machine config
+  (`~/.config/rally/config.toml`). Repo config remains an override layer and is
+  not rewritten by this surface.
+- Persistence must retain unrelated TOML and comments. The existing whole-file
+  `SaveV2File` writer is therefore unsuitable for this surface; narrowly scoped
+  mutations are required.

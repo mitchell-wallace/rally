@@ -161,7 +161,7 @@ var allowList = map[string]map[string]bool{
 	"presentation/terminal":  {"keyboard": true, "relay/runner/runtimeevent": true, "style": true},
 	"presentation/tuicore":   {"relay/runner/runtimeevent": true, "style": true},
 	"presentation/tuitabs":   {"presentation/tuicore": true, "relay/runner/runtimeevent": true, "style": true, "keyboard": true},
-	"app":                    {"harnessapi": true, "harness": true, "config": true, "relay": true, "relay/runner": true, "relay/runner/runtimeevent": true, "routing": true, "store": true, "telemetry": true},
+	"app":                    {"harnessapi": true, "harness": true, "config": true, "relay": true, "relay/runner": true, "relay/runner/runtimeevent": true, "roles": true, "routing": true, "store": true, "telemetry": true},
 	"user_prompt/roleloader": {"store": true},
 }
 
