@@ -22,8 +22,8 @@
 
 ## 4. Verification and Handoff
 
-- [ ] 4.1 Run gofmt, `go build ./...`, `go vet ./...`, `go test ./...`, and `go run ./tools/archguard` for each reviewable commit
-- [ ] 4.2 Build `./bin/rally` without modifying global binaries
-- [ ] 4.3 Drive live tmux verification for route edit/reorder/add/remove, reasoning effort, provider toggle, confirmation key isolation, persistence, routes check, and relaunch
-- [ ] 4.4 Record SHAs, decisions, transcript evidence, gaps, and Rally friction in `tmp/tui-session-2026-07-10.md`
-- [ ] 4.5 Leave a clean dev worktree and push dev without touching staging, main, VERSION, or tags
+- [x] 4.1 Run gofmt, `go build ./...`, `go vet ./...`, `go test ./...`, and `go run ./tools/archguard` for each reviewable commit
+- [x] 4.2 Build `./bin/rally` without modifying global binaries
+- [x] 4.3 Drive live tmux verification for route edit/reorder/add/remove, reasoning effort, provider toggle, confirmation key isolation, persistence, routes check, and relaunch
+- [x] 4.4 Record SHAs, decisions, transcript evidence, gaps, and Rally friction in `tmp/tui-session-2026-07-10.md`
+- [x] 4.5 Leave a clean dev worktree and push dev without touching staging, main, VERSION, or tags

@@ -256,6 +256,16 @@ safe"). Direction locked for this stage:
   bounded with a 10s timeout so a hung laps subprocess can't wedge the tab
   in loading. PTY-verified against live queues: held stint with gate
   message + expanded stint laps, ready, and complete states all render.
+- 2026-07-10: Config tab landed on `dev` (`0b8092f`, `9f90dec`, `e188db3`).
+  Machine-scope ordered routes, per-role reasoning, and provider switches are
+  now operable with targeted atomic TOML writes; presentation remains behind
+  app/CLI callbacks. Exact-target confirmation modes consume navigation to
+  prevent key leaks/retargeting. `./bin/rally tui --demo` was tmux-driven from
+  non-workspace and repo-sentinel directories: route reorder/add/remove,
+  reasoning set/clear, custom role, provider disable/enable, `routes check`,
+  scope isolation, quit, and relaunch all passed. In-flight relays retain their
+  startup config until a future dynamic routing seam exists. Full evidence is
+  in `tmp/tui-session-2026-07-10.md`.
 
 ## Prototype comparison (for selection — fill in as evaluated)
 
