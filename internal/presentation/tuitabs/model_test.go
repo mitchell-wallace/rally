@@ -22,12 +22,14 @@ func TestModelTabSwitching(t *testing.T) {
 		{tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("2")}, tabTranscript},
 		{tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("3")}, tabAgents},
 		{tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("4")}, tabLaps},
+		{tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("5")}, tabConfig},
 		{tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("1")}, tabDashboard},
 		{tea.KeyMsg{Type: tea.KeyTab}, tabTranscript},
 		{tea.KeyMsg{Type: tea.KeyTab}, tabAgents},
 		{tea.KeyMsg{Type: tea.KeyTab}, tabLaps},
+		{tea.KeyMsg{Type: tea.KeyTab}, tabConfig},
 		{tea.KeyMsg{Type: tea.KeyTab}, tabDashboard},
-		{tea.KeyMsg{Type: tea.KeyShiftTab}, tabLaps},
+		{tea.KeyMsg{Type: tea.KeyShiftTab}, tabConfig},
 	} {
 		m = updateModel(t, m, tc.key)
 		if m.active != tc.want {

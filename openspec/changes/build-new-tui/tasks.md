@@ -13,12 +13,12 @@
 
 ## 3. TUI Config Surface
 
-- [ ] 3.1 Add presentation-neutral config snapshot/mutation view models and demo fixtures to tuicore
-- [ ] 3.2 Add a Config tab showing the machine path, role routes/reasoning, and provider state
-- [ ] 3.3 Implement route entry add/remove/reorder and custom role creation interactions
-- [ ] 3.4 Implement reasoning effort selection and confirmed provider enable/disable interactions
-- [ ] 3.5 Make confirmation modes capture exact targets and consume navigation/unrelated keys; add model-level regression tests
-- [ ] 3.6 Wire async app service loading/mutations through the CLI for demo, historical, and live TUI modes
+- [x] 3.1 Add presentation-neutral config snapshot/mutation view models and demo fixtures to tuicore
+- [x] 3.2 Add a Config tab showing the machine path, role routes/reasoning, and provider state
+- [x] 3.3 Implement route entry add/remove/reorder and custom role creation interactions
+- [x] 3.4 Implement reasoning effort selection and confirmed provider enable/disable interactions
+- [x] 3.5 Make confirmation modes capture exact targets and consume navigation/unrelated keys; add model-level regression tests
+- [x] 3.6 Wire async app service loading/mutations through the CLI for demo, historical, and live TUI modes
 
 ## 4. Verification and Handoff
 

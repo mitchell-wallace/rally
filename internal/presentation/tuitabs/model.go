@@ -18,6 +18,7 @@ const (
 	tabTranscript
 	tabAgents
 	tabLaps
+	tabConfig
 )
 
 type model struct {
@@ -32,6 +33,7 @@ type model struct {
 	following  bool
 	agents     tuicore.AgentStatusList
 	laps       lapsModel
+	config     configModel
 
 	statusLine string
 	armedHint  string
@@ -57,6 +59,7 @@ func newModel(title string, controls *controls) model {
 		dashboard: newDashboard(title),
 		viewport:  viewport.New(80, 22),
 		laps:      newLapsModel(nil),
+		config:    newConfigModel(nil, nil).WithSnapshot(tuicore.DemoConfigSnapshot()),
 		following: true,
 		width:     100,
 		height:    30,
@@ -64,7 +67,7 @@ func newModel(title string, controls *controls) model {
 }
 
 func (m model) Init() tea.Cmd {
-	return m.laps.FetchCmd()
+	return tea.Batch(m.laps.FetchCmd(), m.config.FetchCmd())
 }
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -99,6 +102,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.laps.SetSnapshot(msg.snapshot)
 		}
 		return m, nil
+	case configResultMsg:
+		m.config.ApplyResult(msg)
+		return m, nil
 	case doneMsg:
 		m.done = true
 		m.workErr = msg.err
@@ -123,6 +129,12 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 		}
 		return m, nil
+	}
+	if m.active == tabConfig && m.config.mode != configBrowse {
+		cmd, _ := m.config.HandleKey(msg)
+		return m, cmd
+	}
+	switch key {
 	case "1":
 		m.active = tabDashboard
 		return m, nil
@@ -135,12 +147,22 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "4":
 		m.active = tabLaps
 		return m, m.laps.FetchCmd()
+	case "5":
+		m.active = tabConfig
+		return m, nil
 	case "tab":
-		m.active = (m.active + 1) % 4
+		m.active = (m.active + 1) % 5
 		return m, m.fetchLapsIfActive()
 	case "shift+tab":
-		m.active = (m.active + 3) % 4
+		m.active = (m.active + 4) % 5
 		return m, m.fetchLapsIfActive()
+	}
+	if m.active == tabConfig {
+		if cmd, handled := m.config.HandleKey(msg); handled {
+			return m, cmd
+		}
+	}
+	switch key {
 	case "enter":
 		m.controls.resume()
 		return m, nil

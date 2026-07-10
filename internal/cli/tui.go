@@ -36,6 +36,11 @@ func newTuiCmd(opts RootOptions) *cobra.Command {
 }
 
 func runTui(cmd *cobra.Command, args []string, opts RootOptions) error {
+	ctx := context.Background()
+	configBindings, err := newTUIConfigBindings(ctx)
+	if err != nil {
+		return fmt.Errorf("load TUI config: %w", err)
+	}
 	demo, _ := cmd.Flags().GetBool("demo")
 	view, _ := cmd.Flags().GetString("view")
 	resume, _ := cmd.Flags().GetBool("resume")
@@ -63,17 +68,21 @@ func runTui(cmd *cobra.Command, args []string, opts RootOptions) error {
 		if err != nil {
 			return err
 		}
-		session := tuitabs.NewSession(tuitabs.Options{
+		sessionOpts := tuitabs.Options{
 			Title:     "rally tui",
 			DoneHint:  fmt.Sprintf("historical view relay #%d - q to exit", relayID),
 			FetchLaps: fetchLaps,
-		})
-		return session.OutingView(context.Background(), events)
+		}
+		configBindings.apply(&sessionOpts)
+		session := tuitabs.NewSession(sessionOpts)
+		return session.OutingView(ctx, events)
 	}
 
-	session := tuitabs.NewSession(tuitabs.Options{Title: "rally tui"})
+	sessionOpts := tuitabs.Options{Title: "rally tui"}
+	configBindings.apply(&sessionOpts)
+	session := tuitabs.NewSession(sessionOpts)
 	if demo {
-		return session.RunDemo(context.Background())
+		return session.RunDemo(ctx)
 	}
 
 	ro, err := prepareRelayStart(cmd, args, opts)
@@ -88,13 +97,15 @@ func runTui(cmd *cobra.Command, args []string, opts RootOptions) error {
 	if err != nil {
 		return fmt.Errorf("load TUI state: %w", err)
 	}
-	session = tuitabs.NewSession(tuitabs.Options{Title: "rally tui", Seed: seed, Agents: agents, FetchLaps: makeTuiLapsFetcher(ro.WorkspaceDir)})
+	sessionOpts = tuitabs.Options{Title: "rally tui", Seed: seed, Agents: agents, FetchLaps: makeTuiLapsFetcher(ro.WorkspaceDir)}
+	configBindings.apply(&sessionOpts)
+	session = tuitabs.NewSession(sessionOpts)
 	ro.EventSink = session.Sink()
 	ro.Controls = session.Controls()
 	ro.StatusWriter = session.StatusWriter()
 	ro.Out = session.TranscriptWriter()
 	ro.Err = session.TranscriptWriter()
-	return session.Run(context.Background(), func(ctx context.Context) error {
+	return session.Run(ctx, func(ctx context.Context) error {
 		return app.StartRelay(ctx, ro)
 	})
 }

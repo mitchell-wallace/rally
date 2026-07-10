@@ -16,22 +16,28 @@ import (
 )
 
 type Options struct {
-	Title     string
-	DoneHint  string
-	Seed      []tuicore.FeedItem
-	Agents    []tuicore.AgentStatusItem
-	Laps      tuicore.LapsSnapshot
-	FetchLaps func(context.Context) (tuicore.LapsSnapshot, error)
+	Title        string
+	DoneHint     string
+	Seed         []tuicore.FeedItem
+	Agents       []tuicore.AgentStatusItem
+	Laps         tuicore.LapsSnapshot
+	FetchLaps    func(context.Context) (tuicore.LapsSnapshot, error)
+	Config       tuicore.ConfigSnapshot
+	FetchConfig  func(context.Context) (tuicore.ConfigSnapshot, error)
+	UpdateConfig func(context.Context, tuicore.ConfigMutation) (tuicore.ConfigSnapshot, error)
 }
 
 type Session struct {
-	title     string
-	doneHint  string
-	seed      []tuicore.FeedItem
-	agents    []tuicore.AgentStatusItem
-	laps      tuicore.LapsSnapshot
-	fetchLaps func(context.Context) (tuicore.LapsSnapshot, error)
-	controls  *controls
+	title        string
+	doneHint     string
+	seed         []tuicore.FeedItem
+	agents       []tuicore.AgentStatusItem
+	laps         tuicore.LapsSnapshot
+	fetchLaps    func(context.Context) (tuicore.LapsSnapshot, error)
+	config       tuicore.ConfigSnapshot
+	fetchConfig  configLoader
+	updateConfig configUpdater
+	controls     *controls
 
 	mu       sync.Mutex
 	send     func(tea.Msg)
@@ -44,14 +50,21 @@ func NewSession(opts Options) *Session {
 	if title == "" {
 		title = "rally tui"
 	}
+	configSnapshot := tuicore.CloneConfigSnapshot(opts.Config)
+	if configSnapshot.Path == "" {
+		configSnapshot = tuicore.DemoConfigSnapshot()
+	}
 	return &Session{
-		title:     title,
-		doneHint:  opts.DoneHint,
-		seed:      cloneFeedItems(opts.Seed),
-		agents:    cloneAgents(opts.Agents),
-		laps:      tuicore.CloneLapsSnapshot(opts.Laps),
-		fetchLaps: opts.FetchLaps,
-		controls:  newControls(),
+		title:        title,
+		doneHint:     opts.DoneHint,
+		seed:         cloneFeedItems(opts.Seed),
+		agents:       cloneAgents(opts.Agents),
+		laps:         tuicore.CloneLapsSnapshot(opts.Laps),
+		fetchLaps:    opts.FetchLaps,
+		config:       configSnapshot,
+		fetchConfig:  opts.FetchConfig,
+		updateConfig: opts.UpdateConfig,
+		controls:     newControls(),
 	}
 }
 
@@ -95,6 +108,7 @@ func (s *Session) Run(ctx context.Context, work func(context.Context) error) err
 	m.dashboard = m.dashboard.Seed(s.seed)
 	m.agents.Seed(s.agents)
 	m.laps = newLapsModel(s.fetchLaps).WithSnapshot(s.laps)
+	m.config = newConfigModel(s.fetchConfig, s.updateConfig).WithSnapshot(s.config)
 	p := tea.NewProgram(m, tea.WithAltScreen(), tea.WithContext(ctx))
 	s.setSend(p.Send)
 	defer s.setSend(nil)
@@ -183,6 +197,7 @@ func (s *Session) OutingView(ctx context.Context, events []runtimeevent.Event) e
 	m.dashboard = m.dashboard.Seed(s.seed)
 	m.agents.Seed(s.agents)
 	m.laps = newLapsModel(s.fetchLaps).WithSnapshot(s.laps)
+	m.config = newConfigModel(s.fetchConfig, s.updateConfig).WithSnapshot(s.config)
 	p := tea.NewProgram(m, tea.WithAltScreen(), tea.WithContext(ctx))
 	s.setSend(p.Send)
 	defer s.setSend(nil)
