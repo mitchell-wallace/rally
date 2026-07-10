@@ -6,10 +6,28 @@ this doc records *state and protocol*, not narrative. Prune rules at the bottom.
 
 ## Mission
 
-Land **v1.0.0 of rally and laps together**, then run one nitpicker pass and
-address its results. Scope is the `crew-chief` laps queue (below). When the
-queue is empty and the nitpicker pass is addressed, the campaign is complete —
-subsequent wake-ups only verify health and exit.
+**Expanded 2026-07-10 (user brief)** — campaign runs until Monday 2026-07-13
+09:00 AEST (cutoff epoch 1783897200):
+
+1. rally+laps v1.0.0: rall-c3a8 nitpicker pass now; rall-94fc coordinated
+   main release **gated to Monday morning, only if confident it's stable**.
+2. rally TUI: role/routing config + provider enable/disable from the TUI
+   (Sol chief sessions; brief in scratchpad, re-dispatch bounded sessions).
+3. Prayer-app backlog: Sol chief campaign, doc =
+   Prayer-app/docs/backlog-2026-07-10.md. Staging when confident; NEVER main.
+4. rover: azure-cred isolation via config + tmux-on-ssh (rally relay, dev
+   branch; may merge main after chief review).
+5. thenn: `thenn job` hardening + verification (rally relay, dev; may merge
+   main). NOTE: no systemd in this container → thenn job CANNOT replace the
+   wake timer here; shell watchdog stays.
+6. Memory system "pacenotes": research (codex) + chief requirements
+   (scratchpad pacenotes-requirements.md) → Sol design collab → private
+   repos `pacenotes` + `pacenotes-data` via gh → Go CLI build.
+7. Delegation: Sol chiefs (gpt-5.6-sol high) for campaigns; rally+laps for
+   1-3-lap tasks; GPT usage aggressive; GLM-5.2 zai pool first for junior.
+
+Model routing + merge gates recorded in ~/.config/rally/config.toml and the
+harness memory dir (decision-merge-gates-2026-07-10).
 
 ## The queue
 
@@ -85,7 +103,20 @@ subsequent wake-ups only verify health and exit.
 
 ## Session log (newest first; keep ~5 entries, prune older)
 
-- **2026-07-06 (session 12, autonomous, 20:43 wake)** — queue lap 14 (rall-dbfb
+- **2026-07-10 (session 13, user brief, 07:10 UTC)** — Expanded mission (see
+  above). Wake timer rebuilt: in-session cron (5h) + scheduler v2 (a9f06f7,
+  interactive-in-tmux, watchdog-only, running pid in
+  ~/.local/state/crew-chief/). GPT-5.6 family added to rally config
+  (sol/terra/luna verified live via codex). Dispatched in parallel: mbtw Sol
+  chief (P0 bugs), rally-TUI Sol chief (config-from-TUI), rover relay (3
+  laps: azure-creds/tmux-ssh/verify, dev), thenn relay (2 laps: job
+  no-systemd hardening/verify, new dev branch), memory research (codex; the
+  Claude research subagent died twice to API errors). Fresh dev binaries
+  installed: rally v1.0.0-dev @2086a94, laps 1.0.0-dev.62d4ae9. Chief
+  requirements for pacenotes written (scratchpad). Rally friction log: `rally
+  start` on uninitialized repo requires manual `rally init` + committing the
+  queue; backgrounded `rally start | tail` buffers all output (use
+  .rally/state + summary.jsonl to monitor instead). — queue lap 14 (rall-dbfb
   dogfood + staging test-drive) DONE. Session 11 (15:43) died at 15:53 to an
   API connection error mid-test-drive, leaving good uncommitted artifacts:
   fresh dev binaries installed (rally v0.13.0-dev, laps 1.0.0-dev.8ad0098),
