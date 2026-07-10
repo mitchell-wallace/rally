@@ -108,6 +108,16 @@ harness memory dir (decision-merge-gates-2026-07-10).
 
 ## Session log (newest first; keep ~5 entries, prune older)
 
+- **2026-07-10 (session 13 cont., ~09:00 UTC)** — pacenotes v1 BUILT and
+  LIVE: Sol implemented full spec (4k lines, 25 tests) in one lap; chief
+  acceptance found+fixed 2 real bugs (init silently repointing machine config
+  → --force guard; git() TrimSpace mangling first porcelain line → manual
+  note removals refused; gitRaw + regression tests). Binary installed,
+  claude+codex adapters installed (hooks merged, settings keys preserved),
+  store live at ~/.local/share/pacenotes with 7 notes, data remote LOCAL
+  bare (~/.local/share/pacenotes-remote/) pending GitHub repos (PAT
+  blocker). Two-writer sync verified end-to-end. Sol-chief dispatch contract
+  now: prepend `pacenotes brief` output to launch briefs.
 - **2026-07-10 (session 13 cont., ~08:10 UTC)** — LANDED: rover v0.6.0
   released (azure-cred isolation via AZURE_CONFIG_DIR + rover login/logout;
   tmux-on-ssh default with --no-tmux; shellcheck SC2016 fix-forward — NOTE
