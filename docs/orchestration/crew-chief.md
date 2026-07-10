@@ -108,6 +108,22 @@ harness memory dir (decision-merge-gates-2026-07-10).
 
 ## Session log (newest first; keep ~5 entries, prune older)
 
+- **2026-07-10 (session 13 cont., ~09:45 UTC)** — TEST-DRIVE PASS, staging
+  promoted: rally 7301b00, laps 62d4ae9 (both pushed; CI watched). Suite 7/8
+  (agy env-fail only). Live drives: laps queue drained incl. resume-after-
+  stop; round-robin op/cx; REAL usage-limit rotation observed (codex rolling
+  limit hit ~09:10, resets 12:14 — did NOT burn a weekly /reset; Sol
+  dispatches paused until then, one-shot cron re-dispatches mbtw chief).
+  FIXED from mbtw chief's field report: stopped relays claimed "relay
+  complete" (TUI banner + CLI line) — 7301b00 adds stopped-with-work-
+  remaining end line, DoneHintFunc seam, tests; openspec wording aligned to
+  the implemented Ctrl+X contract. mbtw session 1 reviewed: 3/6 P0s landed
+  (queue corruption root-caused; answered/prayed decoupled; sign-out = Web
+  Lock cross-context refresh coordination), typecheck 4/4, no new lint
+  (backend prettier errors pre-exist), dev pushed. thenn v1.1.0 RELEASED
+  (job hardening; chief fixed removal idempotence + killed a 21-try
+  handoff loop on an env-blocked lap — rally gap noted in pacenotes).
+  Monday remains: VERSION bumps + staging→main (rall-94fc), then nitpicker.
 - **2026-07-10 (session 13 cont., ~09:00 UTC)** — pacenotes v1 BUILT and
   LIVE: Sol implemented full spec (4k lines, 25 tests) in one lap; chief
   acceptance found+fixed 2 real bugs (init silently repointing machine config
