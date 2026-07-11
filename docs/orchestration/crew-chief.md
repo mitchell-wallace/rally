@@ -108,6 +108,16 @@ harness memory dir (decision-merge-gates-2026-07-10).
 
 ## Session log (newest first; keep ~5 entries, prune older)
 
+- **2026-07-11 (Sat ~15:00 UTC)** — BOTH mbtw OpenSpec arcs COMPLETE and on
+  staging (d052bc8): today-queue-bootstrap-sync 47/47 (session 19: honest
+  legacy reconciliation — 1.2 needed a real shared-calendar clock-injection
+  fix; capstone 2000+2000-record browser lane, 625ms first assembly, 20+20
+  records returned). Chief combined review: gates re-run (typecheck, shared
+  264/264, both strict validations), calendar fix reviewed. Both changes
+  ARCHIVE-READY — archive deferred to post-breakout settling. mbtw backlog:
+  everything implementable is DONE except the two design-first items
+  (meta algorithm — waits on design; optimistic stats — proposal-only if
+  time). 19 Sol sessions total on mbtw.
 - **2026-07-11 (Sat evening UTC)** — USER SESSION (window): pacenotes+data
   repos pushed to GitHub (memory now wipe-proof; data remote repointed);
   PAT verdict: contents OK, issues/creation blocked — new PAT tonight (user);
