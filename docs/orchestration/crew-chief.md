@@ -108,6 +108,15 @@ harness memory dir (decision-merge-gates-2026-07-10).
 
 ## Session log (newest first; keep ~5 entries, prune older)
 
+- **2026-07-11 (session 13 cont., Sat ~07:30 UTC)** — memory-levelling arc
+  sessions 8-10 DONE on dev (not staging — arc promotes only when
+  feature-complete): foundations, backend persistence/sync gating, per-card
+  streaks, canonical memory_queue_snapshot THROUGH today-queue-bootstrap-
+  sync's contract. Progress: leveling 17/42, bootstrap-sync 9/47, strict
+  validation both changes each session. Session 11 running (shared scorer
+  extraction first per handoff). One usage-limit bounce (session 8 dispatch,
+  ~90min pause, one-shot cron retried — pattern works). User window Sat
+  6-9pm AEST: status prepared; open asks = pacenotes repos/PAT, agy OAuth.
 - **2026-07-10/11 (session 13 cont., overnight)** — mbtw sessions 5-7 DONE,
   reviewed, each promoted to staging (9e0e8a9 chips / 987eab5 double-tap +
   memory modals / b5cfc86 hints framework). Session 5 died once to a
