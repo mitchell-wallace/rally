@@ -404,3 +404,49 @@ printf '%s\n' '{"completed":true,"summary":"ok"}'
 		t.Errorf("ResolvedModel = %q, want opts override %q", res.ResolvedModel, "Gemini 3 Pro")
 	}
 }
+
+func TestAntigravityExecutor_TransientLogAuthNoiseDoesNotFailCompletedRun(t *testing.T) {
+	tmp := t.TempDir()
+	home := filepath.Join(tmp, "home")
+	t.Setenv("HOME", home)
+
+	binDir, _ := testMockBinDir(t, "antigravity")
+	scriptPath := filepath.Join(binDir, "agy")
+	// Mimics a freshly-authenticated agy: real work output on stdout while the
+	// per-run debug log (the executor's --log-file target) carries the
+	// transient pre-silent-auth error lines.
+	script := `#!/bin/sh
+logfile=""
+for a in "$@"; do
+  case "$a" in --log-file=*) logfile="${a#--log-file=}" ;; esac
+done
+if [ -n "$logfile" ]; then
+cat > "$logfile" <<'LOG'
+E0711 11:25:00.779690 1 server.go:644] Failed to get OAuth token: error getting token source from auth provider: You are not logged into Antigravity.
+W0711 11:25:00.779725 1 client.go:83] failed to set auth token
+I0711 11:25:00.800963 1 server.go:2404] Auth succeeded, refreshing features and managers
+LOG
+fi
+echo "Created agy-ok.txt containing yes"
+exit 0
+`
+	if err := os.WriteFile(scriptPath, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	exec := &Executor{PrintTimeout: time.Second}
+	tr, err := exec.Execute(context.Background(), harnessapi.RunOptions{Prompt: "do work", LogPath: filepath.Join(tmp, "try.log")})
+	if err != nil {
+		t.Fatalf("Execute returned error: %v", err)
+	}
+	if tr == nil {
+		t.Fatal("expected TryResult, got nil")
+	}
+	if !tr.Completed {
+		t.Fatalf("Completed = false (evidence %+v), want true: transient log auth noise must not fail a completed run", tr.Evidence)
+	}
+	if tr.Evidence != nil && tr.Evidence.Category == reliability.CategoryAuthOrProxy {
+		t.Fatalf("unexpected auth evidence on completed run: %+v", tr.Evidence)
+	}
+}

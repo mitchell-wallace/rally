@@ -135,7 +135,10 @@ func (a *Executor) Execute(ctx context.Context, opts harnessapi.RunOptions) (*ha
 		return nil, execErr
 	}
 
-	if ev := reliability.ParseAntigravityError(string(out) + "\n" + string(agyLogData)); ev != nil && ev.Category == reliability.CategoryAuthOrProxy {
+	// Auth evidence on STDOUT means the agent's actual output is a login
+	// prompt (the historical exit-0-while-unauthenticated no-op) — that is a
+	// real failure regardless of how leniently the output would parse.
+	if ev := reliability.ParseAntigravityError(string(out)); ev != nil && ev.Category == reliability.CategoryAuthOrProxy {
 		return &harnessapi.TryResult{Completed: false, Evidence: ev, ResolvedModel: model, SessionID: sessionID}, nil
 	}
 
@@ -144,6 +147,16 @@ func (a *Executor) Execute(ctx context.Context, opts harnessapi.RunOptions) (*ha
 		return nil, err
 	}
 	tr.ResolvedModel = model
+
+	// The agy DEBUG log transiently records "You are not logged into
+	// Antigravity" / "error getting token source" during startup even when
+	// silent auth then succeeds, so log-only auth signals may explain a
+	// non-completed run but must never override a completed one.
+	if !tr.Completed && tr.Evidence == nil {
+		if ev := reliability.ParseAntigravityError(string(agyLogData)); ev != nil && ev.Category == reliability.CategoryAuthOrProxy {
+			tr.Evidence = ev
+		}
+	}
 	return tr, nil
 }
 
