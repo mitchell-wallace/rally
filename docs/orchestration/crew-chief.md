@@ -108,6 +108,22 @@ harness memory dir (decision-merge-gates-2026-07-10).
 
 ## Session log (newest first; keep ~5 entries, prune older)
 
+- **2026-07-11 (Sat night UTC)** — Scout sweep landed (user-directed, Claude
+  allowance burn): pacenotes 4 patch batches (pushed main), laps 3 agent-UX
+  proposals, thenn 4 proposals incl. the supervisor job backend (user's
+  direction), rover 2 batches (incomplete — scout hit Claude session limit;
+  all scouts died at commit step, chief salvaged + committed). Skills repo:
+  pathfinder→feature-scout, nitpicker→patch-scout renames + portable
+  crew-chief v2 pushed (c6ec61e); consuming repos' skills-lock.json entries
+  need renaming on next sync. Rover v0.7.0 RELEASED (provisioning:
+  docker-sbx, claude code, thenn, mise, half-RAM swapfile w/ targeted
+  resize). pacenotes v0.1.1 published manually + CI/release wiring fixed
+  (green). Sol's dune dual-backend research on branch dual-backend-
+  exploration (DinD-sibling recommendation). PAT v2 verified (no repo-
+  create by design; annotations 403 = Checks:read absent, harmless).
+  Sonnet's rover codex-key patch STILL UNPUSHED — review pending. NEXT:
+  breakout window (Sun 9-11am AEST), then release gate Sun 23:00 UTC.
+
 - **2026-07-11 (Sat ~15:00 UTC)** — BOTH mbtw OpenSpec arcs COMPLETE and on
   staging (d052bc8): today-queue-bootstrap-sync 47/47 (session 19: honest
   legacy reconciliation — 1.2 needed a real shared-calendar clock-injection
