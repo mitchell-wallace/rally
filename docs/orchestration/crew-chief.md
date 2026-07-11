@@ -108,6 +108,16 @@ harness memory dir (decision-merge-gates-2026-07-10).
 
 ## Session log (newest first; keep ~5 entries, prune older)
 
+- **2026-07-11 (Sat ~06:50 UTC)** — MEMORY-LEVELLING ARC COMPLETE (sessions
+  8-15, 42/42 tasks) and PROMOTED to mbtw staging (325f667) after chief
+  full-arc review: deterministic replay core w/ divergence guards verified,
+  legacy normalization side-effect-free, typecheck + shared 257/257 + both
+  strict validations re-run by chief. CAVEAT held open: Postgres functional
+  lane (bootstrap 3.5/8.3) needs CI/user run — NO DOCKER in container
+  (recorded in pacenotes). today-queue-bootstrap-sync at 20/47, session 16
+  continues it. mbtw backlog remaining: bootstrap-sync completion,
+  ui-component-library arc, optimistic-stats design proposal, archive
+  levelling change after settling.
 - **2026-07-11 (session 13 cont., Sat ~07:30 UTC)** — memory-levelling arc
   sessions 8-10 DONE on dev (not staging — arc promotes only when
   feature-complete): foundations, backend persistence/sync gating, per-card
