@@ -108,6 +108,18 @@ harness memory dir (decision-merge-gates-2026-07-10).
 
 ## Session log (newest first; keep ~5 entries, prune older)
 
+- **2026-07-12 (Sun ~breakout, FINAL in-container entry)** — Container chief
+  DECOMMISSIONED for breakout to bare Rover VM: fleet quiet, watchdog
+  killed, in-session timers die with this session. Next chief bootstraps on
+  the HOST per the pacenotes breakout runbook (01KX8J7FR8): install
+  pacenotes v0.1.1 → init → brief. Crew-chief skill v2 installed at
+  ~/group-1/.claude/skills/ + AGENTS.md pointer (both harnesses). Linear
+  conventions in pacenotes (01KX9RGD0R): agent:chief label, crewchief::
+  comment prefix. FIRST review item on host: Sonnet's rover codex-key patch
+  in ~/rover (unpushed). Release gate Sun 23:00 UTC: rally staging 465f1ed
+  + laps staging 45ffe48, both CI green, suite 8/8, VERSION 1.0.0 both —
+  rally-release + laps-release skills, then rall-c3a8 nitpicker post-release.
+
 - **2026-07-11 (Sat night UTC)** — Scout sweep landed (user-directed, Claude
   allowance burn): pacenotes 4 patch batches (pushed main), laps 3 agent-UX
   proposals, thenn 4 proposals incl. the supervisor job backend (user's
