@@ -50,6 +50,21 @@ Wake infrastructure (both confirmed running 2026-07-12 ~12:40 UTC):
   cutoff (08:57 AEST). Session-scoped — dies if this session exits; the
   watchdog is the fallback for that case.
 
+**2026-07-12 ~21:41 UTC cutoff relaxed (Mitchell, live)**: the hard 09:00
+AEST cutoff is relaxed — reasonable to finish the active backlog, Mitchell
+is unavailable during the workday (back to check in the evening). External
+watchdog cutoff extended to 20:00 AEST (epoch 1783936800) as an outer
+safety bound; the real stopping condition is now "active backlog
+exhausted," checked every 2h cycle, not a clock time. New convention: work
+must be pushed AND released (version-bumped, tagged) where a repo has its
+own release mechanism and accumulated meaningful gate-green work — not
+left sitting committed-but-unreleased. Does NOT extend to the separate,
+pre-existing rally/laps v1.0.0 coordinated release gate (rall-94fc), which
+stays gated pending explicit instruction. Watchdog reliability note: the
+first watchdog instance silently died sometime tonight with no clean exit
+log (cause unknown) — relaunched, and the recurring check-in now
+self-checks watchdog liveness every cycle as a mitigation.
+
 **2026-07-12 ~21:33 UTC re-priority (Mitchell, live)**: skills program is
 now the TOP priority, above telemetry. Telemetry pass status: 8/12 landed
 (marshal, laps, pacenotes, radio, pitstop, spotter, mechanic, rover);
