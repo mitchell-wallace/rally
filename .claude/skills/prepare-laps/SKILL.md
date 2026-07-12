@@ -1,22 +1,23 @@
 ---
 name: prepare-laps
-description: Convert OpenSpec changes, implementation plans, specs, task lists, or rough feature requests into an ordered Laps queue for Rally. Use when decomposing work into role-aware laps, assigning intern/junior/senior/architect/review/verify/qa/recovery tasks, adding phase verification, or preparing agent handoffs from OpenSpec or non-OpenSpec plans.
+description: Convert OpenSpec changes, implementation plans, specs, task lists, or rough feature requests into an ordered flat root queue or named stint queues for Rally. Use when decomposing work into role-aware laps, assigning intern/junior/senior/architect/review/verify/qa/recovery tasks, adding phase verification, preparing agent handoffs, or when the user invokes prepare-laps, prepare-flat-laps, or prepare-stints to select smart, explicitly flat, or explicitly stint-shaped output.
 license: MIT
 metadata:
   author: rally
-  version: "2.0"
+  version: "2.1"
 ---
 
 # Prepare Laps
 
-Turn a plan into a Rally-native Laps queue that another agent can execute one lap at a time. The output should be concrete enough to keep agents on track, but not so prescriptive that it steals ownership of the fine implementation details.
+Turn a plan into a Rally-native Laps queue that another agent can execute one lap at a time. Choose a flat root sequence or multiple named stint sub-queues from the user's intent and the plan's dependency shape. The output should be concrete enough to keep agents on track, but not so prescriptive that it steals ownership of the fine implementation details.
 
-Requires the `laps` CLI v0.8.0 or newer for batch JSON task creation and claim-flow support. Rally injects per-role guidance from `.rally/agents/<assignee>.md` at run time — do not duplicate role intros inside lap descriptions.
+Requires the `laps` CLI v0.9.0 or newer for named stints, scoped batch JSON task creation, and claim-flow support. Rally injects per-role guidance from `.rally/agents/<assignee>.md` at run time — do not duplicate role intros inside lap descriptions.
 
 ## Core Rules
 
 - Treat every lap as a handoff to a different agent.
 - Use assignees exactly: `intern`, `junior`, `senior`, `architect`, `review`, `verify`, `qa`, `recovery`. Set them via the `--assignee` flag; never encode the role in the title.
+- Treat the root queue as deliberately flat and ordered, not as a dependency graph. A stint is a named hierarchical sub-queue referenced from that flat root queue; stint shape does not add dependency or parallel-execution fields to laps.
 - Split each implementation phase into 1–3 laps.
   - 1 lap: mechanical setup, narrow config, isolated file changes, simple docs.
   - 2 laps: familiar cross-module work, implementation plus focused tests, moderate uncertainty.
@@ -39,8 +40,8 @@ Requires the `laps` CLI v0.8.0 or newer for batch JSON task creation and claim-f
 ## Workflow
 
 1. **Orient**
-   - Check existing work with `laps list`.
-   - If the queue still holds laps from a previous, already-committed batch, clear them before adding the new batch. Laps are intermediate state; OpenSpec and git history are the durable record, so completed laps already preserved in git are safe to remove. Use `laps prune 0` to drop done laps and `laps delete <id>` for stale todo laps, leaving only the current batch. (Laps has no edit command — to revise a lap, delete and re-add it.)
+   - Check the root pipeline with `laps list --root` and, when stints exist or are requested, inspect the full shape with `laps list --tree` and `laps stints ls`.
+   - If a selected queue still holds laps from a previous, already-committed batch, clear them before adding the new batch. Laps are intermediate state; OpenSpec and git history are the durable record, so completed laps already preserved in git are safe to remove. Use `laps prune 0 --root` or `laps prune 0 --stint <name>` to drop done laps and the matching scoped `laps delete <id>` for stale todo laps, leaving only the current batch.
    - If the change path or name you were given does not resolve (e.g. a typo), do not fail: list `openspec/changes/` (and `openspec/changes/archive/`) and confirm the intended change before planning. Never silently plan a different change.
    - Confirm `.rally/agents/<role>.md` exists for the roles you plan to assign. If missing, instruct the user to run `rally init roles`, or add an early setup lap that runs it. Do not paste role definitions into the skill or into laps.
    - Confirm Rally route support if relevant: `.rally/config.toml`, `rally routes check`.
@@ -51,12 +52,19 @@ Requires the `laps` CLI v0.8.0 or newer for batch JSON task creation and claim-f
    - For non-OpenSpec input, inspect the provided plan/files and explore the codebase just enough to identify phases, risks, dependencies, and verification commands.
    - For small ad-hoc requests, missing plan files, or very short specs, fold relevant facts directly into each lap description instead of pointing at a file.
 
-2. **Shape phases**
+2. **Select the queue mode**
+   - Treat the three invocation surfaces as intent passed to this one skill: `prepare-laps` is smart/default mode, `prepare-flat-laps` forces flat mode, and `prepare-stints` forces stint mode. Equivalent natural-language requests carry the same intent.
+   - **Explicit flat:** when the user says `prepare-flat-laps`, "keep this flat," "no stints," "single sequence," or equivalent, write one ordered root sequence. Preserve useful phase boundaries in lap titles and descriptions, but never turn them into stints, even when the plan has natural independent slices.
+   - **Explicit stints:** when the user says `prepare-stints`, asks to break work into stints, or requests parallel lanes or independent tracks, decompose the plan into multiple named stint queues, one per independent phase or workstream. This skill shapes queues only; do not invent parallel fields or perform Lanes split/merge mechanics.
+   - **Smart/default:** when the target is the root queue and no mode is requested, use one flat sequence at the root tail. If the plan has clearly independent workstreams with no shared-file conflicts and no ordering dependencies, propose the exact stint names and grouping and ask for confirmation before writing. Never silently restructure a plan presented as a flat sequence. If independence is uncertain, stay flat and tell the operator that the conservative mode was chosen.
+   - A request for stints is deliberate even when the resulting root pipeline remains serial. Enqueued stint references execute in root order; parallel execution, if desired, is an external orchestration concern.
+
+3. **Shape phases**
    - Prefer outcome-oriented phases: setup, core behavior, integration, user-facing surfaces, tests, docs/migration, cleanup.
    - Preserve real dependencies, but avoid over-rigid microplans. Give architecture guidance and acceptance criteria; let the assigned agent choose local implementation details.
    - For under-defined implementation work, add an early `senior` exploration/design lap; when the plan, architecture, sequencing, or remaining lap assignments need repair without implementation, add an `architect` lap. The output should be decisions and follow-up head laps if the work expands.
 
-3. **Assign roles**
+4. **Assign roles**
    - `intern`: prescribed, mechanical, reversible edits where the approach is already chosen. Use only for exact scoped changes; escalate on design ambiguity.
    - `junior`: bounded implementation inside established architecture. This is the default implementation lane; local autonomy is allowed, but cross-subsystem or contract decisions are not.
    - `senior`: design-sensitive implementation. Use for architecture-aware code changes, auth/session/sync/data correctness, migrations, significant new patterns, tricky debugging, and bounded plan corrections.
@@ -69,7 +77,7 @@ Requires the `laps` CLI v0.8.0 or newer for batch JSON task creation and claim-f
    - Escalation map: `intern` → `junior`/`senior`; `junior` → `senior`/`architect`; `senior` → `architect` or `recovery` if dirty; `architect` → implementation laps; `review` → `senior`/`junior` fixes, `architect` decisions, then `verify`; `verify` → `junior`/`senior` fixes, `architect` for ambiguous criteria, `review` for code-risk concerns; `qa` → `junior`/`senior` fixes, `architect` for product ambiguity, then `verify`; `recovery` → continue/discard/course_correct/architect/needs_user.
    - The `assignee` field is the contract. Rally loads `.rally/agents/<assignee>.md` and prepends it to the prompt; the lap description does not need to repeat that. Sharing roles across laps is also a teamwork goal — route exact mechanical work to `intern`, normal implementation to `junior`, design-sensitive work to `senior`, plan repair to `architect`, review to `review`, evidence gates to `verify`, external workflow testing to `qa`, and dirty state repair to `recovery`.
 
-4. **Write each lap**
+5. **Write each lap**
    Inclusion is dynamic. Most laps include 4–5 of these sections; pick what serves the work:
    - **Context** — source artifacts, prior-phase assumptions, relevant files. Skip when the title + acceptance are fully self-explanatory or when the lap is open-ended.
    - **Outcome** — the observable end state. Almost always include.
@@ -77,8 +85,11 @@ Requires the `laps` CLI v0.8.0 or newer for batch JSON task creation and claim-f
    - **Design** — architectural constraints, patterns to follow, risk notes, subtleties. Include when judgment beyond "follow the obvious path" is required (always for `senior`; sometimes for `junior`; for `intern`, provide the exact pattern instead of broad design space).
    - **Acceptance** — tests, commands, smoke checks, docs updates, observable behavior. Almost always include.
 
-5. **Add tasks**
-   - Use one `laps add tail --json '[...]'` call for planned work in execution order. JSON array input is validated and written as one queue update, preserves array order, and avoids leaving a partially-created plan if one lap is invalid. For large generated payloads, pipe the array with `laps add tail --json -` to avoid shell quoting and argument-length problems.
+6. **Add tasks**
+   - **Flat mode:** use one `laps add tail --root --json '[...]'` call for planned work in execution order. The explicit `--root` prevents an active stint from capturing a plan intended for the root queue; when no stint is active, this is the structurally explicit form of `laps add tail --json`. JSON array input is validated and written as one queue update, preserves array order, and avoids leaving a partially-created plan if one lap is invalid. For large generated payloads, pipe the array with `laps add tail --root --json -` to avoid shell quoting and argument-length problems.
+   - **Stint mode:** choose short, descriptive kebab-case names such as `auth`, `search`, or `ui-polish`, never ordinal names such as `stint-1`. For each workstream, run `laps stints new <name>`, then add its ordered lap array atomically with `laps add tail --stint <name> --json '[...]'`. Do not use raw `-f <name>`: that addresses `.laps/<name>.json`, not `.laps/stints/<name>.laps.json`.
+   - Enqueue prepared stints in their required root order with `laps stints enqueue <name> tail`. Unless the user explicitly needs unqueued stints for an external parallel workflow, enqueue each one. If cross-stint acceptance needs a final whole-outcome gate, append one root `verify` lap after the stint references, or use a final clearly named integration stint when integration itself is substantive.
+   - When regrouping laps that already exist, create the destination stint first and use `laps transfer <stint> <task-id>... --root` (or the appropriate source `--stint <name>`). Transfer validates and moves the batch across queue files together while preserving ids and task fields; it does not create the destination implicitly.
    - For urgent blockers, use `laps add head --json '[...]'` or `laps add after <id> --json '[...]'`; array order is preserved for every position, so do not reverse it manually.
    - Use a single JSON object for one planned lap. Use `--title`/`--description` flags only for short ad-hoc laps where the description is a plain sentence.
    - Always set `--assignee`; rally routes from it.
@@ -94,9 +105,9 @@ Requires the `laps` CLI v0.8.0 or newer for batch JSON task creation and claim-f
      ]
      ```
 
-   - Run `laps list` at the end and sanity-check role order, `verify` placement, and the final full-outcome verification lap.
+   - Run `laps list --root` and `laps list --tree` at the end. In stint mode, also run `laps stints show <name>` for each prepared stint. Sanity-check queue order, role order, `verify` placement, stint names and boundaries, and the final full-outcome verification lap.
    - Commit the prepared `.laps/laps.json` queue to git after the sanity check unless the user explicitly says not to. If this prepare-laps session also updates this skill, include that skill edit in the same commit so the queue and planning convention land together.
-   - Report to the operator any meaningful uncertainties or plan problems you hit while planning — circular or contradictory task dependencies, work that does not map cleanly onto laps, missing prerequisites, or a plan claim that contradicts the working tree. Raise these in your summary to the operator; do not bury them inside lap descriptions or silently plan around them. This planning-time reporting is the planning agent's responsibility, distinct from the `verify` role's mid-change verification.
+   - Report the selected mode and why, plus any meaningful uncertainties or plan problems you hit while planning — circular or contradictory task dependencies, work that does not map cleanly onto laps or independent stints, missing prerequisites, or a plan claim that contradicts the working tree. Raise these in your summary to the operator; do not bury them inside lap descriptions or silently plan around them. This planning-time reporting is the planning agent's responsibility, distinct from the `verify` role's mid-change verification.
 
 ## Testing Laps
 
@@ -125,7 +136,7 @@ Verification lap descriptions should include:
 
 At the end of a prepare-laps session, update this skill when:
 
-- The user corrects lap size, phase shape, role assignment, or `verify` cadence.
+- The user corrects lap size, phase shape, queue mode, stint boundaries, role assignment, or `verify` cadence.
 - A recurring class of lap is too vague, too large, or too small.
 - Rally's role-loading behavior, OpenSpec output shape, or Laps CLI behavior changes.
 - A verification failure reveals a better standard check or follow-up-lap pattern.
