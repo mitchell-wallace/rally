@@ -144,6 +144,19 @@ delegated — tackled directly this session.
 
 ## Session log (newest first; keep ~5 entries, prune older)
 
+- **2026-07-12 (Sun night AEST, fifth 2h cron check-in, ~21:14 UTC)** —
+  Mechanic's telemetry dispatch had genuinely finished (ps + file-stability
+  verified); reviewed (diff, README addition, path-scrubbing present,
+  parity test present), gates rerun clean, pushed (dd09d0e). Memory
+  recovered to ~2.8Gi available (false alarm from the prior check-in, no
+  action needed). Dispatched next backlog item #1 (telemetry pass) to Sol
+  for rover — skipped chassis (pure library, no CLI surface, doesn't fit
+  this pattern) and tarmac (naming mid-rename, dune/dunex→tarmac still in
+  flux) as poor fits for now. Confirmed running (pid 1836942). Telemetry
+  landed: marshal, laps, pacenotes, radio, pitstop, spotter, mechanic;
+  rover in flight; remaining: formula, lanes, starter (chassis/tarmac
+  deferred — revisit fit later).
+
 - **2026-07-12 (Sun night AEST, fourth 2h cron check-in, ~19:14 UTC)** —
   Spotter's telemetry dispatch had genuinely finished (ps + file-stability
   verified); reviewed (diff, README addition, no token/content leakage into
@@ -181,20 +194,6 @@ delegated — tackled directly this session.
   (circuit-navy.vercel.app). Dispatched next backlog item #1 (telemetry
   pass) to Sol for radio, confirmed running (pid 1821750). Nothing else
   actionable this check-in.
-
-- **2026-07-12 (Sun night AEST, continued same session — Circuit push)** —
-  Mitchell caught a model mixup (session had drifted to Sonnet instead of
-  Fable) mid-flow; confirmed Fable now the saved default
-  (`~/.claude/settings.json`). Caught and corrected a framing error in my
-  own prior summary: Circuit checkpoints the agent-tooling fleet, not
-  Moved by the Word — corrected via pacenotes 01KXB589 (supersedes stale
-  01KXB1E26). Found the external watchdog scheduler had never actually
-  been installed on this host post-breakout (hardcoded `/workspace/rally`,
-  a dead container path) — fixed (ea43b80, pushed dev), installed, and
-  relaunched; confirmed alive (pid 1812621). Set in-session cron: 2h
-  check-in cadence + 08:57 AEST cutoff wrap-up. Next: dispatch overnight
-  backlog to Sol, then write Circuit's actual site content directly
-  (chief-reserved).
 
 ## Prune rules (anti-snowball)
 
