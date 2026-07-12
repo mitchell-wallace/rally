@@ -29,6 +29,42 @@ this doc records *state and protocol*, not narrative. Prune rules at the bottom.
 Model routing + merge gates recorded in ~/.config/rally/config.toml and the
 harness memory dir (decision-merge-gates-2026-07-10).
 
+## Tonight's push (2026-07-12 night AEST → cutoff Mon 09:00 AEST)
+
+Circuit checkpoint is about the agent-tooling fleet, NOT Moved by the Word —
+see pacenotes 01KXB589 (supersedes 01KXB1E26). Contract is phrased around IP
+the new employer would want; agent tooling qualifies, a prayer app doesn't.
+Circuit is a frozen-but-extensible snapshot for future usability, not a
+maintenance-mode signal yet. Mitchell explicitly wants heavy usage burn
+tonight — Sol chiefs should not sit idle — until the cutoff, then real
+maintenance mode begins.
+
+Wake infrastructure (both confirmed running 2026-07-12 ~12:40 UTC):
+- External watchdog `~/.local/bin/crew-chief-scheduler.sh` (source:
+  docs/orchestration/, REPO path fixed this session — was pointing at a
+  dead container path, so it had never actually been installed
+  post-breakout). 5h dead-man's-switch, revives in tmux with
+  `--model claude-fable-5 --dangerously-skip-permissions` if no claude
+  process is alive.
+- In-session cron: recurring check-in every 2h (:43), one-shot wrap-up at
+  cutoff (08:57 AEST). Session-scoped — dies if this session exits; the
+  watchdog is the fallback for that case.
+
+Overnight backlog for Sol (dispatch one at a time, keep it fed):
+1. Telemetry pass (rally's pattern) beyond marshal: laps, pacenotes, radio,
+   pitstop, spotter, mechanic, chassis, formula, lanes, starter, tarmac,
+   rover.
+2. `.circuit/<tool>/` dotfiles pattern beyond rally+laps: same tool list.
+3. Interactive configuration beyond rover/spotter/mechanic: same tool list.
+4. General robustness/test-coverage hardening pass per tool, framed for
+   "future usability/extensibility" — this is a checkpoint meant to be
+   picked back up later, not abandoned.
+5. Queue empty before cutoff → nitpicker-style scout pass across the fleet
+   for anything else worth doing in the time remaining.
+
+Circuit's actual site content (landing + docs) is chief-reserved, not
+delegated — tackled directly this session.
+
 ## The queue
 
 - File: `.laps/crew-chief.json` in the rally repo (committed).
@@ -107,6 +143,20 @@ harness memory dir (decision-merge-gates-2026-07-10).
   AEST; can answer via remote control. Batch questions for those windows.
 
 ## Session log (newest first; keep ~5 entries, prune older)
+
+- **2026-07-12 (Sun night AEST, continued same session — Circuit push)** —
+  Mitchell caught a model mixup (session had drifted to Sonnet instead of
+  Fable) mid-flow; confirmed Fable now the saved default
+  (`~/.claude/settings.json`). Caught and corrected a framing error in my
+  own prior summary: Circuit checkpoints the agent-tooling fleet, not
+  Moved by the Word — corrected via pacenotes 01KXB589 (supersedes stale
+  01KXB1E26). Found the external watchdog scheduler had never actually
+  been installed on this host post-breakout (hardcoded `/workspace/rally`,
+  a dead container path) — fixed (ea43b80, pushed dev), installed, and
+  relaunched; confirmed alive (pid 1812621). Set in-session cron: 2h
+  check-in cadence + 08:57 AEST cutoff wrap-up. Next: dispatch overnight
+  backlog to Sol, then write Circuit's actual site content directly
+  (chief-reserved).
 
 - **2026-07-12 (Sun, SAME session continued, ~01:20-02:00 UTC)** — Mitchell
   approved all 4 Linear tickets and directed Sol to orchestrate main
@@ -190,17 +240,6 @@ harness memory dir (decision-merge-gates-2026-07-10).
   create by design; annotations 403 = Checks:read absent, harmless).
   Sonnet's rover codex-key patch STILL UNPUSHED — review pending. NEXT:
   breakout window (Sun 9-11am AEST), then release gate Sun 23:00 UTC.
-
-- **2026-07-11 (Sat ~15:00 UTC)** — BOTH mbtw OpenSpec arcs COMPLETE and on
-  staging (d052bc8): today-queue-bootstrap-sync 47/47 (session 19: honest
-  legacy reconciliation — 1.2 needed a real shared-calendar clock-injection
-  fix; capstone 2000+2000-record browser lane, 625ms first assembly, 20+20
-  records returned). Chief combined review: gates re-run (typecheck, shared
-  264/264, both strict validations), calendar fix reviewed. Both changes
-  ARCHIVE-READY — archive deferred to post-breakout settling. mbtw backlog:
-  everything implementable is DONE except the two design-first items
-  (meta algorithm — waits on design; optimistic stats — proposal-only if
-  time). 19 Sol sessions total on mbtw.
 
 ## Prune rules (anti-snowball)
 
