@@ -9,6 +9,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/mitchell-wallace/rally/internal/presentation/tuicore"
+	"github.com/mitchell-wallace/rally/internal/relay/runner/runtimeevent"
 )
 
 type lapsFetcher func(context.Context) (tuicore.LapsSnapshot, error)
@@ -23,6 +24,8 @@ type lapsModel struct {
 	height   int
 }
 
+var _ tea.Model = lapsModel{}
+
 func newLapsModel(fetch lapsFetcher) lapsModel {
 	loading := false
 	return lapsModel{
@@ -32,6 +35,40 @@ func newLapsModel(fetch lapsFetcher) lapsModel {
 		width:    100,
 		height:   30,
 	}
+}
+
+// Init makes the laps view directly composable as a Bubble Tea child model.
+// The active Rally TUI still initializes it through the legacy parent until
+// every tab is ready for the chassis shell.
+func (m lapsModel) Init() tea.Cmd {
+	return m.FetchCmd()
+}
+
+// Update accepts content-sized window messages and the same runtime messages
+// the legacy parent currently fans into the laps view. This is the migration
+// seam used by chassis, while the old shell remains active.
+func (m lapsModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		m.SetSize(msg.Width, msg.Height)
+	case lapsSnapshotMsg:
+		if msg.err != nil {
+			m.SetError(msg.err)
+		} else {
+			m.SetSnapshot(msg.snapshot)
+		}
+	case eventMsg:
+		switch msg.event.(type) {
+		case runtimeevent.OutingHeaderReady, runtimeevent.AttemptFinished, runtimeevent.AttemptCancelled, runtimeevent.HandoffAttemptFinished:
+			return m, m.FetchCmd()
+		}
+	case tea.KeyMsg:
+		if msg.String() == "r" {
+			return m, m.FetchCmd()
+		}
+		m.HandleKey(msg.String())
+	}
+	return m, nil
 }
 
 func (m lapsModel) WithSnapshot(snapshot tuicore.LapsSnapshot) lapsModel {
@@ -72,11 +109,15 @@ func (m *lapsModel) FetchCmd() tea.Cmd {
 	}
 }
 
-func (m *lapsModel) View(width, height int) string {
+func (m *lapsModel) Render(width, height int) string {
 	m.SetSize(width, height)
+	return m.View()
+}
+
+func (m lapsModel) View() string {
 	vp := m.viewport
-	vp.Width = width
-	vp.Height = height
+	vp.Width = m.width
+	vp.Height = m.height
 	return vp.View()
 }
 

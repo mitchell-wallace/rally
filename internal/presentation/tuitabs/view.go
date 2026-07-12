@@ -49,7 +49,7 @@ func (m model) bodyView(height int) string {
 	case tabAgents:
 		return fitBlock(m.agentsView(height), m.width, height)
 	case tabLaps:
-		return fitBlock(m.laps.View(m.width, height), m.width, height)
+		return fitBlock(m.laps.Render(m.width, height), m.width, height)
 	case tabConfig:
 		return fitBlock(m.config.View(m.width, height), m.width, height)
 	default:
