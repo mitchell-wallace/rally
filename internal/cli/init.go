@@ -121,10 +121,14 @@ func runInit(cmd *cobra.Command, args []string) error {
 	}
 
 	// Auto-commit the setup files so they don't clutter git status.
+	rallyDirRel, err := filepath.Rel(workspaceDir, rallyDir)
+	if err != nil {
+		return err
+	}
 	initPaths := []string{
-		".rally/.gitignore",
-		".rally/config.toml",
-		".rally/README.md",
+		filepath.Join(rallyDirRel, ".gitignore"),
+		filepath.Join(rallyDirRel, "config.toml"),
+		filepath.Join(rallyDirRel, "README.md"),
 	}
 	if committed, err := gitx.CommitSetupFiles(workspaceDir, initPaths, "rally: initialize workspace"); err != nil {
 		fmt.Fprintf(os.Stderr, "warning: auto-commit setup files: %v\n", err)

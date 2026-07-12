@@ -209,7 +209,7 @@ func (r *Runner) runBoundedHandoffOnly(
 	// Fold handoff bookkeeping (summary.jsonl, any head followups) into history so
 	// the durable handoff entry is committed. Dirty-handoff auto-commit
 	// suppression for leftover code changes is owned by a later lap.
-	if err := gitx.FoldRallyState(r.cfg.WorkspaceDir); err != nil {
+	if err := gitx.FoldRallyStateAt(r.cfg.WorkspaceDir, store.RallyDir(r.cfg.WorkspaceDir)); err != nil {
 		fmt.Fprintf(log, "relay %d run %d handoff-only rally state fold warning: %v\n", relay.ID, runIndex+1, err)
 	}
 

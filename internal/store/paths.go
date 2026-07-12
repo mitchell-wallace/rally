@@ -5,18 +5,29 @@ import (
 	"path/filepath"
 )
 
-const rallyDirName = ".rally"
+const (
+	rallyDirName        = ".rally"
+	circuitDirName      = ".circuit"
+	circuitRallyDirName = "rally"
+)
 
+// RallyDir returns the per-repository Rally directory. The Circuit-wide
+// dotfiles location is opt-in: when .circuit/rally exists it wins, otherwise
+// Rally keeps using the legacy/default .rally directory.
 func RallyDir(workspaceDir string) string {
+	circuitDir := filepath.Join(workspaceDir, circuitDirName, circuitRallyDirName)
+	if info, err := os.Stat(circuitDir); err == nil && info.IsDir() {
+		return circuitDir
+	}
 	return filepath.Join(workspaceDir, rallyDirName)
 }
 
 func StateDir(workspaceDir string) string {
-	return filepath.Join(workspaceDir, rallyDirName, "state")
+	return filepath.Join(RallyDir(workspaceDir), "state")
 }
 
 func AgentsDir(workspaceDir string) string {
-	return filepath.Join(workspaceDir, rallyDirName, "agents")
+	return filepath.Join(RallyDir(workspaceDir), "agents")
 }
 
 // AgentsBuiltinDir holds rally-managed role instruction files. Rally regenerates
@@ -41,7 +52,7 @@ func RunStatePath(workspaceDir string) string {
 }
 
 func SummaryPath(workspaceDir string) string {
-	return filepath.Join(workspaceDir, rallyDirName, "summary.jsonl")
+	return filepath.Join(RallyDir(workspaceDir), "summary.jsonl")
 }
 
 func ProgressPath(workspaceDir string) string {
@@ -49,7 +60,7 @@ func ProgressPath(workspaceDir string) string {
 }
 
 func ConfigPath(workspaceDir string) string {
-	return filepath.Join(workspaceDir, rallyDirName, "config.toml")
+	return filepath.Join(RallyDir(workspaceDir), "config.toml")
 }
 
 // UserConfigPath returns the path to the user-level rally config, which is the
@@ -68,7 +79,7 @@ func UserConfigPath() string {
 }
 
 func InstructionsPath(workspaceDir string) string {
-	return filepath.Join(workspaceDir, rallyDirName, "instructions.md")
+	return filepath.Join(RallyDir(workspaceDir), "instructions.md")
 }
 
 func HookAuditPath(workspaceDir string) string {

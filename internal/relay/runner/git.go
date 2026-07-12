@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	osexec "os/exec"
+	"path/filepath"
 	"strings"
 
 	"github.com/mitchell-wallace/rally/internal/gitx"
@@ -28,7 +29,10 @@ func (r *Runner) commitLeftoverSummary(ctx context.Context, relay *store.RelayRe
 		return
 	}
 
-	const rel = ".rally/summary.jsonl"
+	rel, err := filepath.Rel(dir, store.SummaryPath(dir))
+	if err != nil {
+		return
+	}
 	out, err := gitx.GitOutput(dir, "status", "--porcelain", "--", rel)
 	if err != nil || strings.TrimSpace(string(out)) == "" {
 		return // clean — nothing left over

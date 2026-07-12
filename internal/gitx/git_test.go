@@ -484,6 +484,8 @@ func TestIsRallyOwnedOrTransientPath(t *testing.T) {
 		{".rally/config.toml", true},
 		{".rally/summary.jsonl", true},
 		{".rally/", true},
+		{".circuit/rally/config.toml", true},
+		{".circuit/rally/state/tries.jsonl", true},
 		{".laps/laps.json", true},
 		{".laps/hooks.json", true},
 		{".laps/", true},

@@ -2,6 +2,7 @@ package harnessapi
 
 import (
 	"fmt"
+	"path/filepath"
 	"strings"
 
 	"github.com/mitchell-wallace/rally/internal/agent_prompt"
@@ -117,7 +118,11 @@ Calling rally directly from the agent is the documented exception in no-backend 
 `)
 	}
 
-	fmt.Fprintf(&b, "\nYou can access rally data and context via `.rally/README.md`.\n")
+	rallyReadme := filepath.Join(".rally", "README.md")
+	if opts.RallyReadmePath != "" {
+		rallyReadme = opts.RallyReadmePath
+	}
+	fmt.Fprintf(&b, "\nYou can access rally data and context via `%s`.\n", filepath.ToSlash(rallyReadme))
 
 	return b.String()
 }

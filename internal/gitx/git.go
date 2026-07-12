@@ -10,12 +10,17 @@ import (
 	"strings"
 )
 
-// rallyStatePathspecs returns the subset of {.rally, .laps} that exist in dir.
+// rallyStatePathspecs returns the selected Rally directory and .laps when they
+// exist in dir.
 // Naming a nonexistent pathspec to `git add` errors, so callers stage only the
 // paths that are present (a workspace without laps has no .laps directory).
-func rallyStatePathspecs(dir string) []string {
+func rallyStatePathspecs(dir, rallyDir string) []string {
 	var paths []string
-	for _, p := range []string{".rally", ".laps"} {
+	rallyDir, err := filepath.Rel(dir, rallyDir)
+	if err != nil {
+		rallyDir = ".rally"
+	}
+	for _, p := range []string{rallyDir, ".laps"} {
 		if _, err := os.Stat(filepath.Join(dir, p)); err == nil {
 			paths = append(paths, p)
 		}
@@ -68,7 +73,7 @@ func GitUserFallbackConfig(dir string) []string {
 }
 
 func IsRallyOwnedOrTransientPath(path string) bool {
-	if strings.HasPrefix(path, ".rally/") || strings.HasPrefix(path, ".laps/") {
+	if strings.HasPrefix(path, ".rally/") || strings.HasPrefix(path, ".circuit/rally/") || strings.HasPrefix(path, ".laps/") {
 		return true
 	}
 	if path == ".claude/settings.local.json" {
@@ -161,6 +166,13 @@ func WorkspaceDirtyPaths(dir string) (map[string]string, error) {
 // not match an identity check. Amends never touch a non-rally HEAD and never
 // stack consecutive state commits.
 func FoldRallyState(dir string) error {
+	return FoldRallyStateAt(dir, filepath.Join(dir, ".rally"))
+}
+
+// FoldRallyStateAt is FoldRallyState with an explicit resolved per-repo Rally
+// directory. Callers that support alternate layouts should pass their selected
+// directory here.
+func FoldRallyStateAt(dir, rallyDir string) error {
 	_, inGit, err := GitRepoRoot(dir)
 	if err != nil || !inGit {
 		return nil
@@ -171,7 +183,7 @@ func FoldRallyState(dir string) error {
 	// .rally operational paths do not error here, and user code is never staged
 	// — preserving any intentionally-uncommitted work tree from an incomplete
 	// run.
-	paths := rallyStatePathspecs(dir)
+	paths := rallyStatePathspecs(dir, rallyDir)
 	if len(paths) == 0 {
 		return nil
 	}
@@ -232,12 +244,18 @@ func FoldRallyState(dir string) error {
 // resulting HEAD hash (the amended hash when a fold happened, otherwise the
 // unchanged HEAD), so callers can refresh the commit hash they report.
 func FoldRallyStateIntoHead(dir string) (string, error) {
+	return FoldRallyStateIntoHeadAt(dir, filepath.Join(dir, ".rally"))
+}
+
+// FoldRallyStateIntoHeadAt is FoldRallyStateIntoHead with an explicit resolved
+// per-repo Rally directory.
+func FoldRallyStateIntoHeadAt(dir, rallyDir string) (string, error) {
 	_, inGit, err := GitRepoRoot(dir)
 	if err != nil || !inGit {
 		return "", nil
 	}
 
-	if paths := rallyStatePathspecs(dir); len(paths) > 0 {
+	if paths := rallyStatePathspecs(dir, rallyDir); len(paths) > 0 {
 		if _, err := GitOutput(dir, append([]string{"add", "--"}, paths...)...); err != nil {
 			return "", err
 		}

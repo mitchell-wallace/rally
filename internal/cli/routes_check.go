@@ -11,6 +11,7 @@ import (
 	"github.com/mitchell-wallace/rally/internal/agent_prompt"
 	"github.com/mitchell-wallace/rally/internal/config"
 	"github.com/mitchell-wallace/rally/internal/routing"
+	"github.com/mitchell-wallace/rally/internal/store"
 	"github.com/mitchell-wallace/rally/internal/user_prompt/roleloader"
 )
 
@@ -154,7 +155,7 @@ func checkRoles(workspaceDir string) ([]RoleDiagnostic, []RoleOverlap, error) {
 		rolesMap[strings.ToLower(r)] = struct{}{}
 	}
 
-	agentsDir := filepath.Join(workspaceDir, ".rally", "agents")
+	agentsDir := store.AgentsDir(workspaceDir)
 	entries, err := os.ReadDir(agentsDir)
 	if err == nil {
 		for _, e := range entries {

@@ -234,6 +234,11 @@ file with sensible defaults (only if it doesn't exist) and writes a
 file. Edit the user base with `rally config`; edit repo overrides with
 `rally config --repo`.
 
+As part of the fleet-wide Circuit dotfiles convention, Rally checks
+`.circuit/rally/` first when that directory exists and otherwise uses `.rally/`
+exactly as before. `rally init` still creates `.rally/` by default; opting in is
+as simple as moving that directory to `.circuit/rally/`.
+
 `rally init roles` adds routes for Rally's built-in roles to the **user**
 config, plus role instruction files under
 `.rally/agents/` (see [Role instruction files](#role-instruction-files)). The
@@ -803,6 +808,10 @@ rally instructions show   # print to stdout
 Stored at `.rally/instructions.md` and included in each session prompt.
 
 ## Where Rally stores state
+
+The repo-local paths below are shown with the default `.rally/` prefix. When
+`.circuit/rally/` exists, Rally reads and writes the same relative layout there
+instead.
 
 Default data directory (override with `data_dir` in config):
 

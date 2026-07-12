@@ -74,7 +74,7 @@ func (r *Runner) reconcileAttemptProgress(relay *store.RelayRecord, runIndex int
 	// computed but before the footer/try record — so reported hashes are the
 	// amended hash while filesChanged still excludes folded rally state.
 	if commitHash != "" {
-		if newHash, foldErr := gitx.FoldRallyStateIntoHead(r.cfg.WorkspaceDir); foldErr != nil {
+		if newHash, foldErr := gitx.FoldRallyStateIntoHeadAt(r.cfg.WorkspaceDir, store.RallyDir(r.cfg.WorkspaceDir)); foldErr != nil {
 			fmt.Fprintf(log, "relay %d run %d attempt %d rally state fold warning: %v\n", relay.ID, runIndex+1, attempt.attempt, foldErr)
 		} else if newHash != "" && newHash != commitHash {
 			if len(commitHistory) > 0 && commitHistory[len(commitHistory)-1] == commitHash {
@@ -82,7 +82,7 @@ func (r *Runner) reconcileAttemptProgress(relay *store.RelayRecord, runIndex int
 			}
 			commitHash = newHash
 		}
-	} else if foldErr := gitx.FoldRallyState(r.cfg.WorkspaceDir); foldErr != nil {
+	} else if foldErr := gitx.FoldRallyStateAt(r.cfg.WorkspaceDir, store.RallyDir(r.cfg.WorkspaceDir)); foldErr != nil {
 		fmt.Fprintf(log, "relay %d run %d attempt %d rally state fold warning: %v\n", relay.ID, runIndex+1, attempt.attempt, foldErr)
 	}
 

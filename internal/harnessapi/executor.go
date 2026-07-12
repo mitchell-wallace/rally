@@ -65,6 +65,7 @@ type RunOptions struct {
 	LogPath            string // path to write try transcript log
 	ResumeSessionID    string // session-id to resume from a previous try
 	WorkspaceDir       string // working directory for the agent process
+	RallyReadmePath    string // repo-relative Rally context path; blank uses .rally/README.md
 	OnStart            func(pid int)
 }
 

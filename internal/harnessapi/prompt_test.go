@@ -57,6 +57,13 @@ func TestBuildPromptDirectRunHasOutputContractWithoutProgressAction(t *testing.T
 	}
 }
 
+func TestBuildPromptUsesResolvedRallyReadmePath(t *testing.T) {
+	prompt := BuildPrompt(RunOptions{RallyReadmePath: ".circuit/rally/README.md"})
+	if !strings.Contains(prompt, "via `.circuit/rally/README.md`") {
+		t.Fatalf("prompt does not use resolved Rally README path:\n%s", prompt)
+	}
+}
+
 func TestBuildPrompt_NoBackend(t *testing.T) {
 	opts := RunOptions{
 		LapsEnabled: false,

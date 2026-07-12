@@ -91,6 +91,9 @@ func (r *Runner) prepareRunAttempt(ctx context.Context, relay *store.RelayRecord
 		ResumeSessionID:    state.sessionID,
 		WorkspaceDir:       r.cfg.WorkspaceDir,
 	}
+	if rel, err := filepath.Rel(r.cfg.WorkspaceDir, filepath.Join(store.RallyDir(r.cfg.WorkspaceDir), "README.md")); err == nil {
+		opts.RallyReadmePath = rel
+	}
 	if state.lastAttemptIncomplete {
 		if opts.TaskPrompt != "" {
 			opts.TaskPrompt += "\n\n" + incompleteRetryGuidance

@@ -149,6 +149,7 @@ func runDirect(ctx context.Context, opts DirectRunOptions, deps directRunDeps) e
 		_ = logFile.Close()
 
 		startedAt := time.Now()
+		rallyReadmePath, _ := filepath.Rel(opts.WorkspaceDir, filepath.Join(store.RallyDir(opts.WorkspaceDir), "README.md"))
 		result, execErr := exec.Execute(tryCtx, harnessapi.RunOptions{
 			Persona:            picked.Harness,
 			Model:              picked.Model,
@@ -165,6 +166,7 @@ func runDirect(ctx context.Context, opts DirectRunOptions, deps directRunDeps) e
 			LogPath:            logPath,
 			ResumeSessionID:    resumeSessionID,
 			WorkspaceDir:       opts.WorkspaceDir,
+			RallyReadmePath:    rallyReadmePath,
 		})
 		runtime := time.Since(startedAt)
 		cancelTry()
