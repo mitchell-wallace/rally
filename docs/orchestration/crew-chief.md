@@ -50,20 +50,59 @@ Wake infrastructure (both confirmed running 2026-07-12 ~12:40 UTC):
   cutoff (08:57 AEST). Session-scoped — dies if this session exits; the
   watchdog is the fallback for that case.
 
-Overnight backlog for Sol (dispatch one at a time, keep it fed):
-1. Telemetry pass (rally's pattern) beyond marshal: laps, pacenotes, radio,
-   pitstop, spotter, mechanic, chassis, formula, lanes, starter, tarmac,
-   rover.
-2. `.circuit/<tool>/` dotfiles pattern beyond rally+laps: same tool list.
-3. Interactive configuration beyond rover/spotter/mechanic: same tool list.
-4. General robustness/test-coverage hardening pass per tool, framed for
-   "future usability/extensibility" — this is a checkpoint meant to be
-   picked back up later, not abandoned.
-5. Queue empty before cutoff → nitpicker-style scout pass across the fleet
-   for anything else worth doing in the time remaining.
+**2026-07-12 ~21:33 UTC re-priority (Mitchell, live)**: skills program is
+now the TOP priority, above telemetry. Telemetry pass status: 8/12 landed
+(marshal, laps, pacenotes, radio, pitstop, spotter, mechanic, rover);
+chassis + tarmac deferred (poor fit — chassis is a pure library with no
+CLI surface, tarmac is mid-rename); formula, lanes, starter not started —
+resume these only after the skills program's first wave lands.
 
-Circuit's actual site content (landing + docs) is chief-reserved, not
-delegated — tackled directly this session.
+### Skills program (top priority)
+
+Source repos to study (already cloned to
+`skills-repo/tmp/research/{mattpocock-skills,obra-superpowers}`, gitignore
+or clean up later): `github.com/mattpocock/skills`, `github.com/obra/superpowers`,
+plus the OpenSpec skills already local in multiple repos
+(`rally/.claude/skills/openspec-*`). Build Circuit equivalents in
+`skills-repo` based on Circuit's own workflows — comprehensive +
+composable, key categories first, expansion after. Near-double-ups (e.g.
+`grill-me` alongside `openspec-explore`) are explicitly fine per Mitchell.
+
+**In flight**: prepare-laps revision (pid 1841797, dispatched 21:33 UTC) —
+reconciles master `skills-repo/prepare-laps/SKILL.md` with rally's
+already-more-current local copy (roles-v2 names, decision tree — master
+had drifted stale), then adds dynamic flat-vs-stints behavior
+(`prepare-laps` smart default, `prepare-flat-laps` / `prepare-stints`
+explicit modes). Brief: `skills-repo/tmp/chief-requirements-prepare-laps-revision.md`.
+
+**Batched build queue** (dispatch one batch at a time to `skills-repo`,
+same-repo sessions must run sequentially, not in parallel, to avoid
+working-tree conflicts):
+
+- Batch A — open-ended-work skills: `systematic-debugging`,
+  `brainstorming` (non-OpenSpec-specific idea exploration), `grill-me`
+  (Socratic requirements interrogation, mattpocock-inspired).
+- Batch B — wrapping-up-work skills: `writing-great-skills` (meta-skill
+  for authoring skills — do this one early, it improves every batch
+  after it), `finishing-a-branch` (author-side pre-merge checklist,
+  complements existing `feature-branch-review`'s reviewer-side role),
+  `requesting-review`, `receiving-review` (obra-inspired split).
+- Batch C — continuity skills: `session-handoff` (generalizes the
+  crew-chief skill's "Working log" pattern into a standalone reusable
+  skill), `pacenotes-hygiene` (when/how to write a good pacenote —
+  types, why/apply fields, never storing secrets; motivated by a real
+  gap caught live tonight, see pacenotes 01KXB5MZJ).
+- Batch D — tool-specific (expansion phase): `radio-coordination`,
+  `marshal-triage`, `using-lanes`, `formula-authoring`,
+  `filing-a-puncture`.
+
+After each batch lands: update `skills-repo/README.md`'s skill list AND
+credit Matt Pocock's skills + obra/superpowers + OpenSpec as sources of
+inspiration (Mitchell's explicit ask — credit belongs on the Circuit
+homepage too, chief-reserved, see below).
+
+Circuit's actual site content (landing + docs, and now a new Skills page)
+is chief-reserved, not delegated — tackled directly by chief, not Sol.
 
 ## The queue
 
@@ -144,6 +183,24 @@ delegated — tackled directly this session.
 
 ## Session log (newest first; keep ~5 entries, prune older)
 
+- **2026-07-12 (Sun night AEST, ~21:33 UTC, Mitchell live)** — Rover's
+  telemetry (from the prior check-in) had genuinely finished; reviewed,
+  gates rerun clean, pushed to dev (4bfe389) — telemetry pass now 8/12
+  (chassis+tarmac deferred, formula/lanes/starter paused). Mitchell
+  re-prioritized: a skills program is now top priority, above telemetry —
+  study mattpocock/skills + obra/superpowers + local OpenSpec skills,
+  build Circuit equivalents, document sources of inspiration on the
+  Circuit homepage and in skills-repo's README. Verified both source repos
+  are real (was initially suspicious of a subagent's oddly-high star
+  counts — 166k/252k — but confirmed genuine via direct GitHub API call,
+  not fabricated). Found master `skills-repo/prepare-laps` had drifted
+  stale vs. rally's already-updated roles-v2 local copy. Dispatched the
+  prepare-laps revision (reconcile + add flat-vs-stints dynamic modes) to
+  Sol, confirmed running (pid 1841797). Designed and recorded a full
+  batched skill inventory (batches A-D) in "Tonight's push" above for
+  future check-ins to work through sequentially (skills-repo sessions
+  can't run in parallel with each other — same working tree).
+
 - **2026-07-12 (Sun night AEST, fifth 2h cron check-in, ~21:14 UTC)** —
   Mechanic's telemetry dispatch had genuinely finished (ps + file-stability
   verified); reviewed (diff, README addition, path-scrubbing present,
@@ -180,12 +237,6 @@ delegated — tackled directly this session.
   tonight), laps, pacenotes, radio, pitstop landed; spotter in flight;
   remaining: mechanic, chassis, formula, lanes, starter, tarmac, rover.
 
-- **2026-07-12 (Sun night AEST, second 2h cron check-in, ~15:14 UTC)** —
-  Radio's telemetry dispatch (from the prior check-in) had genuinely
-  finished (ps + file-stability verified); reviewed (diff + README doc
-  addition + parity test present), gates rerun clean, pushed (d29aaa0).
-  Dispatched next backlog item #1 (telemetry pass) to Sol for pitstop,
-  confirmed running (pid 1825740).
 
 - **2026-07-12 (Sun night AEST, first 2h cron check-in, ~13:13 UTC)** — No
   in-flight dispatches at wake (both laps + pacenotes telemetry from the
