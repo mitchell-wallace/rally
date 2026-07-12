@@ -215,6 +215,21 @@ is chief-reserved, not delegated — tackled directly by chief, not Sol.
   claude+tmux-server on every future revival) so it isn't a one-off manual
   fix. Best-effort only — never blocks the actual revival if sudo is
   unavailable in some future context.
+- **Watchdog kept dying silently (2026-07-12 ~21:55 UTC) — likely root
+  cause found**: the watchdog died twice (once after ~5h, once after
+  ~10min) with zero trace in `dmesg`, `journalctl`, or cgroup
+  `memory.events` (`oom_kill 0`) — ruled out OOM at both kernel and cgroup
+  level. The one real anomaly: `loginctl show-user mitchell` showed
+  `Linger=no` — when disabled, systemd-logind can reap ALL of a user's
+  processes, including `setsid`/`nohup`-detached ones, when login sessions
+  cycle, regardless of process-group tricks. Fixed:
+  `sudo loginctl enable-linger mitchell` (now `Linger=yes`). Not 100%
+  confirmed as the exact mechanism (no direct kill log either way), but
+  it's the standard, correct, no-downside fix for this failure mode on
+  systemd hosts and should be treated as fixed unless it recurs. Full
+  writeup: pacenotes 01KXC516B. Also expanded swap 2G→4G as further
+  headroom (Mitchell's request, unrelated to the linger finding but good
+  general insurance).
 - The Claude scratchpad dir under /tmp/claude-1000/ can be WIPED mid-session;
   keep dispatch briefs and reports in repo tmp/ dirs instead.
 - User availability (2026-07-10 brief): Sat ~6-9pm, Sun ~9-11am and ~7-9pm
