@@ -144,6 +144,14 @@ delegated — tackled directly this session.
 
 ## Session log (newest first; keep ~5 entries, prune older)
 
+- **2026-07-12 (Sun night AEST, first 2h cron check-in, ~13:13 UTC)** — No
+  in-flight dispatches at wake (both laps + pacenotes telemetry from the
+  prior entry had already landed and pushed before this check-in fired).
+  Circuit's real site content is live and verified
+  (circuit-navy.vercel.app). Dispatched next backlog item #1 (telemetry
+  pass) to Sol for radio, confirmed running (pid 1821750). Nothing else
+  actionable this check-in.
+
 - **2026-07-12 (Sun night AEST, continued same session — Circuit push)** —
   Mitchell caught a model mixup (session had drifted to Sonnet instead of
   Fable) mid-flow; confirmed Fable now the saved default
@@ -224,22 +232,6 @@ delegated — tackled directly this session.
   in ~/rover (unpushed). Release gate Sun 23:00 UTC: rally staging 465f1ed
   + laps staging 45ffe48, both CI green, suite 8/8, VERSION 1.0.0 both —
   rally-release + laps-release skills, then rall-c3a8 nitpicker post-release.
-
-- **2026-07-11 (Sat night UTC)** — Scout sweep landed (user-directed, Claude
-  allowance burn): pacenotes 4 patch batches (pushed main), laps 3 agent-UX
-  proposals, thenn 4 proposals incl. the supervisor job backend (user's
-  direction), rover 2 batches (incomplete — scout hit Claude session limit;
-  all scouts died at commit step, chief salvaged + committed). Skills repo:
-  pathfinder→feature-scout, nitpicker→patch-scout renames + portable
-  crew-chief v2 pushed (c6ec61e); consuming repos' skills-lock.json entries
-  need renaming on next sync. Rover v0.7.0 RELEASED (provisioning:
-  docker-sbx, claude code, thenn, mise, half-RAM swapfile w/ targeted
-  resize). pacenotes v0.1.1 published manually + CI/release wiring fixed
-  (green). Sol's dune dual-backend research on branch dual-backend-
-  exploration (DinD-sibling recommendation). PAT v2 verified (no repo-
-  create by design; annotations 403 = Checks:read absent, harmless).
-  Sonnet's rover codex-key patch STILL UNPUSHED — review pending. NEXT:
-  breakout window (Sun 9-11am AEST), then release gate Sun 23:00 UTC.
 
 ## Prune rules (anti-snowball)
 
