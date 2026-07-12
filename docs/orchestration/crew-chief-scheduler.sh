@@ -30,7 +30,7 @@ CUTOFF="${CC_CUTOFF:-1783897200}"
 PROMPT="${CC_PROMPT:-Crew chief, get to work}"
 STATE_DIR="${CC_STATE:-$HOME/.local/state/crew-chief}"
 FIRST_DELAY="${CC_FIRST_DELAY:-$INTERVAL}"
-REPO="/workspace/rally"
+REPO="${CC_REPO:-$HOME/group-1/rally}"
 TMUX_SESSION="crew-chief"
 
 mkdir -p "$STATE_DIR"
