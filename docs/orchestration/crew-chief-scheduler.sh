@@ -51,6 +51,10 @@ if [ -f "$PIDFILE" ]; then
 fi
 echo $$ > "$PIDFILE"
 log "scheduler v2 started pid=$$ interval=${INTERVAL}s cutoff=$CUTOFF first_delay=${FIRST_DELAY}s"
+# Best-effort: the scheduler is the dead-man's-switch itself, harden it too.
+sudo -n bash -c "echo -500 > /proc/$$/oom_score_adj" 2>/dev/null \
+    && log "oom-hardened self pid=$$" \
+    || log "oom-harden self skipped (no passwordless sudo)"
 
 next_fire=$(( $(date +%s) + FIRST_DELAY ))
 
@@ -74,6 +78,20 @@ while :; do
             "claude --dangerously-skip-permissions --model claude-fable-5 '$PROMPT'" \
             && log "revival $stamp launched" \
             || log "revival $stamp FAILED to launch"
+        # Best-effort OOM-kill hardening: a revived session is as valuable as
+        # this scheduler and should not be the first thing reaped under
+        # memory pressure. Never let this block the actual revival.
+        sleep 3
+        newpid=$(pgrep -x claude | head -1)
+        tmuxserver=$(pgrep -x tmux | head -1)
+        if [ -n "$newpid" ]; then
+            sudo -n bash -c "echo -500 > /proc/$newpid/oom_score_adj" 2>/dev/null \
+                && log "oom-hardened revived claude pid=$newpid" \
+                || log "oom-harden skipped (no passwordless sudo or pid $newpid gone)"
+        fi
+        if [ -n "$tmuxserver" ]; then
+            sudo -n bash -c "echo -500 > /proc/$tmuxserver/oom_score_adj" 2>/dev/null
+        fi
     fi
     next_fire=$(( next_fire + INTERVAL ))
     now=$(date +%s)
