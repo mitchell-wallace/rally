@@ -10,7 +10,13 @@ this doc records *state and protocol*, not narrative. Prune rules at the bottom.
 09:00 AEST (cutoff epoch 1783897200):
 
 1. rally+laps v1.0.0: rall-c3a8 nitpicker pass now; rall-94fc coordinated
-   main release **gated to Monday morning, only if confident it's stable**.
+   main release — **UPDATE 2026-07-12 ~21:50 UTC**: no longer gated to
+   Monday morning specifically (Mitchell extended authorization live,
+   pacenotes 01KXC4GM2) — chief may cut it whenever genuinely confident
+   staging is stable (CI green + a real test-driving-rally pass), same bar
+   as before, just no longer time-boxed to a specific morning. Not yet
+   attempted this session — check staging readiness before the skills
+   program's later batches if there's a natural pause point.
 2. rally TUI: role/routing config + provider enable/disable from the TUI
    (Sol chief sessions; brief in scratchpad, re-dispatch bounded sessions).
 3. Prayer-app backlog: Sol chief campaign, doc =
