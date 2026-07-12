@@ -204,6 +204,34 @@ is chief-reserved, not delegated — tackled directly by chief, not Sol.
 
 ## Session log (newest first; keep ~5 entries, prune older)
 
+- **2026-07-12 (Sun night AEST, ~21:38-21:46 UTC, Mitchell live, going
+  offline for the workday)** — Cutoff relaxed: no longer a hard 9am stop,
+  real stop condition is now backlog exhaustion (pacenotes 01KXC4BZM).
+  Watchdog extended to 20:00 AEST cutoff and relaunched with fresh script
+  (old instance had silently died with no clean exit log — cause unknown,
+  recurring check-in now self-checks watchdog liveness each cycle as
+  mitigation). New standing convention: push AND release (version-bump,
+  tag) where a repo has its own release mechanism and accumulated
+  meaningful gate-green work. Asked Mitchell the one open question before
+  he went offline: does this extend to the separate rally/laps v1.0.0
+  coordinated release gate (rall-94fc)? He said yes — authorization
+  extended (pacenotes 01KXC4GM2), same stability bar as before, just not
+  time-boxed to "Monday morning" anymore; not yet attempted, natural pause
+  point is after the current skills dispatch. Landed prepare-laps
+  revision (reviewed, independently verified its new `laps list --tree` /
+  `laps stints ...` CLI syntax against a **fresh** build after initially
+  flagging it as possibly-hallucinated against a stale installed binary —
+  all real; also verified rally's synced copy matches byte-for-byte),
+  pushed both repos (skills-repo 982f5b7, rally a3055ef). Updated
+  skills-repo's README with inspiration credits + prepare-laps' new
+  summary, pushed (9ed77fe). Caught and recorded a real near-miss:
+  authorized Sol to touch rally's working tree while chief was
+  independently committing to the same working tree concurrently — no
+  collision this time (different files) but recorded as a feedback note
+  (01KXC4PGH) since it was luck, not a safe pattern. Dispatched skills
+  batch A (systematic-debugging, brainstorming, grill-me) to Sol,
+  confirmed running (pid 1844478).
+
 - **2026-07-12 (Sun night AEST, ~21:33 UTC, Mitchell live)** — Rover's
   telemetry (from the prior check-in) had genuinely finished; reviewed,
   gates rerun clean, pushed to dev (4bfe389) — telemetry pass now 8/12
@@ -258,14 +286,6 @@ is chief-reserved, not delegated — tackled directly by chief, not Sol.
   tonight), laps, pacenotes, radio, pitstop landed; spotter in flight;
   remaining: mechanic, chassis, formula, lanes, starter, tarmac, rover.
 
-
-- **2026-07-12 (Sun night AEST, first 2h cron check-in, ~13:13 UTC)** — No
-  in-flight dispatches at wake (both laps + pacenotes telemetry from the
-  prior entry had already landed and pushed before this check-in fired).
-  Circuit's real site content is live and verified
-  (circuit-navy.vercel.app). Dispatched next backlog item #1 (telemetry
-  pass) to Sol for radio, confirmed running (pid 1821750). Nothing else
-  actionable this check-in.
 
 ## Prune rules (anti-snowball)
 
