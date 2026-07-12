@@ -9,6 +9,7 @@ require (
 	github.com/charmbracelet/huh v1.0.0
 	github.com/charmbracelet/lipgloss v1.1.0
 	github.com/charmbracelet/x/ansi v0.9.3
+	github.com/mitchell-wallace/chassis v0.0.0
 	github.com/muesli/cancelreader v0.2.2
 	github.com/muesli/termenv v0.16.0
 	github.com/newrelic/go-agent/v3 v3.43.3
@@ -16,6 +17,8 @@ require (
 	github.com/spf13/cobra v1.10.2
 	golang.org/x/term v0.42.0
 )
+
+replace github.com/mitchell-wallace/chassis => ../chassis
 
 require (
 	github.com/atotto/clipboard v0.1.4 // indirect
