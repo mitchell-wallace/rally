@@ -237,6 +237,16 @@ is chief-reserved, not delegated — tackled directly by chief, not Sol.
 
 ## Session log (newest first; keep ~5 entries, prune older)
 
+- **2026-07-12 (Sun night AEST, ~23:14 UTC check-in)** — Watchdog alive
+  (linger fix holding). Batch A had genuinely finished (ps + file-stability
+  verified); reviewed (all three skills read in full, validator confirmed
+  "Skill is valid!" for each, explicit confirmation no unverified CLI
+  syntax was added), pushed (e14eed8). No release mechanism applies to
+  skills-repo (no VERSION/tag process, plain GitHub distribution via `npx
+  skills`) — push alone is the complete action there. Dispatched batch B
+  (writing-great-skills, finishing-a-branch, requesting-review,
+  receiving-review) to Sol, confirmed running (pid 1846633).
+
 - **2026-07-12 (Sun night AEST, ~21:38-21:46 UTC, Mitchell live, going
   offline for the workday)** — Cutoff relaxed: no longer a hard 9am stop,
   real stop condition is now backlog exhaustion (pacenotes 01KXC4BZM).
@@ -309,16 +319,6 @@ is chief-reserved, not delegated — tackled directly by chief, not Sol.
   continues. Telemetry landed: marshal, laps, pacenotes, radio, pitstop,
   spotter; mechanic in flight; remaining: chassis, formula, lanes, starter,
   tarmac, rover.
-
-- **2026-07-12 (Sun night AEST, third 2h cron check-in, ~17:13 UTC)** —
-  Pitstop's telemetry dispatch had genuinely finished (ps + file-stability
-  verified); reviewed (diff, README addition, no puncture-content leakage
-  into events, parity test present), gates rerun clean, pushed (b007994).
-  Dispatched next backlog item #1 (telemetry pass) to Sol for spotter,
-  confirmed running (pid 1829812). Telemetry pass so far: marshal (earlier
-  tonight), laps, pacenotes, radio, pitstop landed; spotter in flight;
-  remaining: mechanic, chassis, formula, lanes, starter, tarmac, rover.
-
 
 ## Prune rules (anti-snowball)
 
