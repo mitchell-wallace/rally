@@ -144,6 +144,20 @@ delegated — tackled directly this session.
 
 ## Session log (newest first; keep ~5 entries, prune older)
 
+- **2026-07-12 (Sun night AEST, fourth 2h cron check-in, ~19:14 UTC)** —
+  Spotter's telemetry dispatch had genuinely finished (ps + file-stability
+  verified); reviewed (diff, README addition, no token/content leakage into
+  events, parity test present), gates rerun clean, pushed (d95b9e7).
+  Dispatched next backlog item #1 (telemetry pass) to Sol for mechanic,
+  confirmed running (pid 1833839). Memory watch: available dropped to
+  ~1.5Gi (from ~1.8-2.2Gi at earlier check-ins) — an "sbx daemon start"
+  process (pid 1202877, started Jul11, ~830MB RSS) is the largest single
+  consumer and looks possibly orphaned, but not clearly so; did not touch
+  it mid-check-in. Worth investigating at the next check-in if the trend
+  continues. Telemetry landed: marshal, laps, pacenotes, radio, pitstop,
+  spotter; mechanic in flight; remaining: chassis, formula, lanes, starter,
+  tarmac, rover.
+
 - **2026-07-12 (Sun night AEST, third 2h cron check-in, ~17:13 UTC)** —
   Pitstop's telemetry dispatch had genuinely finished (ps + file-stability
   verified); reviewed (diff, README addition, no puncture-content leakage
@@ -181,36 +195,6 @@ delegated — tackled directly this session.
   check-in cadence + 08:57 AEST cutoff wrap-up. Next: dispatch overnight
   backlog to Sol, then write Circuit's actual site content directly
   (chief-reserved).
-
-- **2026-07-12 (Sun, SAME session continued, ~01:20-02:00 UTC)** — Mitchell
-  approved all 4 Linear tickets and directed Sol to orchestrate main
-  implementation while chief manages/monitors (session budget: ~2.5h,
-  ~50% used at handoff). Bootstrapped rally+laps binaries on this host
-  (built from group-1/rally + group-1/laps dev, installed ~/.local/bin —
-  neither existed post-breakout). Found + fixed a real bug live: `codex exec`
-  was fully broken host-wide (`/etc/codex` mode 0700 blocked stat-ing an
-  unrelated file, not just Linear-key reads) — fixed forward on rover dev
-  (29ed90b) and chmod'd live. Dispatched Sol (gpt-5.6-sol, codex exec) for
-  MIT-111/112/113 (laps cluster, one session) and MIT-114 (thenn, feature
-  branch `feat/supervisor-job-backend`) — thenn's first dispatch got cut off
-  by an operator (chief) Bash-timeout mistake mid-step-1; chief verified the
-  salvaged diff (interface extraction, zero test changes, green gates),
-  committed it (a82c255), and re-dispatched properly-backgrounded for step 2
-  (scheduler core). New workstream from Mitchell: an inter-agent coordination
-  layer ("radio") so frontier models can iterate together on hard plans, with
-  a human-facing bridge (Discord/Telegram/etc) as Mitchell's own call.
-  Researched `Dicklesworthstone/mcp_agent_mail` (Python+Rust versions) —
-  decided to build bespoke Go instead (fleet-consistent, pacenotes-style,
-  neither upstream has a human bridge anyway) — chief's call per explicit
-  agency grant. Scaffolded `~/group-1/radio` (gh PAT can't create repos,
-  known limitation; Mitchell created it manually mid-session), dispatched Sol
-  for design-collab, got back a full design doc + working v0 CLI in one
-  session (ULID messages, hardlink-atomic writes, advisory file reservations,
-  derived inbox/thread views, no daemon/SQLite) — chief-reviewed
-  (atomicity/collision/path-validation/thread-consistency all checked) and
-  pushed clean. Filed MIT-115 (radio, chief's call, landed) and MIT-116
-  (human bridge options for Mitchell, Backlog). All 4 original tickets now
-  In Progress. Queue (rall-94fc/rall-c3a8) still release-gated, untouched.
 
 ## Prune rules (anti-snowball)
 
