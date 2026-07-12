@@ -144,6 +144,15 @@ delegated — tackled directly this session.
 
 ## Session log (newest first; keep ~5 entries, prune older)
 
+- **2026-07-12 (Sun night AEST, third 2h cron check-in, ~17:13 UTC)** —
+  Pitstop's telemetry dispatch had genuinely finished (ps + file-stability
+  verified); reviewed (diff, README addition, no puncture-content leakage
+  into events, parity test present), gates rerun clean, pushed (b007994).
+  Dispatched next backlog item #1 (telemetry pass) to Sol for spotter,
+  confirmed running (pid 1829812). Telemetry pass so far: marshal (earlier
+  tonight), laps, pacenotes, radio, pitstop landed; spotter in flight;
+  remaining: mechanic, chassis, formula, lanes, starter, tarmac, rover.
+
 - **2026-07-12 (Sun night AEST, second 2h cron check-in, ~15:14 UTC)** —
   Radio's telemetry dispatch (from the prior check-in) had genuinely
   finished (ps + file-stability verified); reviewed (diff + README doc
@@ -202,31 +211,6 @@ delegated — tackled directly this session.
   pushed clean. Filed MIT-115 (radio, chief's call, landed) and MIT-116
   (human bridge options for Mitchell, Backlog). All 4 original tickets now
   In Progress. Queue (rall-94fc/rall-c3a8) still release-gated, untouched.
-
-- **2026-07-12 (Sun, FIRST host session, ~01:00-01:20 UTC)** — Bootstrapped on
-  the bare host per the breakout runbook; pacenotes already live, brief
-  returns real cross-repo notes. Release gate confirmed still correct and
-  NOT yet due (465f1ed/45ffe48, both CI green, VERSION 1.0.0 both; gate is
-  Sun 23:00 UTC, ~22h out at session start) — did not release early.
-  Reviewed + landed the FIRST review item: Sonnet's rover codex-key patch —
-  found it sitting unpushed in the STALE ~/rover clone (main stuck at
-  14baf4a, missing v0.6.0/v0.7.0), cherry-picked onto current group-1/rover
-  dev, pushed (5a662c5). User also flagged high memory/swap live (btm at
-  18%/no tty, orphaned since before breakout) — killed it, stopped 4 running
-  dune sandbox containers (group-1-01 + 2 stray laps-c5/rally-37 pipelock
-  sidecars); swap dropped 1.9Gi→91Mi. Verified sbx-7-host-credential-injection
-  DRAFT.md's open questions against a real `sbx` on this host: keychain
-  storage/encryption now VERIFIED (age+scrypt file fallback when no OS
-  keyring), create-vs-run injection path de-risked from docs (not fully
-  live-traced), proxy transparency still open — committed to dune
-  dual-backend-exploration (c1fe320, pushed, docs-only). Linear intake sweep
-  (agent:chief label created, workspace had none): filed MIT-111/112/113
-  (laps trapdoor/file-targeting/contract-surfacing, Todo — ready to go,
-  independent of the release) and MIT-114 (thenn supervisor-job-backend,
-  Backlog — flagged for Mitchell's evening review, real new-daemon scope
-  call). Found thenn's "four proposals" scout commit only wrote one; noted
-  in pacenotes + the MIT-114 ticket for a possible re-scout. Queue unchanged
-  (rall-94fc/rall-c3a8 still the only two laps, both release-gated).
 
 ## Prune rules (anti-snowball)
 
