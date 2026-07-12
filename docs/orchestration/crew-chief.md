@@ -108,6 +108,36 @@ harness memory dir (decision-merge-gates-2026-07-10).
 
 ## Session log (newest first; keep ~5 entries, prune older)
 
+- **2026-07-12 (Sun, SAME session continued, ~01:20-02:00 UTC)** — Mitchell
+  approved all 4 Linear tickets and directed Sol to orchestrate main
+  implementation while chief manages/monitors (session budget: ~2.5h,
+  ~50% used at handoff). Bootstrapped rally+laps binaries on this host
+  (built from group-1/rally + group-1/laps dev, installed ~/.local/bin —
+  neither existed post-breakout). Found + fixed a real bug live: `codex exec`
+  was fully broken host-wide (`/etc/codex` mode 0700 blocked stat-ing an
+  unrelated file, not just Linear-key reads) — fixed forward on rover dev
+  (29ed90b) and chmod'd live. Dispatched Sol (gpt-5.6-sol, codex exec) for
+  MIT-111/112/113 (laps cluster, one session) and MIT-114 (thenn, feature
+  branch `feat/supervisor-job-backend`) — thenn's first dispatch got cut off
+  by an operator (chief) Bash-timeout mistake mid-step-1; chief verified the
+  salvaged diff (interface extraction, zero test changes, green gates),
+  committed it (a82c255), and re-dispatched properly-backgrounded for step 2
+  (scheduler core). New workstream from Mitchell: an inter-agent coordination
+  layer ("radio") so frontier models can iterate together on hard plans, with
+  a human-facing bridge (Discord/Telegram/etc) as Mitchell's own call.
+  Researched `Dicklesworthstone/mcp_agent_mail` (Python+Rust versions) —
+  decided to build bespoke Go instead (fleet-consistent, pacenotes-style,
+  neither upstream has a human bridge anyway) — chief's call per explicit
+  agency grant. Scaffolded `~/group-1/radio` (gh PAT can't create repos,
+  known limitation; Mitchell created it manually mid-session), dispatched Sol
+  for design-collab, got back a full design doc + working v0 CLI in one
+  session (ULID messages, hardlink-atomic writes, advisory file reservations,
+  derived inbox/thread views, no daemon/SQLite) — chief-reviewed
+  (atomicity/collision/path-validation/thread-consistency all checked) and
+  pushed clean. Filed MIT-115 (radio, chief's call, landed) and MIT-116
+  (human bridge options for Mitchell, Backlog). All 4 original tickets now
+  In Progress. Queue (rall-94fc/rall-c3a8) still release-gated, untouched.
+
 - **2026-07-12 (Sun, FIRST host session, ~01:00-01:20 UTC)** — Bootstrapped on
   the bare host per the breakout runbook; pacenotes already live, brief
   returns real cross-repo notes. Release gate confirmed still correct and
@@ -171,212 +201,6 @@ harness memory dir (decision-merge-gates-2026-07-10).
   everything implementable is DONE except the two design-first items
   (meta algorithm — waits on design; optimistic stats — proposal-only if
   time). 19 Sol sessions total on mbtw.
-- **2026-07-11 (Sat evening UTC)** — USER SESSION (window): pacenotes+data
-  repos pushed to GitHub (memory now wipe-proof; data remote repointed);
-  PAT verdict: contents OK, issues/creation blocked — new PAT tonight (user);
-  Linear = primary intake (MCP at group-1 scope; trigger = Mitchell comment
-  mentioning crewchief); GitHub machine user agreed (username via gh issue).
-  BREAKOUT to bare Rover VM planned Sun AM window; dune->dunex parity
-  manifest stored in pacenotes (01KX8835TG); dunex facts + post-breakout
-  tasks (AEST tz, thenn background-service design) in pacenotes. agy AUTHED
-  → exposed real rally bug: transient startup auth noise failed every
-  completed agy run (auth/proxy false positive); fixed 465f1ed (source-split
-  evidence, red-green proven, live relay + real-backend PASS → suite 8/8),
-  ff'd to staging. mbtw session 18: local-Postgres correction closed ALL
-  gated tasks (3.5/5.5/8.3), 40/47; session 19 running (legacy checkbox
-  reconciliation, no courtesy ticks + capstone 8.4 seeded browser lane).
-  pacenotes v0.1.1 release triggered (verify once new PAT can read Actions).
-- **2026-07-11 (Sat ~06:50 UTC)** — MEMORY-LEVELLING ARC COMPLETE (sessions
-  8-15, 42/42 tasks) and PROMOTED to mbtw staging (325f667) after chief
-  full-arc review: deterministic replay core w/ divergence guards verified,
-  legacy normalization side-effect-free, typecheck + shared 257/257 + both
-  strict validations re-run by chief. CAVEAT held open: Postgres functional
-  lane (bootstrap 3.5/8.3) needs CI/user run — NO DOCKER in container
-  (recorded in pacenotes). today-queue-bootstrap-sync at 20/47, session 16
-  continues it. mbtw backlog remaining: bootstrap-sync completion,
-  ui-component-library arc, optimistic-stats design proposal, archive
-  levelling change after settling.
-- **2026-07-11 (session 13 cont., Sat ~07:30 UTC)** — memory-levelling arc
-  sessions 8-10 DONE on dev (not staging — arc promotes only when
-  feature-complete): foundations, backend persistence/sync gating, per-card
-  streaks, canonical memory_queue_snapshot THROUGH today-queue-bootstrap-
-  sync's contract. Progress: leveling 17/42, bootstrap-sync 9/47, strict
-  validation both changes each session. Session 11 running (shared scorer
-  extraction first per handoff). One usage-limit bounce (session 8 dispatch,
-  ~90min pause, one-shot cron retried — pattern works). User window Sat
-  6-9pm AEST: status prepared; open asks = pacenotes repos/PAT, agy OAuth.
-- **2026-07-10/11 (session 13 cont., overnight)** — mbtw sessions 5-7 DONE,
-  reviewed, each promoted to staging (9e0e8a9 chips / 987eab5 double-tap +
-  memory modals / b5cfc86 hints framework). Session 5 died once to a
-  transient sol CAPACITY error mid-lap; continuation chief preserved and
-  completed the partial diff (recovery pattern holds for codex chiefs).
-  Session 7's audit: lazy-loading is implemented+green (44 tests) but NO
-  OpenSpec record exists — chief ruling: verified-done, no retroactive spec
-  reconstruction. P0s+P1s+ALL P2 tweaks complete in 7 sessions. Session 8
-  dispatched: memory-leveling-redesign arc (openspec-driven, ~2-3 bounded
-  sessions, foundation phases first, today-queue-bootstrap-sync dependency
-  flagged). Remaining after: ui-component-library arc, design-first
-  proposals (optimistic stats), Monday rally+laps release.
-- **2026-07-10 (session 13 cont., ~17:30 UTC)** — mbtw sessions 3+4 DONE and
-  chief-reviewed: ALL P1s (streak high scores use row-locked monotonic
-  max-merge — reviewed; segmented controls; list-view delete; five tweaks
-  found already-landed, coverage added) and the notification-bell P2
-  (design-note-first: local-only versioned envelope, archive history
-  decoupled from clearable rows, taxonomy-compliant placement; 1039 unit/
-  525 component/161 integration/5 e2e green). Staging promoted per batch:
-  4b933a8 (P1s), 652ea6f (bell; June-19 staging-only test tweaks now fully
-  superseded by dev-side resolutions — future merges won't conflict).
-  Session 5 (tappable chips) dispatched. rally/laps: idle by design until
-  Monday release.
-- **2026-07-10 (session 13 cont., ~13:30 UTC)** — Staging CI fix-forward
-  BOTH repos green (rally ae5d23e: chief's gofmt miss on tui.go + fresh
-  stdlib CVE GO-2026-5856 → Go 1.26.5 bump; laps 45ffe48: same bump
-  preemptively). mbtw session 2 DONE (5565470, 700k tok): remaining 3 P0s
-  (daily rollover via Page Lifecycle resume — 2-line surgical fix w/ tests;
-  sync-paused copy; expired-prayer answering) + 2 P1s; chief spot-reviewed +
-  typecheck; PROMOTED mbtw dev→staging (7bb69f9, merge commit per repo
-  convention; 2 test conflicts vs June-19 staging tweaks resolved to dev's
-  verified side, conflicted unit file re-run green 31/31). ALL SIX mbtw P0s
-  now on staging. Session 3 (P1 tweaks) dispatched. Monday: rally+laps
-  staging→main (both staging CIs green at ae5d23e/45ffe48) + nitpicker.
-- **2026-07-10 (session 13 cont., ~09:45 UTC)** — TEST-DRIVE PASS, staging
-  promoted: rally 7301b00, laps 62d4ae9 (both pushed; CI watched). Suite 7/8
-  (agy env-fail only). Live drives: laps queue drained incl. resume-after-
-  stop; round-robin op/cx; REAL usage-limit rotation observed (codex rolling
-  limit hit ~09:10, resets 12:14 — did NOT burn a weekly /reset; Sol
-  dispatches paused until then, one-shot cron re-dispatches mbtw chief).
-  FIXED from mbtw chief's field report: stopped relays claimed "relay
-  complete" (TUI banner + CLI line) — 7301b00 adds stopped-with-work-
-  remaining end line, DoneHintFunc seam, tests; openspec wording aligned to
-  the implemented Ctrl+X contract. mbtw session 1 reviewed: 3/6 P0s landed
-  (queue corruption root-caused; answered/prayed decoupled; sign-out = Web
-  Lock cross-context refresh coordination), typecheck 4/4, no new lint
-  (backend prettier errors pre-exist), dev pushed. thenn v1.1.0 RELEASED
-  (job hardening; chief fixed removal idempotence + killed a 21-try
-  handoff loop on an env-blocked lap — rally gap noted in pacenotes).
-  Monday remains: VERSION bumps + staging→main (rall-94fc), then nitpicker.
-- **2026-07-10 (session 13 cont., ~09:00 UTC)** — pacenotes v1 BUILT and
-  LIVE: Sol implemented full spec (4k lines, 25 tests) in one lap; chief
-  acceptance found+fixed 2 real bugs (init silently repointing machine config
-  → --force guard; git() TrimSpace mangling first porcelain line → manual
-  note removals refused; gitRaw + regression tests). Binary installed,
-  claude+codex adapters installed (hooks merged, settings keys preserved),
-  store live at ~/.local/share/pacenotes with 7 notes, data remote LOCAL
-  bare (~/.local/share/pacenotes-remote/) pending GitHub repos (PAT
-  blocker). Two-writer sync verified end-to-end. Sol-chief dispatch contract
-  now: prepend `pacenotes brief` output to launch briefs.
-- **2026-07-10 (session 13 cont., ~08:10 UTC)** — LANDED: rover v0.6.0
-  released (azure-cred isolation via AZURE_CONFIG_DIR + rover login/logout;
-  tmux-on-ssh default with --no-tmux; shellcheck SC2016 fix-forward — NOTE
-  rover's `just lint` does not run shellcheck, CI does). rally TUI config
-  surface landed on dev (Sol chief, 3 commits 0b8092f/9f90dec/e188db3):
-  targeted comment-preserving TOML writes, Config tab (routes/reasoning/
-  providers/custom roles), archguard `roles`->app only; chief re-ran gates +
-  real-config tmux acceptance (only intended byte changed). thenn laps 1-2
-  done (graceful no-systemd errors verified black-box; verify flagged
-  interval timers lack Persistent=true → relay working follow-up then-e79d).
-  pacenotes: design consult (Sol xhigh) adjudicated — edit-in-place, no
-  SQLite, flat ULID notes/, brief-on-demand; repo scaffolded locally,
-  implementation lap running. BLOCKER for user: gh PAT cannot create repos
-  (403) — need pacenotes + pacenotes-data private repos or a token bump.
-- **2026-07-10 (session 13, user brief, 07:10 UTC)** — Expanded mission (see
-  above). Wake timer rebuilt: in-session cron (5h) + scheduler v2 (a9f06f7,
-  interactive-in-tmux, watchdog-only, running pid in
-  ~/.local/state/crew-chief/). GPT-5.6 family added to rally config
-  (sol/terra/luna verified live via codex). Dispatched in parallel: mbtw Sol
-  chief (P0 bugs), rally-TUI Sol chief (config-from-TUI), rover relay (3
-  laps: azure-creds/tmux-ssh/verify, dev), thenn relay (2 laps: job
-  no-systemd hardening/verify, new dev branch), memory research (codex; the
-  Claude research subagent died twice to API errors). Fresh dev binaries
-  installed: rally v1.0.0-dev @2086a94, laps 1.0.0-dev.62d4ae9. Chief
-  requirements for pacenotes written (scratchpad). Rally friction log: `rally
-  start` on uninitialized repo requires manual `rally init` + committing the
-  queue; backgrounded `rally start | tail` buffers all output (use
-  .rally/state + summary.jsonl to monitor instead). — queue lap 14 (rall-dbfb
-  dogfood + staging test-drive) DONE. Session 11 (15:43) died at 15:53 to an
-  API connection error mid-test-drive, leaving good uncommitted artifacts:
-  fresh dev binaries installed (rally v0.13.0-dev, laps 1.0.0-dev.8ad0098),
-  manual drives for laps/multi-harness/resume/config, SKILL.md slug refresh.
-  Chief verified all of it from relay records + logs rather than redoing:
-  round-robin op→cx alternated, laps queue drained with recorded_laps,
-  resume relay resumed. Filled gaps: real-backend suite 7/8 (agy fail is the
-  documented env auth issue), config-validation outputs, weighted mix op:2,
-  tail/progress/instructions, full build+vet+test green. PASS recorded in
-  tmp/session-handoff.md (gitignored, intentional). Promoted BOTH repos:
-  rally staging 8d30bce→2c2df59, laps staging da519c2→8ad0098 (ff, pushed).
-  FINDING (recorded, not fixed): single-runner retry exhaustion ends relay
-  with end_reason "config_error" (relay_route_wait.go:67) — misleading label,
-  consumer-facing contract, deferred to nitpicker lap rall-c3a8. Next head
-  lap: rall-94fc (coordinated v1.0.0 release).
-- **2026-07-06 (session 10, autonomous, 10:43 wake)** — queue lap 12
-  (rall-03b6 rally TUI laps tab) DONE (11a6ad0). Session 9's continuation
-  died at 06:29 to a USAGE LIMIT (resets 10:40 UTC — new death mode, not the
-  turn-end kill), leaving a near-complete uncommitted laps-tab diff. Chief
-  reviewed and finished it: fixed activeStint decode (object, not string),
-  assignees fixture shape, pinned `laps list --root` (transparent stint
-  descent silently dropped the root queue + gate from the tab — found only
-  via live pty check, unit fixtures were blind to it), added 10s fetch
-  timeout. Full gates + pty+pyte live verification (held/ready/complete)
-  green. THEN queue lap 13 (rall-df75 laps TUI) DONE (laps dev 9840ddd,
-  pushed): codex built `laps tui` (view + done/delete/reorder/hold actions
-  via self-exec, consumer-contract JSON reads) in one clean lap; chief fixes:
-  "tui" missing from isKnownCommand (hook-only intercept swallowed the
-  command — pty e2e caught it, package tests could not), delete-confirm key
-  leak (cursor move between x and y retargeted the delete). Live pty e2e:
-  release + done actions mutated a real queue correctly. Laps CI then failed
-  on its strict gocritic gate (lint not installed locally) — fixed forward
-  (8ad0098, pointer-receiver model; golangci-lint now installed, see skill
-  references), CI green both repos. Next head lap: rall-dbfb (dogfood in-dev
-  rally+laps; staging test-drive).
-- **2026-07-06 (session 9, autonomous, 05:43 wake)** — queue lap 11 (rall-f734
-  rally adopts laps v3) DONE (0e89c50). Session 8 (00:43) DIED mid-codex-lap
-  AGAIN — it ended its assistant turn while codex ran in background; harness
-  killed both (headless `claude -p` does NOT survive turn end; block in-turn
-  until codex exits). Recovered its in-flight source diff (it was correct and
-  complete), re-delegated the 12-file test migration to codex (8 new tests,
-  187k tokens, clean), chief-fixed the hardcoded version-warning test + added
-  queue-state-aware `rally start` end lines. MinLapsVersion 0.8.1→1.0.0; CI
-  builds laps from dev with injected version until v1.0.0 tags (re-pin at
-  rall-94fc). Verified live: exit codes 10/11/12, JSON+stint-scoped claims,
-  stint descent (`-f stints/<name>.laps` is the file spelling), real codex
-  relay completed a stint-served lap end-to-end. Next head lap: rall-03b6
-  (rally TUI laps tab).
-- **2026-07-05 (session 7, autonomous, 19:43 wake)** — recovered session 6's
-  orphaned queue tick (2545aa6), then queue lap 10 (rall-953d laps stints
-  readiness review) DONE. Laps dev is READY: build+full suite+vet green, CI
-  green, Explore sweep found no spec-vs-impl gap in stints; chief smoke-tested
-  e2e (stint descent, hold/release, exit codes 0/10/11/12, claim JSON, nested
-  enqueue not supported — root-only by design). Gaps fixed on laps dev
-  (da489f9, pushed): README --oneline example was stale, added Consumer
-  contract section + version-gating rule (v3 tasks 2.1-2.3), task ticks.
-  DECISION: no 0.9.0 tag — v3 line ships as the coordinated v1.0.0
-  (rall-94fc); MinLapsVersion targets 1.0.0; dev companion must be built with
-  ldflags-injected version (git-describe reports 0.8.1-N-g<sha> → parses
-  0.8.1, fails the floor). Rally adoption surface confirmed for rall-f734:
-  ReadClaim bare-id parse + QueueSize line-count are the two breaks;
-  parseLapOutput already strips the v3 undo footer.
-- **2026-07-05 (session 6, autonomous, ~15:20 continuation)** — queue lap 9
-  (rall-3f79 staging pipeline) DONE (1413cb2, pushed): staging branch created
-  at main tip, AGENTS.md branch-pipeline section, rally-release v0.4 with
-  test-drive gate, test.yml runs on staging. Session died AFTER `laps done`
-  but BEFORE committing the queue tick + log (THIRD session-death occurrence;
-  this one cost only housekeeping — session 7 recovered it). Next head lap:
-  rall-953d (laps stints readiness review, chief-owned).
-- **2026-07-05 (sessions 2–5, autonomous, condensed)** — queue laps 5–8 DONE
-  (harden-outing-failure-handling phase A+B, all on origin/dev, CI green
-  through 2984c3e): rall-3ebf telemetry QA (evidence from local state — NR
-  has no creds in this container; draft.md scoped laps 6–8), rall-178b
-  unauthenticated-harness handling (chief added AuthScope: antigravity auth
-  is account-wide, not per-quota; glog Message overwrite restricted to auth),
-  rall-2730 recovery fallback on repeated retries (chief split tests to
-  respect the 1069-line archguard budget), rall-7fe9 codex sidelining +
-  relay end reasons (chief reverted EndedAt-on-cancellation — breaks relay
-  resumability; added EndReasonDiscarded; root-caused the corpus records to
-  stall-recovery stale fail_reason). Sessions 2 and 4 both DIED mid-codex-lap
-  (keep the session alive until codex exits — review in-turn while it runs,
-  which worked in session 5). **OPERATIONAL: agy is UNAUTHENTICATED here**
-  (OAuth interactive-only; can't self-heal until user returns Jul 8); `ag:*`
-  routes burn ~30 s/try; senior lists `ag:opus` first.
 
 ## Prune rules (anti-snowball)
 
