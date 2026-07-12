@@ -144,6 +144,13 @@ delegated — tackled directly this session.
 
 ## Session log (newest first; keep ~5 entries, prune older)
 
+- **2026-07-12 (Sun night AEST, second 2h cron check-in, ~15:14 UTC)** —
+  Radio's telemetry dispatch (from the prior check-in) had genuinely
+  finished (ps + file-stability verified); reviewed (diff + README doc
+  addition + parity test present), gates rerun clean, pushed (d29aaa0).
+  Dispatched next backlog item #1 (telemetry pass) to Sol for pitstop,
+  confirmed running (pid 1825740).
+
 - **2026-07-12 (Sun night AEST, first 2h cron check-in, ~13:13 UTC)** — No
   in-flight dispatches at wake (both laps + pacenotes telemetry from the
   prior entry had already landed and pushed before this check-in fired).
@@ -220,18 +227,6 @@ delegated — tackled directly this session.
   call). Found thenn's "four proposals" scout commit only wrote one; noted
   in pacenotes + the MIT-114 ticket for a possible re-scout. Queue unchanged
   (rall-94fc/rall-c3a8 still the only two laps, both release-gated).
-
-- **2026-07-12 (Sun ~breakout, FINAL in-container entry)** — Container chief
-  DECOMMISSIONED for breakout to bare Rover VM: fleet quiet, watchdog
-  killed, in-session timers die with this session. Next chief bootstraps on
-  the HOST per the pacenotes breakout runbook (01KX8J7FR8): install
-  pacenotes v0.1.1 → init → brief. Crew-chief skill v2 installed at
-  ~/group-1/.claude/skills/ + AGENTS.md pointer (both harnesses). Linear
-  conventions in pacenotes (01KX9RGD0R): agent:chief label, crewchief::
-  comment prefix. FIRST review item on host: Sonnet's rover codex-key patch
-  in ~/rover (unpushed). Release gate Sun 23:00 UTC: rally staging 465f1ed
-  + laps staging 45ffe48, both CI green, suite 8/8, VERSION 1.0.0 both —
-  rally-release + laps-release skills, then rall-c3a8 nitpicker post-release.
 
 ## Prune rules (anti-snowball)
 
