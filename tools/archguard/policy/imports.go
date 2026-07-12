@@ -158,11 +158,15 @@ var allowList = map[string]map[string]bool{
 	// Concrete presentation adapter (Decision 7): renders runtimeevent events
 	// and translates keyboard presses to runtimeevent controls — nothing else
 	// internal (notably not relay/runner, harness*, config, store, telemetry).
-	"presentation/terminal":  {"keyboard": true, "relay/runner/runtimeevent": true, "style": true},
-	"presentation/tuicore":   {"relay/runner/runtimeevent": true, "style": true},
-	"presentation/tuitabs":   {"presentation/tuicore": true, "relay/runner/runtimeevent": true, "style": true, "keyboard": true},
-	"app":                    {"harnessapi": true, "harness": true, "config": true, "relay": true, "relay/runner": true, "relay/runner/runtimeevent": true, "roles": true, "routing": true, "store": true, "telemetry": true},
-	"user_prompt/roleloader": {"store": true},
+	"presentation/terminal": {"keyboard": true, "relay/runner/runtimeevent": true, "style": true},
+	"presentation/tuicore":  {"relay/runner/runtimeevent": true, "style": true},
+	"presentation/tuitabs":  {"presentation/tuicore": true, "relay/runner/runtimeevent": true, "style": true, "keyboard": true},
+	// The app layer owns both queue-backed and direct execution composition.
+	// Direct execution builds an agent prompt and classifies executor failures
+	// without reaching into relay/runner's store-coupled lifecycle.
+	"app":                    {"agent_prompt": true, "harnessapi": true, "harness": true, "config": true, "relay": true, "relay/runner": true, "relay/runner/runtimeevent": true, "reliability": true, "roleinstructions": true, "roles": true, "routing": true, "store": true, "telemetry": true},
+	"roleinstructions":       {"store": true},
+	"user_prompt/roleloader": {"roleinstructions": true},
 }
 
 // ImportBoundary enforces the production internal import rules: flagship deny

@@ -102,6 +102,12 @@ func BuildPrompt(opts RunOptions) string {
 		fmt.Fprintf(&b, "If laps reports that the wrong lap was claimed or completed, use the undo command it prints (`laps claim undo` or `laps done undo`) before continuing.\n\n")
 		fmt.Fprintf(&b, "Follow any further instructions that command prints before ending the turn.\n\n")
 		fmt.Fprintf(&b, "Do not exit the outing without actually executing the required shell command.\n")
+	} else if opts.DirectRun {
+		fmt.Fprintf(&b, `## Direct Run Contract
+This is a standalone Rally run with no laps queue or relay progress record. The final assistant response is the only workflow output.
+
+Do not invoke laps commands, rally progress, handoff commands, or queue bookkeeping. Any queue-oriented wording in role instructions does not apply to this direct run. Inspect the supplied input directly and return only the requested deliverable in the final response.
+`)
 	} else {
 		fmt.Fprintf(&b, `## Run Exit Action
 Before exiting, record your progress:

@@ -36,6 +36,27 @@ func TestBuildPrompt_LapsEnabled(t *testing.T) {
 	}
 }
 
+func TestBuildPromptDirectRunHasOutputContractWithoutProgressAction(t *testing.T) {
+	prompt := BuildPrompt(RunOptions{
+		DirectRun:        true,
+		RoleInstructions: "Use laps handoff if blocked.",
+		TaskPrompt:       "Inspect /tmp/input.md.",
+	})
+
+	for _, want := range []string{
+		"## Direct Run Contract",
+		"final assistant response is the only workflow output",
+		"Do not invoke laps commands",
+	} {
+		if !strings.Contains(prompt, want) {
+			t.Fatalf("prompt missing %q:\n%s", want, prompt)
+		}
+	}
+	if strings.Contains(prompt, "rally progress --summary") {
+		t.Fatalf("direct prompt contains relay progress action:\n%s", prompt)
+	}
+}
+
 func TestBuildPrompt_NoBackend(t *testing.T) {
 	opts := RunOptions{
 		LapsEnabled: false,

@@ -17,7 +17,7 @@ func TestNewRootCommandRegistersCommandSurface(t *testing.T) {
 		got = append(got, cmd.Name())
 	}
 	sort.Strings(got)
-	want := []string{"config", "hooks", "init", "init-roles", "instructions", "progress", "routes", "start", "tail", "tui", "update", "version"}
+	want := []string{"config", "hooks", "init", "init-roles", "instructions", "progress", "routes", "run", "start", "tail", "tui", "update", "version"}
 	if len(got) != len(want) {
 		t.Fatalf("commands = %v, want %v", got, want)
 	}
@@ -46,6 +46,23 @@ func TestNewRootCommandRegistersCommandSurface(t *testing.T) {
 		if startCmd.Flags().Lookup(name) == nil {
 			t.Fatalf("start missing --%s flag", name)
 		}
+	}
+
+	runCmd, _, err := root.Find([]string{"run"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if runCmd.Use != "run <path> [-- <parameter>...]" {
+		t.Fatalf("run use = %q", runCmd.Use)
+	}
+	for _, name := range []string{"role", "output"} {
+		if runCmd.Flags().Lookup(name) == nil {
+			t.Fatalf("run missing --%s flag", name)
+		}
+	}
+	role, err := runCmd.Flags().GetString("role")
+	if err != nil || role != "intern" {
+		t.Fatalf("run role default = %q, %v; want intern", role, err)
 	}
 
 	tuiCmd, _, err := root.Find([]string{"tui"})

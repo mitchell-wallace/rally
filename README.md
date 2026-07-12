@@ -42,6 +42,7 @@ rally init                  # one-time: writes .rally/config.toml + scaffolding
 rally start                 # run a single iteration with the default mix
 rally start --iterations 4  # run four iterations
 rally start --iterations 4 --agent "ag:1 cl:1 cx:2 op:1"  # custom mix
+rally run prompt.md --role intern -- --format json          # one direct, queue-free run
 ```
 
 While a relay is running, watch the current try's transcript live in another
@@ -830,6 +831,7 @@ workspace path so multiple checkouts under one data dir never collide.
 
 ```sh
 rally start              # start or resume a relay
+rally run <path>         # run one path-backed task without a laps queue
 rally init               # initialise .rally/ in the current repo (workspace only)
 rally init roles         # add default role routes (user config) + .rally/agents/{builtin,user}/ (no workspace scaffold)
 rally init all           # full setup: workspace scaffold + roles
@@ -840,6 +842,39 @@ rally instructions show
 rally update             # self-update from GitHub Releases
 rally version            # print version (vX.Y.Z, vX.Y.Z-dev for source builds)
 ```
+
+### `rally run`
+
+`rally run <path> [--role ROLE] [--output FILE] [-- PARAM ...]` executes one
+standalone task through the configured role route. The default role is
+`intern`; role matching, model aliases, reasoning preferences, disabled
+providers, retries, and telemetry use the same configuration as relay runs.
+The workspace must already be initialized, but no `.laps/` queue is required.
+Configured role routes (or `default`) take precedence; when neither exists, a
+built-in role uses its catalog default driver. Custom roles require an explicit
+role route or `default` route.
+
+The input may be a regular file or directory. Rally passes its normalized
+absolute path to the driver. For a file, the driver reads that file as the
+primary workflow context. For a directory, the driver inspects the directory
+tree and reads relevant files directly; Rally does not concatenate or embed
+the tree. This keeps directory behavior simple and avoids implicit size limits.
+
+Parameters must follow `--`. Rally preserves them as an ordered JSON array in
+the task prompt, so flag-like values and values containing spaces remain
+distinct:
+
+```sh
+rally run ./skill/SKILL.md --role intern -- --format json "target audience"
+```
+
+On success, stdout contains only the driver's final response, normalized to
+one trailing newline. Retry notices and diagnostics go to stderr. With
+`--output FILE`, stdout is empty and Rally atomically writes the same response
+to that file, creating parent directories as needed; `FILE` must not be a
+directory. Direct runs do not create relay records, active-try state, summaries,
+or laps state. Temporary per-try logs used for failure classification are
+removed before the command exits.
 
 ### `rally init` subcommands
 

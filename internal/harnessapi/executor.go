@@ -59,6 +59,7 @@ type RunOptions struct {
 	PreviousSummary    string
 	RecentTryContext   string
 	LapsEnabled        bool
+	DirectRun          bool   // standalone run: final response is the deliverable; no queue/progress actions
 	LeftoverWork       bool   // working tree has uncommitted non-rally changes
 	Prompt             string // explicit override
 	LogPath            string // path to write try transcript log

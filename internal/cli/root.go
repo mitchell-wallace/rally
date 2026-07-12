@@ -33,6 +33,7 @@ func NewRootCommand(opts RootOptions) *cobra.Command {
 	rootCmd.SetVersionTemplate(release.BinaryName + " {{.Version}}\n")
 
 	rootCmd.AddCommand(newStartCmd(opts))
+	rootCmd.AddCommand(newRunCmd(opts))
 	rootCmd.AddCommand(newTuiCmd(opts))
 	rootCmd.AddCommand(newInitCmd())
 	rootCmd.AddCommand(newInstructionsCmd())
