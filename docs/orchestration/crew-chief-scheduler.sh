@@ -19,14 +19,16 @@
 #
 # Env overrides (used by the self-test; defaults are the production values):
 #   CC_INTERVAL  seconds between fire checks       (default 18000 = 5h)
-#   CC_CUTOFF    epoch after which no fire happens (default 2026-07-12 23:00 UTC,
-#                i.e. Monday 2026-07-13 9:00am AEST)
+#   CC_CUTOFF    epoch after which no fire happens (default 2026-07-13 10:00 UTC,
+#                i.e. Monday 2026-07-13 8:00pm AEST — extended 2026-07-12 night
+#                from the original 9am cutoff per Mitchell: finish the work
+#                queue, he's unavailable during the workday)
 #   CC_PROMPT    prompt for the session            (default "Crew chief, get to work")
 #   CC_STATE     state/log directory               (default ~/.local/state/crew-chief)
 #   CC_FIRST_DELAY  seconds before the first check (default CC_INTERVAL)
 
 INTERVAL="${CC_INTERVAL:-18000}"
-CUTOFF="${CC_CUTOFF:-1783897200}"
+CUTOFF="${CC_CUTOFF:-1783936800}"
 PROMPT="${CC_PROMPT:-Crew chief, get to work}"
 STATE_DIR="${CC_STATE:-$HOME/.local/state/crew-chief}"
 FIRST_DELAY="${CC_FIRST_DELAY:-$INTERVAL}"
