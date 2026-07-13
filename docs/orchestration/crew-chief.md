@@ -237,6 +237,12 @@ is chief-reserved, not delegated — tackled directly by chief, not Sol.
 
 ## Session log (newest first; keep ~5 entries, prune older)
 
+- **(Mon AEST, ~07:14 UTC check-in)** — Watchdog alive. Formula's
+  telemetry dispatch had genuinely finished; reviewed (diff, README
+  addition, parity test present, gates rerun clean), pushed (249e508).
+  Dispatched lanes' telemetry pass to Sol, confirmed running (pid
+  1856608). Only starter remains after this on the active backlog.
+
 - **(Mon AEST, ~05:15 UTC check-in)** — Watchdog alive. Batch D had
   genuinely finished; reviewed thoroughly — independently rebuilt all
   five referenced tools (radio, marshal, lanes, formula, pitstop) from
@@ -281,34 +287,6 @@ is chief-reserved, not delegated — tackled directly by chief, not Sol.
   skills`) — push alone is the complete action there. Dispatched batch B
   (writing-great-skills, finishing-a-branch, requesting-review,
   receiving-review) to Sol, confirmed running (pid 1846633).
-
-- **2026-07-12 (Sun night AEST, ~21:38-21:46 UTC, Mitchell live, going
-  offline for the workday)** — Cutoff relaxed: no longer a hard 9am stop,
-  real stop condition is now backlog exhaustion (pacenotes 01KXC4BZM).
-  Watchdog extended to 20:00 AEST cutoff and relaunched with fresh script
-  (old instance had silently died with no clean exit log — cause unknown,
-  recurring check-in now self-checks watchdog liveness each cycle as
-  mitigation). New standing convention: push AND release (version-bump,
-  tag) where a repo has its own release mechanism and accumulated
-  meaningful gate-green work. Asked Mitchell the one open question before
-  he went offline: does this extend to the separate rally/laps v1.0.0
-  coordinated release gate (rall-94fc)? He said yes — authorization
-  extended (pacenotes 01KXC4GM2), same stability bar as before, just not
-  time-boxed to "Monday morning" anymore; not yet attempted, natural pause
-  point is after the current skills dispatch. Landed prepare-laps
-  revision (reviewed, independently verified its new `laps list --tree` /
-  `laps stints ...` CLI syntax against a **fresh** build after initially
-  flagging it as possibly-hallucinated against a stale installed binary —
-  all real; also verified rally's synced copy matches byte-for-byte),
-  pushed both repos (skills-repo 982f5b7, rally a3055ef). Updated
-  skills-repo's README with inspiration credits + prepare-laps' new
-  summary, pushed (9ed77fe). Caught and recorded a real near-miss:
-  authorized Sol to touch rally's working tree while chief was
-  independently committing to the same working tree concurrently — no
-  collision this time (different files) but recorded as a feedback note
-  (01KXC4PGH) since it was luck, not a safe pattern. Dispatched skills
-  batch A (systematic-debugging, brainstorming, grill-me) to Sol,
-  confirmed running (pid 1844478).
 
 ## Prune rules (anti-snowball)
 
