@@ -237,6 +237,20 @@ is chief-reserved, not delegated — tackled directly by chief, not Sol.
 
 ## Session log (newest first; keep ~5 entries, prune older)
 
+- **(Mon AEST, ~05:15 UTC check-in)** — Watchdog alive. Batch D had
+  genuinely finished; reviewed thoroughly — independently rebuilt all
+  five referenced tools (radio, marshal, lanes, formula, pitstop) from
+  fresh source and checked every CLI invocation the skills documented
+  against real `--help` output myself, not just trusted the report's
+  self-verification claim; all matched exactly, zero fabrication found.
+  Pushed (8093ada) — caught my own mistake mid-push, first attempt ran
+  from the wrong directory (still in pitstop's repo from the CLI checks)
+  and silently no-op'd against pitstop instead of skills-repo; corrected
+  and re-verified before trusting it landed. **All four skill batches
+  (A-D) now complete.** Resumed the remaining telemetry backlog per plan
+  — dispatched formula's telemetry pass to Sol, confirmed running (pid
+  1853655). Remaining after this: lanes, starter.
+
 - **(Mon AEST, ~03:14 UTC check-in)** — Watchdog alive. Batch C had
   genuinely finished; reviewed (both skills read in full, pacenotes-hygiene's
   worked example correctly reconstructed the real mbtw pruning incident
@@ -295,24 +309,6 @@ is chief-reserved, not delegated — tackled directly by chief, not Sol.
   (01KXC4PGH) since it was luck, not a safe pattern. Dispatched skills
   batch A (systematic-debugging, brainstorming, grill-me) to Sol,
   confirmed running (pid 1844478).
-
-- **2026-07-12 (Sun night AEST, ~21:33 UTC, Mitchell live)** — Rover's
-  telemetry (from the prior check-in) had genuinely finished; reviewed,
-  gates rerun clean, pushed to dev (4bfe389) — telemetry pass now 8/12
-  (chassis+tarmac deferred, formula/lanes/starter paused). Mitchell
-  re-prioritized: a skills program is now top priority, above telemetry —
-  study mattpocock/skills + obra/superpowers + local OpenSpec skills,
-  build Circuit equivalents, document sources of inspiration on the
-  Circuit homepage and in skills-repo's README. Verified both source repos
-  are real (was initially suspicious of a subagent's oddly-high star
-  counts — 166k/252k — but confirmed genuine via direct GitHub API call,
-  not fabricated). Found master `skills-repo/prepare-laps` had drifted
-  stale vs. rally's already-updated roles-v2 local copy. Dispatched the
-  prepare-laps revision (reconcile + add flat-vs-stints dynamic modes) to
-  Sol, confirmed running (pid 1841797). Designed and recorded a full
-  batched skill inventory (batches A-D) in "Tonight's push" above for
-  future check-ins to work through sequentially (skills-repo sessions
-  can't run in parallel with each other — same working tree).
 
 ## Prune rules (anti-snowball)
 
