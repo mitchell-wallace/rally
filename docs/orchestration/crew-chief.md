@@ -237,6 +237,18 @@ is chief-reserved, not delegated — tackled directly by chief, not Sol.
 
 ## Session log (newest first; keep ~5 entries, prune older)
 
+- **(Mon AEST, ~03:14 UTC check-in)** — Watchdog alive. Batch C had
+  genuinely finished; reviewed (both skills read in full, pacenotes-hygiene's
+  worked example correctly reconstructed the real mbtw pruning incident
+  from earlier tonight, all documented pacenotes flags spot-checked as
+  real, its self-recorded capability note 01KXCGW2C verified to actually
+  exist), pushed (064a928). Dispatched batch D — the last named batch
+  (radio-coordination, marshal-triage, using-lanes, formula-authoring,
+  filing-a-puncture) — to Sol, confirmed running (pid 1849869). Once this
+  lands, all four planned skill batches are complete; next check-in should
+  resume telemetry (formula, lanes, starter) or treat the named backlog as
+  exhausted and hold, per the wrap-up condition.
+
 - **(Mon AEST, ~01:14 UTC check-in)** — Watchdog alive (linger fix
   holding). Batch B had genuinely finished (ps + file-stability verified);
   reviewed (all four skills read, explicit author-vs-reviewer boundary
@@ -301,19 +313,6 @@ is chief-reserved, not delegated — tackled directly by chief, not Sol.
   batched skill inventory (batches A-D) in "Tonight's push" above for
   future check-ins to work through sequentially (skills-repo sessions
   can't run in parallel with each other — same working tree).
-
-- **2026-07-12 (Sun night AEST, fifth 2h cron check-in, ~21:14 UTC)** —
-  Mechanic's telemetry dispatch had genuinely finished (ps + file-stability
-  verified); reviewed (diff, README addition, path-scrubbing present,
-  parity test present), gates rerun clean, pushed (dd09d0e). Memory
-  recovered to ~2.8Gi available (false alarm from the prior check-in, no
-  action needed). Dispatched next backlog item #1 (telemetry pass) to Sol
-  for rover — skipped chassis (pure library, no CLI surface, doesn't fit
-  this pattern) and tarmac (naming mid-rename, dune/dunex→tarmac still in
-  flux) as poor fits for now. Confirmed running (pid 1836942). Telemetry
-  landed: marshal, laps, pacenotes, radio, pitstop, spotter, mechanic;
-  rover in flight; remaining: formula, lanes, starter (chassis/tarmac
-  deferred — revisit fit later).
 
 ## Prune rules (anti-snowball)
 
