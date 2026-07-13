@@ -237,6 +237,15 @@ is chief-reserved, not delegated — tackled directly by chief, not Sol.
 
 ## Session log (newest first; keep ~5 entries, prune older)
 
+- **(Mon AEST, ~01:14 UTC check-in)** — Watchdog alive (linger fix
+  holding). Batch B had genuinely finished (ps + file-stability verified);
+  reviewed (all four skills read, explicit author-vs-reviewer boundary
+  language against existing `auto-code-review`/`feature-branch-review`
+  confirmed in each description, validator passed all four), pushed
+  (f48a812). Dispatched batch C (session-handoff, pacenotes-hygiene — a
+  smaller 2-skill batch per plan, not padded to match A/B's size) to Sol,
+  confirmed running (pid 1848281).
+
 - **2026-07-12 (Sun night AEST, ~23:14 UTC check-in)** — Watchdog alive
   (linger fix holding). Batch A had genuinely finished (ps + file-stability
   verified); reviewed (all three skills read in full, validator confirmed
@@ -305,20 +314,6 @@ is chief-reserved, not delegated — tackled directly by chief, not Sol.
   landed: marshal, laps, pacenotes, radio, pitstop, spotter, mechanic;
   rover in flight; remaining: formula, lanes, starter (chassis/tarmac
   deferred — revisit fit later).
-
-- **2026-07-12 (Sun night AEST, fourth 2h cron check-in, ~19:14 UTC)** —
-  Spotter's telemetry dispatch had genuinely finished (ps + file-stability
-  verified); reviewed (diff, README addition, no token/content leakage into
-  events, parity test present), gates rerun clean, pushed (d95b9e7).
-  Dispatched next backlog item #1 (telemetry pass) to Sol for mechanic,
-  confirmed running (pid 1833839). Memory watch: available dropped to
-  ~1.5Gi (from ~1.8-2.2Gi at earlier check-ins) — an "sbx daemon start"
-  process (pid 1202877, started Jul11, ~830MB RSS) is the largest single
-  consumer and looks possibly orphaned, but not clearly so; did not touch
-  it mid-check-in. Worth investigating at the next check-in if the trend
-  continues. Telemetry landed: marshal, laps, pacenotes, radio, pitstop,
-  spotter; mechanic in flight; remaining: chassis, formula, lanes, starter,
-  tarmac, rover.
 
 ## Prune rules (anti-snowball)
 
