@@ -235,6 +235,9 @@ changes before you're back.
 
 ## Session log (newest first; keep ~5 entries, prune older)
 
+- **(Tue AEST, ~23:13 UTC / 09:13 local check-in)** — No change. Nothing
+  actionable — stopping briefly.
+
 - **(Tue AEST, ~21:13 UTC / 07:13 local check-in)** — No change since
   the evening wrap-up. Nothing actionable — stopping briefly.
 
@@ -254,10 +257,6 @@ changes before you're back.
 - **(Mon AEST, ~17:13 UTC / 03:13 local check-in)** — No change. Nothing
   actionable — stopping briefly.
 
-- **(Mon AEST, ~15:13 UTC / 01:13 local check-in)** — Same state as prior
-  check-in: watchdog still down (expected, clean cutoff), nothing
-  in-flight, no new commits or activity from Mitchell. Backlog remains
-  exhausted. Nothing actionable — stopping briefly.
 
 ## Prune rules (anti-snowball)
 
