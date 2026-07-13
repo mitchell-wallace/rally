@@ -215,6 +215,11 @@ pacenotes rather than this doc for the full record.
 
 ## Session log (newest first; keep ~5 entries, prune older)
 
+- **(Mon AEST, ~15:13 UTC / 01:13 local check-in)** — Same state as prior
+  check-in: watchdog still down (expected, clean cutoff), nothing
+  in-flight, no new commits or activity from Mitchell. Backlog remains
+  exhausted. Nothing actionable — stopping briefly.
+
 - **(Mon AEST, ~13:13 UTC / 23:13 local check-in)** — Watchdog found dead,
   but a clean intentional exit this time: log shows
   `cutoff reached, exiting` → `scheduler stopped` (its designed 20:00 AEST
@@ -270,20 +275,6 @@ pacenotes rather than this doc for the full record.
   addition, parity test present, gates rerun clean), pushed (249e508).
   Dispatched lanes' telemetry pass to Sol, confirmed running (pid
   1856608). Only starter remains after this on the active backlog.
-
-- **(Mon AEST, ~05:15 UTC check-in)** — Watchdog alive. Batch D had
-  genuinely finished; reviewed thoroughly — independently rebuilt all
-  five referenced tools (radio, marshal, lanes, formula, pitstop) from
-  fresh source and checked every CLI invocation the skills documented
-  against real `--help` output myself, not just trusted the report's
-  self-verification claim; all matched exactly, zero fabrication found.
-  Pushed (8093ada) — caught my own mistake mid-push, first attempt ran
-  from the wrong directory (still in pitstop's repo from the CLI checks)
-  and silently no-op'd against pitstop instead of skills-repo; corrected
-  and re-verified before trusting it landed. **All four skill batches
-  (A-D) now complete.** Resumed the remaining telemetry backlog per plan
-  — dispatched formula's telemetry pass to Sol, confirmed running (pid
-  1853655). Remaining after this: lanes, starter.
 
 ## Prune rules (anti-snowball)
 
