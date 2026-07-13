@@ -215,6 +215,9 @@ pacenotes rather than this doc for the full record.
 
 ## Session log (newest first; keep ~5 entries, prune older)
 
+- **(Mon AEST, ~17:13 UTC / 03:13 local check-in)** — No change. Nothing
+  actionable — stopping briefly.
+
 - **(Mon AEST, ~15:13 UTC / 01:13 local check-in)** — Same state as prior
   check-in: watchdog still down (expected, clean cutoff), nothing
   in-flight, no new commits or activity from Mitchell. Backlog remains
@@ -269,12 +272,6 @@ pacenotes rather than this doc for the full record.
   Once this lands, skills batches A-D + full telemetry pass are both
   complete; next check-in should do a real wrap-up or move to genuine
   expansion work per the skills program's "then expanding" phase.
-
-- **(Mon AEST, ~07:14 UTC check-in)** — Watchdog alive. Formula's
-  telemetry dispatch had genuinely finished; reviewed (diff, README
-  addition, parity test present, gates rerun clean), pushed (249e508).
-  Dispatched lanes' telemetry pass to Sol, confirmed running (pid
-  1856608). Only starter remains after this on the active backlog.
 
 ## Prune rules (anti-snowball)
 
