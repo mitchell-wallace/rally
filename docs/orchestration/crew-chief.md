@@ -237,6 +237,18 @@ is chief-reserved, not delegated — tackled directly by chief, not Sol.
 
 ## Session log (newest first; keep ~5 entries, prune older)
 
+- **(Mon AEST, ~09:14 UTC check-in)** — Watchdog alive. Lanes' telemetry
+  dispatch had genuinely finished; reviewed with extra care given it
+  touches merge-train logic — confirmed the actual conflict-stop path
+  (`MergeNoFF` error handling) is completely untouched, telemetry is
+  purely additive `defer`-wrapped observation around existing control
+  flow, no new force-merge/auto-resolve logic anywhere; gates rerun clean,
+  pushed (8c10648). Dispatched starter's telemetry pass to Sol — the last
+  item on the active named backlog — confirmed running (pid 1863183).
+  Once this lands, skills batches A-D + full telemetry pass are both
+  complete; next check-in should do a real wrap-up or move to genuine
+  expansion work per the skills program's "then expanding" phase.
+
 - **(Mon AEST, ~07:14 UTC check-in)** — Watchdog alive. Formula's
   telemetry dispatch had genuinely finished; reviewed (diff, README
   addition, parity test present, gates rerun clean), pushed (249e508).
@@ -277,16 +289,6 @@ is chief-reserved, not delegated — tackled directly by chief, not Sol.
   (f48a812). Dispatched batch C (session-handoff, pacenotes-hygiene — a
   smaller 2-skill batch per plan, not padded to match A/B's size) to Sol,
   confirmed running (pid 1848281).
-
-- **2026-07-12 (Sun night AEST, ~23:14 UTC check-in)** — Watchdog alive
-  (linger fix holding). Batch A had genuinely finished (ps + file-stability
-  verified); reviewed (all three skills read in full, validator confirmed
-  "Skill is valid!" for each, explicit confirmation no unverified CLI
-  syntax was added), pushed (e14eed8). No release mechanism applies to
-  skills-repo (no VERSION/tag process, plain GitHub distribution via `npx
-  skills`) — push alone is the complete action there. Dispatched batch B
-  (writing-great-skills, finishing-a-branch, requesting-review,
-  receiving-review) to Sol, confirmed running (pid 1846633).
 
 ## Prune rules (anti-snowball)
 
