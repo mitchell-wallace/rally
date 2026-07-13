@@ -71,59 +71,37 @@ first watchdog instance silently died sometime tonight with no clean exit
 log (cause unknown) — relaunched, and the recurring check-in now
 self-checks watchdog liveness every cycle as a mitigation.
 
-**2026-07-12 ~21:33 UTC re-priority (Mitchell, live)**: skills program is
-now the TOP priority, above telemetry. Telemetry pass status: 8/12 landed
-(marshal, laps, pacenotes, radio, pitstop, spotter, mechanic, rover);
-chassis + tarmac deferred (poor fit — chassis is a pure library with no
-CLI surface, tarmac is mid-rename); formula, lanes, starter not started —
-resume these only after the skills program's first wave lands.
+**STATUS 2026-07-13 ~11:30 UTC: active backlog fully exhausted.** Skills
+program (batches A-D, prepare-laps revision, README/homepage credits) all
+landed and pushed. Telemetry pass complete on every applicable tool: 10/12
+landed (marshal, laps, pacenotes, radio, pitstop, spotter, mechanic,
+rover, formula, lanes, starter), 2 deferred with reason (chassis — pure
+library, no CLI surface; tarmac — mid-rename). Full repo sweep confirmed
+everything pushed (caught and fixed one real gap: `starter` had never had
+a remote configured, sat fully unpushed all night until this sweep).
+Pacenotes and rover both version-bumped and released cleanly (v0.1.2,
+v0.7.1→v0.7.2 respectively).
 
-### Skills program (top priority)
+**Open item, needs Mitchell — see task #50 / pacenotes 01KXDKY1P**: while
+verifying releases, discovered rover's and rally's CI/release pipelines
+have been silently broken since the chassis TUI migration — two stacked
+causes: (1) `go.mod`'s local `replace .../chassis => ../chassis` only
+resolves where chassis happens to be checked out as a sibling, which
+isn't true in a clean CI checkout — fixed (rover 8093ada→b3fca1e, rally
+74f48df), verified via a genuinely fresh clone simulation; (2) chassis is
+a **private** repo, so the default `GITHUB_TOKEN` can't cross-checkout it
+even with the path fixed — CI still 404s on that step. Fix #2 needs one
+of: a PAT with chassis read access as a repo secret, making chassis
+public, or a real tagged chassis release (probably the actual long-term
+fix, since the local-replace was always meant to be temporary pending
+one). None of these are chief's call to make unilaterally. rover's
+v0.7.1/v0.7.2 tags exist but have no published release artifacts —
+goreleaser never got far enough to publish anything, so nothing broken
+shipped, it's just an unreleased tag sitting there.
 
-Source repos to study (already cloned to
-`skills-repo/tmp/research/{mattpocock-skills,obra-superpowers}`, gitignore
-or clean up later): `github.com/mattpocock/skills`, `github.com/obra/superpowers`,
-plus the OpenSpec skills already local in multiple repos
-(`rally/.claude/skills/openspec-*`). Build Circuit equivalents in
-`skills-repo` based on Circuit's own workflows — comprehensive +
-composable, key categories first, expansion after. Near-double-ups (e.g.
-`grill-me` alongside `openspec-explore`) are explicitly fine per Mitchell.
-
-**In flight**: prepare-laps revision (pid 1841797, dispatched 21:33 UTC) —
-reconciles master `skills-repo/prepare-laps/SKILL.md` with rally's
-already-more-current local copy (roles-v2 names, decision tree — master
-had drifted stale), then adds dynamic flat-vs-stints behavior
-(`prepare-laps` smart default, `prepare-flat-laps` / `prepare-stints`
-explicit modes). Brief: `skills-repo/tmp/chief-requirements-prepare-laps-revision.md`.
-
-**Batched build queue** (dispatch one batch at a time to `skills-repo`,
-same-repo sessions must run sequentially, not in parallel, to avoid
-working-tree conflicts):
-
-- Batch A — open-ended-work skills: `systematic-debugging`,
-  `brainstorming` (non-OpenSpec-specific idea exploration), `grill-me`
-  (Socratic requirements interrogation, mattpocock-inspired).
-- Batch B — wrapping-up-work skills: `writing-great-skills` (meta-skill
-  for authoring skills — do this one early, it improves every batch
-  after it), `finishing-a-branch` (author-side pre-merge checklist,
-  complements existing `feature-branch-review`'s reviewer-side role),
-  `requesting-review`, `receiving-review` (obra-inspired split).
-- Batch C — continuity skills: `session-handoff` (generalizes the
-  crew-chief skill's "Working log" pattern into a standalone reusable
-  skill), `pacenotes-hygiene` (when/how to write a good pacenote —
-  types, why/apply fields, never storing secrets; motivated by a real
-  gap caught live tonight, see pacenotes 01KXB5MZJ).
-- Batch D — tool-specific (expansion phase): `radio-coordination`,
-  `marshal-triage`, `using-lanes`, `formula-authoring`,
-  `filing-a-puncture`.
-
-After each batch lands: update `skills-repo/README.md`'s skill list AND
-credit Matt Pocock's skills + obra/superpowers + OpenSpec as sources of
-inspiration (Mitchell's explicit ask — credit belongs on the Circuit
-homepage too, chief-reserved, see below).
-
-Circuit's actual site content (landing + docs, and now a new Skills page)
-is chief-reserved, not delegated — tackled directly by chief, not Sol.
+Skills program details (batches, sources, credits) are no longer active
+work — see git history (`skills-repo` commits `982f5b7`..`8093ada`) and
+pacenotes rather than this doc for the full record.
 
 ## The queue
 
@@ -237,6 +215,33 @@ is chief-reserved, not delegated — tackled directly by chief, not Sol.
 
 ## Session log (newest first; keep ~5 entries, prune older)
 
+- **(Mon AEST, ~11:14-11:31 UTC check-in — backlog exhausted)** — Watchdog
+  alive. Starter's telemetry had genuinely finished; reviewed with extra
+  care given HMAC signature verification is in scope (`validSignature`'s
+  body confirmed byte-for-byte untouched in the diff, only observed via
+  defer-wrapped telemetry around the existing call site), gates rerun
+  clean — but `git push` failed: starter had **no remote configured at
+  all**, sitting fully unpushed since it was built earlier tonight. Wired
+  it to the existing GitHub repo and pushed both commits for the first
+  time. That gap prompted a full sweep of every touched repo (14 repos:
+  remote sync, clean tree, release-mechanism check) rather than trusting
+  individual per-repo checks alone — everything else was actually fine.
+  Released pacenotes (0.1.1→0.1.2) and rover (0.7.0→0.7.1) cleanly, both
+  confirmed live via `gh release view`. While verifying, found rover's and
+  rally's CI/release had been silently broken since the chassis TUI
+  migration (CI only triggers on push/PR, so it had simply never run on a
+  promoted commit) — fixed the path-resolution half (sibling checkout in
+  CI, verified via a genuinely fresh clone simulation before trusting it),
+  but hit a second, harder blocker: chassis is a private repo, so the
+  default `GITHUB_TOKEN` 404s trying to cross-checkout it regardless of
+  path correctness. That needs Mitchell (PAT secret / public chassis / a
+  real chassis tag) — filed as task #50, full detail in pacenotes
+  01KXDKY1P (supersedes an earlier note that only had half the diagnosis).
+  Active named backlog (skills A-D + all applicable telemetry) is now
+  genuinely exhausted — see "Tonight's push" above for current state.
+  Holding in light available posture per Mitchell's wrap-up instruction —
+  not inventing new unprompted work.
+
 - **(Mon AEST, ~09:14 UTC check-in)** — Watchdog alive. Lanes' telemetry
   dispatch had genuinely finished; reviewed with extra care given it
   touches merge-train logic — confirmed the actual conflict-stop path
@@ -280,15 +285,6 @@ is chief-reserved, not delegated — tackled directly by chief, not Sol.
   lands, all four planned skill batches are complete; next check-in should
   resume telemetry (formula, lanes, starter) or treat the named backlog as
   exhausted and hold, per the wrap-up condition.
-
-- **(Mon AEST, ~01:14 UTC check-in)** — Watchdog alive (linger fix
-  holding). Batch B had genuinely finished (ps + file-stability verified);
-  reviewed (all four skills read, explicit author-vs-reviewer boundary
-  language against existing `auto-code-review`/`feature-branch-review`
-  confirmed in each description, validator passed all four), pushed
-  (f48a812). Dispatched batch C (session-handoff, pacenotes-hygiene — a
-  smaller 2-skill batch per plan, not padded to match A/B's size) to Sol,
-  confirmed running (pid 1848281).
 
 ## Prune rules (anti-snowball)
 
