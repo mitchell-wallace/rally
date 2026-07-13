@@ -103,6 +103,26 @@ Skills program details (batches, sources, credits) are no longer active
 work — see git history (`skills-repo` commits `982f5b7`..`8093ada`) and
 pacenotes rather than this doc for the full record.
 
+**EVENING WRAP-UP CONFIRMED — fired late, actually landing 2026-07-14
+~05:58 AEST (2026-07-13 19:58 UTC)**, well past its scheduled 19:57 AEST
+slot the evening before (cause not diagnosed — the 2h recurring check-ins
+in between show no gap or drift, so this session stayed alive and idle
+throughout; the one-shot itself is just late for reasons not visible from
+here). The above status was re-verified fresh, not just carried forward: a
+full sweep across all 14 touched repos (fetch + status check) found zero
+drift — everything committed, pushed, and in sync with origin. Multiple
+consecutive 2h check-ins between the ~11:30 UTC wrap-up and now found
+nothing new to do, confirming the backlog really is exhausted, not just
+momentarily quiet. Nothing further attempted or changed since the last
+report — this is that same state, re-confirmed. **Summary for Mitchell:**
+skills program (4 batches, ~15 new skills) and the fleet telemetry pass
+are both fully shipped; pacenotes and rover both got real version
+releases; `starter`'s missing-remote gap is fixed; the one thing that
+needs you is the chassis-is-private CI blocker (task #50, pacenotes
+01KXDKY1P) — everything else is clean. Holding in light available
+posture; the recurring 2h check-in continues quietly in case anything
+changes before you're back.
+
 ## The queue
 
 - File: `.laps/crew-chief.json` in the rally repo (committed).
@@ -215,6 +235,16 @@ pacenotes rather than this doc for the full record.
 
 ## Session log (newest first; keep ~5 entries, prune older)
 
+- **(Tue AEST, ~19:58 UTC / 05:58 local — evening wrap-up one-shot,
+  fired late)** — Scheduled for 19:57 AEST the evening before, actually
+  landed ~10h late for reasons not diagnosable from here; the 2h
+  recurring check-ins show no gap in between, so the session itself
+  stayed alive and idle the whole time. Re-verified the full backlog
+  wrap-up fresh (14-repo sweep, zero drift) rather than trusting the
+  earlier report was still accurate — it was. No new work; wrote a
+  consolidated summary into "Tonight's push" above for Mitchell to read
+  directly. Holding.
+
 - **(Mon AEST, ~19:13 UTC / 05:13 local check-in)** — No change (4th
   consecutive idle check-in). Nothing actionable — stopping briefly.
 
@@ -236,33 +266,6 @@ pacenotes rather than this doc for the full record.
   relaunching reflexively would work against "hold in a light posture."
   In-session cron continues regardless. Nothing in flight, nothing
   actionable — stopping briefly per instructions.
-
-- **(Mon AEST, ~11:14-11:31 UTC check-in — backlog exhausted)** — Watchdog
-  alive. Starter's telemetry had genuinely finished; reviewed with extra
-  care given HMAC signature verification is in scope (`validSignature`'s
-  body confirmed byte-for-byte untouched in the diff, only observed via
-  defer-wrapped telemetry around the existing call site), gates rerun
-  clean — but `git push` failed: starter had **no remote configured at
-  all**, sitting fully unpushed since it was built earlier tonight. Wired
-  it to the existing GitHub repo and pushed both commits for the first
-  time. That gap prompted a full sweep of every touched repo (14 repos:
-  remote sync, clean tree, release-mechanism check) rather than trusting
-  individual per-repo checks alone — everything else was actually fine.
-  Released pacenotes (0.1.1→0.1.2) and rover (0.7.0→0.7.1) cleanly, both
-  confirmed live via `gh release view`. While verifying, found rover's and
-  rally's CI/release had been silently broken since the chassis TUI
-  migration (CI only triggers on push/PR, so it had simply never run on a
-  promoted commit) — fixed the path-resolution half (sibling checkout in
-  CI, verified via a genuinely fresh clone simulation before trusting it),
-  but hit a second, harder blocker: chassis is a private repo, so the
-  default `GITHUB_TOKEN` 404s trying to cross-checkout it regardless of
-  path correctness. That needs Mitchell (PAT secret / public chassis / a
-  real chassis tag) — filed as task #50, full detail in pacenotes
-  01KXDKY1P (supersedes an earlier note that only had half the diagnosis).
-  Active named backlog (skills A-D + all applicable telemetry) is now
-  genuinely exhausted — see "Tonight's push" above for current state.
-  Holding in light available posture per Mitchell's wrap-up instruction —
-  not inventing new unprompted work.
 
 ## Prune rules (anti-snowball)
 
