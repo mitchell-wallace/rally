@@ -13,10 +13,18 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+        with:
+          path: rally
+      # go.mod has a local `replace .../chassis => ../chassis` (chassis has
+      # no tagged release yet); check it out as a true sibling so it resolves.
+      - uses: actions/checkout@v6
+        with:
+          repository: mitchell-wallace/chassis
+          path: chassis
 
       - uses: actions/setup-go@v6
         with:
-          go-version-file: go.mod
+          go-version-file: rally/go.mod
 
       - uses: actions/setup-node@v6
         with:
@@ -46,6 +54,7 @@ jobs:
           printf '%s' "$OPENCODE_AUTH_JSON" > "$HOME/.local/share/opencode/auth.json"
 
       - name: Run tests
+        working-directory: rally
         env:
           RALLY_TEST_REAL_AGENTS: "1"
         run: go test -count=1 ./...
@@ -54,10 +63,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+        with:
+          path: rally
+      - uses: actions/checkout@v6
+        with:
+          repository: mitchell-wallace/chassis
+          path: chassis
 
       - uses: actions/setup-go@v6
         with:
-          go-version-file: go.mod
+          go-version-file: rally/go.mod
 
       - uses: actions/setup-node@v6
         with:
@@ -79,21 +94,30 @@ jobs:
           echo "$HOME/.opencode/bin" >> "$GITHUB_PATH"
 
       - name: Run race tests
+        working-directory: rally
         run: go test -race -shuffle=on -count=1 ./...
 
   lint:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+        with:
+          path: rally
+      - uses: actions/checkout@v6
+        with:
+          repository: mitchell-wallace/chassis
+          path: chassis
 
       - uses: actions/setup-go@v6
         with:
-          go-version-file: go.mod
+          go-version-file: rally/go.mod
 
       - name: go vet
+        working-directory: rally
         run: go vet ./...
 
       - name: Check formatting
+        working-directory: rally
         run: |
           unformatted=$(gofmt -l .)
           if [ -n "$unformatted" ]; then
@@ -103,21 +127,30 @@ jobs:
           fi
 
       - name: archguard
+        working-directory: rally
         run: go run ./tools/archguard --ci
 
   tidy:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+        with:
+          path: rally
+      - uses: actions/checkout@v6
+        with:
+          repository: mitchell-wallace/chassis
+          path: chassis
 
       - uses: actions/setup-go@v6
         with:
-          go-version-file: go.mod
+          go-version-file: rally/go.mod
 
       - name: go mod tidy
+        working-directory: rally
         run: go mod tidy
 
       - name: Check for module drift
+        working-directory: rally
         run: git diff --exit-code go.mod go.sum
 
   audit:
@@ -125,13 +158,20 @@ jobs:
     continue-on-error: true
     steps:
       - uses: actions/checkout@v6
+        with:
+          path: rally
+      - uses: actions/checkout@v6
+        with:
+          repository: mitchell-wallace/chassis
+          path: chassis
 
       - uses: actions/setup-go@v6
         with:
-          go-version-file: go.mod
+          go-version-file: rally/go.mod
 
       - name: Install govulncheck
         run: go install golang.org/x/vuln/cmd/govulncheck@latest
 
       - name: govulncheck
+        working-directory: rally
         run: govulncheck ./...
