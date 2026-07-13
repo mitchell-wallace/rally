@@ -215,6 +215,17 @@ pacenotes rather than this doc for the full record.
 
 ## Session log (newest first; keep ~5 entries, prune older)
 
+- **(Mon AEST, ~13:13 UTC / 23:13 local check-in)** — Watchdog found dead,
+  but a clean intentional exit this time: log shows
+  `cutoff reached, exiting` → `scheduler stopped` (its designed 20:00 AEST
+  cutoff), not the earlier mystery silent-death pattern with no exit log.
+  Judgment call: did NOT relaunch it — backlog was already exhausted
+  before that cutoff, it's now 23:13 local (well past both cutoffs), and
+  there's no active work left for a dead-man's-switch to protect;
+  relaunching reflexively would work against "hold in a light posture."
+  In-session cron continues regardless. Nothing in flight, nothing
+  actionable — stopping briefly per instructions.
+
 - **(Mon AEST, ~11:14-11:31 UTC check-in — backlog exhausted)** — Watchdog
   alive. Starter's telemetry had genuinely finished; reviewed with extra
   care given HMAC signature verification is in scope (`validSignature`'s
@@ -273,18 +284,6 @@ pacenotes rather than this doc for the full record.
   (A-D) now complete.** Resumed the remaining telemetry backlog per plan
   — dispatched formula's telemetry pass to Sol, confirmed running (pid
   1853655). Remaining after this: lanes, starter.
-
-- **(Mon AEST, ~03:14 UTC check-in)** — Watchdog alive. Batch C had
-  genuinely finished; reviewed (both skills read in full, pacenotes-hygiene's
-  worked example correctly reconstructed the real mbtw pruning incident
-  from earlier tonight, all documented pacenotes flags spot-checked as
-  real, its self-recorded capability note 01KXCGW2C verified to actually
-  exist), pushed (064a928). Dispatched batch D — the last named batch
-  (radio-coordination, marshal-triage, using-lanes, formula-authoring,
-  filing-a-puncture) — to Sol, confirmed running (pid 1849869). Once this
-  lands, all four planned skill batches are complete; next check-in should
-  resume telemetry (formula, lanes, starter) or treat the named backlog as
-  exhausted and hold, per the wrap-up condition.
 
 ## Prune rules (anti-snowball)
 
