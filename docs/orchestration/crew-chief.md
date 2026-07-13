@@ -235,6 +235,9 @@ changes before you're back.
 
 ## Session log (newest first; keep ~5 entries, prune older)
 
+- **(Tue AEST, ~21:13 UTC / 07:13 local check-in)** — No change since
+  the evening wrap-up. Nothing actionable — stopping briefly.
+
 - **(Tue AEST, ~19:58 UTC / 05:58 local — evening wrap-up one-shot,
   fired late)** — Scheduled for 19:57 AEST the evening before, actually
   landed ~10h late for reasons not diagnosable from here; the 2h
@@ -255,17 +258,6 @@ changes before you're back.
   check-in: watchdog still down (expected, clean cutoff), nothing
   in-flight, no new commits or activity from Mitchell. Backlog remains
   exhausted. Nothing actionable — stopping briefly.
-
-- **(Mon AEST, ~13:13 UTC / 23:13 local check-in)** — Watchdog found dead,
-  but a clean intentional exit this time: log shows
-  `cutoff reached, exiting` → `scheduler stopped` (its designed 20:00 AEST
-  cutoff), not the earlier mystery silent-death pattern with no exit log.
-  Judgment call: did NOT relaunch it — backlog was already exhausted
-  before that cutoff, it's now 23:13 local (well past both cutoffs), and
-  there's no active work left for a dead-man's-switch to protect;
-  relaunching reflexively would work against "hold in a light posture."
-  In-session cron continues regardless. Nothing in flight, nothing
-  actionable — stopping briefly per instructions.
 
 ## Prune rules (anti-snowball)
 
