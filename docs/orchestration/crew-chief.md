@@ -215,6 +215,9 @@ pacenotes rather than this doc for the full record.
 
 ## Session log (newest first; keep ~5 entries, prune older)
 
+- **(Mon AEST, ~19:13 UTC / 05:13 local check-in)** — No change (4th
+  consecutive idle check-in). Nothing actionable — stopping briefly.
+
 - **(Mon AEST, ~17:13 UTC / 03:13 local check-in)** — No change. Nothing
   actionable — stopping briefly.
 
@@ -260,18 +263,6 @@ pacenotes rather than this doc for the full record.
   genuinely exhausted — see "Tonight's push" above for current state.
   Holding in light available posture per Mitchell's wrap-up instruction —
   not inventing new unprompted work.
-
-- **(Mon AEST, ~09:14 UTC check-in)** — Watchdog alive. Lanes' telemetry
-  dispatch had genuinely finished; reviewed with extra care given it
-  touches merge-train logic — confirmed the actual conflict-stop path
-  (`MergeNoFF` error handling) is completely untouched, telemetry is
-  purely additive `defer`-wrapped observation around existing control
-  flow, no new force-merge/auto-resolve logic anywhere; gates rerun clean,
-  pushed (8c10648). Dispatched starter's telemetry pass to Sol — the last
-  item on the active named backlog — confirmed running (pid 1863183).
-  Once this lands, skills batches A-D + full telemetry pass are both
-  complete; next check-in should do a real wrap-up or move to genuine
-  expansion work per the skills program's "then expanding" phase.
 
 ## Prune rules (anti-snowball)
 
