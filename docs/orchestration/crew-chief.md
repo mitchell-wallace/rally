@@ -235,6 +235,10 @@ changes before you're back.
 
 ## Session log (newest first; keep ~5 entries, prune older)
 
+- **(2026-07-14 ~01:13 UTC / 11:13 AEST check-in)** — No change (8th
+  consecutive idle check-in since backlog exhaustion). Nothing actionable
+  — stopping briefly.
+
 - **(Tue AEST, ~23:13 UTC / 09:13 local check-in)** — No change. Nothing
   actionable — stopping briefly.
 
@@ -253,9 +257,6 @@ changes before you're back.
 
 - **(Mon AEST, ~19:13 UTC / 05:13 local check-in)** — No change (4th
   consecutive idle check-in). Nothing actionable — stopping briefly.
-
-- **(Mon AEST, ~17:13 UTC / 03:13 local check-in)** — No change. Nothing
-  actionable — stopping briefly.
 
 
 ## Prune rules (anti-snowball)
