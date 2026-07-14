@@ -235,6 +235,22 @@ changes before you're back.
 
 ## Session log (newest first; keep ~5 entries, prune older)
 
+- **(2026-07-14 ~05:13 UTC / 15:13 AEST — final check-in, cron stood
+  down)** — 10th consecutive identical "nothing to do" result, ~18h since
+  backlog exhaustion, no sign of Mitchell returning. Judgment call:
+  cancelled the recurring 2h cron (`c7ea1ed5`) rather than continuing to
+  auto-fire indefinitely — it was scoped to feed an active overnight push
+  that's long since concluded; past that point, firing on a timer just
+  produces repetitive doc commits with zero new information, not genuine
+  monitoring value. This is the same judgment already applied to the
+  external watchdog's own cutoff, extended consistently to the in-session
+  mechanism too. No further automated re-invocation is scheduled — next
+  action happens when Mitchell sends a new message and picks this up with
+  full context from this doc + pacenotes + git history, per the doc's own
+  design. State to resume from: backlog genuinely exhausted (skills A-D +
+  telemetry, see "Tonight's push" above), everything pushed, task #50
+  (chassis private-repo CI blocker) is the one open item needing him.
+
 - **(2026-07-14 ~03:13 UTC / 13:13 AEST check-in)** — No change (9th
   consecutive idle check-in, ~16h since backlog exhaustion). Nothing
   actionable — stopping briefly.
@@ -248,16 +264,6 @@ changes before you're back.
 
 - **(Tue AEST, ~21:13 UTC / 07:13 local check-in)** — No change since
   the evening wrap-up. Nothing actionable — stopping briefly.
-
-- **(Tue AEST, ~19:58 UTC / 05:58 local — evening wrap-up one-shot,
-  fired late)** — Scheduled for 19:57 AEST the evening before, actually
-  landed ~10h late for reasons not diagnosable from here; the 2h
-  recurring check-ins show no gap in between, so the session itself
-  stayed alive and idle the whole time. Re-verified the full backlog
-  wrap-up fresh (14-repo sweep, zero drift) rather than trusting the
-  earlier report was still accurate — it was. No new work; wrote a
-  consolidated summary into "Tonight's push" above for Mitchell to read
-  directly. Holding.
 
 ## Prune rules (anti-snowball)
 
