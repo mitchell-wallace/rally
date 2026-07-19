@@ -26,6 +26,7 @@
 #   CC_PROMPT    prompt for the session            (default "Crew chief, get to work")
 #   CC_STATE     state/log directory               (default ~/.local/state/crew-chief)
 #   CC_FIRST_DELAY  seconds before the first check (default CC_INTERVAL)
+#   CC_MODEL     model for revived sessions        (default claude-fable-5)
 
 INTERVAL="${CC_INTERVAL:-18000}"
 CUTOFF="${CC_CUTOFF:-1783936800}"
@@ -33,6 +34,7 @@ PROMPT="${CC_PROMPT:-Crew chief, get to work}"
 STATE_DIR="${CC_STATE:-$HOME/.local/state/crew-chief}"
 FIRST_DELAY="${CC_FIRST_DELAY:-$INTERVAL}"
 REPO="${CC_REPO:-$HOME/group-1/rally}"
+MODEL="${CC_MODEL:-claude-fable-5}"
 TMUX_SESSION="crew-chief"
 
 mkdir -p "$STATE_DIR"
@@ -75,7 +77,7 @@ while :; do
         log "reviving crew-chief in tmux ($stamp)"
         tmux kill-session -t "$TMUX_SESSION" 2>/dev/null
         tmux new-session -d -s "$TMUX_SESSION" -c "$REPO" \
-            "claude --dangerously-skip-permissions --model claude-fable-5 '$PROMPT'" \
+            "claude --dangerously-skip-permissions --model $MODEL '$PROMPT'" \
             && log "revival $stamp launched" \
             || log "revival $stamp FAILED to launch"
         # Best-effort OOM-kill hardening: a revived session is as valuable as
