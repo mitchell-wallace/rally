@@ -35,7 +35,7 @@ STATE_DIR="${CC_STATE:-$HOME/.local/state/crew-chief}"
 FIRST_DELAY="${CC_FIRST_DELAY:-$INTERVAL}"
 REPO="${CC_REPO:-$HOME/group-1/rally}"
 MODEL="${CC_MODEL:-claude-fable-5}"
-TMUX_SESSION="crew-chief"
+TMUX_SESSION="${CC_TMUX_SESSION:-crew-chief}"
 
 mkdir -p "$STATE_DIR"
 LOG="$STATE_DIR/scheduler.log"
