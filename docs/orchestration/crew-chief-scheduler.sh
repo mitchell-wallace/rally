@@ -70,14 +70,14 @@ while :; do
         log "cutoff reached, exiting"
         break
     fi
-    if pgrep -x claude >/dev/null 2>&1; then
-        log "skip: claude session already alive"
+    if tmux has-session -t "$TMUX_SESSION" 2>/dev/null; then
+        log "skip: $TMUX_SESSION tmux session already alive"
     else
         stamp=$(date -u '+%Y%m%dT%H%M%SZ')
         log "reviving crew-chief in tmux ($stamp)"
         tmux kill-session -t "$TMUX_SESSION" 2>/dev/null
         tmux new-session -d -s "$TMUX_SESSION" -c "$REPO" \
-            "claude --dangerously-skip-permissions --model $MODEL '$PROMPT'" \
+            "MAX_THINKING_TOKENS=${MAX_THINKING_TOKENS:-31999} claude --dangerously-skip-permissions --model $MODEL '$PROMPT'" \
             && log "revival $stamp launched" \
             || log "revival $stamp FAILED to launch"
         # Best-effort OOM-kill hardening: a revived session is as valuable as
