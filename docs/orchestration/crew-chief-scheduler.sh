@@ -84,7 +84,7 @@ while :; do
         # this scheduler and should not be the first thing reaped under
         # memory pressure. Never let this block the actual revival.
         sleep 3
-        newpid=$(pgrep -x claude | head -1)
+        newpid=$(pgrep -n -x claude)
         tmuxserver=$(pgrep -x tmux | head -1)
         if [ -n "$newpid" ]; then
             sudo -n bash -c "echo -500 > /proc/$newpid/oom_score_adj" 2>/dev/null \
