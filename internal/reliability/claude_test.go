@@ -288,14 +288,88 @@ func TestParseClaudeError_CutStreamWithAllowedRateLimitEvents(t *testing.T) {
 	}
 }
 
-// TestParseClaudeError_BlockedRateLimitEventCarriesReset covers a genuine
-// limit: a rate_limit_event whose status is not ALLOWED and whose reset is
+// TestParseClaudeError_CutStreamWithAllowedWarningEvents covers the 0041
+// lap-2 rejection: claude also emits status=allowed_warning, which is a
+// warning, not a block. A cut stream whose rate_limit_events report only
+// allowed_warning must stay retryable transient — never a usage_limit pause
+// and never a reset.
+func TestParseClaudeError_CutStreamWithAllowedWarningEvents(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Join("testdata", "claude-cut-stream-allowed-warning-events.log"))
+	if err != nil {
+		t.Fatalf("read fixture: %v", err)
+	}
+	ev := ParseClaudeError(string(raw))
+	if ev == nil {
+		t.Fatal("expected non-nil evidence for cut stream")
+	}
+	if ev.Category != CategoryTransientInfra {
+		t.Errorf("category = %q, want %q (allowed_warning is a warning, not a block)", ev.Category, CategoryTransientInfra)
+	}
+	if ev.ResetAfter != 0 {
+		t.Errorf("resetAfter = %v, want 0", ev.ResetAfter)
+	}
+	if ev.ResetAt != nil {
+		t.Errorf("resetAt = %v, want nil", ev.ResetAt)
+	}
+}
+
+// TestParseClaudeError_MixedAllowedWarningThenRejected covers a mixed stream:
+// allowed_warning records stay informational, but a later rejected record is
+// the authoritative limit verdict, with the pause taken from the rejected
+// record's resetsAt — not from the earlier warning's.
+func TestParseClaudeError_MixedAllowedWarningThenRejected(t *testing.T) {
+	warningResetsAt := time.Now().Add(8 * time.Hour).Truncate(time.Second).Unix()
+	rejectedResetsAt := time.Now().Add(150 * time.Minute).Truncate(time.Second).Unix()
+	stderr := fmt.Sprintf(`{"type":"rate_limit_event","rate_limit_info":{"status":"allowed_warning","resetsAt":%d,"rateLimitType":"five_hour"}}`+"\n"+
+		`{"type":"rate_limit_event","rate_limit_info":{"status":"rejected","resetsAt":%d,"rateLimitType":"five_hour"}}`+"\n", warningResetsAt, rejectedResetsAt)
+	ev := ParseClaudeError(stderr)
+	if ev == nil {
+		t.Fatal("expected non-nil evidence for rejected rate_limit_event")
+	}
+	if ev.Category != CategoryUsageLimit {
+		t.Fatalf("category = %q, want %q", ev.Category, CategoryUsageLimit)
+	}
+	if ev.ResetAfter != 0 {
+		t.Errorf("resetAfter = %v, want 0 (record reset is absolute)", ev.ResetAfter)
+	}
+	if ev.ResetAt == nil {
+		t.Fatal("expected ResetAt from the rejected record's resetsAt")
+	}
+	if got := ev.ResetAt.Unix(); got != rejectedResetsAt {
+		t.Errorf("resetAt = %d, want %d (the rejected record's resetsAt, not the warning's %d)", got, rejectedResetsAt, warningResetsAt)
+	}
+}
+
+// TestParseClaudeError_UnknownEventStatusIsNotALimit pins the rule that only
+// rejected is a limit verdict: an unrecognised status is informational and
+// must not bench the lane on its own — a cut stream stays retryable.
+func TestParseClaudeError_UnknownEventStatusIsNotALimit(t *testing.T) {
+	stderr := `{"type":"system","subtype":"init","session_id":"sess-s","model":"claude-opus-5"}` + "\n" +
+		`{"type":"rate_limit_event","rate_limit_info":{"status":"throttled_maybe","resetsAt":1790204400,"rateLimitType":"five_hour"}}` + "\n" +
+		`{"type":"system","subtype":"thinking_tokens","estimated_tokens":650}` + "\n"
+	ev := ParseClaudeError(stderr)
+	if ev == nil {
+		t.Fatal("expected non-nil evidence for cut stream")
+	}
+	if ev.Category != CategoryTransientInfra {
+		t.Errorf("category = %q, want %q (unknown status carries no verdict)", ev.Category, CategoryTransientInfra)
+	}
+	if ev.ResetAfter != 0 {
+		t.Errorf("resetAfter = %v, want 0", ev.ResetAfter)
+	}
+	if ev.ResetAt != nil {
+		t.Errorf("resetAt = %v, want nil", ev.ResetAt)
+	}
+}
+
+// TestParseClaudeError_RejectedRateLimitEventCarriesReset covers a genuine
+// limit: a rate_limit_event whose status is rejected and whose reset is
 // 2.5h away. The verdict is usage_limit with a reset of at most 2.5h — never
 // the canned 168h.
-func TestParseClaudeError_BlockedRateLimitEventCarriesReset(t *testing.T) {
+func TestParseClaudeError_RejectedRateLimitEventCarriesReset(t *testing.T) {
 	resetsAt := time.Now().Add(150 * time.Minute).Truncate(time.Second).Unix()
 	stderr := fmt.Sprintf(`{"type":"rate_limit_event","rate_limit_info":{"status":"allowed","resetsAt":%d,"rateLimitType":"five_hour"}}`+"\n"+
-		`{"type":"rate_limit_event","rate_limit_info":{"status":"blocked","resetsAt":%d,"rateLimitType":"five_hour"}}`+"\n", resetsAt-3600, resetsAt)
+		`{"type":"rate_limit_event","rate_limit_info":{"status":"rejected","resetsAt":%d,"rateLimitType":"five_hour"}}`+"\n", resetsAt-3600, resetsAt)
 	ev := ParseClaudeError(stderr)
 	if ev == nil {
 		t.Fatal("expected non-nil evidence for blocked rate_limit_event")
@@ -318,10 +392,10 @@ func TestParseClaudeError_BlockedRateLimitEventCarriesReset(t *testing.T) {
 	}
 }
 
-// TestParseClaudeError_BlockedEventWithoutResetKeepsWindowDefault is the
+// TestParseClaudeError_RejectedEventWithoutResetKeepsWindowDefault is the
 // negative control: a genuine limit record that carries no parsable reset
 // keeps the existing canned window default.
-func TestParseClaudeError_BlockedEventWithoutResetKeepsWindowDefault(t *testing.T) {
+func TestParseClaudeError_RejectedEventWithoutResetKeepsWindowDefault(t *testing.T) {
 	tests := []struct {
 		name   string
 		window string
@@ -332,7 +406,7 @@ func TestParseClaudeError_BlockedEventWithoutResetKeepsWindowDefault(t *testing.
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			stderr := fmt.Sprintf(`{"type":"rate_limit_event","rate_limit_info":{"status":"blocked","rateLimitType":%q}}`+"\n", tt.window)
+			stderr := fmt.Sprintf(`{"type":"rate_limit_event","rate_limit_info":{"status":"rejected","rateLimitType":%q}}`+"\n", tt.window)
 			ev := ParseClaudeError(stderr)
 			if ev == nil {
 				t.Fatal("expected non-nil evidence")
