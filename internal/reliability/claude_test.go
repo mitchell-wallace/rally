@@ -1,6 +1,9 @@
 package reliability
 
 import (
+	"fmt"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 )
@@ -251,5 +254,125 @@ func TestParseClaudeError_PriorityAuthOverRateLimit(t *testing.T) {
 	}
 	if ev.Category != CategoryAuthOrProxy {
 		t.Errorf("category = %q, want %q (auth should take priority)", ev.Category, CategoryAuthOrProxy)
+	}
+}
+
+// TestParseClaudeError_CutStreamWithAllowedRateLimitEvents reproduces the
+// 0041 evidence shape: every rate_limit_event reports status=ALLOWED (one
+// naming a seven_day window), and the stream ends mid-response with no result
+// record and no error record. The verdict must be retryable transient, not a
+// usage_limit pause, and must carry no seven-day reset.
+func TestParseClaudeError_CutStreamWithAllowedRateLimitEvents(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Join("testdata", "claude-cut-stream-allowed-events.log"))
+	if err != nil {
+		t.Fatalf("read fixture: %v", err)
+	}
+	ev := ParseClaudeError(string(raw))
+	if ev == nil {
+		t.Fatal("expected non-nil evidence for cut stream")
+	}
+	if ev.Category != CategoryTransientInfra {
+		t.Errorf("category = %q, want %q (a cut stream is retryable, not a cap)", ev.Category, CategoryTransientInfra)
+	}
+	if ev.Category == CategoryUsageLimit {
+		t.Fatal("cut stream with only ALLOWED rate_limit_events must not classify usage_limit")
+	}
+	if ev.ResetAfter == 7*24*time.Hour {
+		t.Error("resetAfter = 168h, want no canned seven-day reset")
+	}
+	if ev.ResetAfter != 0 {
+		t.Errorf("resetAfter = %v, want 0", ev.ResetAfter)
+	}
+	if ev.ResetAt != nil {
+		t.Errorf("resetAt = %v, want nil", ev.ResetAt)
+	}
+}
+
+// TestParseClaudeError_BlockedRateLimitEventCarriesReset covers a genuine
+// limit: a rate_limit_event whose status is not ALLOWED and whose reset is
+// 2.5h away. The verdict is usage_limit with a reset of at most 2.5h — never
+// the canned 168h.
+func TestParseClaudeError_BlockedRateLimitEventCarriesReset(t *testing.T) {
+	resetsAt := time.Now().Add(150 * time.Minute).Truncate(time.Second).Unix()
+	stderr := fmt.Sprintf(`{"type":"rate_limit_event","rate_limit_info":{"status":"allowed","resetsAt":%d,"rateLimitType":"five_hour"}}`+"\n"+
+		`{"type":"rate_limit_event","rate_limit_info":{"status":"blocked","resetsAt":%d,"rateLimitType":"five_hour"}}`+"\n", resetsAt-3600, resetsAt)
+	ev := ParseClaudeError(stderr)
+	if ev == nil {
+		t.Fatal("expected non-nil evidence for blocked rate_limit_event")
+	}
+	if ev.Category != CategoryUsageLimit {
+		t.Fatalf("category = %q, want %q", ev.Category, CategoryUsageLimit)
+	}
+	if ev.ResetAfter == 7*24*time.Hour {
+		t.Error("resetAfter = 168h, want reset from the record")
+	}
+	if ev.ResetAfter != 0 {
+		t.Errorf("resetAfter = %v, want 0 (record reset is absolute)", ev.ResetAfter)
+	}
+	if ev.ResetAt == nil {
+		t.Fatal("expected ResetAt from the record's resetsAt")
+	}
+	remaining := time.Until(*ev.ResetAt)
+	if remaining <= 0 || remaining > 150*time.Minute {
+		t.Errorf("reset = %v from now, want within (0, 2.5h]", remaining)
+	}
+}
+
+// TestParseClaudeError_BlockedEventWithoutResetKeepsWindowDefault is the
+// negative control: a genuine limit record that carries no parsable reset
+// keeps the existing canned window default.
+func TestParseClaudeError_BlockedEventWithoutResetKeepsWindowDefault(t *testing.T) {
+	tests := []struct {
+		name   string
+		window string
+		want   time.Duration
+	}{
+		{"seven_day", "seven_day", 7 * 24 * time.Hour},
+		{"five_hour", "five_hour", 5 * time.Hour},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			stderr := fmt.Sprintf(`{"type":"rate_limit_event","rate_limit_info":{"status":"blocked","rateLimitType":%q}}`+"\n", tt.window)
+			ev := ParseClaudeError(stderr)
+			if ev == nil {
+				t.Fatal("expected non-nil evidence")
+			}
+			if ev.Category != CategoryUsageLimit {
+				t.Fatalf("category = %q, want %q", ev.Category, CategoryUsageLimit)
+			}
+			if ev.ResetAfter != tt.want {
+				t.Errorf("resetAfter = %v, want default %v", ev.ResetAfter, tt.want)
+			}
+			if ev.ResetAt != nil {
+				t.Errorf("resetAt = %v, want nil", ev.ResetAt)
+			}
+		})
+	}
+}
+
+// TestParseClaudeError_LimitTextCappedAtEventRecordReset covers the pause cap
+// when the CLI's own limit message carries no parsed reset timing but the
+// stream's rate-limit records do: the pause comes from the latest record's
+// reset (40m away), not the five-hour canned default.
+func TestParseClaudeError_LimitTextCappedAtEventRecordReset(t *testing.T) {
+	resetsAt := time.Now().Add(40 * time.Minute).Truncate(time.Second).Unix()
+	stderr := fmt.Sprintf(`{"type":"rate_limit_event","rate_limit_info":{"status":"allowed","resetsAt":%d,"rateLimitType":"five_hour"}}`+"\n"+
+		"error: rate limit: five hour cap exceeded\n", resetsAt)
+	ev := ParseClaudeError(stderr)
+	if ev == nil {
+		t.Fatal("expected non-nil evidence")
+	}
+	if ev.Category != CategoryUsageLimit {
+		t.Fatalf("category = %q, want %q", ev.Category, CategoryUsageLimit)
+	}
+	if ev.ResetAfter == 5*time.Hour {
+		t.Error("resetAfter = 5h canned default, want cap at the record's reset")
+	}
+	if ev.ResetAt == nil {
+		t.Fatal("expected ResetAt from the latest record's resetsAt")
+	}
+	remaining := time.Until(*ev.ResetAt)
+	if remaining <= 0 || remaining > 40*time.Minute+5*time.Second {
+		t.Errorf("reset = %v from now, want within (0, 40m]", remaining)
 	}
 }
