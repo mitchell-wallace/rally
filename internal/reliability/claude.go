@@ -89,14 +89,15 @@ func scanClaudeStreamLines(stderr string) (events []claudeRateLimitEventInfo, ma
 }
 
 // claudeEventReportsLimit reports whether a rate_limit_event record reports
-// an actual limit: a status that is not ALLOWED. Records with an empty status
-// carry no verdict and stay informational.
+// an actual limit: only a rejected status blocks. allowed and allowed_warning
+// records are informational (a warning is not a block), and unknown or empty
+// statuses carry no verdict, so they must never bench the lane.
 func claudeEventReportsLimit(info claudeRateLimitEventInfo) bool {
-	return info.Status != "" && !strings.EqualFold(info.Status, "allowed")
+	return strings.EqualFold(info.Status, "rejected")
 }
 
 // claudeUsageLimitFromEvents builds usage_limit evidence from the latest
-// rate_limit_event whose status is not ALLOWED. The record's reset (epoch
+// rate_limit_event whose status is rejected. The record's reset (epoch
 // seconds) is authoritative; the canned window defaults apply only when the
 // record carries no reset at all.
 func claudeUsageLimitFromEvents(events []claudeRateLimitEventInfo) *FailureEvidence {
@@ -150,7 +151,7 @@ func claudeEventRecordReset(events []claudeRateLimitEventInfo) *time.Time {
 // stream-json transcript that ended without a result or error record: the
 // process was cut off mid-response rather than reporting a failure of its
 // own. With no verdict from the CLI and no rate-limit record reporting a
-// non-ALLOWED status, the try is transient — retryable, never a pause.
+// rejected status, the try is transient — retryable, never a pause.
 func claudeUnterminatedStreamEvidence(stderr string) *FailureEvidence {
 	streamEvents := 0
 	sawResult, sawError := false, false
@@ -191,7 +192,7 @@ func ParseClaudeError(stderr string) *FailureEvidence {
 	}
 
 	// Structured rate_limit_event records are authoritative: a record whose
-	// status is not ALLOWED decides the limit verdict, and the record lines
+	// status is rejected decides the limit verdict, and the record lines
 	// are removed from the text the word-based branches see below.
 	limitEvents, text := scanClaudeStreamLines(stderr)
 	if ev := claudeUsageLimitFromEvents(limitEvents); ev != nil {
