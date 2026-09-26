@@ -1,6 +1,11 @@
 package reliability
 
 import (
+	"bytes"
+	"log"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -269,13 +274,13 @@ func TestParseOpencodeError_SubscriptionUsageLimitWrappers(t *testing.T) {
 			name:            "zai flat AI_APICallError carrier",
 			stderr:          `timestamp=2026-06-16T20:58:00Z level=ERROR run=r1 message="stream error" providerID=zai-coding-plan modelID=glm-5.2 session.id=ses_1 small=false agent=build mode=primary error.error="AI_APICallError: Usage limit reached for 5 hour. Your limit will reset at 2026-06-16 18:29:51"`,
 			model:           "zai-coding-plan/glm-5.2",
-			expectedResetAt: ptrTime(time.Date(2026, 6, 16, 18, 29, 51, 0, time.Local)),
+			expectedResetAt: ptrTime(time.Date(2026, 6, 16, 18, 29, 51, 0, zaiResetZone)),
 		},
 		{
 			name:            "zai flat AI_RetryError carrier",
 			stderr:          `timestamp=2026-06-16T20:58:00Z level=ERROR run=r1 message="stream error" providerID=zai-coding-plan modelID=glm-5.2 session.id=ses_1 small=false agent=title mode=primary error.error="AI_RetryError: Failed after 3 attempts. Last error: Usage limit reached for 5 hour. Your limit will reset at 2026-06-16 18:29:51"`,
 			model:           "zai-coding-plan/glm-5.2",
-			expectedResetAt: ptrTime(time.Date(2026, 6, 16, 18, 29, 51, 0, time.Local)),
+			expectedResetAt: ptrTime(time.Date(2026, 6, 16, 18, 29, 51, 0, zaiResetZone)),
 		},
 	}
 
@@ -372,7 +377,7 @@ func TestParseOpencodeError_AbsoluteResetTimestamp(t *testing.T) {
 			if ev.ResetAt == nil {
 				t.Fatal("expected non-nil ResetAt")
 			}
-			want := time.Date(2026, 6, 16, 18, 29, 51, 0, time.Local)
+			want := time.Date(2026, 6, 16, 18, 29, 51, 0, zaiResetZone)
 			if !ev.ResetAt.Equal(want) {
 				t.Errorf("resetAt = %v, want %v", ev.ResetAt, want)
 			}
@@ -393,5 +398,164 @@ func TestParseOpencodeError_UsageLimitPriorityOverRateLimit(t *testing.T) {
 	}
 	if ev.Category != CategoryUsageLimit {
 		t.Errorf("category = %q, want %q (usage limit in message should take priority)", ev.Category, CategoryUsageLimit)
+	}
+}
+
+// withOpencodeNow pins the injected clock used by opencode reset parsing for
+// the duration of the test, restoring the real clock on cleanup.
+func withOpencodeNow(t *testing.T, now time.Time) {
+	t.Helper()
+	prev := opencodeNow
+	opencodeNow = func() time.Time { return now }
+	t.Cleanup(func() { opencodeNow = prev })
+}
+
+// loadZaiUsageLimitFixture reads the exact z.ai 5-hour-window usage-limit
+// server-log carrier observed in issue 0044: a naive reset stamp of
+// "2026-09-26 12:32:46" that is Asia/Shanghai (UTC+8) local time, i.e.
+// 04:32:46Z.
+func loadZaiUsageLimitFixture(t *testing.T) string {
+	t.Helper()
+	raw, err := os.ReadFile(filepath.Join("testdata", "zai-usage-limit-reset.log"))
+	if err != nil {
+		t.Fatalf("read fixture: %v", err)
+	}
+	return strings.TrimSpace(string(raw))
+}
+
+// TestParseOpencodeError_ZaiResetStampUTC8 verifies the z.ai naive reset
+// stamp is read as UTC+8, not host-local (UTC) time: at now=03:04:37Z the
+// true reset 04:32:46Z is 1h28m away, where the UTC misread benched 9h28m.
+func TestParseOpencodeError_ZaiResetStampUTC8(t *testing.T) {
+	now := time.Date(2026, 9, 26, 3, 4, 37, 0, time.UTC)
+	withOpencodeNow(t, now)
+	ev := ParseOpencodeError(loadZaiUsageLimitFixture(t), "zai-coding-plan/glm-5.2")
+	if ev == nil {
+		t.Fatal("expected non-nil evidence")
+	}
+	if ev.Category != CategoryUsageLimit {
+		t.Fatalf("category = %q, want %q (classification must not change)", ev.Category, CategoryUsageLimit)
+	}
+	if ev.ResetAt == nil {
+		t.Fatal("expected non-nil ResetAt")
+	}
+	want := time.Date(2026, 9, 26, 4, 32, 46, 0, time.UTC)
+	if !ev.ResetAt.Equal(want) {
+		t.Errorf("resetAt = %v, want %v (naive z.ai stamp read as UTC+8)", ev.ResetAt.UTC(), want)
+	}
+	pause := ev.ResetAt.Sub(now)
+	if pause < 87*time.Minute || pause > 89*time.Minute {
+		t.Errorf("pause = %v, want ≈1h28m (88m ± 1m)", pause)
+	}
+}
+
+// TestParseOpencodeError_ZaiResetStampAlreadyExpired verifies a stamp whose
+// true reset has passed is not a pause: the bench deadline lands at or
+// before now instead of parking the lane for a fresh window.
+func TestParseOpencodeError_ZaiResetStampAlreadyExpired(t *testing.T) {
+	now := time.Date(2026, 9, 26, 5, 0, 0, 0, time.UTC)
+	withOpencodeNow(t, now)
+	ev := ParseOpencodeError(loadZaiUsageLimitFixture(t), "zai-coding-plan/glm-5.2")
+	if ev == nil {
+		t.Fatal("expected non-nil evidence")
+	}
+	if ev.Category != CategoryUsageLimit {
+		t.Fatalf("category = %q, want %q (classification must not change)", ev.Category, CategoryUsageLimit)
+	}
+	switch {
+	case ev.ResetAt == nil:
+		// Not benched at all: acceptable.
+	case ev.ResetAt.After(now):
+		t.Errorf("resetAt = %v is after now %v: expired limit must not pause (pause = %v > 0)",
+			ev.ResetAt.UTC(), now, ev.ResetAt.Sub(now))
+	}
+	if ev.ResetAfter != 0 {
+		t.Errorf("resetAfter = %v, want 0 (no fresh-window fallback for an expired stamp)", ev.ResetAfter)
+	}
+}
+
+// TestParseOpencodeError_ZaiResetStampCappedAtWindow verifies a parsed reset
+// beyond the stated window is treated as a parse error: the pause falls back
+// to now+window and the anomaly is logged.
+func TestParseOpencodeError_ZaiResetStampCappedAtWindow(t *testing.T) {
+	now := time.Date(2026, 9, 25, 20, 0, 0, 0, time.UTC)
+	withOpencodeNow(t, now)
+
+	var logBuf bytes.Buffer
+	log.SetOutput(&logBuf)
+	t.Cleanup(func() { log.SetOutput(os.Stderr) })
+
+	ev := ParseOpencodeError(loadZaiUsageLimitFixture(t), "zai-coding-plan/glm-5.2")
+	if ev == nil {
+		t.Fatal("expected non-nil evidence")
+	}
+	if ev.ResetAt == nil {
+		t.Fatal("expected non-nil ResetAt")
+	}
+	want := now.Add(5 * time.Hour)
+	if !ev.ResetAt.Equal(want) {
+		t.Errorf("resetAt = %v, want %v (capped at the stated 5h window)", ev.ResetAt.UTC(), want)
+	}
+	if !strings.Contains(logBuf.String(), "window") {
+		t.Errorf("expected the window-cap fallback to be logged, got %q", logBuf.String())
+	}
+}
+
+// TestParseOpencodeError_ResetStampExplicitOffsetKept is the negative
+// control: a stamp carrying its own zone designator keeps that offset rather
+// than being reinterpreted as UTC+8 or host-local time.
+func TestParseOpencodeError_ResetStampExplicitOffsetKept(t *testing.T) {
+	now := time.Date(2026, 9, 26, 3, 4, 37, 0, time.UTC)
+	withOpencodeNow(t, now)
+
+	const suffix = ` Your limit will reset at 2026-09-26`
+	tests := []struct {
+		name   string
+		stamp  string
+		wantUT time.Time
+	}{
+		{"numeric offset", suffix + " 13:32:46+09:00", time.Date(2026, 9, 26, 4, 32, 46, 0, time.UTC)},
+		{"RFC3339 Z", suffix + "T04:32:46Z", time.Date(2026, 9, 26, 4, 32, 46, 0, time.UTC)},
+		{"space then Z", suffix + " 04:32:46 Z", time.Date(2026, 9, 26, 4, 32, 46, 0, time.UTC)},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			stderr := `timestamp=2026-09-26T03:04:20Z level=ERROR run=r1 message="stream error" providerID=zai-coding-plan modelID=glm-5.2 session.id=ses_1 small=false agent=build mode=primary error.error="AI_APICallError: Usage limit reached for 5 hour.` + tt.stamp + `"`
+			ev := ParseOpencodeError(stderr, "zai-coding-plan/glm-5.2")
+			if ev == nil {
+				t.Fatal("expected non-nil evidence")
+			}
+			if ev.Category != CategoryUsageLimit {
+				t.Fatalf("category = %q, want %q (classification must not change)", ev.Category, CategoryUsageLimit)
+			}
+			if ev.ResetAt == nil {
+				t.Fatal("expected non-nil ResetAt")
+			}
+			if !ev.ResetAt.Equal(tt.wantUT) {
+				t.Errorf("resetAt = %v, want %v (explicit offset must be kept)", ev.ResetAt.UTC(), tt.wantUT)
+			}
+		})
+	}
+}
+
+// TestParseOpencodeError_NaiveResetStampNonZaiKeepsLocal pins the unchanged
+// behavior for naive stamps outside the z.ai windowed shape: they stay
+// host-local and approximate, with no window cap applied.
+func TestParseOpencodeError_NaiveResetStampNonZaiKeepsLocal(t *testing.T) {
+	stderr := `{"type":"error","error":{"name":"UnknownError","data":{"message":"AI_APICallError: Monthly usage limit reached. Your limit will reset at 2026-06-16 18:29:51"}}}`
+	ev := ParseOpencodeError(stderr, "opencode-go/kimi")
+	if ev == nil {
+		t.Fatal("expected non-nil evidence")
+	}
+	if ev.Category != CategoryUsageLimit {
+		t.Fatalf("category = %q, want %q", ev.Category, CategoryUsageLimit)
+	}
+	if ev.ResetAt == nil {
+		t.Fatal("expected non-nil ResetAt")
+	}
+	want := time.Date(2026, 6, 16, 18, 29, 51, 0, time.Local)
+	if !ev.ResetAt.Equal(want) {
+		t.Errorf("resetAt = %v, want %v (naive non-z.ai stamp stays host-local)", ev.ResetAt, want)
 	}
 }
