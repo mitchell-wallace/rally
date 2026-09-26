@@ -2,6 +2,7 @@ package reliability
 
 import (
 	"encoding/json"
+	"log"
 	"regexp"
 	"strconv"
 	"strings"
@@ -21,14 +22,29 @@ var (
 	// Space-separated spans ("Resets in 7 days", "... 5 hour", "... 30 minutes")
 	// and absolute timestamps ("reset at ...", "will reset at ...") with no
 	// timezone marker.
-	opencodeResetAtRe   = regexp.MustCompile(`(?i)reset\s+at\s+(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2})`)
+	opencodeResetAtRe = regexp.MustCompile(`(?i)reset\s+at\s+(\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2})(?:\s*(Z|z|[+-]\d{2}:?\d{2}))?`)
+
+	// opencodeWindowRe matches the z.ai coding-plan window phrase "Usage
+	// limit reached for 5 hour(s)" (also minutes/seconds/days), which states
+	// the length of the provider's rolling usage window. The companion reset
+	// stamp is naive Asia/Shanghai local time.
+	opencodeWindowRe    = regexp.MustCompile(`(?i)usage\s+limit\s+reached\s+for\s+(\d+)\s+(day|hour|minute|second)s?\b`)
 	opencodeResetSpanRe = regexp.MustCompile(`(?i)(\d+)\s+(day|hour|minute|second)s?`)
 )
 
-// opencodeResetLayout matches opencode's local-time reset timestamp; the value
-// carries no timezone marker so it is parsed in time.Local and treated as
-// approximate (benching slightly long is the safe direction).
+// opencodeResetLayout matches opencode's local-time reset timestamp. A naive
+// value is interpreted per parseOpencodeReset: z.ai windowed stamps in the
+// fixed UTC+8 zone, other providers in time.Local as an approximation.
 const opencodeResetLayout = "2006-01-02 15:04:05"
+
+// zaiResetZone is the fixed zone z.ai emits naive reset stamps in:
+// Asia/Shanghai is UTC+8 year-round (no DST), and z.ai's "Your limit will
+// reset at YYYY-MM-DD HH:MM:SS" carries no offset of its own.
+var zaiResetZone = time.FixedZone("UTC+8", 8*3600)
+
+// opencodeNow is the clock used by opencode reset parsing; a var so tests can
+// pin the present when checking window caps and expired resets.
+var opencodeNow = time.Now
 
 type opencodeErrorEvent struct {
 	Type  string `json:"type"`
@@ -201,14 +217,31 @@ func parseRetryAfterSeconds(s string) time.Duration {
 // parseOpencodeReset extracts opencode's reset timing from a usage-limit
 // message. It prefers an absolute timestamp (the authoritative reset, returned
 // as ResetAt) over a space-separated span ("7 days" / "5 hour" / "30 minutes",
-// returned as a relative duration). The absolute timestamp carries no timezone
-// marker, so it is parsed in time.Local and is approximate. Returns (0, nil)
-// when neither shape is present, leaving the caller to fall back.
+// returned as a relative duration).
+//
+// Timezone handling: a stamp carrying its own zone designator (Z or ±HH:MM)
+// keeps that offset. A naive stamp in the z.ai windowed shape ("Usage limit
+// reached for N hour(s). Your limit will reset at …") is parsed in z.ai's
+// fixed UTC+8 zone — never time.Local, which on a UTC host misreads the stamp
+// 8h late. Other naive stamps stay host-local and approximate (unchanged).
+//
+// Window cap: when the message states the window (the z.ai "for N hour(s)"
+// phrase), the returned ResetAt is never later than now+window. A parsed
+// reset beyond that is a parse error, so the pause falls back to now+window
+// and the anomaly is logged; a reset already in the past is kept as-is (an
+// expired limit is not a pause).
+//
+// Returns (0, nil) when neither shape is present, leaving the caller to fall
+// back.
 func parseOpencodeReset(s string) (time.Duration, *time.Time) {
-	if m := opencodeResetAtRe.FindStringSubmatch(s); len(m) == 2 {
+	window, hasWindow := parseOpencodeWindow(s)
+	if m := opencodeResetAtRe.FindStringSubmatch(s); len(m) == 3 {
 		// Collapse any internal whitespace so the fixed layout matches.
-		ts := strings.Join(strings.Fields(m[1]), " ")
-		if t, err := time.ParseInLocation(opencodeResetLayout, ts, time.Local); err == nil {
+		stamp := strings.Join(strings.Fields(m[1]), " ")
+		if t, ok := parseOpencodeResetStamp(stamp, m[2], hasWindow); ok {
+			if hasWindow {
+				t = capOpencodeResetAtWindow(t, opencodeNow(), window, stamp)
+			}
 			return 0, &t
 		}
 	}
@@ -231,6 +264,88 @@ func parseOpencodeReset(s string) (time.Duration, *time.Time) {
 		return time.Duration(n) * unit, nil
 	}
 	return 0, nil
+}
+
+// parseOpencodeResetStamp parses the captured reset stamp. A stamp with an
+// explicit zone designator keeps that offset; a naive stamp is read in the
+// z.ai fixed UTC+8 zone when the message carries z.ai's windowed usage-limit
+// shape, and host-locally otherwise. The caller lowercases the message, so
+// RFC3339 "T" separators and "Z" designators are re-uppercased here.
+func parseOpencodeResetStamp(stamp, offset string, zai bool) (time.Time, bool) {
+	if len(stamp) >= 11 && (stamp[10] == 't' || stamp[10] == 'T') {
+		normalized := []byte(stamp)
+		normalized[10] = 'T'
+		stamp = string(normalized)
+	}
+	if offset == "z" {
+		offset = "Z"
+	}
+	if offset != "" {
+		for _, layout := range []string{
+			time.RFC3339,
+			"2006-01-02 15:04:05Z07:00",
+			"2006-01-02 15:04:05Z0700",
+			"2006-01-02T15:04:05Z0700",
+		} {
+			if t, err := time.Parse(layout, stamp+offset); err == nil {
+				return t, true
+			}
+		}
+		return time.Time{}, false
+	}
+	loc := time.Local
+	if zai {
+		loc = zaiResetZone
+	}
+	for _, layout := range []string{opencodeResetLayout, "2006-01-02T15:04:05"} {
+		if t, err := time.ParseInLocation(layout, stamp, loc); err == nil {
+			return t, true
+		}
+	}
+	return time.Time{}, false
+}
+
+// parseOpencodeWindow extracts the stated usage window from the z.ai phrase
+// "Usage limit reached for N hour(s)". The second return is false when the
+// message states no window.
+func parseOpencodeWindow(s string) (time.Duration, bool) {
+	m := opencodeWindowRe.FindStringSubmatch(s)
+	if len(m) != 3 {
+		return 0, false
+	}
+	n, err := strconv.Atoi(m[1])
+	if err != nil || n <= 0 {
+		return 0, false
+	}
+	var unit time.Duration
+	switch strings.ToLower(m[2]) {
+	case "day":
+		unit = 24 * time.Hour
+	case "hour":
+		unit = time.Hour
+	case "minute":
+		unit = time.Minute
+	case "second":
+		unit = time.Second
+	}
+	if unit == 0 {
+		return 0, false
+	}
+	return time.Duration(n) * unit, true
+}
+
+// capOpencodeResetAtWindow enforces that a stated-window reset never outlives
+// the window: a parsed reset later than now+window means the stamp was read
+// wrong (or is garbage), so the pause falls back to the window length and the
+// anomaly is logged for operator triage.
+func capOpencodeResetAtWindow(reset, now time.Time, window time.Duration, stamp string) time.Time {
+	deadline := now.Add(window)
+	if reset.After(deadline) {
+		log.Printf("reliability: opencode usage-limit reset stamp %q parsed as %s, beyond the stated %s window from %s; capping reset at %s",
+			stamp, reset.UTC().Format(time.RFC3339), window, now.UTC().Format(time.RFC3339), deadline.UTC().Format(time.RFC3339))
+		return deadline
+	}
+	return reset
 }
 
 func containsAny(s string, substrs ...string) bool {

@@ -1,0 +1,1 @@
+timestamp=2026-09-26T03:04:20Z level=ERROR run=r1 message="stream error" providerID=zai-coding-plan modelID=glm-5.2 session.id=ses_1 small=false agent=build mode=primary error.error="AI_APICallError: Usage limit reached for 5 hour. Your limit will reset at 2026-09-26 12:32:46"
