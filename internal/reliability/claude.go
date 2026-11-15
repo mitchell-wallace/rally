@@ -148,11 +148,7 @@ func parseClaudeReset(s string) (time.Duration, *time.Time) {
 		if hour > 23 || minute > 59 {
 			return 0, nil
 		}
-		now := time.Now()
-		target := time.Date(now.Year(), now.Month(), now.Day(), hour, minute, 0, 0, now.Location())
-		if !target.After(now) {
-			target = target.Add(24 * time.Hour)
-		}
+		target := nextClockReset(nowFunc(), hour, minute)
 		return 0, &target
 	}
 

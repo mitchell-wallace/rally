@@ -25,7 +25,7 @@ func TestParseCodexError(t *testing.T) {
 			expectedProvider:  ProviderOpenAI,
 			expectResetAt:     true,
 			expectedResetHour: 5,
-			expectedResetMin:  22,
+			expectedResetMin:  23, // quoted minute + 60s pad
 		},
 		{
 			name:              "usage limit with try again at PM",
@@ -34,7 +34,7 @@ func TestParseCodexError(t *testing.T) {
 			expectedProvider:  ProviderOpenAI,
 			expectResetAt:     true,
 			expectedResetHour: 23,
-			expectedResetMin:  30,
+			expectedResetMin:  31,
 		},
 		{
 			name:             "usage limit without try again at",
@@ -54,7 +54,7 @@ func TestParseCodexError(t *testing.T) {
 			expectedProvider:  ProviderOpenAI,
 			expectResetAt:     true,
 			expectedResetHour: 5,
-			expectedResetMin:  22,
+			expectedResetMin:  23,
 		},
 		{
 			name:               "authentication failed",

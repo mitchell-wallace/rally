@@ -31,7 +31,7 @@ func ParseCodexError(stderr string) *FailureEvidence {
 		if m := codexTryAgainAtRe.FindStringSubmatch(stderr); len(m) >= 2 {
 			if t := parseTryAgainAt(m[1]); t != nil {
 				ev.ResetAt = t
-				ev.ResetAfter = time.Until(*t)
+				ev.ResetAfter = t.Sub(nowFunc())
 				if ev.ResetAfter < 0 {
 					ev.ResetAfter = 0
 				}
@@ -77,10 +77,6 @@ func parseTryAgainAt(s string) *time.Time {
 			return nil
 		}
 	}
-	now := time.Now()
-	target := time.Date(now.Year(), now.Month(), now.Day(), t.Hour(), t.Minute(), 0, 0, now.Location())
-	if !target.After(now) {
-		target = target.Add(24 * time.Hour)
-	}
+	target := nextClockReset(nowFunc(), t.Hour(), t.Minute())
 	return &target
 }

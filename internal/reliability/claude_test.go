@@ -181,8 +181,8 @@ func TestParseClaudeError_ClockReset(t *testing.T) {
 	if ev.ResetAt == nil {
 		t.Fatal("expected ResetAt to be populated from clock time")
 	}
-	if got := ev.ResetAt.Minute(); got != 30 {
-		t.Errorf("ResetAt minute = %d, want 30", got)
+	if got := ev.ResetAt.Minute(); got != 31 {
+		t.Errorf("ResetAt minute = %d, want 31", got)
 	}
 	if got := ev.ResetAt.Hour(); got != 14 {
 		t.Errorf("ResetAt hour = %d, want 14", got)
