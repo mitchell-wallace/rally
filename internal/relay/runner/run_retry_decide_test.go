@@ -89,9 +89,8 @@ func TestResumeRetryPreservesOutingState(t *testing.T) {
 				if err := progress.RecordLap(workspaceDir, "lap-1"); err != nil {
 					t.Errorf("RecordLap error: %v", err)
 				}
-				if err := progress.SetHandoff(workspaceDir); err != nil {
-					t.Errorf("SetHandoff error: %v", err)
-				}
+				// No SetHandoff here: a handoff-state attempt now ends the lap
+				// instead of retrying (see run_handoff_state_test.go).
 				return &harnessapi.TryResult{Completed: false, Summary: "fail", SessionID: "sess-1"}, nil
 			}
 			f, _ := os.Create(filepath.Join(workspaceDir, "success.txt"))
@@ -149,9 +148,8 @@ func TestFreshStartRetryClearsOutingState(t *testing.T) {
 				if err := progress.RecordLap(workspaceDir, "lap-1"); err != nil {
 					t.Errorf("RecordLap error: %v", err)
 				}
-				if err := progress.SetHandoff(workspaceDir); err != nil {
-					t.Errorf("SetHandoff error: %v", err)
-				}
+				// No SetHandoff here: a handoff-state attempt now ends the lap
+				// instead of retrying (see run_handoff_state_test.go).
 				return &harnessapi.TryResult{Completed: false, Summary: "fail", SessionID: "sess-1"}, nil
 			}
 			f, _ := os.Create(filepath.Join(workspaceDir, "success.txt"))
@@ -185,129 +183,48 @@ func TestFreshStartRetryClearsOutingState(t *testing.T) {
 	}
 }
 
-func TestResumeRetryMidHandoffPreservesFlag(t *testing.T) {
-	oldHeadPull := headPullLap
-	headPullLap = func(context.Context, string) (laps.Lap, laps.QueueState, error) {
-		return laps.Lap{Title: "test"}, laps.StateLap, nil
-	}
-	defer func() { headPullLap = oldHeadPull }()
+// TestMidHandoffCrashEndsAttempt pins the C-RELAY-LOOP contract: an attempt that
+// signalled `laps handoff` (handoff state set) and then failed is treated as
+// deliberately ended and is NOT retried, for resumable and non-resumable
+// harnesses alike.
+func TestMidHandoffCrashEndsAttempt(t *testing.T) {
+	for _, resumable := range []bool{true, false} {
+		oldHeadPull := headPullLap
+		headPullLap = func(context.Context, string) (laps.Lap, laps.QueueState, error) {
+			return laps.Lap{Title: "test"}, laps.StateLap, nil
+		}
 
-	workspaceDir := t.TempDir()
-	rallyDir := store.RallyDir(workspaceDir)
-	os.MkdirAll(rallyDir, 0o755)
-	initRepo(t, workspaceDir)
+		workspaceDir := t.TempDir()
+		rallyDir := store.RallyDir(workspaceDir)
+		os.MkdirAll(rallyDir, 0o755)
+		initRepo(t, workspaceDir)
 
-	s := newTestStore(t, rallyDir)
-	attempt := 0
-	var runStateAtAttempt2 *progress.OutingState
-	exec := &funcExecutor{
-		resumeSupported: true,
-		fn: func(ctx context.Context, opts harnessapi.RunOptions) (*harnessapi.TryResult, error) {
-			attempt++
-			if attempt == 1 {
+		s := newTestStore(t, rallyDir)
+		attempts := 0
+		exec := &funcExecutor{
+			resumeSupported: resumable,
+			fn: func(ctx context.Context, opts harnessapi.RunOptions) (*harnessapi.TryResult, error) {
+				attempts++
 				if err := progress.SetHandoff(workspaceDir); err != nil {
 					t.Errorf("SetHandoff error: %v", err)
 				}
 				return &harnessapi.TryResult{Completed: false, Summary: "crashed mid-handoff", SessionID: "sess-crash"}, nil
-			}
-			if attempt == 2 {
-				rs, err := progress.LoadRunState(workspaceDir)
-				if err != nil {
-					t.Errorf("LoadRunState error: %v", err)
-				}
-				runStateAtAttempt2 = rs
-			}
-			f, _ := os.Create(filepath.Join(workspaceDir, "success.txt"))
-			f.WriteString("changed")
-			f.Close()
-			return &harnessapi.TryResult{Completed: true, Summary: "success"}, nil
-		},
-	}
-	executors := map[string]harnessapi.Executor{"claude": exec}
-
-	r := NewRunner(s, Config{
-		WorkspaceDir:     workspaceDir,
-		DataDir:          t.TempDir(),
-		AgentMixSpecs:    []string{"cc:1"},
-		TargetIterations: 1,
-		LapsEnabled:      true,
-	}, executors)
-
-	if err := r.Run(context.Background()); err != nil {
-		t.Fatalf("run failed: %v", err)
-	}
-
-	if runStateAtAttempt2 == nil {
-		t.Fatal("expected run-state to be loaded during attempt 2")
-	}
-	if runStateAtAttempt2.HandoffState != 1 {
-		t.Fatalf("HandoffState = %d, want 1 (preserved on resume)", runStateAtAttempt2.HandoffState)
-	}
-	if runStateAtAttempt2.SessionID != "sess-crash" {
-		t.Fatalf("SessionID = %q, want sess-crash (preserved on resume)", runStateAtAttempt2.SessionID)
-	}
-}
-
-func TestFreshStartRetryMidHandoffClearsFlag(t *testing.T) {
-	oldHeadPull := headPullLap
-	headPullLap = func(context.Context, string) (laps.Lap, laps.QueueState, error) {
-		return laps.Lap{Title: "test"}, laps.StateLap, nil
-	}
-	defer func() { headPullLap = oldHeadPull }()
-
-	workspaceDir := t.TempDir()
-	rallyDir := store.RallyDir(workspaceDir)
-	os.MkdirAll(rallyDir, 0o755)
-	initRepo(t, workspaceDir)
-
-	s := newTestStore(t, rallyDir)
-	attempt := 0
-	var runStateAtAttempt2 *progress.OutingState
-	exec := &funcExecutor{
-		resumeSupported: false,
-		fn: func(ctx context.Context, opts harnessapi.RunOptions) (*harnessapi.TryResult, error) {
-			attempt++
-			if attempt == 1 {
-				if err := progress.SetHandoff(workspaceDir); err != nil {
-					t.Errorf("SetHandoff error: %v", err)
-				}
-				return &harnessapi.TryResult{Completed: false, Summary: "crashed mid-handoff", SessionID: "sess-crash"}, nil
-			}
-			if attempt == 2 {
-				rs, err := progress.LoadRunState(workspaceDir)
-				if err != nil {
-					t.Errorf("LoadRunState error: %v", err)
-				}
-				runStateAtAttempt2 = rs
-			}
-			f, _ := os.Create(filepath.Join(workspaceDir, "success.txt"))
-			f.WriteString("changed")
-			f.Close()
-			return &harnessapi.TryResult{Completed: true, Summary: "success"}, nil
-		},
-	}
-	executors := map[string]harnessapi.Executor{"claude": exec}
-
-	r := NewRunner(s, Config{
-		WorkspaceDir:     workspaceDir,
-		DataDir:          t.TempDir(),
-		AgentMixSpecs:    []string{"cc:1"},
-		TargetIterations: 1,
-		LapsEnabled:      true,
-	}, executors)
-
-	if err := r.Run(context.Background()); err != nil {
-		t.Fatalf("run failed: %v", err)
-	}
-
-	if runStateAtAttempt2 == nil {
-		t.Fatal("expected run-state to be loaded during attempt 2")
-	}
-	if runStateAtAttempt2.HandoffState != 0 {
-		t.Fatalf("HandoffState = %d, want 0 (cleared on fresh-start)", runStateAtAttempt2.HandoffState)
-	}
-	if runStateAtAttempt2.SessionID != "" {
-		t.Fatalf("SessionID = %q, want empty (cleared on fresh-start)", runStateAtAttempt2.SessionID)
+			},
+		}
+		r := NewRunner(s, Config{
+			WorkspaceDir:     workspaceDir,
+			DataDir:          t.TempDir(),
+			AgentMixSpecs:    []string{"cc:1"},
+			TargetIterations: 1,
+			LapsEnabled:      true,
+		}, map[string]harnessapi.Executor{"claude": exec})
+		if err := r.Run(context.Background()); err != nil {
+			t.Fatalf("resumable=%v: run failed: %v", resumable, err)
+		}
+		headPullLap = oldHeadPull
+		if attempts != 1 {
+			t.Fatalf("resumable=%v: attempts = %d, want 1 (handoff ends the attempt)", resumable, attempts)
+		}
 	}
 }
 

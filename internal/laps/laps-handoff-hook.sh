@@ -2,6 +2,16 @@
 # Hook-only command: laps handoff
 # Sets handoff state and directs agent to wrapup
 
+# Help probes are not a handoff: print usage and stop before any side effect.
+for arg in "$@"; do
+  case "$arg" in
+    -h|--help)
+      echo "usage: laps handoff  (signals a deliberate end of this lap; no flags)"
+      exit 0
+      ;;
+  esac
+done
+
 # Audit trail: record this hook firing.
 AUDIT_FILE=".rally/state/hook-audit.jsonl"
 mkdir -p "$(dirname "$AUDIT_FILE")" 2>/dev/null || true

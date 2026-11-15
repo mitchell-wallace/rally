@@ -21,6 +21,7 @@ func (r *Runner) classifyAttemptOutcome(relay *store.RelayRecord, runIndex int, 
 	detectLapsMarkerAsText(relay, runIndex, task, state, attempt, log)
 	r.validatePinnedLapForAttempt(relay, runIndex, task, state, attempt, log)
 	applyLapDoneRecovery(relay, runIndex, task, state, attempt, log)
+	applyHandoffRecovery(relay, runIndex, task, state, attempt, log)
 	applyStallRecovery(relay, runIndex, task, state, attempt, log)
 	r.resolveAttemptOutcomeAndResume(state, attempt)
 	r.classifyErrorAndApplyStrategy(picked, state, attempt)
@@ -67,7 +68,7 @@ func (r *Runner) classifyInitialFailure(task runTask, state *runOneState, attemp
 		}
 		noFileChanges := !hasChanges
 		exemptCompletedReadOnlyRole := roleWritePolicy(task.promptAssignee()) != harnessapi.RolePolicyImplementation && attempt.result.Completed
-		if noFileChanges && attempt.runtime < 3*time.Minute && attempt.handoffEntry == nil && !exemptCompletedReadOnlyRole {
+		if noFileChanges && attempt.runtime < 3*time.Minute && attempt.handoffEntry == nil && attempt.handoffState == 0 && !exemptCompletedReadOnlyRole {
 			attempt.failed = true
 			state.failReason = "no changes made"
 		}
@@ -134,6 +135,21 @@ func applyLapDoneRecovery(relay *store.RelayRecord, runIndex int, task runTask, 
 	fmt.Fprintf(log, "relay %d run %d attempt %d lap-done recovery: laps done hook fired for pinned lap %q; treating as success (was: %s)\n", relay.ID, runIndex+1, attempt.attempt, task.LapID, overriddenReason)
 }
 
+// applyHandoffRecovery treats a lap that signalled `laps handoff` (structured
+// handoff state, or a wrapup handoff entry) as deliberately ended: the attempt
+// is not failed and must not be retried, whatever failure category it would
+// otherwise carry. Free-text handback words are never parsed.
+func applyHandoffRecovery(relay *store.RelayRecord, runIndex int, task runTask, state *runOneState, attempt *runAttemptState, log io.Writer) {
+	if !attempt.failed || attempt.lapPinMismatch || (attempt.handoffState == 0 && attempt.handoffEntry == nil) {
+		return
+	}
+	overriddenReason := state.failReason
+	attempt.failed = false
+	state.success = true
+	state.failReason = ""
+	fmt.Fprintf(log, "relay %d run %d attempt %d handoff recovery: laps handoff signalled for pinned lap %q; treating as ended (was: %s)\n", relay.ID, runIndex+1, attempt.attempt, task.LapID, overriddenReason)
+}
+
 // applyStallRecovery promotes a stalled attempt to success when the agent
 // committed files before idling. Non-implementation roles are excluded: a
 // trivial commit is not evidence that gate, planning, or recovery work happened.
@@ -173,7 +189,7 @@ func (r *Runner) resolveAttemptOutcomeAndResume(state *runOneState, attempt *run
 	attempt.canHandoffResume = attempt.runBudgetExhausted && state.exec != nil && state.exec.ResumeSupported() && state.sessionID != ""
 
 	hasFailureEvidence := attempt.result != nil && attempt.result.Evidence != nil && attempt.result.Evidence.Category != ""
-	attempt.attemptOutcome = tryOutcomeForAttempt(attempt.failed, attempt.incomplete && !hasFailureEvidence, attempt.actionTaken && r.stopFlag.Load(), attempt.handoffEntry != nil)
+	attempt.attemptOutcome = tryOutcomeForAttempt(attempt.failed, attempt.incomplete && !hasFailureEvidence, attempt.actionTaken && r.stopFlag.Load(), attempt.handoffEntry != nil || attempt.handoffState != 0)
 	// A timed-out attempt (run budget or per-try cap) records a non-freezing
 	// run_timeout outcome: it carries no FailureCategory (so the classifier
 	// below is skipped), is not an Issue, and is not terminal by the outcome
