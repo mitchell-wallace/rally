@@ -16,7 +16,10 @@ if [ -f "$STATE_FILE" ]; then
 fi
 
 if [ "$HANDOFF_STATE" = "1" ]; then
-    sed -i 's/"handoff_state"[[:space:]]*:[[:space:]]*1/"handoff_state": 0/' "$STATE_FILE" 2>/dev/null || true
+    # Portable in-place edit: BSD sed -i requires a suffix arg, GNU sed does
+    # not, so neither "sed -i 's/.../.../'" form works on both. Rewrite via a
+    # temp file instead, keeping the reset best-effort.
+    sed 's/"handoff_state"[[:space:]]*:[[:space:]]*1/"handoff_state": 0/' "$STATE_FILE" > "$STATE_FILE.tmp" 2>/dev/null && mv "$STATE_FILE.tmp" "$STATE_FILE" 2>/dev/null || rm -f "$STATE_FILE.tmp" 2>/dev/null
     if ! rally progress --handoff "$@"; then
         exit $?
     fi
