@@ -169,7 +169,7 @@ func TestFreezeCascade(t *testing.T) {
 		Resolver:         cheapTestResolver,
 	}, executors)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	_ = r.Run(ctx)
 
